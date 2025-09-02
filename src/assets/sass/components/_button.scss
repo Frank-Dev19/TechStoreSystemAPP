@@ -1,0 +1,178 @@
+@import "../abstracts/colors";
+@import "../abstracts/mixins";
+
+%btn-common {
+  display: inline-block;
+  text-align: center;
+  vertical-align: center;
+  border-radius: 4px;
+  line-height: normal;
+  font-weight: 400;
+  font-style: normal;
+  transition: all 0.25s;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  outline: none !important;
+  &:disabled {
+    cursor: not-allowed;
+    pointer-events: none !important;
+  }
+}
+
+@mixin get_size($height, $font) {
+  $padding: floor(($height - ($font * 1.4)) / 2);
+  padding: 0 $padding;
+  height: $height;
+  font-size: $font;
+}
+
+@mixin btn_xl {
+  @include get_size(56px, 32px);
+}
+
+@mixin btn_m {
+  @include get_size(44px, 16px);
+}
+@mixin btn_s {
+  @include get_size(36px, 14px);
+}
+@mixin btn_xs {
+  @include get_size(24px, 12px);
+}
+
+.btn-xl {
+  @extend %btn-common;
+  @include btn_xl;
+}
+.btn-m {
+  @extend %btn-common;
+  @include btn_m;
+}
+.btn-s {
+  @extend %btn-common;
+  @include btn_s;
+}
+.btn-xs {
+  @extend %btn-common;
+  @include btn_xs;
+}
+
+$btn_color: (
+  first: $primary,
+  second: $black,
+  greenish: $green-sucess,
+  bluish: $blue-dark,
+);
+
+@mixin btn_classic($name, $color) {
+  .btn-#{$name} {
+    background-color: $color;
+    border: 1px solid $color;
+    color: $white;
+    &:active {
+      background-color: darken($color, 10%);
+      border-color: darken($color, 10%);
+    }
+    &:focus {
+      box-shadow: 0 0 0 0.2rem rgba($color, 0.5);
+    }
+    &:hover {
+      background-color: lighten($color, 10%);
+      border-color: lighten($color, 10%);
+      opacity: 0.8;
+    }
+
+    &:disabled {
+      background-color: $gray-disabled;
+      border-color: $gray-disabled;
+    }
+  }
+
+  .btn-line-#{$name} {
+    background-color: transparent;
+    border: 1px solid $color;
+    color: $color;
+    &:active {
+      border-color: darken($color, 10%);
+      color: darken($color, 10%);
+    }
+    &:hover {
+      border-color: lighten($color, 10%);
+      color: lighten($color, 10%);
+    }
+
+    &:disabled {
+      border-color: $gray-disabled;
+      color: $gray-disabled;
+    }
+  }
+}
+
+@each $name, $color in $btn_color {
+  @include btn_classic($name, map-get($btn_color, $name));
+}
+
+.btn-full {
+  // replace full for block when you get rid of bootstrap
+  display: block;
+  width: 100%;
+}
+
+.btn-rounded-corners {
+  border-radius: 100px !important;
+}
+
+// Used to removed bootstrap focus styles for btn-link
+.btn-no-outline {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.btn-circle.btn-sm {
+  width: 30px;
+  height: 30px;
+  padding: 6px 0px;
+  border-radius: 15px;
+  font-size: 8px;
+  text-align: center;
+}
+.btn-circle.btn-md {
+  width: 50px;
+  height: 50px;
+  padding: 7px 10px;
+  border-radius: 25px;
+  font-size: 10px;
+  text-align: center;
+}
+.btn-circle.btn-xl {
+  width: 70px;
+  height: 70px;
+  padding: 10px 16px;
+  border-radius: 35px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.btn-action {
+  position: relative;
+  height: 3.2rem;
+  width: 3.2rem;
+  border-radius: 100px;
+
+  .btn-icon {
+    position: absolute;
+    top: 50%;
+    left: 53%;
+    transform: translate(-50%, -50%);
+    display: block;
+    font-size: 13px;
+    padding-bottom: 0;
+    margin-bottom: 0;
+  }
+
+  &:focus {
+    outline: none;
+  }
+}

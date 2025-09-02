@@ -1,0 +1,77 @@
+.ng-select.custom {
+  min-height: $input-height;
+  border-radius: $border-radius;
+}
+.ng-select .ng-select-container {
+  border: $border-width solid $gray-dark;
+  font-size: 1.2rem;
+  font-weight: 400;
+  line-height: $input-line-height;
+  color: $gray-dark;
+  min-height: $input-height;
+  border-radius: $border-radius;
+  font-family: inherit;
+}
+
+// Height for a single-select
+.ng-select.ng-select-single .ng-select-container {
+  font-size: 1.2rem;
+  height: $input-height;
+}
+
+// Left padding for the select/unselect all checkbox
+.ng-dropdown-panel .ng-dropdown-header {
+  padding-left: 10px !important;
+}
+
+.ng-dropdown-panel .ng-dropdown-panel-items {
+  height: auto;
+  max-height: 15rem !important;
+}
+
+// Disabled state
+.ng-select.ng-select-disabled > .ng-select-container {
+  border-color: $gray-input-disabled;
+  color: $gray-input-disabled;
+}
+
+// Leave space between control and its list of options
+.ng-dropdown-panel.ng-select-bottom {
+  margin-top: 8px !important;
+}
+
+.ng-dropdown-panel.ng-select-top {
+  margin-bottom: 8px !important;
+}
+
+// Remove outline
+.ng-select.ng-select-focused > .ng-select-container {
+  border-color: $primary;
+}
+
+.ng-select.ng-select-focused:not(.ng-select-opened) > .ng-select-container {
+  border-color: $primary;
+  box-shadow: none;
+}
+
+// Error state
+.ng-select.is-invalid > .ng-select-container {
+  border-color: $red-error !important;
+}
+
+
+// Select label when there are selected items
+.ng-select.ng-select-multiple .ng-select-container .ng-value-container .ng-value .ng-value-label {
+  display: inline-block;
+  padding: 1.5px 5px 1px;
+}
+
+// Leave equal space for the label shown when a element is selected in a multi-select
+.ng-select.ng-select-multiple .ng-select-container .ng-value-container {
+  padding-top: 2px !important;
+}
+
+.ng-select.ng-select-multiple .ng-select-container .ng-value-container .ng-value {
+  margin-bottom: 2px !important;
+}
+//

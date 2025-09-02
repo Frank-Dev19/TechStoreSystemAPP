@@ -1,0 +1,142 @@
+/* sidebar.component.css */
+.sidebar-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.logo {
+    background-color: #2c3e50;
+    padding: 15px 0;
+    border-bottom: 4px solid rgba(255, 255, 255, 0.1);
+
+}
+
+.logo img {
+    width: 100px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    border-radius: 5px;
+}
+
+.sidebar-wrapper {
+    background-color: #2c3e50;
+    color: white;
+    height: 100%;
+    overflow-y: auto;
+    flex: 1;
+}
+
+#sidebar {
+    min-width: 250px;
+    transition: all 0.3s ease;
+}
+
+.nav {
+    margin-top: 20px;
+    padding: 0;
+    list-style: none;
+}
+
+.nav-item {
+    margin-bottom: 5px;
+}
+
+.nav-link {
+    color: rgba(255, 255, 255, 0.8);
+    padding: 12px 15px;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    transition: all 0.3s;
+    border-radius: 4px;
+    margin: 0 10px;
+}
+
+.nav-link i {
+    margin-right: 10px;
+    font-size: 18px;
+}
+
+.nav-link p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.caret {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 8px;
+    border-top: 4px solid;
+    border-right: 4px solid transparent;
+    border-left: 4px solid transparent;
+}
+
+.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.submenu {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    padding-left: 30px;
+    margin: 0 10px;
+}
+
+.submenu.show {
+    max-height: 500px;
+}
+
+.submenu .nav-link {
+    padding: 8px 15px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+@media (max-width: 767px) {
+    #sidebar {
+        display: none;
+    }
+
+    #sidebar.active {
+        display: block;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 250px;
+    }
+}
+
+/* Aplica a navegadores WebKit (Chrome, Edge, Safari) */
+.sidebar-wrapper::-webkit-scrollbar {
+    width: 8px;
+    /* Grosor del scrollbar */
+}
+
+.sidebar-wrapper::-webkit-scrollbar-track {
+    background: #2c3e50;
+    /* Color del fondo del scrollbar */
+    border-radius: 4px;
+}
+
+.sidebar-wrapper::-webkit-scrollbar-thumb {
+    background: #888;
+    /* Color de la "barra" del scrollbar */
+    border-radius: 4px;
+}
+
+.sidebar-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #555;
+    /* Color al pasar el mouse */
+}

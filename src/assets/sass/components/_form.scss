@@ -1,0 +1,104 @@
+@import "../abstracts/variables";
+@import "../abstracts/mixins";
+
+label {
+  display: inline-block;
+  font-size: 1.15rem;
+  margin-bottom: 0.3rem;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-ctrl {
+  display: block;
+  width: 100%;
+  height: $input-height;
+  padding: $input-padding-y $input-padding-x;
+  font-size: 1.2rem;
+  font-weight: 400;
+  line-height: $input-line-height;
+  color: $gray-dark;
+  background-color: $white;
+  background-clip: padding-box;
+  border: $border-width solid $gray-dark;
+  border-radius: $border-radius;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  outline: none;
+
+  &.is-invalid {
+    border-color: $red-error;
+  }
+
+  // &:active {
+  //   border-color: $black;
+  // }
+
+  &:focus:not(.is-invalid) {
+    border-color: $primary;
+  }
+
+  &:disabled {
+    border-color: $gray-input-disabled;
+    color: $gray-input-disabled;
+  }
+
+  &.custom-disabled-input {
+    color: $gray-light;
+    border: $border-width solid $gray-header;
+  }
+}
+
+
+.validation-container {
+  position: relative;
+
+  &__message {
+    position: absolute;
+    top: 100%;
+    left: add($input-padding-x, $border-width);
+    width: 100%;
+    color: $red-error;
+    font-size: 0.9rem;
+  }
+
+  &__group-message {
+    position: absolute;   
+    top: 100%;
+    left: add(add($input-padding-x, $border-width), 15px); // 15px = row left padding
+    width: 95%; // To compensate the indentation given by "left"
+    color: $red-error;
+    font-size: 0.9rem;
+  }
+}
+
+
+// avoid second rows in toolbar
+.mat-toolbar-multiple-rows {
+  min-height: $header-height !important;
+}
+
+// Loading spinner - reduce space between animation and loading text
+.spinner  .loading-text {
+  top: 57% !important;
+}
+
+
+// Help icon for labels
+.label-help {
+  display: flex;
+  align-items: center;
+
+  &__icon {
+    display: block;
+    align-self: baseline;
+    margin-left: 3px;
+    &::before {
+      font-size: 16px;
+      margin: 2px;
+      color: $primary;
+      cursor: help;
+    }
+  }
+}

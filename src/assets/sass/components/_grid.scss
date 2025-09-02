@@ -1,0 +1,129 @@
+.custom-header {
+    display: flex;
+    justify-content: space-between;
+    //   background: $blue-header-gradient;
+    background-color: $gray-header;
+    .title {
+        flex: 1;
+        display: flex;
+        align-items: center;
+    }
+    .actions {
+        flex: 1;
+        display: flex;
+        justify-content: flex-end;
+        button:not(:last-child) {
+            margin-right: 0.3rem;
+        }
+    }
+}
+
+// Page whose only purpose is to show a grid
+.grid-page-container {
+    height: remaining-vh( $header-height, $page-y-padding * 2, $excution-name-height, $excution-name-bottom-padding) !important;
+}
+
+.execution-summary {
+    height: $excution-name-height;
+    padding-bottom: 0;
+    font-size: 2rem;
+    line-height: 2rem;
+    margin-bottom: $excution-name-bottom-padding;
+    cursor: pointer;
+    div {
+        white-space: nowrap;
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+.header-label {
+    color: $black-title;
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 0;
+}
+
+.grid-container {
+    border-color: $gray-dark;
+    &.full-height {
+        height: 100%;
+    }
+    &.half-height {
+        height: 50%;
+    }
+}
+
+// Generate color clases for the different status
+$status_color: ( "blue": $blue-logo, "yellow": $yellow-toast-warn-b, "green": $green-toast-success-b, "purple-light": $purple-bluish-1, "red": $red-error, );
+@mixin status_base($name, $color) {
+    .status-#{$name} {
+        color: $color;
+        font-size: 20px;
+    }
+}
+
+@each $name,
+$color in $status_color {
+    @include status_base($name, map-get($status_color, $name));
+}
+
+//
+.header-center .ag-header-cell-label {
+    justify-content: center;
+}
+
+.header-end .ag-header-cell-label {
+    justify-content: flex-end;
+}
+
+.header-start .ag-header-cell-label {
+    justify-content: flex-start;
+}
+
+.cell-center .ag-cell-wrapper {
+    display: flex;
+    justify-content: center;
+}
+
+.cell-start .ag-cell-wrapper {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.cell-end .ag-cell-wrapper {
+    display: flex;
+    justify-content: flex-end;
+}
+
+
+/* VALIDATION */
+
+.required-cell {
+    background-color: rgba($red-error, 0.7) !important;
+}
+
+.invalid-row {
+    background-color: rgba($red-toast-error-bg, 0.7) !important;
+}
+
+.warning-row {
+    background-color: rgba($yellow-warning-table, 0.7) !important;
+}
+
+.success-row {
+    background-color: rgba($green-sucess-table, 0.7) !important;
+}
+
+.column-entrega_parcial {
+    background-color: #d38c10;
+}
+
+.column_entrega_total {
+    background-color: #059b07;
+}
+
+.column_entrega_cero {
+    background-color: #e12f2f;
+}

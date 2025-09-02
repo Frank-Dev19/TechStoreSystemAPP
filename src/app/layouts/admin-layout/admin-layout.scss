@@ -1,0 +1,47 @@
+/* admin-layout.component.scss */
+.wrapper {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.sidebar {
+    width: 250px;
+    height: 100%;
+    position: fixed;
+    z-index: 1000;
+    box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.42);
+}
+
+.main-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    margin-left: 250px;
+    transition: all 0.3s;
+    background-color: #f4f6f9;
+}
+
+.content {
+    flex: 1;
+    padding: 20px;
+    margin-top: 7px;
+    /* Adjust based on your navbar height */
+    overflow-y: auto;
+}
+
+@media (max-width: 767px) {
+    .sidebar {
+        width: 0;
+        overflow: hidden;
+    }
+
+    .main-panel {
+        margin-left: 0;
+    }
+
+    .sidebar.active+.main-panel {
+        margin-left: 250px;
+    }
+}

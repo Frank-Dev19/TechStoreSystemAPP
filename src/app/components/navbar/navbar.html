@@ -1,0 +1,77 @@
+<!-- navbar.component.html -->
+<nav class="navbar navbar-expand-lg">
+    <div class="container-fluid">
+        <div class="navbar-wrapper">
+            <!-- Barra lateral Toggle -->
+            <div class="navbar-toggle d-inline">
+                <button class="navbar-toggler" type="button" (click)="sidebarToggle()">
+                    <span class="navbar-toggler-bar bar1"></span>
+                    <span class="navbar-toggler-bar bar2"></span>
+                    <span class="navbar-toggler-bar bar3"></span>
+                </button>
+            </div>
+            <!-- Nombre del sistema -->
+            <a class="navbar-brand" href="javascript:void(0)">{{ getTitle() }}</a>
+        </div>
+
+        <!-- Botón para togglear el colapso en dispositivos móviles -->
+        <button aria-label="Toggle navigation" class="navbar-toggler" (click)="toggleCollapse()"
+            [attr.aria-expanded]="!isCollapsed" aria-controls="collapseExample" id="navigation" type="button">
+            <span class="navbar-toggler-bar navbar-kebab"></span>
+            <span class="navbar-toggler-bar navbar-kebab"></span>
+            <span class="navbar-toggler-bar navbar-kebab"></span>
+        </button>
+
+        <!-- Menú desplegable -->
+        <div class="navbar-collapse" [ngClass]="{'collapse': isCollapsed}" id="navigation">
+            <ul class="navbar-nav ml-auto">
+                <li class="nav-item dropdown">
+                    <!-- Nombre del usuario con icono de dropdown -->
+                    <a class="nav-link dropdown-toggle" href="javascript:void(0)" (click)="open(content)">
+                        <!-- Agrega este botón cerca del dropdown de usuario -->
+
+                        <!-- <li class="nav-item">
+                    <button class="btn btn-link nav-link" (click)="open(content)">
+                        <i class="tim-icons icon-single-02"></i> Icono de usuario 
+                    </button>
+                </li> -->
+                        <div class="user-info">
+                            <span class="user-name">{{this.authenticatedUser.username}}</span>
+                        </div>
+                    </a>
+
+                    <!-- Menú desplegable -->
+                    <div *ngIf="isDropdownOpen" class="dropdown-menu dropdown-menu-right">
+                        <div class="dropdown-header">
+                            <div class="user-profile">
+                                <img alt="User Profile" class="avatar" src="assets/img/Frank.png" />
+                                <h5 class="user-name">{{this.authenticatedUser.username}}</h5>
+                            </div>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-item" [routerLink]="[]" (click)="logout()">
+                            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                        </a>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<ng-template #content let-modal>
+    <div class="modal-header">
+        <div class="user-profile text-center w-100">
+            <img alt="User Profile" class="avatar mb-3" src="assets/img/user.png" />
+            <h4 class="user-name">{{this.authenticatedUser.username}}</h4>
+        </div>
+        <button aria-label="Close" class="close" type="button" (click)="modal.dismiss('Cross click')">
+            <i class="tim-icons icon-simple-remove"></i>
+        </button>
+    </div>
+    <div class="modal-body text-center">
+        <button class="btn btn-danger" (click)="logout(); modal.close()">
+            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+        </button>
+    </div>
+</ng-template>

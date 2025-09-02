@@ -1,0 +1,37 @@
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h2>Gráficos de Reportes</h2>
+    </div>
+
+    <div class="charts-container">
+        <!-- Gráfico 1: Barras -->
+        <div class="chart-item">
+            <apx-chart [series]="chartSeries" [chart]="chartDetails" [title]="chartTitle" [xaxis]="chartXAxis">
+            </apx-chart>
+        </div>
+
+        <!-- Gráfico 2: Líneas -->
+        <div class="chart-item">
+            <apx-chart [series]="lineChartSeries" [chart]="lineChartDetails" [title]="lineChartTitle"
+                [xaxis]="lineChartXAxis">
+            </apx-chart>
+        </div>
+
+        <!-- Gráfico 3: Área -->
+        <div class="chart-item">
+            <apx-chart [series]="areaChartSeries" [chart]="areaChartDetails" [title]="areaChartTitle"
+                [xaxis]="areaChartXAxis">
+            </apx-chart>
+        </div>
+
+        <!-- Gráfico 4: Circular -->
+        <div class="chart-item">
+            <apx-chart [series]="pieChartSeries" [chart]="pieChartDetails" [title]="pieChartTitle">
+            </apx-chart>
+        </div>
+    </div>
+
+    <div class="update-button">
+        <button (click)="actualizarDatos()">Actualizar Datos</button>
+    </div>
+</div>

@@ -1,0 +1,116 @@
+/* Añadir esto a tus estilos */
+.navbar {
+    background: linear-gradient(to right, #2c3e50, #2278b1);
+    padding: 7px 0;
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    color: white;
+    font-weight: 600;
+    font-size: 18px;
+}
+
+.navbar-toggler {
+    border: none;
+    background: transparent;
+}
+
+.navbar-toggler-bar {
+    display: block;
+    position: relative;
+    width: 22px;
+    height: 2px;
+    border-radius: 1px;
+    background: white;
+    margin: 4px 0;
+    transition: all 0.2s;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    /* Alinea a la derecha */
+}
+
+.user-name {
+    color: white;
+    font-weight: 500;
+    margin-right: 5px;
+}
+
+.navbar-collapse {
+    display: flex;
+    justify-content: flex-end;
+    /* Alinea los items de la derecha */
+}
+
+/* .dropdown-menu {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    padding: 0;
+    min-width: 200px;
+} 
+
+/* Añade esto para asegurar que el dropdown se vea por encima de otros elementos */
+.dropdown-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 1000;
+    /* Asegura que esté por encima de otros elementos */
+    display: block;
+    /* Importante para que se muestre */
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    transition: all 0.3s ease;
+}
+
+/* Estado cuando está cerrado */
+.dropdown-menu:not(.show) {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+}
+
+
+
+.dropdown-header {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px 8px 0 0;
+}
+
+.user-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 0;
+}
+
+.avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    margin-bottom: 10px;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-item {
+    padding: 12px 20px;
+    color: #333;
+    transition: all 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: #f8f9fa;
+}
+
+.dropdown-item i {
+    margin-right: 10px;
+    color: #3498db;
+}

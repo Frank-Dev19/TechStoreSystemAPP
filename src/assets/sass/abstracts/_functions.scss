@@ -1,0 +1,57 @@
+@function remaining-vh($heights...) {
+  $sum: 0;
+  @each $height in $heights {
+    $sum: $sum + $height;
+  }
+  @return calc(100vh - #{$sum});
+}
+
+
+@function remaining-vw($widths...) {
+  $sum: 0;
+  @each $width in $widths {
+    $sum: $sum + $width;
+  }
+  @return calc(100vw - #{$sum});
+}
+
+// Return valid calc
+@function add($value1, $value2, $return-calc: true) {
+  @if $value1 == null {
+    @return $value2;
+  }
+
+  @if $value2 == null {
+    @return $value1;
+  }
+
+  @if type-of($value1) == number and type-of($value2) == number and comparable($value1, $value2) {
+    @return $value1 + $value2;
+  }
+
+  @return if($return-calc == true, calc(#{$value1} + #{$value2}), $value1 + unquote(" + ") + $value2);
+}
+
+@function subtract($value1, $value2, $return-calc: true) {
+  @if $value1 == null and $value2 == null {
+    @return null;
+  }
+
+  @if $value1 == null {
+    @return -$value2;
+  }
+
+  @if $value2 == null {
+    @return $value1;
+  }
+
+  @if type-of($value1) == number and type-of($value2) == number and comparable($value1, $value2) {
+    @return $value1 - $value2;
+  }
+
+  @return if($return-calc == true, calc(#{$value1} - #{$value2}), $value1 + unquote(" - ") + $value2);
+}
+
+@function factor($unit) {
+  @return $unit * $alert-factor;
+}

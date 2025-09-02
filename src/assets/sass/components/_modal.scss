@@ -1,0 +1,140 @@
+.dialog-container {
+    border-radius: 4px !important;
+}
+
+.custom-modal-xs-200 {
+    max-width: 200px;
+    @include respond(huge) {
+        max-width: 350px;
+    }
+}
+
+.custom-modal-xs-300 {
+    max-width: 300px;
+    @include respond(huge) {
+        max-width: 450px;
+    }
+}
+
+.custom-modal-middle {
+    max-width: 400px;
+    @include respond(huge) {
+        max-width: 550px;
+    }
+}
+
+.custom-modal-sm-440 {
+    max-width: 440px;
+    @include respond(huge) {
+        max-width: 590px;
+    }
+}
+
+.custom-modal-sm-500 {
+    max-width: 500px;
+    @include respond(huge) {
+        max-width: 650px;
+    }
+}
+
+.custom-modal-sm-600 {
+    max-width: 600px;
+    @include respond(huge) {
+        max-width: 750px;
+    }
+}
+
+.custom-modal-sm-700 {
+    max-width: 700px;
+    @include respond(huge) {
+        max-width: 850px;
+    }
+}
+
+.custom-modal-sm-800 {
+    max-width: 800px;
+    @include respond(huge) {
+        max-width: 950px;
+    }
+}
+
+.custom-modal-lg {
+    max-width: 900px;
+    @include respond(huge) {
+        max-width: 1200px;
+    }
+}
+
+.custom-modal-x-lg {
+    max-width: 1200px;
+    @include respond(huge) {
+        max-width: 1600px;
+    }
+}
+
+.custom.modal-header {
+    align-items: center !important;
+    // background-color: $black;
+    background: $black-greenish; // linear-gradient(45deg, $black 0%, rgba($black, 0.7) 50%, rgba($black, 0.6) 80%);
+    // box-shadow: 0 2px 5px 0 rgba($black, 0.16), 0 2px 10px 0 rgba($black, 0.12);
+    padding: 0.9rem 2rem;
+    border-top-left-radius: calc(.3rem - 1px);
+    border-top-right-radius: calc(.3rem - 1px);
+}
+
+.custom.modal-header-white {
+    align-items: center !important;
+    // background-color: $black;
+    background: $white; // linear-gradient(45deg, $black 0%, rgba($black, 0.7) 50%, rgba($black, 0.6) 80%);
+    // box-shadow: 0 2px 5px 0 rgba($black, 0.16), 0 2px 10px 0 rgba($black, 0.12);
+    padding: 0.9rem 2rem;
+    border-top-left-radius: calc(.3rem - 1px);
+    border-top-right-radius: calc(.3rem - 1px);
+}
+
+.custom.modal-title {
+    font-weight: 600;
+    font-size: 1.7rem;
+    color: $white;
+}
+
+.custom-confirm-title-white {
+    margin-top: factor(0.1rem);
+    font-size: factor(1.4rem);
+    line-height: factor(1.6rem);
+    font-weight: bold;
+    color: $black;
+}
+
+.custom.modal-footer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    >* {
+        flex: 1;
+    }
+}
+
+.close-button {
+    border: none;
+    outline: none !important;
+    background-color: transparent;
+    color: $white;
+    opacity: 1;
+    img {
+        height: 1.9rem;
+        width: 1.9rem;
+    }
+}
+
+.close-button-black {
+    border: none;
+    outline: none !important;
+    background-color: transparent;
+    color: $black !important;
+    opacity: 1;
+    img {
+        height: 1.9rem;
+        width: 1.9rem;
+    }
+}
