@@ -1,94 +1,145 @@
-/* Añadir esto a tus estilos */
-.navbar {
-    background: linear-gradient(to right, #2c3e50, #2278b1);
-    padding: 7px 0;
-    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+/* Altura estándar del navbar: 56px */
+.app-navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1200;
+    background: linear-gradient(90deg, #2c3e50, #2278b1);
+    box-shadow: 0 2px 14px rgba(0, 0, 0, .08);
+    width: 100%;
+    transition: left 0.3s ease;
+    /* ← Añadido para transición suave */
+}
+
+/* Forzamos la altura / alineación vertical */
+.app-navbar .container-fluid {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-inline: 12px;
+    box-sizing: border-box;
+}
+
+/* EN PANTALLAS GRANDES: respetar espacio del sidebar */
+@media (min-width: 768px) {
+    .app-navbar {
+        left: 250px;
+        /* ← Mismo ancho que el sidebar */
+        width: calc(100% - 250px);
+        /* ← Ocupa el espacio restante */
+    }
+}
+
+/* EN MÓVIL: navbar ocupa todo el ancho */
+@media (max-width: 767px) {
+    .app-navbar {
+        left: 0;
+        width: 100%;
+    }
+}
+
+.navbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .navbar-brand {
-    color: white;
-    font-weight: 600;
-    font-size: 18px;
+    color: #fff;
+    font-weight: 700;
+    font-size: clamp(16px, 1.6vw, 18px);
+    letter-spacing: .2px;
 }
 
-.navbar-toggler {
+/* Hamburguesa SOLO móvil */
+.hamburger {
     border: none;
     background: transparent;
+    padding: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.navbar-toggler-bar {
+.icon-menu {
+    width: 26px;
+    height: 26px;
     display: block;
-    position: relative;
-    width: 22px;
-    height: 2px;
-    border-radius: 1px;
-    background: white;
-    margin: 4px 0;
-    transition: all 0.2s;
+    color: #fff;
 }
 
-.user-info {
+@media (min-width: 768px) {
+    .only-mobile {
+        display: none !important;
+    }
+}
+
+/* Usuario / dropdown */
+.navbar-right {
+    position: relative;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    /* Alinea a la derecha */
+}
+
+.user-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: 0;
+    color: #fff;
+}
+
+.user-icon {
+    width: 22px;
+    height: 22px;
 }
 
 .user-name {
-    color: white;
-    font-weight: 500;
-    margin-right: 5px;
+    color: #fff;
+    font-weight: 600;
+    display: none;
 }
 
-.navbar-collapse {
-    display: flex;
-    justify-content: flex-end;
-    /* Alinea los items de la derecha */
+@media (min-width: 992px) {
+    .user-name {
+        display: inline;
+    }
 }
 
-/* .dropdown-menu {
-    background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-    padding: 0;
-    min-width: 200px;
-} 
-
-/* Añade esto para asegurar que el dropdown se vea por encima de otros elementos */
+/* Dropdown */
 .dropdown-menu {
     position: absolute;
     right: 0;
-    top: 100%;
-    z-index: 1000;
-    /* Asegura que esté por encima de otros elementos */
+    top: calc(100% + 6px);
+    z-index: 2000;
     display: block;
-    /* Importante para que se muestre */
     opacity: 1;
     visibility: visible;
     transform: translateY(0);
-    transition: all 0.3s ease;
+    transition: all .2s ease;
+    min-width: 220px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .18);
+    overflow: hidden;
 }
-
-/* Estado cuando está cerrado */
-.dropdown-menu:not(.show) {
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(-10px);
-}
-
-
 
 .dropdown-header {
-    padding: 15px;
-    background-color: #f8f9fa;
-    border-radius: 8px 8px 0 0;
+    padding: 14px;
+    background: #f8f9fa;
 }
 
 .user-profile {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 10px 0;
+    padding: 8px 0;
 }
 
 .avatar {
@@ -97,20 +148,24 @@
     border-radius: 50%;
     margin-bottom: 10px;
     border: 3px solid #fff;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .1);
 }
 
 .dropdown-item {
-    padding: 12px 20px;
-    color: #333;
-    transition: all 0.2s;
+    padding: 12px 16px;
+    color: #1f2937;
+    background: #fff;
+    transition: background .15s ease;
+    width: 100%;
+    text-align: left;
+    border: 0;
 }
 
 .dropdown-item:hover {
-    background-color: #f8f9fa;
+    background: #f4f6f9;
 }
 
 .dropdown-item i {
     margin-right: 10px;
-    color: #3498db;
+    color: #2278b1;
 }

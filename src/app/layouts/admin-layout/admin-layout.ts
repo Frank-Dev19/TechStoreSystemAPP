@@ -4,20 +4,15 @@ import { Component, OnInit } from '@angular/core';
   selector: 'app-admin-layout',
   standalone: false,
   templateUrl: './admin-layout.html',
-  styleUrl: './admin-layout.scss'
+  styleUrls: ['./admin-layout.scss']
 })
 export class AdminLayout implements OnInit {
+  public sidebarColor: string = 'blue';
 
-  public sidebarColor: string = "blue";
-
-  constructor() { }
-
-  ngOnInit() {
-    var sidebar = document.getElementsByClassName('sidebar')[0];
-    var mainPanel = document.getElementsByClassName('main-panel')[0];
-    sidebar.setAttribute('data', this.sidebarColor);
-    mainPanel.setAttribute('data', this.sidebarColor);
+  ngOnInit(): void {
+    const sidebar = document.getElementsByClassName('sidebar')[0];
+    const mainPanel = document.getElementsByClassName('main-panel')[0];
+    if (sidebar) sidebar.setAttribute('data', this.sidebarColor);
+    if (mainPanel) mainPanel.setAttribute('data', this.sidebarColor);
   }
-
-
 }

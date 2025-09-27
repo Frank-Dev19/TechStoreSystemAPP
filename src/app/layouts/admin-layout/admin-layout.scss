@@ -1,47 +1,82 @@
-/* admin-layout.component.scss */
+/* Layout base */
 .wrapper {
     display: flex;
-    height: 100vh;
+    min-height: 100vh;
     overflow: hidden;
+    background: #f4f6f9;
 }
 
+/* Sidebar fijo (panel interno ya controla open/close y top) */
 .sidebar {
     width: 250px;
-    height: 100%;
+    height: 100vh;
     position: fixed;
-    z-index: 1000;
-    box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.42);
+    z-index: 1030;
 }
 
+/* Panel principal: deja espacio al navbar fixed */
 .main-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 100vh;
     margin-left: 250px;
-    transition: all 0.3s;
+    padding-top: 56px;
+    transition: margin-left .3s ease;
     background-color: #f4f6f9;
+    width: 100%;
 }
 
+/* EN PANTALLAS GRANDES: contenido también se ajusta */
+@media (min-width: 768px) {
+    .main-panel {
+        margin-left: 250px;
+        width: calc(100% - 250px);
+    }
+}
+
+/* EN MÓVIL: contenido ocupa todo el ancho */
+@media (max-width: 767px) {
+    .main-panel {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+
+/* Contenido scrolleable */
 .content {
     flex: 1;
-    padding: 20px;
-    margin-top: 7px;
-    /* Adjust based on your navbar height */
+    padding: clamp(12px, 2.2vw, 20px);
+    margin-top: 0;
     overflow-y: auto;
 }
 
-@media (max-width: 767px) {
-    .sidebar {
-        width: 0;
-        overflow: hidden;
-    }
+body.sidebar-open {
+    overflow: hidden;
+}
 
+/* Overlay solo móvil, bajo el navbar */
+.main-panel .close-layer {
+    position: fixed;
+    inset: 56px 0 0 0;
+    /* ← Empieza debajo del navbar */
+    background: rgba(0, 0, 0, .4);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1019;
+    /* ← Un z-index menor que el sidebar (1030) pero mayor que el contenido */
+    transition: opacity .2s ease;
+}
+
+.main-panel .close-layer.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Responsivo */
+@media (max-width: 767px) {
     .main-panel {
         margin-left: 0;
-    }
-
-    .sidebar.active+.main-panel {
-        margin-left: 250px;
+        width: 100%;
     }
 }

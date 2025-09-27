@@ -4,7 +4,7 @@ export const environment = {
 
 // La configuración de las rutas de la API que se conectan al backend
 export const config = {
-  endpointServices: 'http://localhost:8080', // URL base de la API (ajustar si se usa otro servidor o puerto),
-  authMethod: '/auth/', // Endpoint para autenticarse, es el que creamos en el backend
-  adminTest: '/admin/test', // Endpoint de prueba para admin, también lo definimos en el backend
+  // ⇩ apunta a tu API Nest (según tus logs corre en el 3000)
+  endpointServices: 'http://localhost:3000',
+  authMethod: '/auth/', // queda: http://localhost:3000/auth/...
 };

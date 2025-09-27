@@ -11,6 +11,10 @@ import { AdminLayoutRoutes } from "./admin-layout.routing";
 //import { GesionUsuariosComponent } from '../../pages/gesion-usuarios/gesion-usuarios';
 import { Dashboard } from "../../components/dashboard/dashboard";
 import { Home } from "../../pages/home/home";
+import { Clientes } from "../../pages/clientes/clientes";
+// import { ForgotPassword } from "../../pages/forgot-password/forgot-password";
+// import { ResetPassword } from "../../pages/reset-password/reset-password";
+
 
 @NgModule({
     imports: [
@@ -36,6 +40,9 @@ import { Home } from "../../pages/home/home";
         //GesionUsuariosComponent,
         Home,
         Dashboard,
+        Clientes,
+        //ForgotPassword,
+        //ResetPassword
 
     ],
     providers: [DatePipe],

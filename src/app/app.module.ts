@@ -18,6 +18,9 @@ import { ComponentsModule } from './components/components.module';
 import localePE from "@angular/common/locales/es-PE";
 import { registerLocaleData } from '@angular/common';
 import { NgApexchartsModule } from 'ng-apexcharts';
+import { ForgotPassword } from './pages/forgot-password/forgot-password';
+import { ResetPassword } from './pages/reset-password/reset-password';
+//import { Clientes } from './pages/clientes/clientes';
 
 
 
@@ -27,7 +30,10 @@ registerLocaleData(localePE, 'es-PE');
   declarations: [
     AppComponent,
     AdminLayout,
-    Login
+    Login,
+    ForgotPassword,
+    ResetPassword,
+    //Clientes
   ],
   imports: [
     BrowserModule,

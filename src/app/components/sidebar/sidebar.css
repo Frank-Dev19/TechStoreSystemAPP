@@ -1,15 +1,36 @@
-/* sidebar.component.css */
+/* Estructura */
 .sidebar-container {
     height: 100%;
     display: flex;
     flex-direction: column;
 }
 
-.logo {
-    background-color: #2c3e50;
-    padding: 15px 0;
-    border-bottom: 4px solid rgba(255, 255, 255, 0.1);
+.sidebar-wrapper {
+    height: 100%;
+    overflow-y: auto;
+    flex: 1;
+    position: relative;
+    background: transparent;
+}
 
+.sidebar-panel {
+    min-width: 250px;
+    height: 100vh;
+    background: #2c3e50;
+    color: #fff;
+    transition: transform .3s ease;
+    box-shadow: 0 10px 30px -12px rgba(0, 0, 0, .42);
+    display: flex;
+    flex-direction: column;
+    /* ← Nueva línea */
+}
+
+/* Logo */
+.logo {
+    padding: 15px 0;
+    border-bottom: 4px solid rgba(255, 255, 255, .1);
+    flex-shrink: 0;
+    /* ← Evita que el logo se reduzca */
 }
 
 .logo img {
@@ -20,38 +41,86 @@
     border-radius: 5px;
 }
 
-.sidebar-wrapper {
-    background-color: #2c3e50;
-    color: white;
-    height: 100%;
-    overflow-y: auto;
+/* Desktop: visible estático */
+@media (min-width: 768px) {
+    .sidebar-panel {
+        position: relative;
+        transform: none;
+        height: 100vh;
+    }
+
+    .sidebar-wrapper {
+        height: 100%;
+        overflow-y: auto;
+    }
+}
+
+/* MÓVIL: off-canvas - CORREGIDO */
+@media (max-width: 767px) {
+    .sidebar-panel {
+        position: fixed;
+        left: 0;
+        width: 250px;
+        top: 56px;
+        height: calc(100vh - 56px);
+        transform: translateX(-100%);
+        z-index: 1030;
+    }
+
+    .sidebar-panel.open {
+        transform: translateX(0);
+    }
+
+    .logo {
+        padding: 12px 0;
+    }
+
+    .logo img {
+        width: 80px;
+    }
+
+    /* SCROLL CORREGIDO para móvil */
+    .sidebar-wrapper {
+        height: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        flex: 1;
+    }
+}
+
+/* Contenedor del menú con scroll */
+.nav-container {
     flex: 1;
+    overflow-y: auto;
+    padding-bottom: 20px;
+    /* ← Espacio al final */
 }
 
-#sidebar {
-    min-width: 250px;
-    transition: all 0.3s ease;
-}
-
+/* Nav */
 .nav {
-    margin-top: 20px;
+    margin-top: 16px;
     padding: 0;
     list-style: none;
 }
 
 .nav-item {
-    margin-bottom: 5px;
+    margin-bottom: 6px;
 }
 
 .nav-link {
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, .86);
     padding: 12px 15px;
     display: flex;
     align-items: center;
     text-decoration: none;
-    transition: all 0.3s;
-    border-radius: 4px;
+    transition: background .15s, color .15s;
+    border-radius: 8px;
     margin: 0 10px;
+}
+
+.nav-link:hover {
+    background: rgba(255, 255, 255, .12);
+    color: #fff;
 }
 
 .nav-link i {
@@ -62,7 +131,7 @@
 .nav-link p {
     margin: 0;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -74,69 +143,49 @@
     width: 0;
     height: 0;
     margin-left: 8px;
-    border-top: 4px solid;
-    border-right: 4px solid transparent;
-    border-left: 4px solid transparent;
-}
-
-.nav-link:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
+    border-top: 5px solid;
+    border-right: 5px solid transparent;
+    border-left: 5px solid transparent;
 }
 
 .submenu {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s ease;
+    transition: max-height .22s ease;
     padding-left: 30px;
     margin: 0 10px;
 }
 
 .submenu.show {
-    max-height: 500px;
+    max-height: 520px;
 }
 
 .submenu .nav-link {
-    padding: 8px 15px;
+    padding: 8px 14px;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, .78);
 }
 
-@media (max-width: 767px) {
-    #sidebar {
-        display: none;
-    }
-
-    #sidebar.active {
-        display: block;
-        position: fixed;
-        z-index: 1000;
-        left: 0;
-        top: 0;
-        height: 100%;
-        width: 250px;
-    }
-}
-
-/* Aplica a navegadores WebKit (Chrome, Edge, Safari) */
+/* Scrollbar mejorado */
 .sidebar-wrapper::-webkit-scrollbar {
-    width: 8px;
-    /* Grosor del scrollbar */
+    width: 6px;
 }
 
 .sidebar-wrapper::-webkit-scrollbar-track {
-    background: #2c3e50;
-    /* Color del fondo del scrollbar */
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
 }
 
 .sidebar-wrapper::-webkit-scrollbar-thumb {
-    background: #888;
-    /* Color de la "barra" del scrollbar */
+    background: rgba(255, 255, 255, 0.3);
     border-radius: 4px;
 }
 
 .sidebar-wrapper::-webkit-scrollbar-thumb:hover {
-    background: #555;
-    /* Color al pasar el mouse */
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Prevenir scroll del body cuando sidebar está abierto en móvil */
+.sidebar-open {
+    overflow: hidden;
 }

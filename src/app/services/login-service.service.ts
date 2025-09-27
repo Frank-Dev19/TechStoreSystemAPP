@@ -1,70 +1,53 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable } from 'rxjs';
-import { config } from './../../environments/environment';
-import { UserSession, Usuario } from '../models/user';
+import { Observable, tap } from 'rxjs';
 import { BaseService } from './base.service';
-import moment from 'moment';  // Asegúrate de tener Moment.js instalado para manejar fechas
+import { config } from '../../environments/environment';
+import { AuthSessionService } from './auth-session.service';
+import { decodeJwt } from '../utils/jwt.util';
 
-@Injectable({
-    providedIn: 'root'
-})
+interface LoginResponse { accessToken: string; }
+
+@Injectable({ providedIn: 'root' })
 export class LoginService {
 
-    usuarioLogin: Usuario;
+    constructor(
+        private base: BaseService,
+        private session: AuthSessionService,
+    ) { }
 
-    constructor(private base: BaseService, private http: HttpClient) { }
-
-    login(user: string, password: string): Observable<UserSession> {
-        return this.base.ExecuteHttpPost<UserSession>(config.authMethod + 'login', {
-            username: user,
-            password: password
-        }, this.setSession);
+    login(email: string, password: string): Observable<LoginResponse> {
+        const body = { email, password };
+        return this.base.post<LoginResponse>(`${config.authMethod}login`, body).pipe(
+            tap(res => this.session.setAccessToken(res.accessToken))
+        );
     }
 
-    private setSession(authResult: UserSession) {
-        if (authResult) {
-            localStorage.setItem('id_token', authResult.token);
-            localStorage.setItem('expires_at', JSON.stringify(authResult.timeExpires));
-            localStorage.setItem('user-info', JSON.stringify(authResult.usuario));
-        }
+    async logout(): Promise<void> {
+        // Limpia access token local
+        this.session.clearSession();
+        // Pide al backend limpiar la cookie refresh
+        try {
+            await this.base.post(`${config.authMethod}logout`, {}, { withCredentials: true, withLoader: false }).toPromise();
+        } catch { }
     }
 
-    logout() {
-        localStorage.removeItem('id_token');
-        localStorage.removeItem('expires_at');
-        localStorage.removeItem('user-info');
-    }
-
-    isUserLoggedIn(): Usuario {
-        const accessToken = localStorage.getItem("id_token");
-        const jsonUserInfo = localStorage.getItem("user-info");
-        this.usuarioLogin = JSON.parse(jsonUserInfo);
-        if (this.usuarioLogin) {
-            return this.usuarioLogin;
-        } else {
-            return null;
-        }
-    }
-
-
-
-
-    // Método para verificar si el usuario está logueado
     isLoggedIn(): boolean {
-        const token = localStorage.getItem('id_token');
-        const expiresAt = localStorage.getItem('expires_at');
+        const token = this.session.getAccessToken();
+        if (!token) return false;
+        try {
+            const payload: any = decodeJwt(token);
+            if (!payload?.exp) return false;
+            const now = Math.floor(Date.now() / 1000);
+            return now < payload.exp;
+        } catch { return false; }
+    }
 
-        if (!token || !expiresAt) {
-            return false;
-        }
-
-        // const expirationDate = moment(JSON.parse(expiresAt));  // Verifica si la fecha de expiración no ha pasado
-        // return moment().isBefore(expirationDate);  // Compara si la fecha de expiración es mayor que la fecha actual
-
-        // Parsea la fecha con el formato exacto que envía el backend
-        const expirationDate = moment(expiresAt, 'ddd MMM DD HH:mm:ss [PET] YYYY');
-        return moment().isBefore(expirationDate);
-
+    getCurrentUserEmail(): string | null {
+        const token = this.session.getAccessToken();
+        if (!token) return null;
+        try {
+            const payload: any = decodeJwt(token);
+            return payload?.email ?? null;
+        } catch { return null; }
     }
 }

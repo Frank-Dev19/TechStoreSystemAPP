@@ -1,121 +1,101 @@
-<!-- sidebar.component.html -->
 <div class="sidebar-container">
-    <div class="logo">
-        <a href="home" class="simple-text logo-normal">
-            <div class="logo-sirge">
-                <a href="/reservasHabitaciones"><img src="assets/img/LogoNeptComputer.png" alt="Logo del sistema" /></a>
-            </div>
-        </a>
-    </div>
-
     <div class="sidebar-wrapper">
-        <div id="sidebar" [ngClass]="{ 'active': menuOpen }">
-            <ul class="nav">
+        <div class="sidebar-panel">
+            <div class="logo">
+                <a routerLink="/home" class="simple-text logo-normal">
+                    <div class="logo-sirge">
+                        <img src="assets/img/LogoNeptComputer.png" alt="Logo del sistema" />
+                    </div>
+                </a>
+            </div>
 
-                <li class="nav-item" *ngIf="authenticatedUser?.role === 'ADMIN'">
-                    <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('modulo1')">
-                        <i class="tim-icons icon-bank"></i>
-                        <p>modulo1 <span class="caret"></span></p>
-                    </a>
-                    <ul class="nav submenu" [ngClass]="{ 'show': isSubMenuOpen('modulo1') }">
-                        <li><a class="nav-link" href="/dashboard">Dashboard</a></li>
-                        <li><a class="nav-link" href="/gestionUsuarios">Usuarios</a></li>
-                        <li><a class="nav-link" href="/dashboard">Dashboard</a></li>
-                        <li><a class="nav-link" href="/CategoriasProductos">Categ-Produc</a></li>
-                        <li><a class="nav-link" href="/habitaciones">Habitaciones</a></li>
-                        <li><a class="nav-link" href="/reservasHabitaciones">Reservas</a></li>
-                        <li><a class="nav-link" href="/modoPago">Modo Pago</a></li>
-                        <!-- <li><a class="nav-link" href="/prueba">Modo Pago</a></li> -->
-                        <li><a class="nav-link" href="/clientes">Clientess</a></li>
-                        <li><a class="nav-link" href="/servicios">Servicios</a></li>
-                        <li><a class="nav-link" href="/solicitudes">Solicitudes</a></li>
-                        <li><a class="nav-link" href="/calificaciones">Calificaciones</a></li>
-                    </ul>
-                </li>
+            <!-- CONTENEDOR DEL MENÚ CON SCROLL -->
+            <div class="nav-container">
+                <ul class="nav">
+                    <li class="nav-item" *ngIf="authenticatedUser?.role === 'ADMIN'">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('modulo1')">
+                            <i class="tim-icons icon-bank"></i>
+                            <p>Modulo1 <span class="caret"></span></p>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('modulo1')">
+                            <li><a class="nav-link" routerLink="/dashboard">Dashboard</a></li>
+                        </ul>
+                    </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo1')">
-                        <i class="tim-icons icon-bank"></i>
-                        <p>Modulo1 <span class="caret"></span></p>
-                    </a>
-                    <ul class="nav submenu" [ngClass]="{ 'show': isSubMenuOpen('Modulo1') }">
-                        <li><a class="nav-link" href="/habitaciones">Habitaciones</a></li>
-                        <li><a class="nav-link" href="/reservasHabitaciones">Reservas</a></li>
-                    </ul>
-                </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo1')">
+                            <i class="tim-icons icon-bank"></i>
+                            <p>Modulo1 <span class="caret"></span></p>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo1')">
+                            <li><a class="nav-link" routerLink="/habitaciones">Habitaciones</a></li>
+                            <li><a class="nav-link" routerLink="/reservasHabitaciones">Reservas</a></li>
+                        </ul>
+                    </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo2')">
-                        <i class="tim-icons icon-bullet-list-67"></i>
-                        <p>Modulo2 <span class="caret"></span></p>
-                    </a>
-                    <ul class="nav submenu" [ngClass]="{ 'show': isSubMenuOpen('Modulo2') }">
-                        <li><a class="nav-link" href="/CategoriasProductos">Categ-Produc</a></li>
-                        <li><a class="nav-link" href="/CategoriasProductos"></a></li>
-                        <li><a class="nav-link" href="/CategoriasProductos"></a></li>
-                    </ul>
-                </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo2')">
+                            <i class="tim-icons icon-bullet-list-67"></i>
+                            <p>Modulo2 <span class="caret"></span></p>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo2')">
+                            <li><a class="nav-link" routerLink="/clientes">Clientes</a></li>
+                        </ul>
+                    </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo3')">
-                        <i class="tim-icons icon-single-02"></i>
-                        <p>Modulo3 <span class="caret"></span></p>
-                    </a>
-                    <ul class="nav submenu" [ngClass]="{ 'show': isSubMenuOpen('Modulo3') }">
-                        <li><a class="nav-link" href="/clientes">Clientes</a></li>
-                        <li><a class="nav-link" href="/clientes"></a></li>
-                        <li><a class="nav-link" href="/clientes"></a></li>
-                    </ul>
-                </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo3')">
+                            <i class="tim-icons icon-single-02"></i>
+                            <p>Modulo3 <span class="caret"></span></p>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo3')">
+                            <li><a class="nav-link" routerLink="/clientes">Clientes</a></li>
+                        </ul>
+                    </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo4')">
-                        <i class="tim-icons icon-settings-gear-63"></i>
-                        <p>Modulo4 <span class="caret"></span></p>
-                    </a>
-                    <ul class="nav submenu" [ngClass]="{ 'show': isSubMenuOpen('Modulo4') }">
-                        <li><a class="nav-link" href="#">Usuarios</a></li>
-                        <!-- <li><a class="nav-link" href="#">Roles</a></li> -->
-                        <li><a class="nav-link" href="#">Subida de archivos</a></li>
-                    </ul>
-                </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo4')">
+                            <i class="tim-icons icon-settings-gear-63"></i>
+                            <p>Modulo4 <span class="caret"></span></p>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo4')">
+                            <li><a class="nav-link" routerLink="/dashboard">Usuarios</a></li>
+                            <li><a class="nav-link" routerLink="/home">Subida de archivos</a></li>
+                        </ul>
+                    </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo5')">
-                        <i class="tim-icons icon-delivery-fast"></i>
-                        <p>Modulo5 <span class="caret"></span></p>
-                    </a>
-                    <ul class="nav submenu" [ngClass]="{ 'show': isSubMenuOpen('Modulo5') }">
-                        <li><a class="nav-link" href="/servicios">Servicios</a></li>
-                        <li><a class="nav-link" href="/solicitudes">Solicitudes</a></li>
-                    </ul>
-                </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo5')">
+                            <i class="tim-icons icon-delivery-fast"></i>
+                            <p>Modulo5 <span class="caret"></span></p>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo5')">
+                            <li><a class="nav-link" routerLink="/servicios">Servicios</a></li>
+                            <li><a class="nav-link" routerLink="/solicitudes">Solicitudes</a></li>
+                        </ul>
+                    </li>
 
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo6')">
+                            <i class="tim-icons icon-money-coins"></i>
+                            <p>Modulo6 <span class="caret"></span></p>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo6')">
+                            <li><a class="nav-link" routerLink="/modoPago">Modo Pago</a></li>
+                        </ul>
+                    </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo6')">
-                        <i class="tim-icons icon-money-coins"></i>
-                        <p>Modulo6<span class="caret"></span></p>
-                    </a>
-                    <ul class="nav submenu" [ngClass]="{ 'show': isSubMenuOpen('Modulo6') }">
-                        <li><a class="nav-link" href="/modoPago">Modo Pago</a></li>
-                        <li><a class="nav-link" href="/modoPago"></a></li>
-                        <li><a class="nav-link" href="/modoPago"></a></li>
-                    </ul>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('7')">
-                        <i class="tim-icons icon-shape-star"></i>
-                        <p>Modulo7 <span class="caret"></span></p>
-                    </a>
-                    <ul class="nav submenu" [ngClass]="{ 'show': isSubMenuOpen('Modulo7') }">
-                        <li><a class="nav-link" href="/calificaciones">Calificaciones</a></li>
-                        <li><a class="nav-link" href="/calificaciones"></a></li>
-                        <li><a class="nav-link" href="/calificaciones"></a></li>
-                    </ul>
-                </li>
-            </ul>
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo7')">
+                            <i class="tim-icons icon-shape-star"></i>
+                            <p>Modulo7 <span class="caret"></span></p>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo7')">
+                            <li><a class="nav-link" routerLink="/calificaciones">Calificaciones</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
         </div>
     </div>
 </div>
