@@ -2,11 +2,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { of } from 'rxjs';
 
-import { Clientes } from './clientes';
-import { CustomersApiService } from '../../services/customers-api.service';
+import { DocumentTypes } from './document-types';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 
-class CustomersApiServiceStub {
+class DocumentTypesApiServiceStub {
   findAll() {
     return of({ data: [], total: 0, page: 1, limit: 10 });
   }
@@ -19,32 +18,28 @@ class CustomersApiServiceStub {
   remove() {
     return of(null as any);
   }
-  bulkSoftDelete() {
+  restore() {
+    return of(null as any);
+  }
+  hardRemove() {
     return of(null as any);
   }
 }
 
-class DocumentTypesApiServiceStub {
-  findAll() {
-    return of({ data: [], total: 0, page: 1, limit: 10 });
-  }
-}
-
-describe('Clientes', () => {
-  let component: Clientes;
-  let fixture: ComponentFixture<Clientes>;
+describe('DocumentTypes', () => {
+  let component: DocumentTypes;
+  let fixture: ComponentFixture<DocumentTypes>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [Clientes],
+      declarations: [DocumentTypes],
       imports: [FormsModule, ReactiveFormsModule],
       providers: [
-        { provide: CustomersApiService, useClass: CustomersApiServiceStub },
         { provide: DocumentTypesApiService, useClass: DocumentTypesApiServiceStub },
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(Clientes);
+    fixture = TestBed.createComponent(DocumentTypes);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

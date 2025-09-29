@@ -7,14 +7,10 @@ import { FormsModule, ReactiveFormsModule } from "@angular/forms";
 import { NgApexchartsModule } from 'ng-apexcharts';
 
 import { AdminLayoutRoutes } from "./admin-layout.routing";
-//import { HomeComponent } from '../../pages/home/home';
-//import { GesionUsuariosComponent } from '../../pages/gesion-usuarios/gesion-usuarios';
 import { Dashboard } from "../../components/dashboard/dashboard";
 import { Home } from "../../pages/home/home";
 import { Clientes } from "../../pages/clientes/clientes";
-// import { ForgotPassword } from "../../pages/forgot-password/forgot-password";
-// import { ResetPassword } from "../../pages/reset-password/reset-password";
-
+import { DocumentTypes } from "../../pages/document-types/document-types";
 
 @NgModule({
     imports: [
@@ -26,24 +22,12 @@ import { Clientes } from "../../pages/clientes/clientes";
         NgbModule,
         NgbCollapseModule,
         NgApexchartsModule
-        //   AgGridModule,
-        //   NgMultiSelectDropDownModule,
-        //   FullCalendarModule,
-        //   BsDatepickerModule.forRoot(),
-        //   ModalModule.forChild(),
-        //   NgSelectModule,
-        //   PopoverModule.forRoot(),
-        //   IMaskModule
     ],
     declarations: [
-        //HomeComponent,
-        //GesionUsuariosComponent,
         Home,
         Dashboard,
         Clientes,
-        //ForgotPassword,
-        //ResetPassword
-
+        DocumentTypes,
     ],
     providers: [DatePipe],
     exports: [

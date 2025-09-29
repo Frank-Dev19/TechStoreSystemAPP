@@ -1,14 +1,14 @@
-<div class="clientes-container">
+<div class="document-types-container">
     <!-- Header Section -->
     <div class="header-section">
         <div class="title-section">
-            <h1 class="page-title">Gestión de Clientes</h1>
-            <p class="page-subtitle">Administra y gestiona la información de tus clientes</p>
+            <h1 class="page-title">Gestión de Tipos de Documentos</h1>
+            <p class="page-subtitle">Administra y gestiona la información de tus tipos de documentos</p>
         </div>
         <div class="actions-section">
             <button class="btn btn-primary" (click)="openCreateModal()">
                 <i class="fas fa-plus"></i>
-                Nuevo Cliente
+                Nuevo Tipo de Documento
             </button>
             <button class="btn btn-secondary" (click)="refreshData()">
                 <i class="fas fa-sync-alt"></i>
@@ -36,9 +36,9 @@
     </div>
 
     <!-- Bulk Actions Section -->
-    <div class="bulk-actions" *ngIf="selectedClients.length > 0">
+    <div class="bulk-actions" *ngIf="selectedDocumentTypes.length > 0">
         <div class="selected-info">
-            <span>{{selectedClients.length}} cliente(s) seleccionado(s)</span>
+            <span>{{selectedDocumentTypes.length}} tipo(s) de documento(s) seleccionado(s)</span>
         </div>
         <div class="bulk-buttons">
             <button class="btn btn-danger" (click)="confirmBulkDelete()">
@@ -51,7 +51,7 @@
     <!-- Table Section -->
     <div class="table-container">
         <div class="table-wrapper">
-            <table class="clients-table">
+            <table class="document-types-table">
                 <thead>
                     <tr>
                         <th class="checkbox-column">
@@ -59,44 +59,32 @@
                                 (change)="toggleSelectAll()" class="checkbox-input">
                         </th>
                         <th>Nombre</th>
-                        <th>Tipo Doc.</th>
-                        <th>N° Documento</th>
-                        <th>Correo</th>
-                        <th>Teléfono</th>
-                        <th>Estado</th>
                         <th>Fecha Creación</th>
+                        <th>Estado</th>
                         <th class="actions-column">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr *ngFor="let cliente of filteredClientes" [class.selected]="isSelected(cliente.id)">
+                    <tr *ngFor="let documentType of filteredDocumentTypes" [class.selected]="isSelected(documentType.id)">
                         <td class="checkbox-column">
-                            <input type="checkbox" [checked]="isSelected(cliente.id)"
-                                (change)="toggleSelect(cliente.id)" class="checkbox-input">
+                            <input type="checkbox" [checked]="isSelected(documentType.id)"
+                                (change)="toggleSelect(documentType.id)" class="checkbox-input">
                         </td>
                         <td class="name-cell">
-                            <div class="client-name">{{cliente.name}}</div>
+                            <div class="document-type-name">{{documentType.name}}</div>
                         </td>
                         <td>
-                            <span class="doc-type-badge" [ngClass]="getDocTypeClass(cliente.documentTypeId)">
-                                {{getDocumentTypeName(cliente.documentTypeId)}}
+                            <span class="status-badge" [ngClass]="documentType.isActive ? 'active' : 'inactive'">
+                                {{documentType.isActive ? 'Activo' : 'Inactivo'}}
                             </span>
                         </td>
-                        <td class="document-cell">{{cliente.documentNumber}}</td>
-                        <td class="email-cell">{{cliente.email}}</td>
-                        <td class="phone-cell">{{cliente.phone}}</td>
-                        <td>
-                            <span class="status-badge" [ngClass]="cliente.isActive ? 'active' : 'inactive'">
-                                {{cliente.isActive ? 'Activo' : 'Inactivo'}}
-                            </span>
-                        </td>
-                        <td class="date-cell">{{formatDate(cliente.createdAt)}}</td>
+                        <td class="date-cell">{{formatDate(documentType.createdAt)}}</td>
                         <td class="actions-column">
                             <div class="action-buttons">
-                                <button class="btn-icon btn-edit" (click)="openEditModal(cliente)" title="Editar">
+                                <button class="btn-icon btn-edit" (click)="openEditModal(documentType)" title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn-icon btn-delete" (click)="confirmDelete(cliente)" title="Eliminar">
+                                <button class="btn-icon btn-delete" (click)="confirmDelete(documentType)" title="Eliminar">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -107,20 +95,20 @@
         </div>
 
         <!-- Empty State -->
-        <div class="empty-state" *ngIf="filteredClientes.length === 0">
+        <div class="empty-state" *ngIf="filteredDocumentTypes.length === 0">
             <div class="empty-icon">
                 <i class="fas fa-users"></i>
             </div>
-            <h3>No se encontraron clientes</h3>
-            <p>No hay clientes que coincidan con tu búsqueda</p>
+            <h3>No se encontraron tipos de documentos</h3>
+            <p>No hay tipos de documentos que coincidan con tu búsqueda</p>
         </div>
     </div>
 
     <!-- Pagination -->
-    <div class="pagination-container" *ngIf="filteredClientes.length > 0">
+    <div class="pagination-container" *ngIf="filteredDocumentTypes.length > 0">
         <div class="pagination-info">
             Mostrando {{(currentPage - 1) * itemsPerPage + 1}} - {{Math.min(currentPage * itemsPerPage,
-            filteredClientes.length)}} de {{filteredClientes.length}} clientes
+            filteredDocumentTypes.length)}} de {{filteredDocumentTypes.length}} tipos de documentos
         </div>
         <div class="pagination-controls">
             <button class="btn-pagination" [disabled]="currentPage === 1" (click)="previousPage()">
@@ -138,68 +126,29 @@
 <div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
     <div class="modal-container" (click)="$event.stopPropagation()">
         <div class="modal-header">
-            <h2>{{isEditMode ? 'Editar Cliente' : 'Nuevo Cliente'}}</h2>
+            <h2>{{isEditMode ? 'Editar Tipo de Documento' : 'Nuevo Tipo de Documento'}}</h2>
             <button class="btn-close" (click)="closeModal()">
                 <i class="fas fa-times"></i>
             </button>
         </div>
         <div class="modal-body">
-            <form [formGroup]="clientForm" (ngSubmit)="saveClient()">
+            <form [formGroup]="documentTypeForm" (ngSubmit)="saveDocumentType()">
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="nombre">Nombre *</label>
                         <input type="text" id="nombre" formControlName="name" class="form-input"
-                            [class.error]="clientForm.get('name')?.invalid && clientForm.get('name')?.touched">
+                            [class.error]="documentTypeForm.get('name')?.invalid && documentTypeForm.get('name')?.touched">
                         <div class="error-message"
-                            *ngIf="clientForm.get('name')?.invalid && clientForm.get('name')?.touched">
+                            *ngIf="documentTypeForm.get('name')?.invalid && documentTypeForm.get('name')?.touched">
                             El nombre es requerido
                         </div>
                     </div>
-
-                    <div class="form-group">
-                        <label for="documentType">Tipo de Documento *</label>
-                        <select id="documentType" formControlName="documentTypeId" class="form-select"
-                            [class.error]="clientForm.get('documentTypeId')?.invalid && clientForm.get('documentTypeId')?.touched">
-                            <option value="">Seleccionar tipo</option>
-                            <option *ngFor="let tipo of documentTypes" [value]="tipo.id">{{tipo.name}}</option>
-                        </select>
-                        <div class="error-message"
-                            *ngIf="clientForm.get('documentTypeId')?.invalid && clientForm.get('documentTypeId')?.touched">
-                            Selecciona un tipo de documento
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="documentNumber">Número de Documento *</label>
-                        <input type="text" id="numeroDocumento" formControlName="documentNumber" class="form-input"
-                            [class.error]="clientForm.get('documentNumber')?.invalid && clientForm.get('documentNumber')?.touched">
-                        <div class="error-message"
-                            *ngIf="clientForm.get('documentNumber')?.invalid && clientForm.get('documentNumber')?.touched">
-                            El número de documento es requerido
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="email">Correo Electrónico *</label>
-                        <input type="email" id="correo" formControlName="email" class="form-input"
-                            [class.error]="clientForm.get('email')?.invalid && clientForm.get('email')?.touched">
-                        <div class="error-message"
-                            *ngIf="clientForm.get('email')?.invalid && clientForm.get('email')?.touched">
-                            <span *ngIf="clientForm.get('email')?.errors?.['required']">El correo es requerido</span>
-                            <span *ngIf="clientForm.get('email')?.errors?.['email']">Ingresa un correo válido</span>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="phone">Teléfono</label>
-                        <input type="tel" id="telefono" formControlName="phone" class="form-input">
-                    </div>
-
+                   
                     <div class="form-group checkbox-group">
                         <label class="checkbox-label">
                             <input type="checkbox" formControlName="isActive" class="checkbox-input">
                             <span class="checkbox-custom"></span>
-                            Cliente Activo
+                            Tipo de Documento Activo
                         </label>
                     </div>
                 </div>
@@ -209,8 +158,8 @@
             <button type="button" class="btn btn-secondary" (click)="closeModal()">
                 Cancelar
             </button>
-            <button type="submit" class="btn btn-primary" (click)="saveClient()" [disabled]="clientForm.invalid">
-                {{isEditMode ? 'Actualizar' : 'Crear'}} Cliente
+            <button type="submit" class="btn btn-primary" (click)="saveDocumentType()" [disabled]="documentTypeForm.invalid">
+                {{isEditMode ? 'Actualizar' : 'Crear'}} Tipo de Documento
             </button>
         </div>
     </div>

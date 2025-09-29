@@ -26,6 +26,7 @@ export interface HttpOptions {
     responseType?: 'json';
     withCredentials?: boolean;    // ✅ ahora soportado
     withLoader?: boolean;          // ✅ loader opcional (por defecto true)
+    body?: any;
 }
 
 @Injectable()
@@ -50,7 +51,7 @@ export class BaseService {
     }
 
     delete<T>(url: string, options?: HttpOptions): Observable<T> {
-        return this.request<T>('DELETE', url, null, options);
+        return this.request<T>('DELETE', url, options?.body, options);
     }
 
     // ------------ Internos ------------
@@ -60,7 +61,7 @@ export class BaseService {
         body?: any,
         options?: HttpOptions
     ): Observable<T> {
-        const { withLoader = true, ...httpOpts } = options ?? {};
+        const { withLoader = true, body: optionsBody, ...httpOpts } = options ?? {};
 
         const fullUrl = `${config.endpointServices}${url}`;
 
@@ -68,9 +69,11 @@ export class BaseService {
 
         if (withLoader) this.trigger.fireShowLoader();
 
+        const requestBody = body ?? optionsBody;
+
         return this.http
             .request<T>(method, fullUrl, {
-                body,
+                body: requestBody,
                 ...httpOpts,          // ← aquí se respeta withCredentials
                 headers,
             })

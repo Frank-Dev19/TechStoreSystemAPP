@@ -1,18 +1,10 @@
-import { Component, type OnInit } from '@angular/core';
-import { FormBuilder, type FormGroup, Validators } from "@angular/forms"
-
-export interface Cliente {
-  id: number
-  nombre: string
-  tipoDocumento: "DNI" | "RUC" | "CE"
-  numeroDocumento: string
-  correo: string
-  telefono: string
-  activo: boolean
-  fechaCreado: Date
-}
-
-
+import { Component, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from "@angular/forms";
+import { CustomersApiService, PaginatedResponse } from "../../services/customers-api.service";
+import { CustomersResponse } from "../../models/customers/customers-response";
+import { CustomersSaveRequest } from "../../models/customers/customers-request";
+import { DocumentTypesApiService } from "../../services/document-types-api.service";
+import { DocumentTypeResponse, DocumentTypesPaginatedResponse } from "../../models/document-types/document-types-response";
 
 @Component({
   selector: 'app-clientes',
@@ -20,325 +12,341 @@ export interface Cliente {
   templateUrl: './clientes.html',
   styleUrl: './clientes.scss'
 })
-export class Clientes {
+export class Clientes implements OnInit {
 
-  // Data properties
-  clientes: Cliente[] = []
-  filteredClientes: Cliente[] = []
-  selectedClients: number[] = []
+  clientes: CustomersResponse[] = [];
+  filteredClientes: CustomersResponse[] = [];
+  selectedClients: number[] = [];
 
-  // Search and filter properties
-  searchTerm = ""
-  statusFilter = ""
+  searchTerm = "";
+  statusFilter = "";
 
-  // Pagination properties
-  currentPage = 1
-  itemsPerPage = 10
-  totalPages = 1
+  currentPage = 1;
+  itemsPerPage = 10;
+  totalPages = 1;
+  totalItems = 0;
 
-  // Modal properties
-  showModal = false
-  showConfirmModal = false
-  isEditMode = false
-  clientForm: FormGroup
-  currentClient: Cliente | null = null
+  isLoading = false;
+  documentTypes: DocumentTypeResponse[] = [];
 
-  // Confirmation properties
-  confirmMessage = ""
-  deleteAction: (() => void) | null = null
+  showModal = false;
+  showConfirmModal = false;
+  isEditMode = false;
+  clientForm: FormGroup;
+  currentClient: CustomersResponse | null = null;
 
-  // Math reference for template
-  Math = Math
+  confirmMessage = "";
+  deleteAction: (() => void) | null = null;
 
-  constructor(private formBuilder: FormBuilder) {
-    this.clientForm = this.createForm()
+  Math = Math;
+
+  constructor(
+    private readonly formBuilder: FormBuilder,
+    private readonly customersApi: CustomersApiService,
+    private readonly documentTypesApi: DocumentTypesApiService,
+  ) {
+    this.clientForm = this.createForm();
   }
 
   ngOnInit(): void {
-    this.loadClientes()
-    this.applyFilters()
+    this.loadDocumentTypes();
+    this.fetchClientes();
   }
 
-  // Form creation
   private createForm(): FormGroup {
     return this.formBuilder.group({
-      nombre: ["", [Validators.required, Validators.minLength(2)]],
-      tipoDocumento: ["", Validators.required],
-      numeroDocumento: ["", [Validators.required, Validators.minLength(8)]],
-      correo: ["", [Validators.required, Validators.email]],
-      telefono: [""],
-      activo: [true],
-    })
+      name: ["", [Validators.required, Validators.minLength(2)]],
+      documentTypeId: ["", Validators.required],
+      documentNumber: ["", [Validators.required, Validators.minLength(8)]],
+      email: ["", [Validators.required, Validators.email]],
+      phone: [""],
+      isActive: [true],
+    });
   }
 
-  // Data loading and management
-  private loadClientes(): void {
-    // Simulated data - replace with actual API call
-    this.clientes = [
-      {
-        id: 1,
-        nombre: "Juan Carlos Pérez García",
-        tipoDocumento: "DNI",
-        numeroDocumento: "12345678",
-        correo: "juan.perez@email.com",
-        telefono: "+51 987654321",
-        activo: true,
-        fechaCreado: new Date("2024-01-15"),
+  private loadDocumentTypes(): void {
+    this.documentTypesApi.findAll({ limit: 50, isActive: 'true' }).subscribe({
+      next: (response) => {
+        this.documentTypes = response.data.map((item) => ({
+          ...item,  
+          id: Number(item.id),
+        }));
       },
-      {
-        id: 2,
-        nombre: "Empresa Tecnológica SAC",
-        tipoDocumento: "RUC",
-        numeroDocumento: "20123456789",
-        correo: "contacto@empresa.com",
-        telefono: "+51 987654322",
-        activo: true,
-        fechaCreado: new Date("2024-02-20"),
+      error: (err) => {
+        console.error("Error fetching document types", err);
       },
-      {
-        id: 3,
-        nombre: "María Elena Rodriguez",
-        tipoDocumento: "CE",
-        numeroDocumento: "CE001234567",
-        correo: "maria.rodriguez@email.com",
-        telefono: "+51 987654323",
-        activo: false,
-        fechaCreado: new Date("2024-03-10"),
+    });
+  }
+
+  private fetchClientes(): void {
+    this.isLoading = true;
+
+    const params: Record<string, string | number | boolean> = {
+      page: this.currentPage,
+      limit: this.itemsPerPage,
+    };
+
+    if (this.searchTerm.trim()) {
+      params['search'] = this.searchTerm.trim();
+    }
+
+    if (this.statusFilter !== "") {
+      params['isActive'] = this.statusFilter;
+    }
+
+    this.customersApi.findAll(params).subscribe({
+      next: (response: PaginatedResponse<CustomersResponse>) => {
+        this.clientes = response.data.map((cliente) => ({
+          ...cliente,
+          id: Number(cliente.id),
+          documentTypeId: Number(cliente.documentTypeId),
+        }));
+        this.filteredClientes = [...this.clientes];
+        this.totalItems = response.total;
+        this.itemsPerPage = this.itemsPerPage;
+        this.currentPage = this.currentPage;
+        this.updatePagination();
+        this.selectedClients = [];
       },
-      {
-        id: 4,
-        nombre: "Carlos Alberto Mendoza",
-        tipoDocumento: "DNI",
-        numeroDocumento: "87654321",
-        correo: "carlos.mendoza@email.com",
-        telefono: "+51 987654324",
-        activo: true,
-        fechaCreado: new Date("2024-03-25"),
+      error: (err) => {
+        console.error("Error fetching customers", err);
+        this.clientes = [];
+        this.filteredClientes = [];
+        this.totalItems = 0;
+        this.totalPages = 1;
       },
-      {
-        id: 5,
-        nombre: "Innovación Digital EIRL",
-        tipoDocumento: "RUC",
-        numeroDocumento: "20987654321",
-        correo: "info@innovacion.com",
-        telefono: "+51 987654325",
-        activo: true,
-        fechaCreado: new Date("2024-04-05"),
+      complete: () => {
+        this.isLoading = false;
       },
-    ]
+    });
   }
 
   refreshData(): void {
-    this.loadClientes()
-    this.applyFilters()
-    // Show success message or loading indicator
-    console.log("Datos actualizados correctamente")
+    this.fetchClientes();
   }
 
-  // Search and filter functionality
   onSearch(): void {
-    this.currentPage = 1
-    this.applyFilters()
+    this.currentPage = 1;
+    this.fetchClientes();
   }
 
   applyFilters(): void {
-    let filtered = [...this.clientes]
-
-    // Apply search filter
-    if (this.searchTerm.trim()) {
-      const searchLower = this.searchTerm.toLowerCase().trim()
-      filtered = filtered.filter(
-        (cliente) =>
-          cliente.nombre.toLowerCase().includes(searchLower) ||
-          cliente.numeroDocumento.toLowerCase().includes(searchLower),
-      )
-    }
-
-    // Apply status filter
-    if (this.statusFilter !== "") {
-      const isActive = this.statusFilter === "true"
-      filtered = filtered.filter((cliente) => cliente.activo === isActive)
-    }
-
-    this.filteredClientes = filtered
-    this.updatePagination()
+    this.currentPage = 1;
+    this.fetchClientes();
   }
 
-  // Pagination
   private updatePagination(): void {
-    this.totalPages = Math.ceil(this.filteredClientes.length / this.itemsPerPage)
+    this.totalPages = Math.max(1, Math.ceil(this.totalItems / this.itemsPerPage));
     if (this.currentPage > this.totalPages) {
-      this.currentPage = 1
+      this.currentPage = this.totalPages;
+    }
+    if (this.currentPage < 1) {
+      this.currentPage = 1;
     }
   }
 
   previousPage(): void {
     if (this.currentPage > 1) {
-      this.currentPage--
+      this.currentPage--;
+      this.fetchClientes();
     }
   }
 
   nextPage(): void {
     if (this.currentPage < this.totalPages) {
-      this.currentPage++
+      this.currentPage++;
+      this.fetchClientes();
     }
   }
 
-  // Selection functionality
-  toggleSelect(clientId: number): void {
-    const index = this.selectedClients.indexOf(clientId)
+  toggleSelect(clientId: number | string): void {
+    const id = Number(clientId);
+    const index = this.selectedClients.indexOf(id);
     if (index > -1) {
-      this.selectedClients.splice(index, 1)
+      this.selectedClients.splice(index, 1);
     } else {
-      this.selectedClients.push(clientId)
+      this.selectedClients.push(id);
     }
   }
 
   toggleSelectAll(): void {
     if (this.isAllSelected()) {
-      this.selectedClients = []
+      this.selectedClients = [];
     } else {
-      this.selectedClients = this.filteredClientes.map((cliente) => cliente.id)
+      this.selectedClients = this.filteredClientes.map((cliente) => Number(cliente.id));
     }
   }
 
   isSelected(clientId: number): boolean {
-    return this.selectedClients.includes(clientId)
+    return this.selectedClients.includes(clientId);
   }
 
   isAllSelected(): boolean {
-    return this.filteredClientes.length > 0 && this.selectedClients.length === this.filteredClientes.length
+    return this.filteredClientes.length > 0 && this.selectedClients.length === this.filteredClientes.length;
   }
 
   isIndeterminate(): boolean {
-    return this.selectedClients.length > 0 && this.selectedClients.length < this.filteredClientes.length
+    return this.selectedClients.length > 0 && this.selectedClients.length < this.filteredClientes.length;
   }
 
-  // Modal functionality
   openCreateModal(): void {
-    this.isEditMode = false
-    this.currentClient = null
+    this.isEditMode = false;
+    this.currentClient = null;
     this.clientForm.reset({
-      nombre: "",
-      tipoDocumento: "",
-      numeroDocumento: "",
-      correo: "",
-      telefono: "",
-      activo: true,
-    })
-    this.showModal = true
+      name: "",
+      documentTypeId: "",
+      documentNumber: "",
+      email: "",
+      phone: "",
+      isActive: true,
+    });
+    this.showModal = true;
   }
 
-  openEditModal(cliente: Cliente): void {
-    this.isEditMode = true
-    this.currentClient = cliente
+  openEditModal(cliente: CustomersResponse): void {
+    this.isEditMode = true;
+    this.currentClient = cliente;
     this.clientForm.patchValue({
-      nombre: cliente.nombre,
-      tipoDocumento: cliente.tipoDocumento,
-      numeroDocumento: cliente.numeroDocumento,
-      correo: cliente.correo,
-      telefono: cliente.telefono,
-      activo: cliente.activo,
-    })
-    this.showModal = true
+      name: cliente.name,
+      documentTypeId: String(cliente.documentTypeId),
+      documentNumber: cliente.documentNumber,
+      email: cliente.email ?? "",
+      phone: cliente.phone ?? "",
+      isActive: cliente.isActive,
+    });
+    this.showModal = true;
   }
 
   closeModal(): void {
-    this.showModal = false
-    this.clientForm.reset()
-    this.currentClient = null
+    this.showModal = false;
+    this.clientForm.reset({ isActive: true });
+    this.currentClient = null;
+  }
+
+  private buildPayload(): CustomersSaveRequest {
+    const formValue = this.clientForm.value;
+    return {
+      name: String(formValue.name).trim(),
+      documentTypeId: Number(formValue.documentTypeId),
+      documentNumber: String(formValue.documentNumber).trim(),
+      email: formValue.email ? String(formValue.email).trim() : undefined,
+      phone: formValue.phone ? String(formValue.phone).trim() : undefined,
+      isActive: formValue.isActive,
+    };
+  }
+
+  private markFormAsTouched(): void {
+    Object.keys(this.clientForm.controls).forEach((key) => {
+      this.clientForm.get(key)?.markAsTouched();
+    });
   }
 
   saveClient(): void {
-    if (this.clientForm.valid) {
-      const formData = this.clientForm.value
-
-      if (this.isEditMode && this.currentClient) {
-        // Update existing client
-        const index = this.clientes.findIndex((c) => c.id === this.currentClient!.id)
-        if (index > -1) {
-          this.clientes[index] = {
-            ...this.currentClient,
-            ...formData,
-          }
-        }
-        console.log("Cliente actualizado correctamente")
-      } else {
-        // Create new client
-        const newClient: Cliente = {
-          id: Math.max(...this.clientes.map((c) => c.id)) + 1,
-          ...formData,
-          fechaCreado: new Date(),
-        }
-        this.clientes.push(newClient)
-        console.log("Cliente creado correctamente")
-      }
-
-      this.applyFilters()
-      this.closeModal()
-    } else {
-      // Mark all fields as touched to show validation errors
-      Object.keys(this.clientForm.controls).forEach((key) => {
-        this.clientForm.get(key)?.markAsTouched()
-      })
+    if (this.clientForm.invalid) {
+      this.markFormAsTouched();
+      return;
     }
+
+    const payload = this.buildPayload();
+
+    const request$ = this.isEditMode && this.currentClient
+      ? this.customersApi.update(this.currentClient.id, payload)
+      : this.customersApi.create(payload);
+
+    request$.subscribe({
+      next: () => {
+        console.log(this.isEditMode ? "Cliente actualizado correctamente" : "Cliente creado correctamente");
+        this.closeModal();
+        this.fetchClientes();
+      },
+      error: (err) => {
+        console.error("Error saving customer", err);
+      },
+    });
   }
 
-  // Delete functionality
-  confirmDelete(cliente: Cliente): void {
-    this.confirmMessage = `¿Estás seguro de que deseas eliminar al cliente "${cliente.nombre}"?`
-    this.deleteAction = () => this.deleteClient(cliente.id)
-    this.showConfirmModal = true
+  confirmDelete(cliente: CustomersResponse): void {
+    this.confirmMessage = `Estas seguro de que deseas eliminar al cliente "${cliente.name}"?`;
+    this.deleteAction = () => this.deleteClient(cliente.id);
+    this.showConfirmModal = true;
   }
 
   confirmBulkDelete(): void {
-    const count = this.selectedClients.length
-    this.confirmMessage = `¿Estás seguro de que deseas eliminar ${count} cliente${count > 1 ? "s" : ""}?`
-    this.deleteAction = () => this.deleteBulkClients()
-    this.showConfirmModal = true
+    const count = this.selectedClients.length;
+    if (!count) {
+      return;
+    }
+    this.confirmMessage = `Estas seguro de que deseas eliminar ${count} cliente${count > 1 ? "s" : ""}?`;
+    this.deleteAction = () => this.deleteBulkClients();
+    this.showConfirmModal = true;
   }
 
   private deleteClient(clientId: number): void {
-    const index = this.clientes.findIndex((c) => c.id === clientId)
-    if (index > -1) {
-      this.clientes.splice(index, 1)
-      this.selectedClients = this.selectedClients.filter((id) => id !== clientId)
-      this.applyFilters()
-      console.log("Cliente eliminado correctamente")
-    }
+    this.customersApi.remove(clientId).subscribe({
+      next: () => {
+        console.log("Cliente eliminado correctamente");
+        this.fetchClientes();
+      },
+      error: (err) => {
+        console.error("Error deleting customer", err);
+      },
+      complete: () => {
+        this.closeConfirmModal();
+      },
+    });
   }
 
   private deleteBulkClients(): void {
-    this.clientes = this.clientes.filter((cliente) => !this.selectedClients.includes(cliente.id))
-    this.selectedClients = []
-    this.applyFilters()
-    console.log("Clientes eliminados correctamente")
+    if (!this.selectedClients.length) {
+      return;
+    }
+
+    const ids = this.selectedClients.map((value) => Number(value));
+
+    this.customersApi.bulkSoftDelete(ids).subscribe({
+      next: () => {
+        console.log("Clientes eliminados correctamente");
+        this.fetchClientes();
+      },
+      error: (err) => {
+        console.error("Error deleting customers", err);
+      },
+      complete: () => {
+        this.closeConfirmModal();
+      },
+    });
   }
 
   executeDelete(): void {
     if (this.deleteAction) {
-      this.deleteAction()
-      this.closeConfirmModal()
+      this.deleteAction();
     }
   }
 
   closeConfirmModal(): void {
-    this.showConfirmModal = false
-    this.confirmMessage = ""
-    this.deleteAction = null
+    this.showConfirmModal = false;
+    this.confirmMessage = "";
+    this.deleteAction = null;
   }
 
-  // Utility functions
-  formatDate(date: Date): string {
+  formatDate(date: string | Date | undefined): string {
+    if (!date) {
+      return "";
+    }
     return new Intl.DateTimeFormat("es-PE", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
-    }).format(new Date(date))
+    }).format(new Date(date));
   }
 
-  getDocTypeClass(tipoDocumento: string): string {
-    return tipoDocumento.toLowerCase()
+  getDocTypeClass(documentTypeId: number): string {
+    const label = this.getDocumentTypeName(documentTypeId).toLowerCase();
+    return label.replace(/\s+/g, '-');
   }
 
+  getDocumentTypeName(documentTypeId: number): string {
+    const docType = this.documentTypes.find((item) => item.id === documentTypeId);
+    return docType?.name ?? documentTypeId.toString();
+  }
 }
