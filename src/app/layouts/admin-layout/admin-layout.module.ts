@@ -14,8 +14,8 @@ import { Home } from "../../pages/home/home";
 import { Clientes } from "../../pages/clientes/clientes";
 // import { ForgotPassword } from "../../pages/forgot-password/forgot-password";
 // import { ResetPassword } from "../../pages/reset-password/reset-password";
-
-
+import { Tests } from "../../pages/tests/tests";
+import { Perfil } from "../../pages/perfil/perfil";
 @NgModule({
     imports: [
         CommonModule,
@@ -41,6 +41,8 @@ import { Clientes } from "../../pages/clientes/clientes";
         Home,
         Dashboard,
         Clientes,
+        Tests,
+        Perfil
         //ForgotPassword,
         //ResetPassword
 

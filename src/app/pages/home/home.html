@@ -1,7 +1,267 @@
 <div class="home-container">
-    <h1>aca va todo el contenido</h1>
+    <!-- Header Section  -->
+    <div class="home-header">
+        <div class="header-content">
+            <h1 class="page-title">Panel de Control</h1>
+            <p class="page-subtitle">Gestiona tu negocio tecnológico de manera eficiente</p>
+        </div>
+    </div>
 
+    <!-- Main Dashboard Content  -->
+    <div class="dashboard-content">
 
+        <!-- Metrics Cards Row  -->
+        <div class="metrics-grid">
+            <div class="metric-card sales">
+                <div class="metric-icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="metric-info">
+                    <h3 class="metric-value">{{ totalSales | currency }}</h3>
+                    <p class="metric-label">Ventas del Mes</p>
+                    <span class="metric-change positive">
+                        <i class="fas fa-arrow-up"></i>
+                        +12.5%
+                    </span>
+                </div>
+            </div>
 
+            <div class="metric-card inventory">
+                <div class="metric-icon">
+                    <i class="fas fa-boxes"></i>
+                </div>
+                <div class="metric-info">
+                    <h3 class="metric-value">{{ totalProducts }}</h3>
+                    <p class="metric-label">Productos en Stock</p>
+                    <span class="metric-change neutral">
+                        <i class="fas fa-minus"></i>
+                        Sin cambios
+                    </span>
+                </div>
+            </div>
 
+            <div class="metric-card services">
+                <div class="metric-icon">
+                    <i class="fas fa-tools"></i>
+                </div>
+                <div class="metric-info">
+                    <h3 class="metric-value">{{ activeServices }}</h3>
+                    <p class="metric-label">Servicios Activos</p>
+                    <span class="metric-change positive">
+                        <i class="fas fa-arrow-up"></i>
+                        +8.3%
+                    </span>
+                </div>
+            </div>
+
+            <div class="metric-card clients">
+                <div class="metric-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="metric-info">
+                    <h3 class="metric-value">{{ totalClients }}</h3>
+                    <p class="metric-label">Clientes Registrados</p>
+                    <span class="metric-change positive">
+                        <i class="fas fa-arrow-up"></i>
+                        +15.2%
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions Section  -->
+        <div class="quick-actions-section">
+            <h2 class="section-title">
+                <i class="fas fa-bolt"></i>
+                Accesos Rápidos
+            </h2>
+
+            <div class="actions-grid">
+                <div class="action-card" (click)="navigateToModule('clientes')">
+                    <div class="action-icon clients-icon">
+                        <i class="fas fa-user-friends"></i>
+                    </div>
+                    <div class="action-content">
+                        <h3 class="action-title">Gestión de Clientes</h3>
+                        <p class="action-description">Administra la información de tus clientes</p>
+                    </div>
+                    <div class="action-arrow">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+
+                <div class="action-card" (click)="navigateToModule('productos')">
+                    <div class="action-icon products-icon">
+                        <i class="fas fa-microchip"></i>
+                    </div>
+                    <div class="action-content">
+                        <h3 class="action-title">Inventario de Productos</h3>
+                        <p class="action-description">RAM, SSD, USB y componentes tecnológicos</p>
+                    </div>
+                    <div class="action-arrow">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+
+                <div class="action-card" (click)="navigateToModule('servicios')">
+                    <div class="action-icon services-icon">
+                        <i class="fas fa-wrench"></i>
+                    </div>
+                    <div class="action-content">
+                        <h3 class="action-title">Servicios Técnicos</h3>
+                        <p class="action-description">Gestiona reparaciones y mantenimiento</p>
+                    </div>
+                    <div class="action-arrow">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+
+                <div class="action-card" (click)="navigateToModule('ventas')">
+                    <div class="action-icon sales-icon">
+                        <i class="fas fa-cash-register"></i>
+                    </div>
+                    <div class="action-content">
+                        <h3 class="action-title">Registro de Ventas</h3>
+                        <p class="action-description">Historial y nuevas transacciones</p>
+                    </div>
+                    <div class="action-arrow">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+
+                <div class="action-card" (click)="navigateToModule('reportes')">
+                    <div class="action-icon reports-icon">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <div class="action-content">
+                        <h3 class="action-title">Reportes y Analytics</h3>
+                        <p class="action-description">Análisis de rendimiento del negocio</p>
+                    </div>
+                    <div class="action-arrow">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+
+                <div class="action-card" (click)="navigateToModule('configuracion')">
+                    <div class="action-icon settings-icon">
+                        <i class="fas fa-cog"></i>
+                    </div>
+                    <div class="action-content">
+                        <h3 class="action-title">Configuración</h3>
+                        <p class="action-description">Ajustes del sistema y preferencias</p>
+                    </div>
+                    <div class="action-arrow">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity Section  -->
+        <div class="recent-activity-section">
+            <h2 class="section-title">
+                <i class="fas fa-clock"></i>
+                Actividad Reciente
+            </h2>
+
+            <div class="activity-grid">
+                <div class="activity-card">
+                    <div class="activity-header">
+                        <h3 class="activity-title">Últimas Ventas</h3>
+                        <a href="#" class="view-all-link">Ver todas</a>
+                    </div>
+                    <div class="activity-list">
+                        <div class="activity-item" *ngFor="let sale of recentSales">
+                            <div class="activity-icon sale-icon">
+                                <i class="fas fa-shopping-cart"></i>
+                            </div>
+                            <div class="activity-details">
+                                <p class="activity-text">{{ sale.product }} - {{ sale.client }}</p>
+                                <span class="activity-time">{{ sale.time }}</span>
+                            </div>
+                            <div class="activity-amount">{{ sale.amount | currency }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="activity-card">
+                    <div class="activity-header">
+                        <h3 class="activity-title">Servicios Pendientes</h3>
+                        <a href="#" class="view-all-link">Ver todos</a>
+                    </div>
+                    <div class="activity-list">
+                        <div class="activity-item" *ngFor="let service of pendingServices">
+                            <div class="activity-icon service-icon">
+                                <i class="fas fa-tools"></i>
+                            </div>
+                            <div class="activity-details">
+                                <p class="activity-text">{{ service.type }} - {{ service.client }}</p>
+                                <span class="activity-time">{{ service.scheduledDate }}</span>
+                            </div>
+                            <div class="activity-status" [ngClass]="service.priority">
+                                {{ service.priority }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tech Categories Overview  -->
+        <div class="categories-section">
+            <h2 class="section-title">
+                <i class="fas fa-layer-group"></i>
+                Categorías de Productos
+            </h2>
+
+            <div class="categories-grid">
+                <div class="category-card ram">
+                    <div class="category-icon">
+                        <i class="fas fa-memory"></i>
+                    </div>
+                    <h3 class="category-title">Memoria RAM</h3>
+                    <p class="category-count">{{ ramCount }} productos</p>
+                    <div class="category-progress">
+                        <div class="progress-bar" [style.width.%]="ramStock"></div>
+                    </div>
+                </div>
+
+                <div class="category-card storage">
+                    <div class="category-icon">
+                        <i class="fas fa-hdd"></i>
+                    </div>
+                    <h3 class="category-title">Almacenamiento</h3>
+                    <p class="category-count">{{ storageCount }} productos</p>
+                    <div class="category-progress">
+                        <div class="progress-bar" [style.width.%]="storageStock"></div>
+                    </div>
+                </div>
+
+                <div class="category-card peripherals">
+                    <div class="category-icon">
+                        <i class="fas fa-usb"></i>
+                    </div>
+                    <h3 class="category-title">Periféricos</h3>
+                    <p class="category-count">{{ peripheralsCount }} productos</p>
+                    <div class="category-progress">
+                        <div class="progress-bar" [style.width.%]="peripheralsStock"></div>
+                    </div>
+                </div>
+
+                <div class="category-card printers">
+                    <div class="category-icon">
+                        <i class="fas fa-print"></i>
+                    </div>
+                    <div class="category-content">
+                        <h3 class="category-title">Impresoras</h3>
+                        <p class="category-count">{{ printersCount }} productos</p>
+                        <div class="category-progress">
+                            <div class="progress-bar" [style.width.%]="printersStock"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
 </div>

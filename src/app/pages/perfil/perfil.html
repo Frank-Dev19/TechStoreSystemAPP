@@ -1,0 +1,237 @@
+<div class="perfil-container">
+    <!-- Header -->
+    <div class="perfil-header">
+        <div class="header-content">
+            <h1 class="page-title">Mi Perfil</h1>
+            <p class="page-subtitle">Gestiona tu información personal y configuración de cuenta</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="perfil-content">
+        <div class="perfil-card">
+            <!-- Profile Photo Section -->
+            <div class="photo-section">
+                <div class="photo-container">
+                    <img [src]="perfilData.fotoUrl" alt="Foto de perfil" class="profile-photo">
+                    <div class="photo-overlay">
+                        <i class="fas fa-camera"></i>
+                    </div>
+                </div>
+                <h2 class="user-name">{{perfilData.nombre}}</h2>
+                <p class="user-role">Trabajador</p>
+            </div>
+
+            <!-- Form Section -->
+            <div class="form-section">
+                <form [formGroup]="perfilForm" (ngSubmit)="guardarCambios()">
+                    <!-- Optimized grid layout for better width utilization -->
+                    <div class="form-grid">
+                        <!-- Row 1: Nombre and Email -->
+                        <div class="form-group">
+                            <label for="nombre" class="form-label">
+                                <i class="fas fa-user"></i>
+                                Nombre Completo
+                            </label>
+                            <input type="text" id="nombre" formControlName="nombre" class="form-input"
+                                placeholder="Ingrese su nombre completo" (input)="onFieldChange()">
+                            <div class="input-border"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="email" class="form-label">
+                                <i class="fas fa-envelope"></i>
+                                Correo Electrónico
+                            </label>
+                            <input type="email" id="email" formControlName="email" class="form-input disabled" readonly>
+                            <div class="input-border"></div>
+                            <small class="field-note">Este campo no se puede modificar</small>
+                        </div>
+
+                        <!-- Row 2: Celular and Tipo Documento -->
+                        <div class="form-group">
+                            <label for="celular" class="form-label">
+                                <i class="fas fa-phone"></i>
+                                Número de Celular
+                            </label>
+                            <input type="tel" id="celular" formControlName="celular" class="form-input"
+                                placeholder="Ingrese su número de celular" (input)="onFieldChange()">
+                            <div class="input-border"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="tipoDocumento" class="form-label">
+                                <i class="fas fa-id-card"></i>
+                                Tipo de Documento
+                            </label>
+                            <input type="text" id="tipoDocumento" formControlName="tipoDocumento"
+                                class="form-input disabled" readonly>
+                            <div class="input-border"></div>
+                            <small class="field-note">Este campo no se puede modificar</small>
+                        </div>
+
+                        <!-- Row 3: Numero Documento and Fecha Registro -->
+                        <div class="form-group">
+                            <label for="numeroDocumento" class="form-label">
+                                <i class="fas fa-id-badge"></i>
+                                Número de Documento
+                            </label>
+                            <input type="text" id="numeroDocumento" formControlName="numeroDocumento"
+                                class="form-input disabled" readonly>
+                            <div class="input-border"></div>
+                            <small class="field-note">Este campo no se puede modificar</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="fechaRegistro" class="form-label">
+                                <i class="fas fa-calendar"></i>
+                                Fecha de Registro
+                            </label>
+                            <input type="text" id="fechaRegistro" [value]="perfilData.fechaRegistro | date:'dd/MM/yyyy'"
+                                class="form-input disabled" readonly>
+                            <div class="input-border"></div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <button type="submit" class="btn btn-primary profile-save" [class.show]="hasChanges"
+                            [disabled]="!hasChanges || perfilForm.invalid">
+                            <i class="fas fa-save"></i>
+                            Guardar Cambios
+                        </button>
+
+                        <button type="button" class="btn btn-secondary" (click)="toggleCambioContrasena()">
+                            <i class="fas fa-key"></i>
+                            {{mostrarCambioContrasena ? 'Cancelar' : 'Editar Contraseña'}}
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Password Change Section -->
+                <div class="password-change-section" [class.show]="mostrarCambioContrasena">
+                    <div class="section-header">
+                        <h3 class="section-title">
+                            <i class="fas fa-key"></i>
+                            Cambiar Contraseña
+                        </h3>
+                        <p class="section-subtitle">Actualiza tu contraseña para mantener tu cuenta segura</p>
+                    </div>
+
+                    <form [formGroup]="contrasenaForm" (ngSubmit)="cambiarContrasena()">
+                        <!-- Improved password form layout for better space utilization -->
+                        <div class="password-form-grid">
+                            <div class="form-group">
+                                <label for="contrasenaActual" class="form-label">
+                                    <i class="fas fa-lock"></i>
+                                    Contraseña Actual
+                                </label>
+                                <div class="password-input">
+                                    <input [type]="mostrarContrasenaActual ? 'text' : 'password'" id="contrasenaActual"
+                                        formControlName="contrasenaActual" class="form-input"
+                                        placeholder="Ingrese su contraseña actual">
+                                    <button type="button" class="password-toggle"
+                                        (click)="togglePasswordVisibility('actual')">
+                                        <i [class]="mostrarContrasenaActual ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                                    </button>
+                                </div>
+                                <div class="input-border"></div>
+                                <div class="error-message"
+                                    *ngIf="contrasenaForm.get('contrasenaActual')?.errors?.['required'] && contrasenaForm.get('contrasenaActual')?.touched">
+                                    La contraseña actual es requerida
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="nuevaContrasena" class="form-label">
+                                    <i class="fas fa-lock"></i>
+                                    Nueva Contraseña
+                                </label>
+                                <div class="password-input">
+                                    <input [type]="mostrarNuevaContrasena ? 'text' : 'password'" id="nuevaContrasena"
+                                        formControlName="nuevaContrasena" class="form-input"
+                                        placeholder="Ingrese su nueva contraseña">
+                                    <button type="button" class="password-toggle"
+                                        (click)="togglePasswordVisibility('nueva')">
+                                        <i [class]="mostrarNuevaContrasena ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                                    </button>
+                                </div>
+                                <div class="input-border"></div>
+                                <div class="error-message"
+                                    *ngIf="contrasenaForm.get('nuevaContrasena')?.errors?.['required'] && contrasenaForm.get('nuevaContrasena')?.touched">
+                                    La nueva contraseña es requerida
+                                </div>
+                                <div class="error-message"
+                                    *ngIf="contrasenaForm.get('nuevaContrasena')?.errors?.['minlength'] && contrasenaForm.get('nuevaContrasena')?.touched">
+                                    La contraseña debe tener al menos 6 caracteres
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="confirmarContrasena" class="form-label">
+                                    <i class="fas fa-lock"></i>
+                                    Confirmar Nueva Contraseña
+                                </label>
+                                <div class="password-input">
+                                    <input [type]="mostrarConfirmarContrasena ? 'text' : 'password'"
+                                        id="confirmarContrasena" formControlName="confirmarContrasena"
+                                        class="form-input" placeholder="Confirme su nueva contraseña">
+                                    <button type="button" class="password-toggle"
+                                        (click)="togglePasswordVisibility('confirmar')">
+                                        <i [class]="mostrarConfirmarContrasena ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                                    </button>
+                                </div>
+                                <div class="input-border"></div>
+                                <div class="error-message"
+                                    *ngIf="contrasenaForm.get('confirmarContrasena')?.errors?.['required'] && contrasenaForm.get('confirmarContrasena')?.touched">
+                                    Debe confirmar la nueva contraseña
+                                </div>
+                                <div class="error-message"
+                                    *ngIf="contrasenaForm.errors?.['passwordMismatch'] && contrasenaForm.get('confirmarContrasena')?.touched">
+                                    Las contraseñas no coinciden
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="password-actions">
+                            <button type="submit" class="btn btn-primary" [disabled]="contrasenaForm.invalid">
+                                <i class="fas fa-check"></i>
+                                Cambiar Contraseña
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmación Personalizado -->
+    <div class="modal-overlay" [class.active]="mostrarConfirmacion" (click)="cerrarConfirmacion()">
+        <div class="confirmation-modal" (click)="$event.stopPropagation()">
+            <div class="confirmation-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3 class="confirmation-title">Confirmar Cambio de Contraseña</h3>
+            <p class="confirmation-message">¿Está seguro de que desea cambiar su contraseña?</p>
+            <div class="confirmation-actions">
+                <button type="button" class="btn btn-cancel" (click)="cerrarConfirmacion()">
+                    Cancelar
+                </button>
+                <button type="button" class="btn btn-danger" (click)="confirmarCambioContrasena()">
+                    Cambiar Contraseña
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Messages -->
+    <div class="alert-container" [class.show]="mostrarAlerta">
+        <div class="alert" [class]="tipoAlerta">
+            <i [class]="iconoAlerta"></i>
+            <span>{{mensajeAlerta}}</span>
+            <button type="button" class="alert-close" (click)="cerrarAlerta()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+</div>
