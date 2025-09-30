@@ -1,44 +1,85 @@
-/* Estructura */
+/* Enhanced structure with modern design elements */
 .sidebar-container {
-    height: 100%;
+    height: 100vh;
     display: flex;
     flex-direction: column;
 }
 
 .sidebar-wrapper {
     height: 100%;
-    overflow-y: auto;
-    flex: 1;
-    position: relative;
+    overflow: hidden;
+    /* antes: overflow-y: auto; */
     background: transparent;
+    position: relative;
+    flex: 1;
 }
 
 .sidebar-panel {
-    min-width: 250px;
-    height: 100vh;
-    background: #2c3e50;
-    color: #fff;
-    transition: transform .3s ease;
-    box-shadow: 0 10px 30px -12px rgba(0, 0, 0, .42);
+    min-width: 280px;
+    height: 100%;
+    overflow: hidden;
+    /* nuevo */
     display: flex;
     flex-direction: column;
-    /* ← Nueva línea */
+    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
 }
 
-/* Logo */
+.sidebar-panel::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+}
+
+/* Enhanced logo section with modern styling */
 .logo {
-    padding: 15px 0;
-    border-bottom: 4px solid rgba(255, 255, 255, .1);
+    padding: 24px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
-    /* ← Evita que el logo se reduzca */
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(10px);
+}
+
+.logo-sirge {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .logo img {
-    width: 100px;
-    height: auto;
-    display: block;
-    margin: 0 auto;
-    border-radius: 5px;
+    width: 45px;
+    height: 45px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: transform 0.3s ease;
+}
+
+.logo img:hover {
+    transform: scale(1.05);
+}
+
+.logo-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.company-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.5px;
+}
+
+.company-tagline {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 /* Desktop: visible estático */
@@ -55,16 +96,17 @@
     }
 }
 
-/* MÓVIL: off-canvas - CORREGIDO */
+/* MÓVIL: off-canvas */
 @media (max-width: 767px) {
     .sidebar-panel {
         position: fixed;
         left: 0;
-        width: 250px;
+        width: 280px;
         top: 56px;
         height: calc(100vh - 56px);
         transform: translateX(-100%);
         z-index: 1030;
+        min-width: 280px;
     }
 
     .sidebar-panel.open {
@@ -72,14 +114,18 @@
     }
 
     .logo {
-        padding: 12px 0;
+        padding: 16px 20px;
     }
 
     .logo img {
-        width: 80px;
+        width: 40px;
+        height: 40px;
     }
 
-    /* SCROLL CORREGIDO para móvil */
+    .company-name {
+        font-size: 15px;
+    }
+
     .sidebar-wrapper {
         height: 100%;
         overflow-y: auto;
@@ -88,104 +134,374 @@
     }
 }
 
-/* Contenedor del menú con scroll */
 .nav-container {
     flex: 1;
+    min-height: 0;
+    /* importante para que el flex-child pueda scrollear */
     overflow-y: auto;
-    padding-bottom: 20px;
-    /* ← Espacio al final */
+    /* se queda el scroll aquí */
+    padding: 16px 0 20px 0;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Nav */
+/* Modern navigation styling */
 .nav {
-    margin-top: 16px;
-    padding: 0;
+    margin: 0;
+    padding: 0 16px;
     list-style: none;
+    flex: 1;
 }
 
 .nav-item {
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .nav-link {
-    color: rgba(255, 255, 255, .86);
-    padding: 12px 15px;
+    color: rgba(255, 255, 255, 0.85);
+    padding: 16px 20px;
     display: flex;
     align-items: center;
     text-decoration: none;
-    transition: background .15s, color .15s;
-    border-radius: 8px;
-    margin: 0 10px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 12px;
+    margin-bottom: 2px;
+    position: relative;
+    overflow: hidden;
+    gap: 16px;
 }
 
-.nav-link:hover {
-    background: rgba(255, 255, 255, .12);
-    color: #fff;
+.nav-link::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 100%;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    transition: width 0.3s ease;
+    z-index: 0;
 }
 
-.nav-link i {
-    margin-right: 10px;
-    font-size: 18px;
-}
-
-.nav-link p {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+.nav-link:hover::before {
     width: 100%;
 }
 
-.caret {
-    display: inline-block;
-    width: 0;
-    height: 0;
-    margin-left: 8px;
-    border-top: 5px solid;
-    border-right: 5px solid transparent;
-    border-left: 5px solid transparent;
+.nav-link:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+.nav-icon-wrapper {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 1;
+}
+
+.nav-link:hover .nav-icon-wrapper {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.05);
+}
+
+.nav-icon-wrapper i {
+    font-size: 18px;
+    color: #fff;
+}
+
+.nav-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    position: relative;
+    z-index: 1;
+}
+
+.nav-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: inherit;
+    line-height: 1.2;
+}
+
+.nav-subtitle {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 400;
+    line-height: 1.2;
+}
+
+.nav-arrow {
+    font-size: 12px;
+    transition: transform 0.3s ease;
+    position: relative;
+    z-index: 1;
+}
+
+.nav-arrow.rotated {
+    transform: rotate(180deg);
+}
+
+/* Enhanced submenu styling */
 .submenu {
     max-height: 0;
     overflow: hidden;
-    transition: max-height .22s ease;
-    padding-left: 30px;
-    margin: 0 10px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    margin: 4px 0 8px 0;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
 }
 
 .submenu.show {
-    max-height: 520px;
+    max-height: 300px;
+    padding: 8px 0;
 }
 
-.submenu .nav-link {
-    padding: 8px 14px;
+.submenu-link {
+    padding: 12px 20px 12px 60px !important;
     font-size: 13px;
-    color: rgba(255, 255, 255, .78);
+    color: rgba(255, 255, 255, 0.75) !important;
+    margin-bottom: 0 !important;
+    border-radius: 8px !important;
+    gap: 12px !important;
+    position: relative;
 }
 
-/* Scrollbar mejorado */
+.submenu-link::before {
+    display: none;
+}
+
+.submenu-link:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    transform: translateX(8px) !important;
+    color: #fff !important;
+}
+
+.submenu-dot {
+    width: 6px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.submenu-link:hover .submenu-dot {
+    background: #fff;
+    transform: scale(1.2);
+}
+
+/* Added modern sidebar footer */
+.sidebar-footer {
+    padding: 20px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+.user-info:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.user-avatar {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.1));
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.user-avatar i {
+    font-size: 16px;
+    color: #fff;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.user-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.2;
+}
+
+.user-role {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Enhanced scrollbar styling */
 .sidebar-wrapper::-webkit-scrollbar {
     width: 6px;
 }
 
 .sidebar-wrapper::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
 }
 
 .sidebar-wrapper::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.15));
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
 }
 
 .sidebar-wrapper::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.5);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.25));
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* Prevenir scroll del body cuando sidebar está abierto en móvil */
 .sidebar-open {
     overflow: hidden;
+}
+
+/* Added subtle animations and micro-interactions */
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.nav-item {
+    animation: slideInLeft 0.3s ease forwards;
+}
+
+.nav-item:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.nav-item:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.nav-item:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+.nav-item:nth-child(4) {
+    animation-delay: 0.4s;
+}
+
+.nav-item:nth-child(5) {
+    animation-delay: 0.5s;
+}
+
+.nav-item:nth-child(6) {
+    animation-delay: 0.6s;
+}
+
+/* Active state styling */
+.nav-link.active {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.nav-link.active .nav-icon-wrapper {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.nav-link.active::before {
+    width: 100%;
+}
+
+/* Enhanced global scrollbar styling for entire application */
+/* Global scrollbar styling - applies to all scrollable elements */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(44, 62, 80, 0.6) rgba(44, 62, 80, 0.1);
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: rgba(44, 62, 80, 0.1);
+    border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(44, 62, 80, 0.7), rgba(52, 73, 94, 0.8));
+    border-radius: 4px;
+    border: 1px solid rgba(44, 62, 80, 0.2);
+    transition: all 0.3s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(44, 62, 80, 0.9), rgba(52, 73, 94, 1));
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+*::-webkit-scrollbar-corner {
+    background: rgba(44, 62, 80, 0.1);
+}
+
+/* Specific styling for main content area */
+.main-content::-webkit-scrollbar,
+.content-wrapper::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.main-content::-webkit-scrollbar-track,
+.content-wrapper::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+    background: rgba(44, 62, 80, 0.08);
+    border-radius: 5px;
+}
+
+.main-content::-webkit-scrollbar-thumb,
+.content-wrapper::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(44, 62, 80, 0.6), rgba(52, 73, 94, 0.7));
+    border-radius: 5px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.main-content::-webkit-scrollbar-thumb:hover,
+.content-wrapper::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(44, 62, 80, 0.8), rgba(52, 73, 94, 0.9));
+    border-color: rgba(255, 255, 255, 0.2);
 }

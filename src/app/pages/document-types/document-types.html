@@ -59,13 +59,14 @@
                                 (change)="toggleSelectAll()" class="checkbox-input">
                         </th>
                         <th>Nombre</th>
-                        <th>Fecha Creación</th>
                         <th>Estado</th>
+                        <th>Fecha Creación</th>
                         <th class="actions-column">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr *ngFor="let documentType of filteredDocumentTypes" [class.selected]="isSelected(documentType.id)">
+                    <tr *ngFor="let documentType of filteredDocumentTypes"
+                        [class.selected]="isSelected(documentType.id)">
                         <td class="checkbox-column">
                             <input type="checkbox" [checked]="isSelected(documentType.id)"
                                 (change)="toggleSelect(documentType.id)" class="checkbox-input">
@@ -84,7 +85,8 @@
                                 <button class="btn-icon btn-edit" (click)="openEditModal(documentType)" title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn-icon btn-delete" (click)="confirmDelete(documentType)" title="Eliminar">
+                                <button class="btn-icon btn-delete" (click)="confirmDelete(documentType)"
+                                    title="Eliminar">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -143,7 +145,7 @@
                             El nombre es requerido
                         </div>
                     </div>
-                   
+
                     <div class="form-group checkbox-group">
                         <label class="checkbox-label">
                             <input type="checkbox" formControlName="isActive" class="checkbox-input">
@@ -158,7 +160,8 @@
             <button type="button" class="btn btn-secondary" (click)="closeModal()">
                 Cancelar
             </button>
-            <button type="submit" class="btn btn-primary" (click)="saveDocumentType()" [disabled]="documentTypeForm.invalid">
+            <button type="submit" class="btn btn-primary" (click)="saveDocumentType()"
+                [disabled]="documentTypeForm.invalid">
                 {{isEditMode ? 'Actualizar' : 'Crear'}} Tipo de Documento
             </button>
         </div>

@@ -1,102 +1,188 @@
 <div class="sidebar-container">
     <div class="sidebar-wrapper">
         <div class="sidebar-panel">
+            <!-- Enhanced logo section with better styling -->
             <div class="logo">
                 <a routerLink="/home" class="simple-text logo-normal">
                     <div class="logo-sirge">
                         <img src="assets/img/LogoNeptComputer.png" alt="Logo del sistema" />
+                        <div class="logo-text">
+                            <span class="company-name">NeptComputer</span>
+                            <span class="company-tagline">Sistema de Gestión</span>
+                        </div>
                     </div>
                 </a>
             </div>
 
-            <!-- CONTENEDOR DEL MENÚ CON SCROLL -->
+            <!-- Reemplazando todos los iconos tim-icons con SVG inline -->
+            <!-- Enhanced navigation container with better visual hierarchy -->
             <div class="nav-container">
                 <ul class="nav">
-                    <li class="nav-item" *ngIf="authenticatedUser?.role === 'ADMIN'">
-                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('modulo1')">
-                            <i class="tim-icons icon-bank"></i>
-                            <p>Modulo1 <span class="caret"></span></p>
+                    <li class="nav-item" *ngIf="authenticatedUser?.roles">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('modulo1a')">
+                            <div class="nav-icon-wrapper">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2L2 7v10c0 5.55 3.84 9.739 9 11 5.16-1.261 9-5.45 9-11V7l-10-5z" />
+                                </svg>
+                            </div>
+                            <div class="nav-content">
+                                <span class="nav-title">Panel de Control</span>
+                                <span class="nav-subtitle">Dashboard principal</span>
+                            </div>
+                            <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('modulo1a')" width="16" height="16"
+                                viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
                         </a>
-                        <ul class="nav submenu" [class.show]="isSubMenuOpen('modulo1')">
-                            <li><a class="nav-link" routerLink="/dashboard">Dashboard</a></li>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('modulo1a')">
+                            <li><a class="nav-link submenu-link" routerLink="/dashboard">
+                                    <i class="submenu-dot"></i>Dashboard
+                                </a>
+                            </li>
+                            <li><a class="nav-link submenu-link" routerLink="/document-types">
+                                    <i class="submenu-dot"></i>Tipo de Documentos
+                                </a>
+                            </li>
                         </ul>
                     </li>
 
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo1')">
-                            <i class="tim-icons icon-bank"></i>
-                            <p>Modulo1 <span class="caret"></span></p>
+                            <div class="nav-icon-wrapper">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path
+                                        d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                                </svg>
+                            </div>
+                            <div class="nav-content">
+                                <span class="nav-title">Perfil</span>
+                                <span class="nav-subtitle">Configuración personal</span>
+                            </div>
+                            <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo1')" width="16" height="16"
+                                viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo1')">
-                            <li><a class="nav-link" routerLink="/habitaciones">Habitaciones</a></li>
-                            <li><a class="nav-link" routerLink="/reservasHabitaciones">Reservas</a></li>
+                            <li><a class="nav-link submenu-link" routerLink="/perfil">
+                                    <i class="submenu-dot"></i>Mi Perfil
+                                </a></li>
                         </ul>
                     </li>
 
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo2')">
-                            <i class="tim-icons icon-bullet-list-67"></i>
-                            <p>Modulo2 <span class="caret"></span></p>
+                            <div class="nav-icon-wrapper">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path
+                                        d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zM4 18v-4h3v4h2v-7.5c0-.83.67-1.5 1.5-1.5S12 9.67 12 10.5V11h2V9.5c0-1.93-1.57-3.5-3.5-3.5S7 7.57 7 9.5V12H4c-1.11 0-2 .89-2 2v4c0 1.11.89 2 2 2h14c1.11 0 2-.89 2-2v-4c0-1.11-.89-2-2-2h-3v7h2v-4h3z" />
+                                </svg>
+                            </div>
+                            <div class="nav-content">
+                                <span class="nav-title">Clientes</span>
+                                <span class="nav-subtitle">Gestión de clientes</span>
+                            </div>
+                            <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo2')" width="16" height="16"
+                                viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo2')">
-                            <li><a class="nav-link" routerLink="/clientes">Clientes</a></li>
-                            <li><a class="nav-link" routerLink="/document-types">Tipos de Documento</a></li>
+                            <li><a class="nav-link submenu-link" routerLink="/clientes">
+                                    <i class="submenu-dot"></i>Lista de Clientes
+                                </a></li>
                         </ul>
                     </li>
 
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo3')">
-                            <i class="tim-icons icon-single-02"></i>
-                            <p>Modulo3 <span class="caret"></span></p>
+                            <div class="nav-icon-wrapper">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path
+                                        d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zM10 6a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1a1 1 0 0 0 2 0V9h4v1a1 1 0 0 0 2 0V9h2v10z" />
+                                </svg>
+                            </div>
+                            <div class="nav-content">
+                                <span class="nav-title">Proveedores</span>
+                                <span class="nav-subtitle">Gestión de proveedores</span>
+                            </div>
+                            <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo3')" width="16" height="16"
+                                viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo3')">
-                            <li><a class="nav-link" routerLink="/clientes">Clientes</a></li>
-                            <li><a class="nav-link" routerLink="/document-types">Tipos de Documento</a></li>
+                            <li><a class="nav-link submenu-link" routerLink="/proovedores">
+                                    <i class="submenu-dot"></i>Lista de Proveedores
+                                </a></li>
                         </ul>
                     </li>
 
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo4')">
-                            <i class="tim-icons icon-settings-gear-63"></i>
-                            <p>Modulo4 <span class="caret"></span></p>
+                            <div class="nav-icon-wrapper">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path
+                                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                                </svg>
+                            </div>
+                            <div class="nav-content">
+                                <span class="nav-title">Ventas</span>
+                                <span class="nav-subtitle">Gestión de ventas</span>
+                            </div>
+                            <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo4')" width="16" height="16"
+                                viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo4')">
-                            <li><a class="nav-link" routerLink="/dashboard">Usuarios</a></li>
-                            <li><a class="nav-link" routerLink="/tests">tests</a></li>
+                            <li><a class="nav-link submenu-link" routerLink="/realizarventas">
+                                    <i class="submenu-dot"></i>Realizar Ventas
+                                </a></li>
+                            <li><a class="nav-link submenu-link" routerLink="/ventasver">
+                                    <i class="submenu-dot"></i>Ver Ventas
+                                </a></li>
                         </ul>
                     </li>
 
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo5')">
-                            <i class="tim-icons icon-delivery-fast"></i>
-                            <p>Modulo5 <span class="caret"></span></p>
+                            <div class="nav-icon-wrapper">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path
+                                        d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1 0 .33.03.65.07.97L2.46 14.6c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.31.61.22l2.49-1c.52.39 1.06.73 1.69.98l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.25 1.17-.59 1.69-.98l2.49 1c.22.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66Z" />
+                                </svg>
+                            </div>
+                            <div class="nav-content">
+                                <span class="nav-title">Servicios</span>
+                                <span class="nav-subtitle">Servicios técnicos</span>
+                            </div>
+                            <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo5')" width="16" height="16"
+                                viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo5')">
-                            <li><a class="nav-link" routerLink="/servicios">Servicios</a></li>
-                            <li><a class="nav-link" routerLink="/perfil">Perfil</a></li>
-                        </ul>
-                    </li>
-
-                    <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo6')">
-                            <i class="tim-icons icon-money-coins"></i>
-                            <p>Modulo6 <span class="caret"></span></p>
-                        </a>
-                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo6')">
-                            <li><a class="nav-link" routerLink="/modoPago">Modo Pago</a></li>
-                        </ul>
-                    </li>
-
-                    <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo7')">
-                            <i class="tim-icons icon-shape-star"></i>
-                            <p>Modulo7 <span class="caret"></span></p>
-                        </a>
-                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo7')">
-                            <li><a class="nav-link" routerLink="/calificaciones">Calificaciones</a></li>
+                            <li><a class="nav-link submenu-link" routerLink="/servicios">
+                                    <i class="submenu-dot"></i>Servicios Técnicos
+                                </a></li>
                         </ul>
                     </li>
                 </ul>
+
+                <!-- Added footer section with user info -->
+                <div class="sidebar-footer">
+                    <div class="user-info" *ngIf="authenticatedUser">
+                        <div class="user-avatar">
+                            <img width="24px" height="24px" src="assets/img/user.png" alt="Foto de perfil"
+                                class="profile-photo">
+                        </div>
+                        <div class="user-details">
+                            <span class="user-name">{{ authenticatedUser?.name || 'Usuario' }}</span>
+                            <span class="user-role">{{ authenticatedUser?.roles }}</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
