@@ -1,4 +1,4 @@
-.clientes-container {
+.business-partners-container {
     padding: 24px;
     background-color: #f8fafc;
     min-height: 100vh;
@@ -78,25 +78,6 @@
                 }
             }
 
-            .filter-actions {
-                display: flex;
-                gap: 12px;
-
-                .filter-select {
-                    padding: 12px 16px;
-                    border: 2px solid #e2e8f0;
-                    border-radius: 8px;
-                    font-size: 14px;
-                    background: white;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-
-                    &:focus {
-                        outline: none;
-                        border-color: #3b82f6;
-                    }
-                }
-            }
         }
     }
 
@@ -135,7 +116,7 @@
             overflow-x: auto;
         }
 
-        .clients-table {
+        .partners-table {
             width: 100%;
             border-collapse: collapse;
 
@@ -186,18 +167,14 @@
                         }
 
                         &.name-cell {
-                            .client-name {
+                            .partner-name {
                                 font-weight: 600;
                                 color: #1f2937;
                             }
                         }
 
-                        &.email-cell {
+                        &.contact-cell {
                             color: #3b82f6;
-                        }
-
-                        &.phone-cell {
-                            font-family: monospace;
                         }
 
                         &.date-cell {
@@ -238,7 +215,7 @@
     }
 
     // Pagination
-    .pagination-container {
+    .pagination {
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -246,20 +223,9 @@
         flex-wrap: wrap;
         gap: 16px;
 
-        .pagination-info {
+        .page-info {
             color: #6b7280;
             font-size: 14px;
-        }
-
-        .pagination-controls {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-
-            .page-info {
-                font-weight: 600;
-                color: #374151;
-            }
         }
     }
 }
@@ -288,20 +254,29 @@
     }
 }
 
-.status-badge {
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 6px 12px;
-    border-radius: 20px;
+    border-radius: 999px;
     font-size: 12px;
     font-weight: 600;
+    text-transform: uppercase;
 
-    &.active {
-        background: #d1fae5;
-        color: #065f46;
+    &.client {
+        background: rgba(59, 130, 246, 0.12);
+        color: #1d4ed8;
     }
 
-    &.inactive {
-        background: #fee2e2;
-        color: #dc2626;
+    &.supplier {
+        background: rgba(16, 185, 129, 0.15);
+        color: #047857;
+    }
+
+    &.both {
+        background: rgba(139, 92, 246, 0.15);
+        color: #5b21b6;
     }
 }
 
@@ -612,7 +587,7 @@
 
 // Responsive Design
 @media (max-width: 768px) {
-    .clientes-container {
+    .business-partners-container {
         padding: 16px;
 
         .header-section {
@@ -637,13 +612,6 @@
                     min-width: auto;
                 }
 
-                .filter-actions {
-                    width: 100%;
-
-                    .filter-select {
-                        width: 100%;
-                    }
-                }
             }
         }
 
@@ -657,7 +625,7 @@
         }
 
         .table-container {
-            .clients-table {
+            .partners-table {
                 font-size: 12px;
 
                 th,
@@ -667,7 +635,7 @@
             }
         }
 
-        .pagination-container {
+        .pagination {
             flex-direction: column;
             text-align: center;
         }
@@ -687,10 +655,10 @@
 }
 
 @media (max-width: 480px) {
-    .clientes-container {
+    .business-partners-container {
         .table-container {
             .table-wrapper {
-                .clients-table {
+                .partners-table {
 
                     th:nth-child(5),
                     td:nth-child(5),
@@ -703,5 +671,19 @@
                 }
             }
         }
+    }
+}
+
+.hint {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #2563eb;
+}
+
+.role-group {
+    .checkboxes {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
     }
 }

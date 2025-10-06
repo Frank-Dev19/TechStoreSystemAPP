@@ -2,11 +2,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { of } from 'rxjs';
 
-import { Clientes } from './clientes';
-import { CustomersApiService } from '../../services/customers-api.service';
+import { BusinessPartners } from './business-partners';
+import { BusinessPartnersApiService } from '../../services/business-partners-api.service';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 
-class CustomersApiServiceStub {
+class BusinessPartnersApiServiceStub {
   findAll() {
     return of({ data: [], total: 0, page: 1, limit: 10 });
   }
@@ -30,21 +30,21 @@ class DocumentTypesApiServiceStub {
   }
 }
 
-describe('Clientes', () => {
-  let component: Clientes;
-  let fixture: ComponentFixture<Clientes>;
+describe('BusinessPartners', () => {
+  let component: BusinessPartners;
+  let fixture: ComponentFixture<BusinessPartners>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [Clientes],
+      declarations: [BusinessPartners],
       imports: [FormsModule, ReactiveFormsModule],
       providers: [
-        { provide: CustomersApiService, useClass: CustomersApiServiceStub },
+        { provide: BusinessPartnersApiService, useClass: BusinessPartnersApiServiceStub },
         { provide: DocumentTypesApiService, useClass: DocumentTypesApiServiceStub },
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(Clientes);
+    fixture = TestBed.createComponent(BusinessPartners);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

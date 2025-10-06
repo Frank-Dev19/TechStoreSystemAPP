@@ -1,7 +1,8 @@
 export interface DocumentTypeResponse {
     id: number;
     name: string;
-    isActive: boolean;
+    digits: number;
+    description: string;
     createdAt?: string | Date;
     updatedAt?: string | Date;
     deletedAt?: string | Date | null;
@@ -13,3 +14,5 @@ export interface DocumentTypesPaginatedResponse {
     page: number;
     limit: number;
 }
+
+

@@ -79,8 +79,8 @@
                                 </svg>
                             </div>
                             <div class="nav-content">
-                                <span class="nav-title">Clientes</span>
-                                <span class="nav-subtitle">Gestión de clientes</span>
+                                <span class="nav-title">Socios Comerciales</span>
+                                <span class="nav-subtitle">Clientes y proveedores</span>
                             </div>
                             <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo2')" width="16" height="16"
                                 viewBox="0 0 24 24" fill="currentColor">
@@ -88,32 +88,8 @@
                             </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo2')">
-                            <li><a class="nav-link submenu-link" routerLink="/clientes">
-                                    <i class="submenu-dot"></i>Lista de Clientes
-                                </a></li>
-                        </ul>
-                    </li>
-
-                    <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo3')">
-                            <div class="nav-icon-wrapper">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                    <path
-                                        d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zM10 6a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1a1 1 0 0 0 2 0V9h4v1a1 1 0 0 0 2 0V9h2v10z" />
-                                </svg>
-                            </div>
-                            <div class="nav-content">
-                                <span class="nav-title">Proveedores</span>
-                                <span class="nav-subtitle">Gestión de proveedores</span>
-                            </div>
-                            <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo3')" width="16" height="16"
-                                viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M7 10l5 5 5-5z" />
-                            </svg>
-                        </a>
-                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo3')">
-                            <li><a class="nav-link submenu-link" routerLink="/proovedores">
-                                    <i class="submenu-dot"></i>Lista de Proveedores
+                            <li><a class="nav-link submenu-link" routerLink="/business-partners">
+                                    <i class="submenu-dot"></i>Listado de Socios
                                 </a></li>
                         </ul>
                     </li>

@@ -17,20 +17,13 @@
         </div>
     </div>
 
-    <!-- Search and Filters Section -->
+    <!-- Search Section -->
     <div class="search-section">
         <div class="search-container">
             <div class="search-input-wrapper">
                 <i class="fas fa-search search-icon"></i>
                 <input type="text" class="search-input" placeholder="Buscar por nombre o número de documento..."
                     [(ngModel)]="searchTerm" (input)="onSearch()">
-            </div>
-            <div class="filter-actions">
-                <select class="filter-select" [(ngModel)]="statusFilter" (change)="applyFilters()">
-                    <option value="">Todos los estados</option>
-                    <option value="true">Activos</option>
-                    <option value="false">Inactivos</option>
-                </select>
             </div>
         </div>
     </div>
@@ -59,7 +52,8 @@
                                 (change)="toggleSelectAll()" class="checkbox-input">
                         </th>
                         <th>Nombre</th>
-                        <th>Estado</th>
+                        <th>Descripción</th>
+                        <th>Dígitos</th>
                         <th>Fecha Creación</th>
                         <th class="actions-column">Acciones</th>
                     </tr>
@@ -74,11 +68,8 @@
                         <td class="name-cell">
                             <div class="document-type-name">{{documentType.name}}</div>
                         </td>
-                        <td>
-                            <span class="status-badge" [ngClass]="documentType.isActive ? 'active' : 'inactive'">
-                                {{documentType.isActive ? 'Activo' : 'Inactivo'}}
-                            </span>
-                        </td>
+                        <td class="description-cell">{{documentType.description}}</td>
+                        <td>{{documentType.digits}}</td>
                         <td class="date-cell">{{formatDate(documentType.createdAt)}}</td>
                         <td class="actions-column">
                             <div class="action-buttons">
@@ -146,12 +137,25 @@
                         </div>
                     </div>
 
-                    <div class="form-group checkbox-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" formControlName="isActive" class="checkbox-input">
-                            <span class="checkbox-custom"></span>
-                            Tipo de Documento Activo
-                        </label>
+                    <div class="form-group">
+                        <label for="digits">Cantidad de dígitos *</label>
+                        <input type="number" id="digits" formControlName="digits" class="form-input"
+                            min="1" max="30"
+                            [class.error]="documentTypeForm.get('digits')?.invalid && documentTypeForm.get('digits')?.touched">
+                        <div class="error-message"
+                            *ngIf="documentTypeForm.get('digits')?.invalid && documentTypeForm.get('digits')?.touched">
+                            Ingresa un número entre 1 y 30
+                        </div>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="description">Descripción *</label>
+                        <textarea id="description" formControlName="description" class="form-input" rows="3"
+                            [class.error]="documentTypeForm.get('description')?.invalid && documentTypeForm.get('description')?.touched"></textarea>
+                        <div class="error-message"
+                            *ngIf="documentTypeForm.get('description')?.invalid && documentTypeForm.get('description')?.touched">
+                            La descripción es requerida
+                        </div>
                     </div>
                 </div>
             </form>
@@ -177,7 +181,7 @@
         <div class="modal-body">
             <div class="confirm-content">
                 <div class="confirm-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
+                    <i class="fas fa-exclamación-triangle"></i>
                 </div>
                 <p>{{confirmMessage}}</p>
             </div>
@@ -192,3 +196,4 @@
         </div>
     </div>
 </div>
+

@@ -9,7 +9,7 @@ import { NgApexchartsModule } from 'ng-apexcharts';
 import { AdminLayoutRoutes } from "./admin-layout.routing";
 import { Dashboard } from "../../components/dashboard/dashboard";
 import { Home } from "../../pages/home/home";
-import { Clientes } from "../../pages/clientes/clientes";
+import { BusinessPartners } from "../../pages/business-partners/business-partners";
 // import { ForgotPassword } from "../../pages/forgot-password/forgot-password";
 // import { ResetPassword } from "../../pages/reset-password/reset-password";
 import { Tests } from "../../pages/tests/tests";
@@ -30,7 +30,7 @@ import { DocumentTypes } from "../../pages/document-types/document-types";
     declarations: [
         Home,
         Dashboard,
-        Clientes,
+        BusinessPartners,
         DocumentTypes,
         Tests,
         Perfil

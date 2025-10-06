@@ -33,7 +33,6 @@ export class Sidebar implements OnInit {
     modulo1: false,
     Modulo1: false,
     Modulo2: false,
-    Modulo3: false,
     Modulo4: false,
     Modulo5: false,
     Modulo6: false,

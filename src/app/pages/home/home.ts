@@ -94,8 +94,8 @@ export class Home implements OnInit {
    */
   navigateToModule(module: string): void {
     switch (module) {
-      case "clientes":
-        this.router.navigate(["/clientes"])
+      case "business-partners":
+        this.router.navigate(["/business-partners"])
         break
       case "productos":
         this.router.navigate(["/productos"])

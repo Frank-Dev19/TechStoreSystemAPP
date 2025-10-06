@@ -1,6 +1,7 @@
 export interface DocumentTypeSaveRequest {
     name: string;
-    isActive?: boolean;
+    digits: number;
+    description: string;
 }
 
 export interface DocumentTypeDeleteRequest {
@@ -14,4 +15,5 @@ export interface DocumentTypeBulkDeleteRequest {
 export type DocumentTypeUpdateRequest = Partial<DocumentTypeSaveRequest> & {
     id?: number;
 }
+
 

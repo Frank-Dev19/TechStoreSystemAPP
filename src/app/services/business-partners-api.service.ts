@@ -2,10 +2,10 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { BaseService } from './base.service';
 import {
-    CustomersSaveRequest,
-    CustomersUpdateRequest,
-} from '../models/customers/customers-request';
-import { CustomersResponse } from '../models/customers/customers-response';
+    BusinessPartnerSaveRequest,
+    BusinessPartnerUpdateRequest,
+} from '../models/business-partners/business-partners-request';
+import { BusinessPartnerResponse } from '../models/business-partners/business-partners-response';
 
 export interface PaginatedResponse<T> {
     data: T[];
@@ -15,25 +15,25 @@ export interface PaginatedResponse<T> {
 }
 
 @Injectable({ providedIn: 'root' })
-export class CustomersApiService {
-    private readonly resource = '/customers';
+export class BusinessPartnersApiService {
+    private readonly resource = '/business-partners';
 
     constructor(private readonly baseService: BaseService) { }
 
-    findAll(params: Record<string, string | number | boolean | undefined>): Observable<PaginatedResponse<CustomersResponse>> {
-        return this.baseService.get<PaginatedResponse<CustomersResponse>>(this.resource, { params });
+    findAll(params: Record<string, string | number | boolean | undefined>): Observable<PaginatedResponse<BusinessPartnerResponse>> {
+        return this.baseService.get<PaginatedResponse<BusinessPartnerResponse>>(this.resource, { params });
     }
 
-    findOne(id: number): Observable<CustomersResponse> {
-        return this.baseService.get<CustomersResponse>(`${this.resource}/${id}`);
+    findOne(id: number): Observable<BusinessPartnerResponse> {
+        return this.baseService.get<BusinessPartnerResponse>(`${this.resource}/${id}`);
     }
 
-    create(payload: CustomersSaveRequest): Observable<CustomersResponse> {
-        return this.baseService.post<CustomersResponse>(this.resource, payload);
+    create(payload: BusinessPartnerSaveRequest): Observable<BusinessPartnerResponse> {
+        return this.baseService.post<BusinessPartnerResponse>(this.resource, payload);
     }
 
-    update(id: number, payload: CustomersUpdateRequest): Observable<CustomersResponse> {
-        return this.baseService.patch<CustomersResponse>(`${this.resource}/${id}`, payload);
+    update(id: number, payload: BusinessPartnerUpdateRequest): Observable<BusinessPartnerResponse> {
+        return this.baseService.patch<BusinessPartnerResponse>(`${this.resource}/${id}`, payload);
     }
 
     remove(id: number): Observable<{ ok: boolean; message: string }> {

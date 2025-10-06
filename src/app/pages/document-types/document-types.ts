@@ -17,8 +17,6 @@ export class DocumentTypes implements OnInit {
   selectedDocumentTypes: number[] = [];
 
   searchTerm = '';
-  statusFilter = '';
-
   currentPage = 1;
   itemsPerPage = 10;
   totalPages = 1;
@@ -51,14 +49,15 @@ export class DocumentTypes implements OnInit {
   private createForm(): FormGroup {
     return this.formBuilder.group({
       name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
-      isActive: [true],
+      digits: [null, [Validators.required, Validators.min(1), Validators.max(30)]],
+      description: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(255)]],
     });
   }
 
   private fetchDocumentTypes(): void {
     this.isLoading = true;
 
-    const params: Record<string, string | number | boolean> = {
+    const params: Record<string, string | number> = {
       page: this.currentPage,
       limit: this.itemsPerPage,
     };
@@ -67,16 +66,13 @@ export class DocumentTypes implements OnInit {
       params['search'] = this.searchTerm.trim();
     }
 
-    if (this.statusFilter !== '') {
-      params['isActive'] = this.statusFilter;
-    }
-
     this.documentTypesApi.findAll(params).subscribe({
       next: (response: DocumentTypesPaginatedResponse) => {
         const data = response.data ?? [];
         this.documentTypes = data.map((item) => ({
           ...item,
           id: Number(item.id),
+          digits: Number(item.digits),
         }));
         this.filteredDocumentTypes = [...this.documentTypes];
         this.totalItems = Number(response.total ?? this.filteredDocumentTypes.length);
@@ -107,10 +103,6 @@ export class DocumentTypes implements OnInit {
     this.fetchDocumentTypes();
   }
 
-  applyFilters(): void {
-    this.currentPage = 1;
-    this.fetchDocumentTypes();
-  }
 
   private updatePagination(): void {
     this.totalPages = Math.max(1, Math.ceil(this.totalItems / this.itemsPerPage));
@@ -170,7 +162,8 @@ export class DocumentTypes implements OnInit {
     this.currentDocumentType = null;
     this.documentTypeForm.reset({
       name: '',
-      isActive: true,
+      digits: null,
+      description: '',
     });
     this.showModal = true;
   }
@@ -180,30 +173,35 @@ export class DocumentTypes implements OnInit {
     this.currentDocumentType = documentType;
     this.documentTypeForm.patchValue({
       name: documentType.name,
-      isActive: documentType.isActive,
+      digits: Number(documentType.digits),
+      description: documentType.description ?? '',
     });
     this.showModal = true;
   }
 
   closeModal(): void {
     this.showModal = false;
-    this.documentTypeForm.reset({ isActive: true });
+    this.documentTypeForm.reset({ name: '', digits: null, description: '' });
     this.currentDocumentType = null;
   }
 
   private buildSavePayload(): DocumentTypeSaveRequest {
     const formValue = this.documentTypeForm.value;
+    const digitsValue = Number(formValue.digits);
     return {
-      name: String(formValue.name).trim(),
-      isActive: typeof formValue.isActive === 'boolean' ? formValue.isActive : undefined,
+      name: String(formValue.name ?? '').trim(),
+      digits: Number.isFinite(digitsValue) && digitsValue > 0 ? digitsValue : 1,
+      description: String(formValue.description ?? '').trim(),
     };
   }
 
   private buildUpdatePayload(): DocumentTypeUpdateRequest {
     const formValue = this.documentTypeForm.value;
+    const digitsValue = Number(formValue.digits);
     return {
       name: formValue.name ? String(formValue.name).trim() : undefined,
-      isActive: typeof formValue.isActive === 'boolean' ? formValue.isActive : undefined,
+      digits: Number.isFinite(digitsValue) && digitsValue > 0 ? digitsValue : undefined,
+      description: formValue.description ? String(formValue.description).trim() : undefined,
     };
   }
 
@@ -236,7 +234,7 @@ export class DocumentTypes implements OnInit {
   }
 
   confirmDelete(documentType: DocumentTypeResponse): void {
-    this.confirmMessage = `¿Estás seguro de que deseas eliminar el tipo de documento "${documentType.name}"?`;
+    this.confirmMessage = `¿Estás seguro de que deseas eliminar el tipo de documento "${documentType.name}"?`;
     this.confirmAction = () => this.deleteDocumentType(documentType.id);
     this.showConfirmModal = true;
   }
@@ -246,7 +244,7 @@ export class DocumentTypes implements OnInit {
     if (!count) {
       return;
     }
-    this.confirmMessage = `¿Estás seguro de que deseas eliminar ${count} tipo${count > 1 ? 's' : ''} de documento?`;
+    this.confirmMessage = `¿Estás seguro de que deseas eliminar ${count} tipo${count > 1 ? 's' : ''} de documento?`;
     this.confirmAction = () => this.deleteBulkDocumentTypes();
     this.showConfirmModal = true;
   }
@@ -315,3 +313,6 @@ export class DocumentTypes implements OnInit {
     }).format(new Date(date));
   }
 }
+
+
+

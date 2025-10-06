@@ -7,4 +7,5 @@ export const config = {
   // ⇩ apunta a tu API Nest (según tus logs corre en el 3000)
   endpointServices: 'http://localhost:3000',
   authMethod: '/auth/', // queda: http://localhost:3000/auth/...
+  defaultCompanyId: 1,
 };
