@@ -32,12 +32,12 @@ export class DocumentTypesApiService {
         return this.baseService.patch<DocumentTypeResponse>(`${this.resource}/${id}`, payload);
     }
 
-    remove(id: number): Observable<{ ok: boolean }> {
+    delete(id: number): Observable<{ ok: boolean }> {
         return this.baseService.delete<{ ok: boolean }>(`${this.resource}/${id}`);
     }
 
-    bulkSoftDelete(ids: number[]): Observable<{ ok: boolean }> {
-        return this.baseService.delete<{ ok: boolean }>(`${this.resource}/bulk-soft-delete`, { body: { ids } });
+    bulkDelete(ids: number[]): Observable<{ ok: boolean }> {
+        return this.baseService.delete<{ ok: boolean }>(`${this.resource}/bulk-delete`, { body: { ids } });
     }
 
     restore(id: number): Observable<{ ok: boolean }> {
@@ -46,9 +46,5 @@ export class DocumentTypesApiService {
 
     bulkRestore(ids: number[]): Observable<{ ok: boolean }> {
         return this.baseService.patch<{ ok: boolean }>(`${this.resource}/bulk-restore`, { ids });
-    }
-
-    hardRemove(id: number): Observable<{ ok: boolean }> {
-        return this.baseService.delete<{ ok: boolean }>(`${this.resource}/${id}/hard-remove`);
     }
 }

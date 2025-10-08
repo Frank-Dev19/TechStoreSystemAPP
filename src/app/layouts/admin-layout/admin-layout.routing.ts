@@ -10,9 +10,9 @@ import { Rbac } from '../../pages/rbac/rbac';
 export const AdminLayoutRoutes: Routes = [
     { path: 'home', component: Home },
     { path: 'dashboard', component: Dashboard },
-    { path: 'business-partners', component: BusinessPartners },
+    { path: 'socios-comerciales', component: BusinessPartners },
     { path: 'tests', component: Tests },
     { path: 'perfil', component: Perfil },
-    { path: 'document-types', component: DocumentTypes },
+    { path: 'tipos-documento', component: DocumentTypes },
     { path: 'rbac', component: Rbac },
 ];

@@ -48,6 +48,27 @@
             align-items: center;
             flex-wrap: wrap;
 
+            .filter-select-wrapper {
+                min-width: 180px;
+
+                .filter-select {
+                    width: 100%;
+                    padding: 12px 16px;
+                    border: 2px solid #e2e8f0;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    background: white;
+                    color: #1e293b;
+                    transition: all 0.2s ease;
+
+                    &:focus {
+                        outline: none;
+                        border-color: #3b82f6;
+                        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+                    }
+                }
+            }
+
             .search-input-wrapper {
                 position: relative;
                 flex: 1;
@@ -326,6 +347,17 @@
             box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
         }
     }
+
+    &.btn-success {
+        background: #22c55e;
+        color: white;
+
+        &:hover:not(:disabled) {
+            background: #16a34a;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+        }
+    }
 }
 
 .btn-icon {
@@ -356,6 +388,17 @@
 
         &:hover {
             background: #dc2626;
+            color: white;
+            transform: translateY(-1px);
+        }
+    }
+
+    &.btn-restore {
+        background: #ecfdf5;
+        color: #059669;
+
+        &:hover {
+            background: #059669;
             color: white;
             transform: translateY(-1px);
         }
@@ -515,6 +558,14 @@
                     font-size: 48px;
                     color: #f59e0b;
                     margin-bottom: 16px;
+
+                    &.restore {
+                        color: #22c55e;
+                    }
+
+                    &.delete {
+                        color: #f59e0b;
+                    }
                 }
 
                 p {
@@ -530,6 +581,41 @@
             display: flex;
             justify-content: flex-end;
             gap: 12px;
+        }
+    }
+}
+
+.restore-suggestion-modal {
+    max-width: 520px;
+
+    .restore-message {
+        font-size: 16px;
+        color: #1f2937;
+        margin: 0 0 16px 0;
+    }
+
+    .restore-details {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        background: #f8fafc;
+        display: grid;
+        gap: 12px;
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+
+            .detail-label {
+                font-weight: 600;
+                color: #1f2937;
+            }
+
+            .detail-value {
+                color: #4b5563;
+                text-align: right;
+            }
         }
     }
 }
@@ -626,6 +712,87 @@
                     }
                 }
             }
+        }
+    }
+}
+.alert-container {
+    position: fixed;
+    top: 6rem;
+    right: 2rem;
+    z-index: 1100;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+
+    &.show {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    @media (max-width: 768px) {
+        top: 1rem;
+        right: 1rem;
+        left: 1rem;
+    }
+}
+
+.alert {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border-left: 4px solid;
+    min-width: 300px;
+
+    &.success {
+        border-left-color: #2ecc71;
+
+        i {
+            color: #2ecc71;
+        }
+    }
+
+    &.error {
+        border-left-color: #e74c3c;
+
+        i {
+            color: #e74c3c;
+        }
+    }
+
+    &.warning {
+        border-left-color: #f39c12;
+
+        i {
+            color: #f39c12;
+        }
+    }
+
+    i {
+        font-size: 1.2rem;
+    }
+
+    span {
+        flex: 1;
+        color: #2c3e50;
+        font-weight: 500;
+    }
+
+    .alert-close {
+        background: none;
+        border: none;
+        color: #7f8c8d;
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
+        transition: all 0.3s ease;
+
+        &:hover {
+            color: #e74c3c;
+            background: rgba(231, 76, 60, 0.1);
         }
     }
 }

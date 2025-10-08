@@ -2,8 +2,8 @@
     <!-- Header Section -->
     <div class="header-section">
         <div class="title-section">
-            <h1 class="page-title">Gestión de Tipos de Documentos</h1>
-            <p class="page-subtitle">Administra y gestiona la información de tus tipos de documentos</p>
+            <h1 class="page-title">Gestión de Tipos de Documento</h1>
+            <p class="page-subtitle">Administra y gestiona la información de tus tipos de documento</p>
         </div>
         <div class="actions-section">
             <button class="btn btn-primary" (click)="openCreateModal()">
@@ -22,24 +22,33 @@
         <div class="search-container">
             <div class="search-input-wrapper">
                 <i class="fas fa-search search-icon"></i>
-                <input type="text" class="search-input" placeholder="Buscar por nombre o número de documento..."
+                <input type="text" class="search-input" placeholder="Buscar por nombre..."
                     [(ngModel)]="searchTerm" (input)="onSearch()">
+            </div>
+            <div class="filter-select-wrapper">
+                <select class="filter-select" [(ngModel)]="statusFilter" (change)="onStatusFilterChange()">
+                    <option value="active">Vigentes</option>
+                    <option value="deleted">Eliminados</option>
+                </select>
             </div>
         </div>
     </div>
 
     <!-- Bulk Actions Section -->
-    <div class="bulk-actions" *ngIf="selectedDocumentTypes.length > 0">
+     @if (selectedDocumentTypes.length > 0) {
+    <div class="bulk-actions">
         <div class="selected-info">
-            <span>{{selectedDocumentTypes.length}} tipo(s) de documento(s) seleccionado(s)</span>
+            <span>{{selectedDocumentTypes.length}} tipo(s) de documento seleccionados</span>
         </div>
         <div class="bulk-buttons">
-            <button class="btn btn-danger" (click)="confirmBulkDelete()">
-                <i class="fas fa-trash"></i>
-                Eliminar Seleccionados
+            <button class="btn" [ngClass]="isDeletedView ? 'btn-success' : 'btn-danger'"
+                (click)="isDeletedView ? confirmBulkRestore() : confirmBulkDelete()">
+                <i class="fas" [ngClass]="isDeletedView ? 'fa-undo' : 'fa-trash'"></i>
+                {{isDeletedView ? 'Restaurar seleccionados' : 'Eliminar seleccionados'}}
             </button>
         </div>
     </div>
+    }
 
     <!-- Table Section -->
     <div class="table-container">
@@ -54,51 +63,62 @@
                         <th>Nombre</th>
                         <th>Descripción</th>
                         <th>Dígitos</th>
-                        <th>Fecha Creación</th>
+                        <th>{{isDeletedView ? 'Fecha Eliminación' : 'Fecha Creación'}}</th>
                         <th class="actions-column">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr *ngFor="let documentType of filteredDocumentTypes"
-                        [class.selected]="isSelected(documentType.id)">
-                        <td class="checkbox-column">
-                            <input type="checkbox" [checked]="isSelected(documentType.id)"
-                                (change)="toggleSelect(documentType.id)" class="checkbox-input">
-                        </td>
-                        <td class="name-cell">
-                            <div class="document-type-name">{{documentType.name}}</div>
-                        </td>
-                        <td class="description-cell">{{documentType.description}}</td>
-                        <td>{{documentType.digits}}</td>
-                        <td class="date-cell">{{formatDate(documentType.createdAt)}}</td>
-                        <td class="actions-column">
-                            <div class="action-buttons">
-                                <button class="btn-icon btn-edit" (click)="openEditModal(documentType)" title="Editar">
-                                    <i class="fas fa-edit"></i>
-                                </button>
+                @for (documentType of filteredDocumentTypes; track $index) {
+                    <tr [class.selected]="isSelected(documentType.id)">
+                    <td class="checkbox-column">
+                        <input type="checkbox" [checked]="isSelected(documentType.id)"
+                            (change)="toggleSelect(documentType.id)" class="checkbox-input">
+                    </td>
+                    <td class="name-cell">
+                        <div class="document-type-name">{{documentType.name}}</div>
+                    </td>
+                    <td class="description-cell">{{documentType.description}}</td>
+                    <td>{{documentType.digits}}</td>
+                    <td class="date-cell">{{formatDate(isDeletedView ? documentType.deletedAt : documentType.createdAt)}}</td>
+                    <td class="actions-column">
+                        <div class="action-buttons">
+                            <button class="btn-icon btn-edit" (click)="openEditModal(documentType)" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            @if (!isDeletedView) {
                                 <button class="btn-icon btn-delete" (click)="confirmDelete(documentType)"
                                     title="Eliminar">
                                     <i class="fas fa-trash"></i>
                                 </button>
-                            </div>
-                        </td>
-                    </tr>
+                            } @else {
+                                <button class="btn-icon btn-restore" (click)="confirmRestore(documentType)"
+                                    title="Restaurar">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                            }
+                        </div>
+                    </td>
+                </tr>
+                    }
                 </tbody>
             </table>
         </div>
 
         <!-- Empty State -->
-        <div class="empty-state" *ngIf="filteredDocumentTypes.length === 0">
+         @if (filteredDocumentTypes.length === 0) {
+        <div class="empty-state">
             <div class="empty-icon">
                 <i class="fas fa-users"></i>
             </div>
             <h3>No se encontraron tipos de documentos</h3>
             <p>No hay tipos de documentos que coincidan con tu búsqueda</p>
         </div>
+         }
     </div>
 
     <!-- Pagination -->
-    <div class="pagination-container" *ngIf="filteredDocumentTypes.length > 0">
+     @if (filteredDocumentTypes.length > 0) {
+    <div class="pagination-container">
         <div class="pagination-info">
             Mostrando {{(currentPage - 1) * itemsPerPage + 1}} - {{Math.min(currentPage * itemsPerPage,
             filteredDocumentTypes.length)}} de {{filteredDocumentTypes.length}} tipos de documentos
@@ -113,10 +133,12 @@
             </button>
         </div>
     </div>
+    }
 </div>
 
 <!-- Create/Edit Modal -->
-<div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
+ @if (showModal) {  
+<div class="modal-overlay" (click)="closeModal()">
     <div class="modal-container" (click)="$event.stopPropagation()">
         <div class="modal-header">
             <h2>{{isEditMode ? 'Editar Tipo de Documento' : 'Nuevo Tipo de Documento'}}</h2>
@@ -131,10 +153,11 @@
                         <label for="nombre">Nombre *</label>
                         <input type="text" id="nombre" formControlName="name" class="form-input"
                             [class.error]="documentTypeForm.get('name')?.invalid && documentTypeForm.get('name')?.touched">
-                        <div class="error-message"
-                            *ngIf="documentTypeForm.get('name')?.invalid && documentTypeForm.get('name')?.touched">
+                        @if (documentTypeForm.get('name')?.invalid && documentTypeForm.get('name')?.touched) {
+                        <div class="error-message">
                             El nombre es requerido
                         </div>
+                        }
                     </div>
 
                     <div class="form-group">
@@ -142,20 +165,22 @@
                         <input type="number" id="digits" formControlName="digits" class="form-input"
                             min="1" max="30"
                             [class.error]="documentTypeForm.get('digits')?.invalid && documentTypeForm.get('digits')?.touched">
-                        <div class="error-message"
-                            *ngIf="documentTypeForm.get('digits')?.invalid && documentTypeForm.get('digits')?.touched">
-                            Ingresa un número entre 1 y 30
-                        </div>
+                        @if (documentTypeForm.get('digits')?.invalid && documentTypeForm.get('digits')?.touched) {
+                            <div class="error-message">
+                                Ingresa un número entre 1 y 30
+                            </div>
+                        }
                     </div>
 
                     <div class="form-group full-width">
                         <label for="description">Descripción *</label>
                         <textarea id="description" formControlName="description" class="form-input" rows="3"
                             [class.error]="documentTypeForm.get('description')?.invalid && documentTypeForm.get('description')?.touched"></textarea>
-                        <div class="error-message"
-                            *ngIf="documentTypeForm.get('description')?.invalid && documentTypeForm.get('description')?.touched">
-                            La descripción es requerida
-                        </div>
+                        @if (documentTypeForm.get('description')?.invalid && documentTypeForm.get('description')?.touched) {
+                            <div class="error-message">
+                                La descripción es requerida
+                            </div>
+                        }
                     </div>
                 </div>
             </form>
@@ -171,17 +196,19 @@
         </div>
     </div>
 </div>
+ }
 
 <!-- Confirmation Modal -->
-<div class="modal-overlay" *ngIf="showConfirmModal" (click)="closeConfirmModal()">
+ @if (showConfirmModal) {
+<div class="modal-overlay" (click)="closeConfirmModal()">
     <div class="modal-container confirm-modal" (click)="$event.stopPropagation()">
         <div class="modal-header">
-            <h2>Confirmar Eliminación</h2>
+            <h2>{{isRestoreConfirm ? 'Confirmar Restauración' : 'Confirmar Eliminación'}}</h2>
         </div>
         <div class="modal-body">
             <div class="confirm-content">
-                <div class="confirm-icon">
-                    <i class="fas fa-exclamación-triangle"></i>
+                <div class="confirm-icon" [ngClass]="isRestoreConfirm ? 'restore' : 'delete'">
+                    <i class="fas" [ngClass]="isRestoreConfirm ? 'fa-undo' : 'fa-exclamation-triangle'"></i>
                 </div>
                 <p>{{confirmMessage}}</p>
             </div>
@@ -190,10 +217,63 @@
             <button type="button" class="btn btn-secondary" (click)="closeConfirmModal()">
                 Cancelar
             </button>
-            <button type="button" class="btn btn-danger" (click)="executeDelete()">
-                Eliminar
+            <button type="button" class="btn" [ngClass]="isRestoreConfirm ? 'btn-success' : 'btn-danger'"
+                (click)="executeConfirmAction()">
+                {{isRestoreConfirm ? 'Restaurar' : 'Eliminar'}}
             </button>
         </div>
     </div>
 </div>
+}
 
+<!-- Restore Suggestion Modal -->
+ @if (showRestoreSuggestion) {
+<div class="modal-overlay" (click)="closeRestoreSuggestion()">
+    <div class="modal-container restore-suggestion-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>Restaurar tipo de documento</h2>
+            <button class="btn-close" (click)="closeRestoreSuggestion()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p class="restore-message">
+                El tipo de documento '{{restoreSuggestionData?.name}}' ya existe pero se encuentra borrado, ¿deseas restaurarlo?
+            </p>
+            <div class="restore-details">
+                <div class="detail-row">
+                    <span class="detail-label">Nombre:</span>
+                    <span class="detail-value">{{restoreSuggestionData?.name}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Descripción:</span>
+                    <span class="detail-value">{{restoreSuggestionData?.description}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Dígitos:</span>
+                    <span class="detail-value">{{restoreSuggestionData?.digits}}</span>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeRestoreSuggestion()">
+                Cancelar
+            </button>
+            <button type="button" class="btn btn-success" (click)="confirmRestoreSuggestion()">
+                Restaurar
+            </button>
+        </div>
+    </div>
+</div>
+ }
+
+<!-- Alert Messages -->
+<div class="alert-container" [class.show]="showAlert">
+    <div class="alert" [class]="AlertType">
+        <i [class]="AlertIcon"></i>
+        <span>{{AlertMessage}}</span>
+        <button type="button" class="alert-close" (click)="closeAlert()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>

@@ -17,6 +17,7 @@ export class DocumentTypes implements OnInit {
   selectedDocumentTypes: number[] = [];
 
   searchTerm = '';
+  statusFilter: 'active' | 'deleted' = 'active';
   currentPage = 1;
   itemsPerPage = 10;
   totalPages = 1;
@@ -30,8 +31,16 @@ export class DocumentTypes implements OnInit {
   documentTypeForm: FormGroup;
   currentDocumentType: DocumentTypeResponse | null = null;
 
+  showAlert = false;
+  AlertType = "";
+  AlertMessage = "";
+  AlertIcon = "";
+
   confirmMessage = '';
   confirmAction: (() => void) | null = null;
+  confirmModalMode: 'delete' | 'restore' = 'delete';
+  showRestoreSuggestion = false;
+  restoreSuggestionData: DocumentTypeResponse | null = null;
 
   Math = Math;
 
@@ -44,6 +53,14 @@ export class DocumentTypes implements OnInit {
 
   ngOnInit(): void {
     this.fetchDocumentTypes();
+  }
+
+  get isDeletedView(): boolean {
+    return this.statusFilter === 'deleted';
+  }
+
+  get isRestoreConfirm(): boolean {
+    return this.confirmModalMode === 'restore';
   }
 
   private createForm(): FormGroup {
@@ -60,6 +77,7 @@ export class DocumentTypes implements OnInit {
     const params: Record<string, string | number> = {
       page: this.currentPage,
       limit: this.itemsPerPage,
+      status: this.statusFilter,
     };
 
     if (this.searchTerm.trim()) {
@@ -87,6 +105,7 @@ export class DocumentTypes implements OnInit {
         this.filteredDocumentTypes = [];
         this.totalItems = 0;
         this.totalPages = 1;
+        this.selectedDocumentTypes = [];
       },
       complete: () => {
         this.isLoading = false;
@@ -100,6 +119,12 @@ export class DocumentTypes implements OnInit {
 
   onSearch(): void {
     this.currentPage = 1;
+    this.fetchDocumentTypes();
+  }
+
+  onStatusFilterChange(): void {
+    this.currentPage = 1;
+    this.selectedDocumentTypes = [];
     this.fetchDocumentTypes();
   }
 
@@ -223,19 +248,34 @@ export class DocumentTypes implements OnInit {
 
     request$.subscribe({
       next: () => {
-        console.log(this.isEditMode ? 'Tipo de documento actualizado correctamente' : 'Tipo de documento creado correctamente');
+        this.isEditMode ? this.showMessage("success", "fas fa-check-circle", "Tipo de documento actualizado correctamente!") : this.showMessage("success", "fas fa-check-circle", "Tipo de documento creado correctamente!")
         this.closeModal();
         this.fetchDocumentTypes();
       },
       error: (err) => {
-        console.error('Error saving document type', err);
+        if (!this.isEditMode && err?.status === 409 && err?.error?.deleted && err?.error?.data) {
+          const candidate = err.error.data as DocumentTypeResponse;
+          this.openRestoreSuggestion(candidate);
+          return;
+        }
+        this.isEditMode ? this.showMessage("error", "fas fa-exclamation-circle", "No se pudo actualizar el tipo de documento") : this.showMessage("error", "fas fa-exclamation-circle", "No se pudo crear el tipo de documento!")
       },
     });
   }
 
   confirmDelete(documentType: DocumentTypeResponse): void {
-    this.confirmMessage = `¿Estás seguro de que deseas eliminar el tipo de documento "${documentType.name}"?`;
+    this.confirmMessage = `¿Estás seguro de que deseas eliminar el tipo de documento "${documentType.name}"?`;
+
     this.confirmAction = () => this.deleteDocumentType(documentType.id);
+    this.confirmModalMode = 'delete';
+    this.showConfirmModal = true;
+  }
+
+  confirmRestore(documentType: DocumentTypeResponse): void {
+    this.confirmMessage = `¿Estás seguro de que deseas restaurar el tipo de documento "${documentType.name}"?`;
+
+    this.confirmAction = () => this.restoreDocumentType(documentType.id);
+    this.confirmModalMode = 'restore';
     this.showConfirmModal = true;
   }
 
@@ -244,23 +284,63 @@ export class DocumentTypes implements OnInit {
     if (!count) {
       return;
     }
-    this.confirmMessage = `¿Estás seguro de que deseas eliminar ${count} tipo${count > 1 ? 's' : ''} de documento?`;
+    this.confirmMessage = `¿Estás seguro de que deseas eliminar ${count} tipo${count > 1 ? 's' : ''} de documento?`;
+
     this.confirmAction = () => this.deleteBulkDocumentTypes();
+    this.confirmModalMode = 'delete';
+    this.showConfirmModal = true;
+  }
+
+  confirmBulkRestore(): void {
+    const count = this.selectedDocumentTypes.length;
+    if (!count) {
+      return;
+    }
+    this.confirmMessage = `¿Estás seguro de que deseas restaurar ${count} tipo${count > 1 ? 's' : ''} de documento?`;
+
+    this.confirmAction = () => this.restoreBulkDocumentTypes();
+    this.confirmModalMode = 'restore';
     this.showConfirmModal = true;
   }
 
   private deleteDocumentType(id: number | string): void {
     const numericId = Number(id);
-    this.documentTypesApi.remove(numericId).subscribe({
+    this.documentTypesApi.delete(numericId).subscribe({
       next: () => {
-        console.log('Tipo de documento eliminado correctamente');
+        this.showMessage("success", "fas fa-check-circle", "Tipo de documento eliminado correctamente!");
         this.fetchDocumentTypes();
       },
       error: (err) => {
-        console.error('Error deleting document type', err);
+        this.showMessage("error", "fas fa-exclamation-circle", "No se pudo eliminar el tipo de documento!");
       },
       complete: () => {
         this.closeConfirmModal();
+      },
+    });
+  }
+
+  private restoreDocumentType(id: number | string): void {
+    this.restoreDocumentTypeWithOptions(id);
+  }
+
+  private restoreDocumentTypeWithOptions(id: number | string, options?: { onSuccess?: () => void; closeConfirm?: boolean }): void {
+    const numericId = Number(id);
+    const closeConfirm = options?.closeConfirm ?? true;
+    const onSuccess = options?.onSuccess;
+
+    this.documentTypesApi.restore(numericId).subscribe({
+      next: () => {
+        this.showMessage("success", "fas fa-check-circle", "Tipo de documento restaurado correctamente!");
+        this.fetchDocumentTypes();
+        onSuccess?.();
+      },
+      error: () => {
+        this.showMessage("error", "fas fa-exclamation-circle", "No se pudo restaurar el tipo de documento!");
+      },
+      complete: () => {
+        if (closeConfirm) {
+          this.closeConfirmModal();
+        }
       },
     });
   }
@@ -272,13 +352,13 @@ export class DocumentTypes implements OnInit {
 
     const ids = this.selectedDocumentTypes.map((value) => Number(value));
 
-    this.documentTypesApi.bulkSoftDelete(ids).subscribe({
+    this.documentTypesApi.bulkDelete(ids).subscribe({
       next: () => {
-        console.log('Tipos de documento eliminados correctamente');
+        this.showMessage("success", "fas fa-check-circle", "Tipos de documento eliminados correctamente!");
         this.fetchDocumentTypes();
       },
       error: (err) => {
-        console.error('Error deleting document types', err);
+        this.showMessage("error", "fas fa-exclamation-circle", "No se pudieron eliminar los tipos de documento!");
       },
       complete: () => {
         this.closeConfirmModal();
@@ -286,8 +366,25 @@ export class DocumentTypes implements OnInit {
     });
   }
 
-  executeDelete(): void {
-    this.executeConfirmAction();
+  private restoreBulkDocumentTypes(): void {
+    if (!this.selectedDocumentTypes.length) {
+      return;
+    }
+
+    const ids = this.selectedDocumentTypes.map((value) => Number(value));
+
+    this.documentTypesApi.bulkRestore(ids).subscribe({
+      next: () => {
+        this.showMessage("success", "fas fa-check-circle", "Tipos de documento restaurados correctamente!");
+        this.fetchDocumentTypes();
+      },
+      error: () => {
+        this.showMessage("error", "fas fa-exclamation-circle", "No se pudieron restaurar los tipos de documento!");
+      },
+      complete: () => {
+        this.closeConfirmModal();
+      },
+    });
   }
 
   executeConfirmAction(): void {
@@ -300,6 +397,36 @@ export class DocumentTypes implements OnInit {
     this.showConfirmModal = false;
     this.confirmMessage = '';
     this.confirmAction = null;
+    this.confirmModalMode = 'delete';
+  }
+
+  openRestoreSuggestion(data: DocumentTypeResponse): void {
+    this.restoreSuggestionData = {
+      ...data,
+      id: Number(data.id),
+      digits: Number(data.digits),
+    };
+    this.showRestoreSuggestion = true;
+  }
+
+  closeRestoreSuggestion(): void {
+    this.showRestoreSuggestion = false;
+    this.restoreSuggestionData = null;
+  }
+
+  confirmRestoreSuggestion(): void {
+    if (!this.restoreSuggestionData) {
+      return;
+    }
+    const id = Number(this.restoreSuggestionData.id);
+    this.showRestoreSuggestion = false;
+    this.restoreDocumentTypeWithOptions(id, {
+      closeConfirm: false,
+      onSuccess: () => {
+        this.closeModal();
+      },
+    });
+    this.restoreSuggestionData = null;
   }
 
   formatDate(date: string | Date | undefined): string {
@@ -312,6 +439,16 @@ export class DocumentTypes implements OnInit {
       day: '2-digit',
     }).format(new Date(date));
   }
+
+  private showMessage(tipo: string, icono: string, mensaje: string): void {
+    this.AlertType = tipo;
+    this.AlertIcon = icono;
+    this.AlertMessage = mensaje;
+    this.showAlert = true;
+    setTimeout(() => this.closeAlert(), 5000);
+  }     
+
+  closeAlert(): void { this.showAlert = false; }
 }
 
 
