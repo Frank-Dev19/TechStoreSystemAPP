@@ -1,0 +1,702 @@
+<div class="rbac-container">
+    <!-- Header -->
+    <div class="rbac-header">
+        <div class="header-content">
+            <h1 class="title">Control de Acceso (RBAC)</h1>
+            <p class="subtitle">Administra permisos, roles, usuarios y módulos</p>
+        </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="tabs-navigation">
+        <button class="tab-button" [class.active]="activeTab === 'permissions'" (click)="activeTab = 'permissions'">
+            <span class="tab-icon">🔐</span>
+            Permisos
+        </button>
+        <button class="tab-button" [class.active]="activeTab === 'roles'" (click)="activeTab = 'roles'">
+            <span class="tab-icon">👥</span>
+            Roles
+        </button>
+        <button class="tab-button" [class.active]="activeTab === 'users'" (click)="activeTab = 'users'">
+            <span class="tab-icon">👤</span>
+            Usuarios
+        </button>
+        <button class="tab-button" [class.active]="activeTab === 'modules'" (click)="activeTab = 'modules'">
+            <span class="tab-icon">🧱</span>
+            Módulos
+        </button>
+    </div>
+
+    <!-- PERMISSIONS TAB -->
+    <div class="tab-content" *ngIf="activeTab === 'permissions'">
+        <div class="content-header">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Buscar permisos..." [(ngModel)]="searchPermission">
+            </div>
+            <div class="header-actions">
+                <select class="permission-filter" [(ngModel)]="permissionFilter">
+                    <option value="regular">Permisos</option>
+                    <option value="exceptional">Permisos Excepcionales</option>
+                </select>
+                <button class="btn-primary" (click)="openPermissionModal()">
+                    <i class="fas fa-plus"></i>
+                    Nuevo Permiso
+                </button>
+            </div>
+        </div>
+
+        <!-- Regular Permissions View -->
+        <div *ngIf="permissionFilter === 'regular'">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th width="40">
+                                <input type="checkbox"
+                                    [checked]="selectedPermissions.length === filteredPermissions.length && filteredPermissions.length > 0"
+                                    (change)="toggleAllPermissions($event)">
+                            </th>
+                            <th>Código</th>
+                            <th>Descripción</th>
+                            <th>Módulo</th>
+                            <th>Acción</th>
+                            <th width="120">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let permission of filteredPermissions">
+                            <td>
+                                <input type="checkbox" [checked]="selectedPermissions.includes(permission.id)"
+                                    (change)="togglePermissionSelection(permission.id)">
+                            </td>
+                            <td><code>{{ permission.codigo }}</code></td>
+                            <td>{{ permission.descripcion }}</td>
+                            <td>
+                                <span class="module-badge">
+                                    <i [class]="getModuleIcon(permission.module_id)"></i>
+                                    {{ getModuleLabel(permission.module_id) }}
+                                </span>
+                            </td>
+                            <td><span class="action-badge">{{ permission.actionkey }}</span></td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-icon btn-edit" (click)="editPermission(permission)"
+                                        title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn-icon btn-delete" (click)="deletePermission(permission.id)"
+                                        title="Eliminar">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-footer" *ngIf="selectedPermissions.length > 0">
+                <span>{{ selectedPermissions.length }} seleccionado(s)</span>
+                <button class="btn-danger-outline" (click)="deleteSelectedPermissions()">
+                    <i class="fas fa-trash"></i>
+                    Eliminar seleccionados
+                </button>
+            </div>
+        </div>
+
+        <!-- Exceptional Permissions View -->
+        <div *ngIf="permissionFilter === 'exceptional'">
+            <div class="exceptional-permissions-header">
+                <button class="btn-primary" (click)="openExceptionalPermissionModal()">
+                    <i class="fas fa-plus"></i>
+                    Asignar Permiso Excepcional
+                </button>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Permiso</th>
+                            <th>Efecto</th>
+                            <th>Alcance</th>
+                            <th>Expira</th>
+                            <th width="120">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let ep of filteredExceptionalPermissions">
+                            <td>
+                                <div class="user-info">
+                                    <i class="fas fa-user"></i>
+                                    {{ getUserName(ep.userId) }}
+                                </div>
+                            </td>
+                            <td><code>{{ getPermissionCode(ep.permissionId) }}</code></td>
+                            <td>
+                                <span class="effect-badge" [class.allow]="ep.effect === 'allow'"
+                                    [class.deny]="ep.effect === 'deny'">
+                                    {{ ep.effect === 'allow' ? 'Permitir' : 'Denegar' }}
+                                </span>
+                            </td>
+                            <td>{{ ep.scope || 'Global' }}</td>
+                            <td>{{ ep.expiresAt ? (ep.expiresAt | date:'dd/MM/yyyy') : 'Sin expiración' }}</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-icon btn-edit" (click)="editExceptionalPermission(ep)"
+                                        title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn-icon btn-delete" (click)="deleteExceptionalPermission(ep.id)"
+                                        title="Eliminar">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROLES TAB -->
+    <div class="tab-content" *ngIf="activeTab === 'roles'">
+        <div class="content-header">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Buscar roles..." [(ngModel)]="searchRole">
+            </div>
+            <button class="btn-primary" (click)="openRoleModal()">
+                <i class="fas fa-plus"></i>
+                Nuevo Rol
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th width="40">
+                            <input type="checkbox"
+                                [checked]="selectedRoles.length === filteredRoles.length && filteredRoles.length > 0"
+                                (change)="toggleAllRoles($event)">
+                        </th>
+                        <th>Nombre</th>
+                        <th>Permisos Asignados</th>
+                        <th>Fecha Creación</th>
+                        <th width="150">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let role of filteredRoles">
+                        <td>
+                            <input type="checkbox" [checked]="selectedRoles.includes(role.id)"
+                                (change)="toggleRoleSelection(role.id)">
+                        </td>
+                        <td><strong>{{ role.nombre }}</strong></td>
+                        <td>
+                            <span class="permission-count">{{ role.permissions.length }} permiso(s)</span>
+                        </td>
+                        <td>{{ role.createdAt | date:'dd/MM/yyyy' }}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-icon btn-edit" (click)="editRole(role)" title="Editar rol">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon btn-key" (click)="openRolePermissionsTreeModal(role)"
+                                    title="Gestionar permisos">
+                                    <i class="fas fa-key"></i>
+                                </button>
+                                <button class="btn-icon btn-delete" (click)="deleteRole(role.id)" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="table-footer" *ngIf="selectedRoles.length > 0">
+            <span>{{ selectedRoles.length }} seleccionado(s)</span>
+            <button class="btn-danger-outline" (click)="deleteSelectedRoles()">
+                <i class="fas fa-trash"></i>
+                Eliminar seleccionados
+            </button>
+        </div>
+    </div>
+
+    <!-- USERS TAB -->
+    <div class="tab-content" *ngIf="activeTab === 'users'">
+        <div class="content-header">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Buscar usuarios..." [(ngModel)]="searchUser">
+            </div>
+            <div class="header-actions">
+                <select class="user-filter" [(ngModel)]="userStatusFilter">
+                    <option value="all">Todos los estados</option>
+                    <option value="active">Activos</option>
+                    <option value="inactive">Inactivos</option>
+                    <option value="deleted">Eliminados</option>
+                </select>
+                <button class="btn-primary" (click)="openUserModal()">
+                    <i class="fas fa-plus"></i>
+                    Nuevo Usuario
+                </button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th width="40">
+                            <input type="checkbox"
+                                [checked]="selectedUsers.length === filteredUsers.length && filteredUsers.length > 0"
+                                (change)="toggleAllUsers($event)">
+                        </th>
+                        <th>Nombre</th>
+                        <th>Email</th>
+                        <th>Documento</th>
+                        <th>Roles</th>
+                        <th>Estado</th>
+                        <th width="150">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let user of filteredUsers">
+                        <td>
+                            <input type="checkbox" [checked]="selectedUsers.includes(user.id)"
+                                (change)="toggleUserSelection(user.id)">
+                        </td>
+                        <td><strong>{{ user.nombre }}</strong></td>
+                        <td>{{ user.email }}</td>
+                        <td>{{ user.tipoDocumento }} - {{ user.nroDocumento }}</td>
+                        <td>
+                            <div class="roles-list">
+                                <span class="role-badge" *ngFor="let roleId of user.roles">
+                                    {{ getRoleName(roleId) }}
+                                </span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="status-badge" [class.active]="user.isActive && !user.deleted"
+                                [class.inactive]="!user.isActive && !user.deleted" [class.deleted]="user.deleted">
+                                {{ user.deleted ? 'Eliminado' : (user.isActive ? 'Activo' : 'Inactivo') }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-icon btn-edit" (click)="editUser(user)" title="Editar"
+                                    *ngIf="!user.deleted">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon btn-restore" (click)="restoreUser(user.id)" title="Restaurar"
+                                    *ngIf="user.deleted">
+                                    <i class="fas fa-redo"></i>
+                                </button>
+                                <button class="btn-icon btn-delete" (click)="deleteUser(user.id, false)"
+                                    title="Eliminar lógico" *ngIf="!user.deleted">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                                <button class="btn-icon btn-delete-permanent" (click)="deleteUser(user.id, true)"
+                                    title="Eliminar físico">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="table-footer" *ngIf="selectedUsers.length > 0">
+            <span>{{ selectedUsers.length }} seleccionado(s)</span>
+            <button class="btn-danger-outline" (click)="deleteSelectedUsers()">
+                <i class="fas fa-trash"></i>
+                Eliminar seleccionados
+            </button>
+        </div>
+    </div>
+
+    <!-- MODULES TAB -->
+    <div class="tab-content" *ngIf="activeTab === 'modules'">
+        <div class="content-header">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Buscar módulos..." [(ngModel)]="searchModule">
+            </div>
+            <button class="btn-primary" (click)="openModuleModal()">
+                <i class="fas fa-plus"></i>
+                Nuevo Módulo
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th width="40">
+                            <input type="checkbox"
+                                [checked]="selectedModules.length === filteredModules.length && filteredModules.length > 0"
+                                (change)="toggleAllModules($event)">
+                        </th>
+                        <th>Icono</th>
+                        <th>Clave</th>
+                        <th>Etiqueta</th>
+                        <th>Orden</th>
+                        <th width="120">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let module of filteredModules">
+                        <td>
+                            <input type="checkbox" [checked]="selectedModules.includes(module.id)"
+                                (change)="toggleModuleSelection(module.id)">
+                        </td>
+                        <td>
+                            <i [class]="module.icon" class="module-icon-preview"></i>
+                        </td>
+                        <td><code>{{ module.key }}</code></td>
+                        <td><strong>{{ module.label }}</strong></td>
+                        <td>{{ module.sortOrder }}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-icon btn-edit" (click)="editModule(module)" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon btn-delete" (click)="deleteModule(module.id)" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="table-footer" *ngIf="selectedModules.length > 0">
+            <span>{{ selectedModules.length }} seleccionado(s)</span>
+            <button class="btn-danger-outline" (click)="deleteSelectedModules()">
+                <i class="fas fa-trash"></i>
+                Eliminar seleccionados
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- PERMISSION MODAL -->
+<div class="modal-overlay" *ngIf="showPermissionModal" (click)="closePermissionModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>{{ editingPermission ? 'Editar Permiso' : 'Nuevo Permiso' }}</h2>
+            <button class="btn-close" (click)="closePermissionModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="modal-body">
+            <!-- ❌ Se elimina el campo "Código" -->
+
+            <div class="form-group">
+                <label>Descripción *</label>
+                <input type="text" [(ngModel)]="permissionForm.descripcion" placeholder="Ej: Crear usuarios"
+                    class="form-control">
+            </div>
+
+            <div class="form-group">
+                <label>Clave de Acción *</label>
+                <input type="text" [(ngModel)]="permissionForm.actionkey" placeholder="Ej: create" class="form-control">
+            </div>
+
+            <div class="form-group">
+                <label>Módulo *</label>
+                <select [(ngModel)]="permissionForm.module_id" class="form-control">
+                    <option [ngValue]="null">Seleccionar módulo</option>
+                    <option *ngFor="let module of permissionModules" [ngValue]="module.id">
+                        {{ module.label }}
+                    </option>
+                </select>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="closePermissionModal()">Cancelar</button>
+            <button class="btn-primary" (click)="savePermission()">
+                {{ editingPermission ? 'Actualizar' : 'Crear' }}
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ROLE MODAL -->
+<div class="modal-overlay" *ngIf="showRoleModal" (click)="closeRoleModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>{{ editingRole ? 'Editar Rol' : 'Nuevo Rol' }}</h2>
+            <button class="btn-close" (click)="closeRoleModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Nombre del Rol *</label>
+                <input type="text" [(ngModel)]="roleForm.nombre" placeholder="Ej: Administrador" class="form-control">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeRoleModal()">Cancelar</button>
+            <button class="btn-primary" (click)="saveRole()">
+                {{ editingRole ? 'Actualizar' : 'Crear' }}
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ROLE PERMISSIONS TREE MODAL -->
+<div class="modal-overlay" *ngIf="showRolePermissionsTreeModal" (click)="closeRolePermissionsTreeModal()">
+    <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>Gestionar Permisos - {{ selectedRoleForPermissions?.nombre }}</h2>
+            <button class="btn-close" (click)="closeRolePermissionsTreeModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="permissions-tree">
+                <div class="tree-node" *ngFor="let module of permissionModules">
+                    <div class="tree-node-header">
+                        <input type="checkbox" [checked]="isModuleFullyChecked(module.id)"
+                            [indeterminate]="isModulePartiallyChecked(module.id)"
+                            (change)="toggleModulePermissions(module.id, $event)">
+                        <i [class]="module.icon"></i>
+                        <span class="module-label">{{ module.label }}</span>
+                        <span class="permission-count">({{ getModulePermissionsCount(module.id) }})</span>
+                    </div>
+                    <div class="tree-node-children">
+                        <div class="tree-child" *ngFor="let permission of getPermissionsByModule(module.id)">
+                            <input type="checkbox" [checked]="tempRolePermissions.includes(permission.id)"
+                                (change)="togglePermissionInRole(permission.id)">
+                            <code>{{ permission.codigo }}</code>
+                            <span class="permission-description">{{ permission.descripcion }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeRolePermissionsTreeModal()">Cancelar</button>
+            <button class="btn-primary" (click)="saveRolePermissions()">Guardar Permisos</button>
+        </div>
+    </div>
+</div>
+
+<!-- USER MODAL -->
+<div class="modal-overlay" *ngIf="showUserModal" (click)="closeUserModal()">
+    <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>{{ editingUser ? 'Editar Usuario' : 'Nuevo Usuario' }}</h2>
+            <button class="btn-close" (click)="closeUserModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nombre *</label>
+                    <input type="text" [(ngModel)]="userForm.nombre" placeholder="Nombre completo" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Email *</label>
+                    <input type="email" [(ngModel)]="userForm.email" placeholder="correo@ejemplo.com"
+                        class="form-control">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Celular *</label>
+                    <input type="text" [(ngModel)]="userForm.celular" placeholder="999999999" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Documento *</label>
+                    <select [(ngModel)]="userForm.tipoDocumento" class="form-control">
+                        <option value="DNI">DNI</option>
+                        <option value="RUC">RUC</option>
+                        <option value="CE">Carnet de Extranjería</option>
+                        <option value="Pasaporte">Pasaporte</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nro de Documento *</label>
+                    <input type="text" [(ngModel)]="userForm.nroDocumento" placeholder="12345678" class="form-control">
+                    <small class="form-hint">La contraseña será igual al número de documento</small>
+                </div>
+                <div class="form-group">
+                    <label>Estado</label>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="userActive" [(ngModel)]="userForm.isActive">
+                        <label for="userActive">{{ userForm.isActive ? 'Activo' : 'Inactivo' }}</label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Roles *</label>
+                <div class="roles-grid">
+                    <div class="role-checkbox" *ngFor="let role of roles">
+                        <input type="checkbox" [id]="'role-' + role.id" [checked]="userForm.roles.includes(role.id)"
+                            (change)="toggleRoleInUser(role.id)">
+                        <label [for]="'role-' + role.id">{{ role.nombre }}</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeUserModal()">Cancelar</button>
+            <button class="btn-primary" (click)="saveUser()">
+                {{ editingUser ? 'Actualizar' : 'Crear' }}
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- EXCEPTIONAL PERMISSION MODAL -->
+<div class="modal-overlay" *ngIf="showExceptionalPermissionModal" (click)="closeExceptionalPermissionModal()">
+    <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>{{ editingExceptionalPermission ? 'Editar Permiso Excepcional' : 'Asignar Permiso Excepcional' }}</h2>
+            <button class="btn-close" (click)="closeExceptionalPermissionModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Usuario *</label>
+                <select [(ngModel)]="exceptionalPermissionForm.userId" class="form-control">
+                    <option [value]="null">Seleccionar usuario</option>
+                    <option *ngFor="let user of users" [value]="user.id">
+                        {{ user.nombre }} ({{ user.email }})
+                    </option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Seleccionar Permiso *</label>
+                <div class="permissions-tree">
+                    <div class="tree-node" *ngFor="let module of permissionModules">
+                        <div class="tree-node-header">
+                            <i [class]="module.icon"></i>
+                            <span class="module-label">{{ module.label }}</span>
+                        </div>
+                        <div class="tree-node-children">
+                            <div class="tree-child" *ngFor="let permission of getPermissionsByModule(module.id)">
+                                <input type="radio" name="exceptionalPermission" [value]="permission.id"
+                                    [(ngModel)]="exceptionalPermissionForm.permissionId">
+                                <code>{{ permission.codigo }}</code>
+                                <span class="permission-description">{{ permission.descripcion }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Efecto *</label>
+                    <select [(ngModel)]="exceptionalPermissionForm.effect" class="form-control">
+                        <option value="allow">Permitir</option>
+                        <option value="deny">Denegar</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Alcance</label>
+                    <input type="text" [(ngModel)]="exceptionalPermissionForm.scope" placeholder="Ej: department:sales"
+                        class="form-control">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Fecha de Expiración</label>
+                <input type="date" [(ngModel)]="exceptionalPermissionForm.expiresAt" class="form-control">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeExceptionalPermissionModal()">Cancelar</button>
+            <button class="btn-primary" (click)="saveExceptionalPermission()">
+                {{ editingExceptionalPermission ? 'Actualizar' : 'Asignar' }}
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- MODULE MODAL -->
+<div class="modal-overlay" *ngIf="showModuleModal" (click)="closeModuleModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>{{ editingModule ? 'Editar Módulo' : 'Nuevo Módulo' }}</h2>
+            <button class="btn-close" (click)="closeModuleModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Clave *</label>
+                <input type="text" [(ngModel)]="moduleForm.key" placeholder="Ej: users" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Etiqueta *</label>
+                <input type="text" [(ngModel)]="moduleForm.label" placeholder="Ej: Usuarios" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Icono *</label>
+                <select [(ngModel)]="moduleForm.icon" class="form-control icon-select">
+                    <option [value]="null">Seleccionar icono</option>
+                    <option *ngFor="let icon of availableIcons" [value]="icon.class">
+                        {{ icon.label }}
+                    </option>
+                </select>
+                <div class="icon-preview" *ngIf="moduleForm.icon">
+                    <i [class]="moduleForm.icon"></i>
+                    <span>Vista previa del icono</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Orden</label>
+                <input type="number" [(ngModel)]="moduleForm.sortOrder" placeholder="0" class="form-control">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeModuleModal()">Cancelar</button>
+            <button class="btn-primary" (click)="saveModule()">
+                {{ editingModule ? 'Actualizar' : 'Crear' }}
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE CONFIRMATION MODAL -->
+<div class="modal-overlay" *ngIf="showDeleteConfirmation" (click)="closeDeleteConfirmation()">
+    <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>Confirmar Eliminación</h2>
+            <button class="btn-close" (click)="closeDeleteConfirmation()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="confirmation-message">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>{{ deleteConfirmationMessage }}</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeDeleteConfirmation()">Cancelar</button>
+            <button class="btn-danger" (click)="confirmDelete()">Eliminar</button>
+        </div>
+    </div>
+</div>

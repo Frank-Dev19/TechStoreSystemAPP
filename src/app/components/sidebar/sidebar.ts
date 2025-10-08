@@ -12,11 +12,13 @@ declare interface RouteInfo {
 }
 
 export const ROUTES: RouteInfo[] = [
-  { path: "/dashboard", title: "Dashboard", icon: "icon-chart-pie-36", class: "" },
+  { path: "/dashboard", title: "DASHBOARD", icon: "icon-chart-pie-36", class: "" },
   { path: "/estado-proyectos", title: "Estado de Proyectos", icon: "icon-puzzle-10", class: "" },
   { path: "/registro-resoluciones", title: "Estado de Lote en el Proyecto", icon: "icon-puzzle-10", class: "" },
   { path: "/tables", title: "Table List", icon: "icon-puzzle-10", class: "" },
   { path: "/typography", title: "Typography", icon: "icon-align-center", class: "" },
+  { path: "/perfil", title: "GESTION DE PERFIL", icon: "icon-chart-pie-36", class: "" },
+  { path: "/rbac", title: "GESTION DE CONTROL DE ACCESO", icon: "icon-chart-pie-36", class: "" },
 ]
 
 @Component({

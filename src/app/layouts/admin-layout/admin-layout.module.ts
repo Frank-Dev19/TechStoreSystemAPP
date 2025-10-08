@@ -15,7 +15,7 @@ import { BusinessPartners } from "../../pages/business-partners/business-partner
 import { Tests } from "../../pages/tests/tests";
 import { Perfil } from "../../pages/perfil/perfil";
 import { DocumentTypes } from "../../pages/document-types/document-types";
-
+import { Rbac } from "../../pages/rbac/rbac";
 @NgModule({
     imports: [
         CommonModule,
@@ -33,7 +33,8 @@ import { DocumentTypes } from "../../pages/document-types/document-types";
         BusinessPartners,
         DocumentTypes,
         Tests,
-        Perfil
+        Perfil,
+        Rbac
         //ForgotPassword,
         //ResetPassword
 
