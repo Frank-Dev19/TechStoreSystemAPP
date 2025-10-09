@@ -253,9 +253,18 @@ export class DocumentTypes implements OnInit {
         this.fetchDocumentTypes();
       },
       error: (err) => {
-        if (!this.isEditMode && err?.status === 409 && err?.error?.deleted && err?.error?.data) {
-          const candidate = err.error.data as DocumentTypeResponse;
-          this.openRestoreSuggestion(candidate);
+        if (!this.isEditMode && err?.status === 409) {
+          if (err?.error?.deleted && err?.error?.data) {
+            const candidate = err.error.data as DocumentTypeResponse;
+            this.openRestoreSuggestion(candidate);
+            return;
+          }
+          const nameValue = String(this.documentTypeForm.get('name')?.value ?? '').trim();
+          this.showMessage(
+            "error",
+            "fas fa-exclamation-circle",
+            `No se pudo crear el tipo de documento porque el nombre "${nameValue}" ya existe!`,
+          );
           return;
         }
         this.isEditMode ? this.showMessage("error", "fas fa-exclamation-circle", "No se pudo actualizar el tipo de documento") : this.showMessage("error", "fas fa-exclamation-circle", "No se pudo crear el tipo de documento!")
