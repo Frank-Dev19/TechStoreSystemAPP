@@ -23,6 +23,7 @@ export class BusinessPartners implements OnInit {
   selectedPartnerIds: number[] = [];
 
   searchTerm = '';
+  statusFilter: 'active' | 'deleted' = 'active';
 
   currentPage = 1;
   itemsPerPage = 10;
@@ -38,10 +39,20 @@ export class BusinessPartners implements OnInit {
   partnerForm: FormGroup;
   currentPartner: BusinessPartnerResponse | null = null;
 
+  showAlert = false;
+  AlertType = '';
+  AlertMessage = '';
+  AlertIcon = '';
+
   confirmMessage = '';
-  deleteAction: (() => void) | null = null;
+  confirmAction: (() => void) | null = null;
+  confirmModalMode: 'delete' | 'restore' = 'delete';
+  showRestoreSuggestion = false;
+  restoreSuggestionData: BusinessPartnerResponse | null = null;
 
   documentDigitsHint: number | null = null;
+
+  Math = Math;
 
   private readonly companyId = Number(config.defaultCompanyId ?? 1) || 1;
 
@@ -57,6 +68,14 @@ export class BusinessPartners implements OnInit {
     this.loadDocumentTypes();
     this.observeDocumentTypeChanges();
     this.fetchPartners();
+  }
+
+  get isDeletedView(): boolean {
+    return this.statusFilter === 'deleted';
+  }
+
+  get isRestoreConfirm(): boolean {
+    return this.confirmModalMode === 'restore';
   }
 
   private createForm(): FormGroup {
@@ -139,6 +158,7 @@ export class BusinessPartners implements OnInit {
       page: this.currentPage,
       limit: this.itemsPerPage,
       companyId: this.companyId ?? undefined,
+      status: this.statusFilter,
     };
 
     if (this.searchTerm.trim()) {
@@ -181,6 +201,12 @@ export class BusinessPartners implements OnInit {
 
   onSearch(): void {
     this.currentPage = 1;
+    this.fetchPartners();
+  }
+
+  onStatusFilterChange(): void {
+    this.currentPage = 1;
+    this.selectedPartnerIds = [];
     this.fetchPartners();
   }
 
@@ -331,19 +357,41 @@ export class BusinessPartners implements OnInit {
 
     request$.subscribe({
       next: () => {
-        console.log(this.isEditMode ? 'Socio comercial actualizado correctamente' : 'Socio comercial creado correctamente');
+        this.isEditMode
+          ? this.showMessage('success', 'fas fa-check-circle', 'Socio comercial actualizado correctamente!')
+          : this.showMessage('success', 'fas fa-check-circle', 'Socio comercial creado correctamente!');
         this.closeModal();
         this.fetchPartners();
       },
       error: (err) => {
-        console.error('Error saving business partner', err);
+        if (!this.isEditMode && err?.status === 409) {
+          const deleted = !!err?.error?.deleted;
+          const candidate = err?.error?.data as BusinessPartnerResponse | undefined;
+          if (deleted && candidate) {
+            this.openRestoreSuggestion(candidate);
+            return;
+          }
+          const docTypeId = Number(this.partnerForm.get('documentTypeId')?.value);
+          const docNumber = String(this.partnerForm.get('documentNumber')?.value ?? '').trim();
+          const docTypeName = this.getDocTypeName(docTypeId);
+          this.showMessage(
+            'error',
+            'fas fa-exclamation-circle',
+            `No se pudo crear el socio porque el documento ${docTypeName} - ${docNumber} ya existe!`,
+          );
+          return;
+        }
+        this.isEditMode
+          ? this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo actualizar el socio comercial!')
+          : this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo crear el socio comercial!');
       },
     });
   }
 
   confirmDelete(partner: BusinessPartnerResponse): void {
     this.confirmMessage = `¿Estás seguro de que deseas eliminar al socio comercial "${partner.name}"?`;
-    this.deleteAction = () => this.deletePartner(partner.id);
+    this.confirmAction = () => this.deletePartner(partner.id);
+    this.confirmModalMode = 'delete';
     this.showConfirmModal = true;
   }
 
@@ -353,7 +401,26 @@ export class BusinessPartners implements OnInit {
       return;
     }
     this.confirmMessage = `¿Estás seguro de que deseas eliminar ${count} socio${count > 1 ? 's' : ''} comercial${count > 1 ? 'es' : ''}?`;
-    this.deleteAction = () => this.deleteBulkPartners();
+    this.confirmAction = () => this.deleteBulkPartners();
+    this.confirmModalMode = 'delete';
+    this.showConfirmModal = true;
+  }
+
+  confirmRestore(partner: BusinessPartnerResponse): void {
+    this.confirmMessage = `¿Estás seguro de que deseas restaurar al socio comercial "${partner.name}"?`;
+    this.confirmAction = () => this.restorePartner(partner.id);
+    this.confirmModalMode = 'restore';
+    this.showConfirmModal = true;
+  }
+
+  confirmBulkRestore(): void {
+    const count = this.selectedPartnerIds.length;
+    if (!count) {
+      return;
+    }
+    this.confirmMessage = `¿Estás seguro de que deseas restaurar ${count} socio${count > 1 ? 's' : ''} comercial${count > 1 ? 'es' : ''}?`;
+    this.confirmAction = () => this.restoreBulkPartners();
+    this.confirmModalMode = 'restore';
     this.showConfirmModal = true;
   }
 
@@ -361,11 +428,12 @@ export class BusinessPartners implements OnInit {
     const id = Number(partnerId);
     this.businessPartnersApi.remove(id).subscribe({
       next: () => {
-        console.log('Socio comercial eliminado correctamente');
+        this.showMessage('success', 'fas fa-check-circle', 'Socio comercial eliminado correctamente!');
         this.fetchPartners();
       },
       error: (err) => {
         console.error('Error deleting business partner', err);
+        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo eliminar el socio comercial!');
       },
       complete: () => {
         this.closeConfirmModal();
@@ -382,11 +450,12 @@ export class BusinessPartners implements OnInit {
 
     this.businessPartnersApi.bulkSoftDelete(ids).subscribe({
       next: () => {
-        console.log('Socios comerciales eliminados correctamente');
+        this.showMessage('success', 'fas fa-check-circle', 'Socios comerciales eliminados correctamente!');
         this.fetchPartners();
       },
       error: (err) => {
         console.error('Error deleting business partners', err);
+        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron eliminar los socios comerciales!');
       },
       complete: () => {
         this.closeConfirmModal();
@@ -394,16 +463,66 @@ export class BusinessPartners implements OnInit {
     });
   }
 
-  executeDelete(): void {
-    if (this.deleteAction) {
-      this.deleteAction();
+  private restorePartner(partnerId: number | string): void {
+    this.restorePartnerWithOptions(partnerId);
+  }
+
+  private restorePartnerWithOptions(partnerId: number | string, options?: { onSuccess?: () => void; closeConfirm?: boolean }): void {
+    const id = Number(partnerId);
+    const closeConfirm = options?.closeConfirm ?? true;
+    const onSuccess = options?.onSuccess;
+
+    this.businessPartnersApi.restore(id).subscribe({
+      next: () => {
+        this.showMessage('success', 'fas fa-check-circle', 'Socio comercial restaurado correctamente!');
+        this.fetchPartners();
+        onSuccess?.();
+      },
+      error: (err) => {
+        console.error('Error restoring business partner', err);
+        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo restaurar el socio comercial!');
+      },
+      complete: () => {
+        if (closeConfirm) {
+          this.closeConfirmModal();
+        }
+      },
+    });
+  }
+
+  private restoreBulkPartners(): void {
+    if (!this.selectedPartnerIds.length) {
+      return;
+    }
+
+    const ids = this.selectedPartnerIds.map((value) => Number(value));
+
+    this.businessPartnersApi.bulkRestore(ids).subscribe({
+      next: () => {
+        this.showMessage('success', 'fas fa-check-circle', 'Socios comerciales restaurados correctamente!');
+        this.fetchPartners();
+      },
+      error: (err) => {
+        console.error('Error restoring business partners', err);
+        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron restaurar los socios comerciales!');
+      },
+      complete: () => {
+        this.closeConfirmModal();
+      },
+    });
+  }
+
+  executeConfirmAction(): void {
+    if (this.confirmAction) {
+      this.confirmAction();
     }
   }
 
   closeConfirmModal(): void {
     this.showConfirmModal = false;
     this.confirmMessage = '';
-    this.deleteAction = null;
+    this.confirmAction = null;
+    this.confirmModalMode = 'delete';
   }
 
   formatDate(date: string | Date | undefined): string {
@@ -433,6 +552,49 @@ export class BusinessPartners implements OnInit {
       return 'Proveedor';
     }
     return 'Sin asignar';
+  }
+
+  openRestoreSuggestion(data: BusinessPartnerResponse): void {
+    const docTypeId = Number(data.documentTypeId ?? data.documentType?.id ?? 0);
+    this.restoreSuggestionData = {
+      ...data,
+      id: Number(data.id),
+      companyId: Number(data.companyId),
+      documentTypeId: docTypeId,
+    };
+    this.showRestoreSuggestion = true;
+  }
+
+  closeRestoreSuggestion(): void {
+    this.showRestoreSuggestion = false;
+    this.restoreSuggestionData = null;
+  }
+
+  confirmRestoreSuggestion(): void {
+    if (!this.restoreSuggestionData) {
+      return;
+    }
+    const id = Number(this.restoreSuggestionData.id);
+    this.showRestoreSuggestion = false;
+    this.restorePartnerWithOptions(id, {
+      closeConfirm: false,
+      onSuccess: () => {
+        this.closeModal();
+      },
+    });
+    this.restoreSuggestionData = null;
+  }
+
+  private showMessage(tipo: string, icono: string, mensaje: string): void {
+    this.AlertType = tipo;
+    this.AlertIcon = icono;
+    this.AlertMessage = mensaje;
+    this.showAlert = true;
+    setTimeout(() => this.closeAlert(), 5000);
+  }
+
+  closeAlert(): void {
+    this.showAlert = false;
   }
 }
 
