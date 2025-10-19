@@ -54,9 +54,14 @@ export class BaseService {
         return this.request<T>('DELETE', url, options?.body, options);
     }
 
+    put<T>(url: string, body?: any, options?: HttpOptions): Observable<T> {
+        return this.request<T>('PUT', url, body, options);
+    }
+
+
     // ------------ Internos ------------
     private request<T>(
-        method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+        method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT',
         url: string,
         body?: any,
         options?: HttpOptions

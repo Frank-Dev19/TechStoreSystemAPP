@@ -20,6 +20,7 @@ import { registerLocaleData } from '@angular/common';
 import { NgApexchartsModule } from 'ng-apexcharts';
 import { ForgotPassword } from './pages/forgot-password/forgot-password';
 import { ResetPassword } from './pages/reset-password/reset-password';
+//import { Inventory } from './pages/inventory/inventory';
 //import { Perfil } from './pages/perfil/perfil';
 
 //import { BusinessPartners } from './pages/business-partners/business-partners';
@@ -35,6 +36,7 @@ registerLocaleData(localePE, 'es-PE');
     Login,
     ForgotPassword,
     ResetPassword,
+
 
 
     //Clientes

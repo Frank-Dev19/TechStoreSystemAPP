@@ -1,0 +1,1382 @@
+import { Component, OnInit } from '@angular/core';
+
+// ===== Modelos (usamos los que ya creaste en /models) =====
+import { Product } from '../../models/catalog/product';
+import { Category } from '../../models/catalog/category';
+import { Unit } from '../../models/catalog/unit';
+import { Stock } from '../../models/inventory/stock';
+import { Movement } from '../../models/inventory/movement';
+import { Count } from '../../models/inventory/count';
+import { CountSnapshot } from '../../models/inventory/count-snapshot';
+import { CountEntry } from '../../models/inventory/count-entry';
+
+// ===== Servicios (los que ya construimos) =====
+import { ProductsService } from '../../services/inventory/products.service';
+import { CatalogsService } from '../../services/inventory/catalogs.service';
+import { StockService } from '../../services/inventory/stock.service';
+import { KardexService, KardexFilters } from '../../services/inventory/kardex.service';
+import { CountsHttpService } from '../../services/inventory/counts.service';
+import { MovementsService } from '../../services/inventory/movements.service';
+import { LotsService } from '../../services/inventory/lots.service';
+import { SerialsService } from '../../services/inventory/serials.service';
+//import { MovementsService } from '../../services/inventory/movements.service';
+
+// ===== Util =====
+type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+@Component({
+  selector: 'app-inventory',
+  standalone: false,
+  templateUrl: './inventory.html',
+  styleUrl: './inventory.scss',
+})
+export class Inventory implements OnInit {
+
+  public Math = Math;
+  // -----------------------------
+  // UI STATE
+  // -----------------------------
+  activeTab: 'operations' | 'counts' | 'kardex' | 'catalogs' = 'operations';
+  isLocked = false;
+  lockReason = '';
+  selectedProductAdjustment: Product | null = null;
+
+  // Buscadores
+  searchStock = '';
+  searchProduct = '';
+  searchCategory = '';
+  searchUnit = '';
+
+  // Filtros Kardex
+  kardexFilters: KardexFilters = {
+    dateFrom: '',
+    dateTo: '',
+    product_id: null,
+    reason_code: null,
+  };
+
+  // -----------------------------
+  // FORM STATE
+  // -----------------------------
+  entryForm = {
+    product_id: null as number | null,
+    qty: 0,
+    unit_cost: 0,
+    lot_code: '',
+    expiration_date: '',
+    serials: '',
+    notes: '',
+  };
+
+  // --- ENTRADA (seriales) ---
+  entrySerialInput = '';
+  entrySerialCodes: string[] = [];
+
+  // --- SALIDA (seriales) ---
+  availableSerialsForExit: { id: number; serial_code: string; lot_id?: number | null }[] = [];
+  exitSelectedSerialIds: number[] = [];
+
+  // --- AJUSTE (seriales) ---
+  adjSerialInput = '';
+  adjSerialCodes: string[] = [];          // para qty > 0
+  adjSelectedSerialIds: number[] = [];    // para qty < 0
+
+  // --- KARDEX (modal seriales) ---
+  showMovementSerialsModal = false;
+  currentMovementSerials: Array<{ serial_id: number; serial_code: string; lot_id: number | null }> = [];
+
+
+
+
+  exitForm = {
+    product_id: null as number | null,
+    qty: 0,
+    reason_code: 'VENTA',
+    lot_id: null as number | null,
+    serial_id: null as number | null,
+    notes: '',
+  };
+
+  adjustmentForm = {
+    product_id: null as number | null,
+    lot_id: null as number | null,   // <--- nuevo
+    qty: 0,
+    notes: '',
+  };
+
+  countEntryForm = {
+    product_id: null as number | null,
+    lot_id: null as number | null,
+    qty_counted: 0,
+  };
+
+  productForm = {
+    sku: '',
+    name: '',
+    description: '',
+    category_id: null as number | null,
+    unit_id: null as number | null,
+    is_serialized: false,
+    manages_expiration: false,
+    min_stock: 0,
+    max_stock: 0,
+    reorder_point: 0,
+  };
+
+  categoryForm = {
+    code: '',
+    name: '',
+    description: '',
+  };
+
+  unitForm = {
+    code: '',
+    name: '',
+    abbreviation: '',
+  };
+
+  // -----------------------------
+  // DATOS CARGADOS
+  // -----------------------------
+  products: Product[] = [];
+  categories: Category[] = [];
+  units: Unit[] = [];
+  stock: Stock[] = [];
+  kardex: Movement[] = [];
+  counts: Count[] = [];
+
+  // Mapas rápidos
+  private productMap = new Map<number, Product>();
+  private categoryMap = new Map<number, Category>();
+  // (Si en el futuro expones lots, rellena estos métodos; por ahora mostramos '-')
+  // private lotMap = new Map<number, { lot_code: string; expiration_date: string | null }>();
+  private lotIdMap = new Map<number, { lot_code: string; expiration_date: string | null }>();
+
+
+  // Conteo seleccionado
+  selectedCount: Count | null = null;
+
+  // Snapshots / entradas del conteo seleccionado
+  currentCountSnapshots: CountSnapshot[] = [];
+  currentCountEntries: CountEntry[] = [];
+
+  // Producto seleccionado por formulario
+  selectedProductEntry: Product | null = null;
+  selectedProductExit: Product | null = null;
+  selectedCountProduct: Product | null = null;
+
+  // Auxiliares para salida (si luego agregas servicios de lotes/seriales, alínealo aquí)
+  availableLotsForExit: { id: number; lot_code: string; expiration_date: string | null; qty_on_hand: number }[] = [];
+  //availableSerialsForExit: { id: number; serial_code: string }[] = [];
+
+  // Diferencias (REVIEW)
+  differences: Array<{
+    product_id: number;
+    lot_id: number | null;
+    qty_system: number;
+    qty_counted: number;
+    difference: number;
+    avg_cost: number;
+    value_difference: number;
+  }> = [];
+
+  differenceSummary = { surplus: 0, shortage: 0, net: 0 };
+
+  // Modales Catálogos
+  showProductModal = false;
+  showCategoryModal = false;
+  showUnitModal = false;
+  editingProduct: Product | null = null;
+  editingCategory: Category | null = null;
+  editingUnit: Unit | null = null;
+
+  // Toasts
+  toasts: { type: ToastType; message: string }[] = [];
+
+  constructor(
+    private productsSvc: ProductsService,
+    private catalogsSvc: CatalogsService,
+    private stockSvc: StockService,
+    private kardexSvc: KardexService,
+    private countsSvc: CountsHttpService,
+    private movementSvc: MovementsService,
+    private lotsSvc: LotsService,
+    private serialsSvc: SerialsService,
+  ) { }
+
+  // =========================================================
+  // INIT
+  // =========================================================
+  async ngOnInit(): Promise<void> {
+    await Promise.all([
+      this.loadProducts(),
+      this.loadCategories(),
+      this.loadUnits(),
+      this.loadStock(),
+      this.loadKardex(),
+      this.loadCounts(),
+    ]);
+  }
+
+  // =========================================================
+  // LOADERS
+  // =========================================================
+  private async loadProducts() {
+    try {
+      this.products = await this.productsSvc.list().toPromise();
+      this.productMap.clear();
+      this.products.forEach((p) => this.productMap.set(p.id, p));
+    } catch {
+      this.showToast('error', 'No se pudieron cargar productos');
+    }
+  }
+
+  private async loadCategories() {
+    try {
+      this.categories = await this.catalogsSvc.listCategories().toPromise();
+      this.categoryMap.clear();
+      this.categories.forEach((c) => this.categoryMap.set(c.id, c));
+    } catch {
+      this.showToast('error', 'No se pudieron cargar categorías');
+    }
+  }
+
+  private async loadUnits() {
+    try {
+      this.units = await this.catalogsSvc.listUnits().toPromise();
+    } catch {
+      this.showToast('error', 'No se pudieron cargar unidades');
+    }
+  }
+
+  private async loadStock() {
+    try {
+      this.stock = await this.stockSvc.list().toPromise();
+
+      // PRE-CARGA: para cada renglón con lot_id, trae los lotes del producto 1 sola vez
+      const productIdsNeedingLots = Array.from(
+        new Set(
+          this.stock
+            .filter(s => s.lot_id != null)
+            .map(s => s.product_id)
+        )
+      );
+
+      // Cargar en paralelo lotes por producto y llenar los mapas
+      await Promise.all(productIdsNeedingLots.map(pid => this.ensureLotsForProduct(pid)));
+    } catch {
+      this.showToast('error', 'No se pudo cargar el stock');
+    }
+  }
+
+
+  async loadKardex(params: KardexFilters = this.kardexFilters) {
+    try {
+      this.kardex = await this.kardexSvc.list(params).toPromise();
+    } catch {
+      this.showToast('error', 'No se pudo cargar el kardex');
+    }
+  }
+
+  private async loadCounts() {
+    try {
+      this.counts = await this.countsSvc.list().toPromise();
+    } catch {
+      this.showToast('error', 'No se pudieron cargar los conteos');
+    }
+  }
+
+  // =========================================================
+  // OPERACIONES - ENTRADA
+  // =========================================================
+  onProductChangeEntry(): void {
+    this.selectedProductEntry = this.entryForm.product_id
+      ? this.productMap.get(this.entryForm.product_id) ?? null
+      : null;
+  }
+
+  async registerEntry(): Promise<void> {
+    if (!this.entryForm.product_id || this.entryForm.qty <= 0 || this.entryForm.unit_cost <= 0) {
+      this.showToast('error', 'Complete todos los campos requeridos');
+      return;
+    }
+    const p = this.getProductBySku(this.entryForm.product_id);
+    if (!p) return;
+
+    if (p.manages_expiration && (!this.entryForm.lot_code || !this.entryForm.expiration_date)) {
+      this.showToast('error', 'Debe ingresar lote y fecha de vencimiento');
+      return;
+    }
+    if (p.is_serialized && this.entrySerialCodes.length !== Number(this.entryForm.qty)) {
+      this.showToast('error', `Debes agregar exactamente ${this.entryForm.qty} serial(es)`);
+      return;
+    }
+
+    try {
+      let lotId: number | null = null;
+      if (p.manages_expiration) {
+        const lot = await this.lotsSvc.create({
+          product_id: this.entryForm.product_id!,
+          lot_code: this.entryForm.lot_code!,
+          expiration_date: this.entryForm.expiration_date!,
+        }).toPromise();
+        lotId = lot.id;
+        const list = this.lotsByProduct.get(p.id) ?? [];
+        const norm = { id: lot.id, lot_code: lot.lot_code, expiration_date: lot.expiration_date ?? null };
+        this.lotsByProduct.set(p.id, [norm, ...list]);
+        this.lotIdMap.set(lot.id, norm);
+      }
+
+      await this.movementSvc.entry({
+        product_id: this.entryForm.product_id!,
+        qty: this.entryForm.qty,
+        unit_cost: this.entryForm.unit_cost,
+        lot_id: lotId ?? undefined,
+        notes: this.entryForm.notes || undefined,
+        serial_codes: p.is_serialized ? this.entrySerialCodes : undefined,
+      }).toPromise();
+
+      await Promise.all([this.loadStock(), this.loadKardex()]);
+      this.showToast('success', 'Entrada registrada');
+      this.resetEntryForm();
+      this.entrySerialCodes = [];
+    } catch (e: any) {
+      this.showToast('error', e?.error?.message || 'No se pudo registrar la entrada');
+    }
+  }
+
+
+  private resetEntryForm() {
+    this.entryForm = {
+      product_id: null,
+      qty: 0,
+      unit_cost: 0,
+      lot_code: '',
+      expiration_date: '',
+      serials: '',
+      notes: '',
+    };
+    this.selectedProductEntry = null;
+  }
+
+  // =========================================================
+  // OPERACIONES - SALIDA
+  // =========================================================
+  async onProductChangeExit(): Promise<void> {
+    this.selectedProductExit = this.exitForm.product_id ? this.productMap.get(this.exitForm.product_id) ?? null : null;
+    this.availableLotsForExit = [];
+    this.availableSerialsForExit = [];
+    this.exitSelectedSerialIds = [];
+    this.exitForm.lot_id = null;
+
+    if (this.selectedProductExit?.manages_expiration) {
+      await this.ensureLotsForProduct(this.selectedProductExit.id);
+      const fefo = this.getLotsWithStockFEFO(this.selectedProductExit.id);
+      this.availableLotsForExit = fefo.map(l => ({ id: l.id, lot_code: l.lot_code, expiration_date: l.expiration_date, qty_on_hand: l.qty_on_hand }));
+      this.exitForm.lot_id = this.availableLotsForExit[0]?.id ?? null;
+    }
+
+    // Cargar seriales IN_STOCK filtrando por lote si aplica
+    await this.loadAvailableSerialsForExit();
+  }
+
+  async loadAvailableSerialsForExit(): Promise<void> {
+    this.availableSerialsForExit = [];
+    this.exitSelectedSerialIds = [];
+    const p = this.selectedProductExit;
+    if (!p || !p.is_serialized) return;
+
+    try {
+      const rows = await this.serialsSvc.list({
+        product_id: p.id,
+        lot_id: p.manages_expiration ? (this.exitForm.lot_id ?? null) : undefined,
+        status: 'IN_STOCK'
+      }).toPromise();
+
+      this.availableSerialsForExit = (rows ?? []).map(r => ({ id: r.id, serial_code: r.serial_code, lot_id: r.lot_id ?? null }));
+    } catch {
+      this.showToast('error', 'No se pudieron cargar los seriales disponibles');
+    }
+  }
+
+
+
+  async registerExit(): Promise<void> {
+    if (!this.exitForm.product_id || this.exitForm.qty <= 0) {
+      this.showToast('error', 'Complete todos los campos requeridos');
+      return;
+    }
+    const p = this.getProductBySku(this.exitForm.product_id);
+    if (!p) return;
+
+    try {
+
+      if (p.is_serialized) {
+        if (this.exitSelectedSerialIds.length !== Number(this.exitForm.qty)) {
+          this.showToast('error', `Debes seleccionar exactamente ${this.exitForm.qty} serial(es)`);
+          return;
+        }
+        // Si maneja vencimiento, puedes además validar que los seleccionados pertenezcan al lote elegido (opcional)
+      }
+      if (p.manages_expiration) {
+        // 1) Asegura lotes y arma la cola FEFO
+        await this.ensureLotsForProduct(p.id);
+        const fefo = this.getLotsWithStockFEFO(p.id); // trae qty_on_hand de stock
+
+        if (fefo.length === 0) {
+          this.showToast('error', 'No hay lotes disponibles con stock');
+          return;
+        }
+
+        // 2) Si el usuario eligió un lote, empezamos por ese y luego seguimos FEFO
+        let ordered = [...fefo];
+        if (this.exitForm.lot_id) {
+          const idx = ordered.findIndex(l => l.id === this.exitForm.lot_id);
+          if (idx > 0) {
+            const first = ordered.splice(idx, 1)[0];
+            ordered.unshift(first);
+          }
+        }
+
+        // 3) Capacidad total y cantidad a despachar
+        let remaining = this.exitForm.qty;
+        const totalAvailable = ordered.reduce((a, l) => a + l.qty_on_hand, 0);
+
+        if (totalAvailable <= 0) {
+          this.showToast('error', 'No hay stock disponible por lotes');
+          return;
+        }
+
+        // (Opcional) Si quieres evitar saldos parciales, corta aquí
+        // if (remaining > totalAvailable) {
+        //   this.showToast('error', `Stock insuficiente por lotes. Disponible: ${totalAvailable}.`);
+        //   return;
+        // }
+
+        // 4) Descuenta en varios lotes sin permitir negativos
+        for (const l of ordered) {
+          if (remaining <= 0) break;
+          const take = Math.min(remaining, l.qty_on_hand);
+          if (take <= 0) continue;
+
+          await this.movementSvc.exit({
+            product_id: this.exitForm.product_id!,
+            qty: this.exitForm.qty,
+            reason_code: this.exitForm.reason_code,
+            lot_id: this.exitForm.lot_id ?? undefined,
+            serial_ids: p.is_serialized ? this.exitSelectedSerialIds : undefined,
+            notes: this.exitForm.notes || undefined,
+          }).toPromise();
+
+          remaining -= take;
+        }
+
+        // 5) Aviso si no alcanzó
+        if (remaining > 0) {
+          this.showToast('warning', `Stock insuficiente por lotes. Faltó despachar ${remaining}.`);
+        }
+      } else {
+        // Producto sin vencimiento: salida normal
+        await this.movementSvc.exit({
+          product_id: this.exitForm.product_id!,
+          qty: this.exitForm.qty,
+          reason_code: this.exitForm.reason_code,
+          serial_ids: p.is_serialized ? this.exitSelectedSerialIds : undefined,
+          notes: this.exitForm.notes || undefined,
+        }).toPromise();
+      }
+
+      await Promise.all([this.loadStock(), this.loadKardex()]);
+      this.showToast('success', 'Salida registrada');
+      this.resetExitForm();
+    } catch (e: any) {
+      this.showToast('error', e?.error?.message || 'No se pudo registrar la salida');
+    }
+  }
+
+
+  private resetExitForm() {
+    this.exitForm = {
+      product_id: null,
+      qty: 0,
+      reason_code: 'VENTA',
+      lot_id: null,
+      serial_id: null,
+      notes: '',
+    };
+    this.selectedProductExit = null;
+    this.availableLotsForExit = [];
+    this.availableSerialsForExit = [];
+  }
+
+  // =========================================================
+  // OPERACIONES - AJUSTE
+  // =========================================================
+  async registerAdjustment(): Promise<void> {
+    if (!this.adjustmentForm.product_id || this.adjustmentForm.qty === 0 || !this.adjustmentForm.notes.trim()) {
+      this.showToast('error', 'Complete todos los campos requeridos');
+      return;
+    }
+    const p = this.getProductBySku(this.adjustmentForm.product_id);
+    if (!p) return;
+
+    if (p.manages_expiration && !this.adjustmentForm.lot_id) {
+      this.showToast('error', 'Debe seleccionar el lote para el ajuste');
+      return;
+    }
+
+    // Validaciones seriales
+    if (p.is_serialized) {
+      const q = Number(this.adjustmentForm.qty);
+      if (q > 0 && this.adjSerialCodes.length !== q) {
+        this.showToast('error', `Debes agregar exactamente ${q} serial(es) para el ajuste positivo`);
+        return;
+      }
+      if (q < 0 && this.adjSelectedSerialIds.length !== Math.abs(q)) {
+        this.showToast('error', `Debes seleccionar exactamente ${Math.abs(q)} serial(es) para el ajuste negativo`);
+        return;
+      }
+    }
+
+    try {
+      await this.movementSvc.adjustment({
+        product_id: this.adjustmentForm.product_id!,
+        qty: this.adjustmentForm.qty,
+        reason_code: 'AJUSTE_INV',
+        lot_id: this.adjustmentForm.lot_id ?? undefined,
+        notes: this.adjustmentForm.notes || undefined,
+        serial_codes: p.is_serialized && this.adjustmentForm.qty > 0 ? this.adjSerialCodes : undefined,
+        serial_ids: p.is_serialized && this.adjustmentForm.qty < 0 ? this.adjSelectedSerialIds : undefined,
+      }).toPromise();
+
+      await Promise.all([this.loadStock(), this.loadKardex()]);
+      this.showToast('success', 'Ajuste registrado');
+      this.resetAdjustmentForm();
+      this.adjSerialCodes = [];
+      this.adjSelectedSerialIds = [];
+    } catch (e: any) {
+      this.showToast('error', e?.error?.message || 'No se pudo registrar el ajuste');
+    }
+  }
+
+
+  private resetAdjustmentForm() {
+    this.adjustmentForm = { product_id: null, lot_id: null, qty: 0, notes: '' };
+    this.selectedProductAdjustment = null;
+  }
+
+
+  // =========================================================
+  // STOCK (tabla)
+  // =========================================================
+  get filteredStock(): Stock[] {
+    const term = (this.searchStock || '').toLowerCase();
+    return this.stock.filter((s) => {
+      const p = this.productMap.get(s.product_id);
+      return (
+        !term ||
+        p?.name.toLowerCase().includes(term) ||
+        p?.sku.toLowerCase().includes(term)
+      );
+    });
+  }
+
+  isLowStock(item: Stock): boolean {
+    const p = this.productMap.get(item.product_id);
+    if (!p) return false;
+    const min = (p.min_stock ?? 0) as number;
+    return item.qty_on_hand <= min;
+    // Si tu backend trae min_stock en otra propiedad, ajústalo aquí.
+  }
+
+  isExpiringSoon(item: Stock): boolean {
+    // Hasta que haya catálogo de lotes, devolvemos false para evitar falsos positivos
+    return false;
+  }
+
+  // =========================================================
+  // LOCK / UNLOCK (solo UI)
+  // =========================================================
+  lockInventory(): void {
+    if (confirm('¿Detener el almacén para conteo? Esto bloqueará todas las operaciones.')) {
+      this.isLocked = true;
+      this.lockReason = 'Detenido para conteo cíclico';
+      this.showToast('warning', 'Almacén detenido.');
+    }
+  }
+
+  unlockInventory(): void {
+    if (confirm('¿Reactivar el almacén?')) {
+      this.isLocked = false;
+      this.lockReason = '';
+      this.showToast('success', 'Almacén reactivado.');
+    }
+  }
+
+  // =========================================================
+  // CONTEOS
+  // =========================================================
+  getStepIndex(status?: string): number {
+    if (!status) return -1;
+    const map: Record<string, number> = { DRAFT: 0, FROZEN: 1, COUNTING: 2, REVIEW: 3, POSTED: 4 };
+    return map[status] ?? -1;
+  }
+
+  async createDraftCount(): Promise<void> {
+    try {
+      const c = await this.countsSvc.create({ description: 'Conteo cíclico' }).toPromise();
+      this.counts.unshift(c);
+      this.selectCount(c);
+      this.showToast('success', 'Conteo creado (Borrador). Ahora puedes congelarlo.');
+    } catch {
+      this.showToast('error', 'No se pudo crear el conteo');
+    }
+  }
+
+  async freezeSelectedCount(): Promise<void> {
+    if (!this.selectedCount) return;
+    if (this.selectedCount.status !== 'DRAFT') {
+      this.showToast('error', 'Solo puedes congelar un conteo en Borrador');
+      return;
+    }
+    if (!confirm('¿Congelar el conteo? Se tomará snapshot y se bloqueará el almacén.')) return;
+
+    try {
+      const updated = await this.countsSvc.freeze(this.selectedCount.id).toPromise();
+      // Bloqueamos almacén a nivel UI
+      this.isLocked = true;
+      this.lockReason = 'Detenido para conteo cíclico';
+      await this.refreshCount(updated);
+      this.showToast('success', 'Conteo congelado.');
+    } catch {
+      this.showToast('error', 'No se pudo congelar el conteo');
+    }
+  }
+
+  async startCounting(): Promise<void> {
+    if (!this.selectedCount || this.selectedCount.status !== 'FROZEN') {
+      this.showToast('error', 'Seleccione un conteo congelado');
+      return;
+    }
+    try {
+      const updated = await this.countsSvc.start(this.selectedCount.id).toPromise();
+      await this.refreshCount(updated);
+      this.showToast('success', 'Conteo iniciado');
+    } catch {
+      this.showToast('error', 'No se pudo iniciar el conteo');
+    }
+  }
+
+  async reviewDifferences(): Promise<void> {
+    if (!this.selectedCount || this.selectedCount.status !== 'COUNTING') {
+      this.showToast('error', 'El conteo debe estar en proceso');
+      return;
+    }
+
+    // Calculamos diferencias con la data actual
+    const snaps = this.currentCountSnapshots;
+    const entries = this.currentCountEntries;
+
+    const diffs: typeof this.differences = [];
+    let surplus = 0;
+    let shortage = 0;
+
+    for (const s of snaps) {
+      const entry = entries.find((e) => e.product_id === s.product_id && (e.lot_id ?? null) === (s.lot_id ?? null));
+      const counted = Number(entry?.qty_counted ?? 0);
+      const diff = counted - Number(s.qty_system);
+      const val = diff * Number(s.avg_cost_at_freeze);
+
+      if (diff !== 0) {
+        diffs.push({
+          product_id: s.product_id,
+          lot_id: s.lot_id,
+          qty_system: Number(s.qty_system),
+          qty_counted: counted,
+          difference: diff,
+          avg_cost: Number(s.avg_cost_at_freeze),
+          value_difference: val,
+        });
+        if (val > 0) surplus += val;
+        else shortage += Math.abs(val);
+      }
+    }
+
+    this.differences = diffs;
+    this.differenceSummary = { surplus, shortage, net: surplus - shortage };
+
+    // Marcamos estado REVIEW en UI (el backend cambia al publicar)
+    this.selectedCount.status = 'REVIEW';
+    this.showToast('info', `Se encontraron ${diffs.length} diferencias`);
+  }
+
+  async postAdjustments(): Promise<void> {
+    if (!this.selectedCount || this.selectedCount.status !== 'REVIEW') {
+      this.showToast('error', 'El conteo debe estar en revisión');
+      return;
+    }
+    if (!confirm('¿Publicar los ajustes?')) return;
+
+    try {
+      const updated = await this.countsSvc.post(this.selectedCount.id).toPromise();
+      await Promise.all([this.refreshCount(updated), this.loadStock(), this.loadKardex()]);
+      this.isLocked = false;
+      this.showToast('success', 'Ajustes publicados');
+    } catch {
+      this.showToast('error', 'No se pudieron publicar los ajustes');
+    }
+  }
+
+  async cancelCount(): Promise<void> {
+    if (!this.selectedCount) return;
+    if (!confirm('¿Cancelar este conteo?')) return;
+
+    try {
+      const updated = await this.countsSvc.cancel(this.selectedCount.id).toPromise();
+      await this.refreshCount(updated);
+      this.isLocked = false;
+      this.showToast('info', 'Conteo cancelado');
+    } catch {
+      this.showToast('error', 'No se pudo cancelar el conteo');
+    }
+  }
+
+  async selectCount(c: Count): Promise<void> {
+    this.selectedCount = c;
+    await this.reloadCountData(c.id);
+  }
+
+  private async refreshCount(updated: Count) {
+    // Actualiza lista y selección
+    const idx = this.counts.findIndex((x) => x.id === updated.id);
+    if (idx >= 0) this.counts[idx] = updated;
+    this.selectedCount = updated;
+    await this.reloadCountData(updated.id);
+  }
+
+  private async reloadCountData(id: number) {
+    try {
+      // Si tu backend expone GET /inventory/counts/:id úsalo para refrescar cabecera
+      const fresh = await this.countsSvc.get(id).toPromise();
+      this.selectedCount = fresh;
+
+      // Cargar snapshots/entries
+      this.currentCountSnapshots = await this.countsSvc.getSnapshots(id).toPromise();
+      this.currentCountEntries = await this.countsSvc.getEntries(id).toPromise();
+    } catch {
+      // Si aún no existen endpoints GET snapshots/entries en tu backend,
+      // deja estas colecciones vacías para no romper la UI.
+      this.currentCountSnapshots = this.currentCountSnapshots ?? [];
+      this.currentCountEntries = this.currentCountEntries ?? [];
+    }
+  }
+
+  // onCountProductChange(): void {
+  //   this.selectedCountProduct = this.countEntryForm.product_id
+  //     ? this.productMap.get(this.countEntryForm.product_id) ?? null
+  //     : null;
+  // }
+
+  async onCountProductChange(): Promise<void> {
+    this.selectedCountProduct = this.countEntryForm.product_id
+      ? this.productMap.get(this.countEntryForm.product_id) ?? null
+      : null;
+
+    // Si el producto maneja vencimientos, precargar lotes
+    if (this.selectedCountProduct?.manages_expiration) {
+      await this.ensureLotsForProduct(this.selectedCountProduct.id);
+    }
+    // Reinicia el lote seleccionado al cambiar de producto
+    this.countEntryForm.lot_id = null;
+  }
+
+
+
+  async addCountEntry(): Promise<void> {
+    if (!this.selectedCount || !this.countEntryForm.product_id) {
+      this.showToast('error', 'Complete los campos requeridos');
+      return;
+    }
+    try {
+      await this.countsSvc.addEntry(this.selectedCount.id, {
+        product_id: this.countEntryForm.product_id,
+        lot_id: this.countEntryForm.lot_id ?? null,
+        qty_counted: this.countEntryForm.qty_counted,
+        user: 'Usuario Front',
+      }).toPromise();
+
+      await this.reloadCountData(this.selectedCount.id);
+      this.resetCountEntryForm();
+      this.showToast('success', 'Conteo agregado');
+    } catch {
+      this.showToast('error', 'No se pudo agregar la entrada');
+    }
+  }
+
+  deleteCountEntry(_id: number): void {
+    // No tenemos endpoint DELETE de entradas; podrías implementarlo si lo necesitas.
+    this.showToast('warning', 'Eliminación de entradas no implementada en backend');
+  }
+
+  private resetCountEntryForm() {
+    this.countEntryForm = { product_id: null, lot_id: null, qty_counted: 0 };
+    this.selectedCountProduct = null;
+  }
+
+  requiresDoubleApproval(): boolean {
+    const total = this.stock.reduce((a, s) => a + Number(s.total_cost ?? 0), 0);
+    const pct = total > 0 ? Math.abs(this.differenceSummary.net) / total * 100 : 0;
+    return pct > 3;
+  }
+
+  getCountStatusLabel(status: string): string {
+    const map: Record<string, string> = {
+      DRAFT: 'Borrador',
+      FROZEN: 'Congelado',
+      COUNTING: 'Contando',
+      REVIEW: 'Revisión',
+      POSTED: 'Publicado',
+      CANCELLED: 'Cancelado',
+    };
+    return map[status] ?? status;
+  }
+
+  // =========================================================
+  // KARDEX
+  // =========================================================
+  get filteredKardex(): Movement[] {
+    // Si quieres filtrar del lado del servidor, usa applyKardexFilters() que ya llama al servicio
+    return this.kardex;
+  }
+
+  async applyKardexFilters(): Promise<void> {
+    await this.loadKardex(this.kardexFilters);
+    this.showToast('info', 'Filtros aplicados');
+  }
+
+  async clearKardexFilters(): Promise<void> {
+    this.kardexFilters = { dateFrom: '', dateTo: '', product_id: null, reason_code: null };
+    await this.loadKardex(this.kardexFilters);
+    this.showToast('info', 'Filtros limpiados');
+  }
+
+  exportKardexCsv(): void {
+    let csv = 'Fecha,Tipo,Motivo,Producto,Cantidad,Costo Unit.,Costo Total,Saldo Cant.,Saldo Costo,CPP\n';
+    for (const m of this.kardex) {
+      const p = this.getProductBySku(m.product_id);
+      csv += `"${new Date(m.occurred_at).toLocaleString()}","${this.getMovementTypeLabel(m.type)}","${m.reason_code}","${p?.name ?? ''}",${m.qty},${Number(m.unit_cost).toFixed(2)},${Number(m.total_cost).toFixed(2)},${m.balance_qty_post},${Number(m.balance_total_cost_post).toFixed(2)},${Number(m.balance_avg_cost_post).toFixed(2)}\n`;
+    }
+    this.downloadFile(csv, 'kardex-export.csv', 'text/csv');
+    this.showToast('success', 'Kardex exportado');
+  }
+
+  printKardex(): void {
+    window.print();
+    this.showToast('info', 'Imprimiendo kardex...');
+  }
+
+  getMovementTypeLabel(type: Movement['type']): string {
+    const map: Record<string, string> = { IN: 'Entrada', OUT: 'Salida', ADJ: 'Ajuste', TRANSFER: 'Transferencia' };
+    return map[type] ?? type;
+  }
+
+  // MODAL KARDEX
+  async openMovementSerials(mov: Movement): Promise<void> {
+    try {
+      this.currentMovementSerials = await this.serialsSvc.byMovement(mov.id).toPromise();
+      this.showMovementSerialsModal = true;
+    } catch {
+      this.showToast('error', 'No se pudieron cargar seriales del movimiento');
+    }
+  }
+  closeMovementSerials(): void {
+    this.showMovementSerialsModal = false;
+    this.currentMovementSerials = [];
+  }
+
+
+  // =========================================================
+  // CATÁLOGOS (CRUD lite en front; conecta con services reales)
+  // =========================================================
+  openProductModal(): void {
+    this.editingProduct = null;
+    this.productForm = {
+      sku: '',
+      name: '',
+      description: '',
+      category_id: null,
+      unit_id: null,
+      is_serialized: false,
+      manages_expiration: false,
+      min_stock: 0,
+      max_stock: 0,
+      reorder_point: 0,
+    };
+    this.showProductModal = true;
+  }
+
+  editProduct(p: Product): void {
+    this.editingProduct = p;
+    this.productForm = {
+      sku: p.sku,
+      name: p.name,
+      description: p.description ?? '',
+      category_id: p.category_id ?? null,
+      unit_id: p.unit_id ?? null,
+      is_serialized: !!p.is_serialized,
+      manages_expiration: !!p.manages_expiration,
+      min_stock: (p as any).min_stock ?? 0,
+      max_stock: (p as any).max_stock ?? 0,
+      reorder_point: (p as any).reorder_point ?? 0,
+    };
+    this.showProductModal = true;
+  }
+
+  async saveProduct(): Promise<void> {
+    const f = this.productForm;
+    if (!f.sku || !f.name || !f.category_id || !f.unit_id) {
+      this.showToast('error', 'Complete todos los campos requeridos');
+      return;
+    }
+
+    try {
+      if (this.editingProduct) {
+        const updated = await this.productsSvc.update(this.editingProduct.id, f).toPromise();
+        const i = this.products.findIndex((x) => x.id === updated.id);
+        if (i >= 0) this.products[i] = updated;
+        this.productMap.set(updated.id, updated);
+        this.showToast('success', 'Producto actualizado');
+      } else {
+        const created = await this.productsSvc.create(f).toPromise();
+        this.products.push(created);
+        this.productMap.set(created.id, created);
+        this.showToast('success', 'Producto creado');
+      }
+      this.closeProductModal();
+    } catch {
+      this.showToast('error', 'No se pudo guardar el producto');
+    }
+  }
+
+  async deleteProduct(id: number): Promise<void> {
+    if (!confirm('¿Eliminar producto?')) return;
+    try {
+      await this.productsSvc.delete(id).toPromise();
+      this.products = this.products.filter((p) => p.id !== id);
+      this.productMap.delete(id);
+      this.showToast('success', 'Producto eliminado');
+    } catch {
+      this.showToast('error', 'No se pudo eliminar el producto');
+    }
+  }
+
+  closeProductModal(): void {
+    this.showProductModal = false;
+    this.editingProduct = null;
+  }
+
+  openCategoryModal(): void {
+    this.editingCategory = null;
+    this.categoryForm = { code: '', name: '', description: '' };
+    this.showCategoryModal = true;
+  }
+
+  editCategory(c: Category): void {
+    this.editingCategory = c;
+    this.categoryForm = { code: c.code, name: c.name, description: c.description ?? '' };
+    this.showCategoryModal = true;
+  }
+
+  async saveCategory(): Promise<void> {
+    const f = this.categoryForm;
+    if (!f.code || !f.name) {
+      this.showToast('error', 'Complete todos los campos requeridos');
+      return;
+    }
+    try {
+      if (this.editingCategory) {
+        const u = await this.catalogsSvc.updateCategory(this.editingCategory.id, f).toPromise();
+        const i = this.categories.findIndex((x) => x.id === u.id);
+        if (i >= 0) this.categories[i] = u;
+        this.categoryMap.set(u.id, u);
+        this.showToast('success', 'Categoría actualizada');
+      } else {
+        const c = await this.catalogsSvc.createCategory(f).toPromise();
+        this.categories.push(c);
+        this.categoryMap.set(c.id, c);
+        this.showToast('success', 'Categoría creada');
+      }
+      this.closeCategoryModal();
+    } catch {
+      this.showToast('error', 'No se pudo guardar la categoría');
+    }
+  }
+
+  async deleteCategory(id: number): Promise<void> {
+    if (!confirm('¿Eliminar categoría?')) return;
+    try {
+      await this.catalogsSvc.deleteCategory(id).toPromise();
+      this.categories = this.categories.filter((c) => c.id !== id);
+      this.categoryMap.delete(id);
+      this.showToast('success', 'Categoría eliminada');
+    } catch {
+      this.showToast('error', 'No se pudo eliminar la categoría');
+    }
+  }
+
+  closeCategoryModal(): void {
+    this.showCategoryModal = false;
+    this.editingCategory = null;
+  }
+
+  openUnitModal(): void {
+    this.editingUnit = null;
+    this.unitForm = { code: '', name: '', abbreviation: '' };
+    this.showUnitModal = true;
+  }
+
+  editUnit(u: Unit): void {
+    this.editingUnit = u;
+    this.unitForm = { code: u.code, name: u.name, abbreviation: u.abbreviation };
+    this.showUnitModal = true;
+  }
+
+  async saveUnit(): Promise<void> {
+    const f = this.unitForm;
+    if (!f.code || !f.name || !f.abbreviation) {
+      this.showToast('error', 'Complete todos los campos requeridos');
+      return;
+    }
+    try {
+      if (this.editingUnit) {
+        const u = await this.catalogsSvc.updateUnit(this.editingUnit.id, f).toPromise();
+        const i = this.units.findIndex((x) => x.id === u.id);
+        if (i >= 0) this.units[i] = u;
+        this.showToast('success', 'Unidad actualizada');
+      } else {
+        const u = await this.catalogsSvc.createUnit(f).toPromise();
+        this.units.push(u);
+        this.showToast('success', 'Unidad creada');
+      }
+      this.closeUnitModal();
+    } catch {
+      this.showToast('error', 'No se pudo guardar la unidad');
+    }
+  }
+
+  async deleteUnit(id: number): Promise<void> {
+    if (!confirm('¿Eliminar unidad?')) return;
+    try {
+      await this.catalogsSvc.deleteUnit(id).toPromise();
+      this.units = this.units.filter((u) => u.id !== id);
+      this.showToast('success', 'Unidad eliminada');
+    } catch {
+      this.showToast('error', 'No se pudo eliminar la unidad');
+    }
+  }
+
+  closeUnitModal(): void {
+    this.showUnitModal = false;
+    this.editingUnit = null;
+  }
+
+  // =========================================================
+  // HELPERS PARA EL HTML
+  // =========================================================
+  getProductBySku(id: number | null | undefined): Product | undefined {
+    if (!id) return undefined;
+    return this.productMap.get(id);
+  }
+
+  getCategoryName(id?: number | null): string {
+    if (!id) return '-';
+    return this.categoryMap.get(id)?.name ?? '-';
+  }
+
+  // --- firma sobrecargada (Angular ve ambas como válidas)
+  getLotCode(lotId: number): string;
+  getLotCode(productId: number, lotId: number): string;
+  getLotCode(a: number, b?: number): string {
+    if (b == null) {
+      // llamado con 1 arg: lotId
+      const lot = this.lotIdMap.get(a);
+      return lot?.lot_code ?? '-';
+    } else {
+      // llamado con 2 args: productId + lotId
+      const lots = this.lotsByProduct.get(a) ?? [];
+      const lot = lots.find(l => l.id === b);
+      return lot?.lot_code ?? '-';
+    }
+  }
+
+  getLotExpiration(lotId: number): Date | null;
+  getLotExpiration(productId: number, lotId: number): Date | null;
+  getLotExpiration(a: number, b?: number): Date | null {
+    let iso: string | null | undefined;
+    if (b == null) iso = this.lotIdMap.get(a)?.expiration_date ?? null;
+    else iso = (this.lotsByProduct.get(a) ?? []).find(l => l.id === b)?.expiration_date ?? null;
+    return this.toUtcDateOnly(iso);
+  }
+
+
+
+  // =========================================================
+  // TOASTS + UTILS
+  // =========================================================
+  showToast(type: ToastType, message: string): void {
+    const t = { type, message };
+    this.toasts.push(t);
+    setTimeout(() => (this.toasts = this.toasts.filter((x) => x !== t)), 3000);
+  }
+
+  getToastIcon(type: ToastType): string {
+    const map: Record<ToastType, string> = {
+      success: 'fas fa-check-circle',
+      error: 'fas fa-times-circle',
+      warning: 'fas fa-exclamation-triangle',
+      info: 'fas fa-info-circle',
+    };
+    return map[type];
+  }
+
+  downloadFile(content: string, filename: string, mimeType: string): void {
+    const blob = new Blob([content], { type: mimeType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+
+
+  //-------------------------------------------------------------
+  // Cache de lotes por producto para uso en el template
+  private lotsByProduct = new Map<number, Array<{ id: number; lot_code: string; expiration_date: string | null }>>();
+
+
+  /**
+   * Carga (y cachea) los lotes de un producto si aún no están en memoria.
+   */
+  private async ensureLotsForProduct(productId: number, force = false): Promise<void> {
+    if (!productId) return;
+    if (!force && this.lotsByProduct.has(productId)) return;
+
+    try {
+      const lots = await this.lotsSvc.listByProduct(productId).toPromise();
+      const norm = (lots || []).map(l => ({
+        id: l.id,
+        lot_code: l.lot_code,
+        expiration_date: l.expiration_date ?? null,
+      }));
+      this.lotsByProduct.set(productId, norm);
+
+      // --- también indexar por lotId:
+      for (const l of norm) this.lotIdMap.set(l.id, l);
+
+    } catch {
+      this.lotsByProduct.set(productId, []);
+      this.showToast('error', 'No se pudieron cargar los lotes del producto');
+    }
+  }
+
+
+
+
+  /**
+   * Devuelve los lotes ya cargados para el producto (sincrónico para el template).
+   * Si aún no están cargados, devuelve [] (los precargamos al cambiar de producto).
+   */
+  getLotsForProduct(productId: number | null): { id: number; lot_code: string; expiration_date: string | null }[] {
+    if (!productId) return [];
+    return this.lotsByProduct.get(productId) ?? [];
+  }
+
+
+
+  downloadCountList(): void {
+    if (!this.selectedCount) {
+      this.showToast('error', 'No hay conteo seleccionado');
+      return;
+    }
+
+    // Si no hay snapshots cargados, avisar
+    const rows = this.currentCountSnapshots || [];
+    if (!rows.length) {
+      this.showToast('warning', 'No hay datos del snapshot para exportar');
+      return;
+    }
+
+    // Arma CSV
+    let csv = 'Conteo,Fecha Snapshot,SKU,Producto,Lote,Cant. Sistema,CPP Congelado,Total Congelado\n';
+    for (const s of rows) {
+      const p = this.productMap.get(s.product_id);
+      // intentar resolver el lot_code desde el cache (si no, '-')
+      const lotCode = (() => {
+        if (s.lot_id == null) return '-';
+        const lots = this.lotsByProduct.get(s.product_id) ?? [];
+        const lot = lots.find(l => l.id === s.lot_id);
+        return lot?.lot_code ?? '-';
+      })();
+
+      const countCode = this.selectedCount.code || '';
+      const snapDate = new Date(s.snapshot_date).toLocaleString(); // si tu modelo es Date string
+      const sku = p?.sku ?? '';
+      const name = (p?.name ?? '').replace(/"/g, '""'); // escapa comillas
+      const qtySys = Number(s.qty_system).toFixed(4);
+      const avg = Number(s.avg_cost_at_freeze).toFixed(4);
+      const total = Number(s.total_cost_at_freeze).toFixed(4);
+
+      csv += `"${countCode}","${snapDate}","${sku}","${name}","${lotCode}",${qtySys},${avg},${total}\n`;
+    }
+
+    this.downloadFile(csv, `count-${this.selectedCount.code || this.selectedCount.id}-snapshot.csv`, 'text/csv');
+    this.showToast('success', 'Listado del conteo exportado');
+  }
+
+
+
+  /** Lotes con stock > 0 para un producto, ordenados FEFO (vencimiento más próximo primero) */
+  private getLotsWithStockFEFO(productId: number): Array<{
+    id: number;
+    lot_code: string;
+    expiration_date: string | null;
+    qty_on_hand: number;
+  }> {
+    const lots = this.lotsByProduct.get(productId) ?? [];
+
+    // Mapa lotId -> qty_on_hand desde la tabla de stock
+    const qtyByLot = new Map<number, number>();
+    for (const s of this.stock) {
+      if (s.product_id === productId && s.lot_id != null) {
+        qtyByLot.set(s.lot_id, Number(s.qty_on_hand ?? 0));
+      }
+    }
+
+    // Une info de lotes + qty y filtra sin stock
+    const enriched = lots
+      .map(l => ({
+        id: l.id,
+        lot_code: l.lot_code,
+        expiration_date: l.expiration_date ?? null,
+        qty_on_hand: qtyByLot.get(l.id) ?? 0,
+      }))
+      .filter(x => x.qty_on_hand > 0);
+
+    // Orden FEFO: fecha más próxima primero; nulas al final
+    enriched.sort((a, b) => {
+      const da = a.expiration_date ? this.toUtcDateOnly(a.expiration_date)!.getTime() : Number.POSITIVE_INFINITY;
+      const db = b.expiration_date ? this.toUtcDateOnly(b.expiration_date)!.getTime() : Number.POSITIVE_INFINITY;
+
+      return da - db;
+    });
+
+    return enriched;
+  }
+
+  private toUtcDateOnly(isoDate?: string | null): Date | null {
+    if (!isoDate) return null;
+    // Evita usar new Date(isoDate) directo
+    return new Date(isoDate + 'T00:00:00Z');
+  }
+
+  /** Mapa lotId -> qty_on_hand para el producto dado (a partir de la tabla stock ya cargada) */
+  private getQtyByLot(productId: number): Map<number, number> {
+    const m = new Map<number, number>();
+    for (const s of this.stock) {
+      if (s.product_id === productId && s.lot_id != null) {
+        m.set(s.lot_id, Number(s.qty_on_hand ?? 0));
+      }
+    }
+    return m;
+  }
+
+
+
+
+  // Al cambiar el producto en Ajuste
+  async onProductChangeAdjustment(): Promise<void> {
+    this.selectedProductAdjustment = this.adjustmentForm.product_id
+      ? this.productMap.get(this.adjustmentForm.product_id) ?? null
+      : null;
+
+    this.adjustmentForm.lot_id = null;
+
+    if (this.selectedProductAdjustment?.manages_expiration) {
+      await this.ensureLotsForProduct(this.selectedProductAdjustment.id);
+    }
+  }
+
+  //HELPERS ENTRADA
+  addEntrySerial(): void {
+    const code = (this.entrySerialInput || '').trim();
+    if (!code) return;
+    if (this.entrySerialCodes.includes(code)) {
+      this.showToast('warning', `Serial duplicado: ${code}`);
+      return;
+    }
+    const required = Number(this.entryForm.qty || 0);
+    if (required > 0 && this.entrySerialCodes.length >= required) {
+      this.showToast('warning', 'Ya alcanzaste la cantidad requerida');
+      return;
+    }
+    this.entrySerialCodes.push(code);
+    this.entrySerialInput = '';
+  }
+
+  removeEntrySerial(code: string): void {
+    this.entrySerialCodes = this.entrySerialCodes.filter(c => c !== code);
+  }
+
+  remainingEntrySerials(): number {
+    const required = Number(this.entryForm.qty || 0);
+    return Math.max(0, required - this.entrySerialCodes.length);
+  }
+
+
+  //HELPERS SALIDA
+  toggleExitSerial(id: number): void {
+    const i = this.exitSelectedSerialIds.indexOf(id);
+    if (i >= 0) this.exitSelectedSerialIds.splice(i, 1);
+    else this.exitSelectedSerialIds.push(id);
+  }
+
+  remainingExitSerials(): number {
+    const required = Number(this.exitForm.qty || 0);
+    return Math.max(0, required - this.exitSelectedSerialIds.length);
+  }
+
+
+  //HELPERS AJUSTE
+  addAdjSerial(): void {
+    const code = (this.adjSerialInput || '').trim();
+    if (!code) return;
+    if (this.adjSerialCodes.includes(code)) {
+      this.showToast('warning', `Serial duplicado: ${code}`);
+      return;
+    }
+    const required = Math.max(0, Number(this.adjustmentForm.qty || 0));
+    if (required > 0 && this.adjSerialCodes.length >= required) {
+      this.showToast('warning', 'Ya alcanzaste la cantidad requerida');
+      return;
+    }
+    this.adjSerialCodes.push(code);
+    this.adjSerialInput = '';
+  }
+  removeAdjSerial(code: string): void {
+    this.adjSerialCodes = this.adjSerialCodes.filter(c => c !== code);
+  }
+  toggleAdjSerial(id: number): void {
+    const i = this.adjSelectedSerialIds.indexOf(id);
+    if (i >= 0) this.adjSelectedSerialIds.splice(i, 1);
+    else this.adjSelectedSerialIds.push(id);
+  }
+  remainingAdjSerialsAbs(): number {
+    const required = Math.abs(Number(this.adjustmentForm.qty || 0));
+    const picked = this.adjustmentForm.qty >= 0 ? this.adjSerialCodes.length : this.adjSelectedSerialIds.length;
+    return Math.max(0, required - picked);
+  }
+
+
+}

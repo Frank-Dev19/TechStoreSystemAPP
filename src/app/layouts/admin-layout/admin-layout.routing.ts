@@ -7,6 +7,8 @@ import { Tests } from '../../pages/tests/tests';
 import { Perfil } from '../../pages/perfil/perfil';
 import { DocumentTypes } from '../../pages/document-types/document-types';
 import { Rbac } from '../../pages/rbac/rbac';
+import { Inventory } from '../../pages/inventory/inventory';
+
 export const AdminLayoutRoutes: Routes = [
     { path: 'home', component: Home },
     { path: 'dashboard', component: Dashboard },
@@ -15,4 +17,5 @@ export const AdminLayoutRoutes: Routes = [
     { path: 'perfil', component: Perfil },
     { path: 'tipos-documento', component: DocumentTypes },
     { path: 'rbac', component: Rbac },
+    { path: 'inventory', component: Inventory },
 ];

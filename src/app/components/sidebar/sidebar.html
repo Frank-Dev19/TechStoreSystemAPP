@@ -27,7 +27,7 @@
                             </div>
                             <div class="nav-content">
                                 <span class="nav-title">Panel de Control</span>
-                                <span class="nav-subtitle">Dashboard principal</span>
+                                <span class="nav-subtitle">Administracion</span>
                             </div>
                             <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('modulo1a')" width="16" height="16"
                                 viewBox="0 0 24 24" fill="currentColor">
@@ -97,6 +97,32 @@
                                 </a></li>
                         </ul>
                     </li>
+
+
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo3')">
+                            <div class="nav-icon-wrapper">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path
+                                        d="M12 2 3 6v12l9 4 9-4V6l-9-4Zm0 2.2 6.5 2.9L12 10 5.5 7.1 12 4.2ZM5 8.4l6 2.7V20l-6-2.7V8.4Zm14 0V17.3L13 20V11.1l6-2.7Z" />
+                                </svg>
+                            </div>
+                            <div class="nav-content">
+                                <span class="nav-title">Inventario</span>
+                                <span class="nav-subtitle">Control de almacen</span>
+                            </div>
+                            <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo3')" width="16" height="16"
+                                viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo3')">
+                            <li><a class="nav-link submenu-link" routerLink="/inventory">
+                                    <i class="submenu-dot"></i>Resumen de Inventario
+                                </a></li>
+                        </ul>
+                    </li>
+
 
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo4')">

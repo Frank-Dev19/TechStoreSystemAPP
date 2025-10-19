@@ -8,4 +8,19 @@ export const config = {
   endpointServices: 'http://localhost:3000',
   authMethod: '/auth/', // queda: http://localhost:3000/auth/...
   defaultCompanyId: 1,
+
+  // módulos API
+  inventory: {
+    base: '/inventory',
+    stock: '/inventory/stock',
+    kardex: '/inventory/movements',
+    counts: '/inventory/counts',
+    serials: '/serials',
+  },
+  catalogs: {
+    products: '/inventory/catalogs/products',
+    categories: '/inventory/catalogs/categories',
+    units: '/inventory/catalogs/units',
+    lots: '/lots',               // si tu backend lo expone
+  },
 };

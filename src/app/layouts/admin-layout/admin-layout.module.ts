@@ -16,6 +16,8 @@ import { Tests } from "../../pages/tests/tests";
 import { Perfil } from "../../pages/perfil/perfil";
 import { DocumentTypes } from "../../pages/document-types/document-types";
 import { Rbac } from "../../pages/rbac/rbac";
+import { Inventory } from "../../pages/inventory/inventory";
+
 @NgModule({
     imports: [
         CommonModule,
@@ -34,7 +36,8 @@ import { Rbac } from "../../pages/rbac/rbac";
         DocumentTypes,
         Tests,
         Perfil,
-        Rbac
+        Rbac,
+        Inventory
         //ForgotPassword,
         //ResetPassword
 
