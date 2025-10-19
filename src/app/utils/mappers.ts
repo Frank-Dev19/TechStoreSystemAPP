@@ -52,14 +52,15 @@ export const mapProductToApi = (p: Partial<Product>) => ({
     sku: p.sku,
     name: p.name,
     description: p.description ?? null,
-    categoryId: p.category_id ?? null,
-    unitId: p.unit_id ?? null,
-    isSerialized: p.is_serialized ?? false,
-    managesExpiration: p.manages_expiration ?? false,
-    minStock: p.min_stock ?? null,
-    maxStock: p.max_stock ?? null,
-    reorderPoint: p.reorder_point ?? null,
+    category_id: p.category_id ?? null,
+    unit_id: p.unit_id ?? null,
+    is_serialized: p.is_serialized ?? false,
+    manages_expiration: p.manages_expiration ?? false,
+    min_stock: p.min_stock ?? 0,
+    max_stock: p.max_stock ?? 0,
+    reorder_point: p.reorder_point ?? 0,
 });
+
 
 /* =======================
    LOTS  (BACKEND: snake_case)
