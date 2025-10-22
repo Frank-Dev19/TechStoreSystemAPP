@@ -18,7 +18,7 @@ export class MovementsService {
         product_id: number; qty: number; unit_cost: number;
         notes?: string | null; lot_id?: number | null;
         serial_codes?: string[]; // NEW
-        source_doc_type?: string | null; source_doc_id?: string | null; reason_code?: string | null;
+        source_doc_type?: string | null; source_doc_id?: string | null; reason_code?: string | null; user_created?: string;
     }): Observable<Movement> {
         const body: any = {
             type: 'IN',
@@ -30,6 +30,7 @@ export class MovementsService {
             lot_id: data.lot_id ?? null,
             source_doc_type: data.source_doc_type ?? 'MANUAL',
             source_doc_id: data.source_doc_id ?? null,
+            user_created: data.user_created
         };
         if (data.serial_codes?.length) body.serial_codes = data.serial_codes;
         return this.create(body);
@@ -40,7 +41,7 @@ export class MovementsService {
         reason_code?: string | null; notes?: string | null;
         lot_id?: number | null;
         serial_ids?: number[]; // NEW
-        source_doc_type?: string | null; source_doc_id?: string | null;
+        source_doc_type?: string | null; source_doc_id?: string | null; user_created?: string;
     }): Observable<Movement> {
         const body: any = {
             type: 'OUT',
@@ -51,6 +52,7 @@ export class MovementsService {
             lot_id: data.lot_id ?? null,
             source_doc_type: data.source_doc_type ?? 'MANUAL',
             source_doc_id: data.source_doc_id ?? null,
+            user_created: data.user_created
         };
         if (data.serial_ids?.length) body.serial_ids = data.serial_ids;
         return this.create(body);
@@ -62,7 +64,7 @@ export class MovementsService {
         lot_id?: number | null;
         serial_ids?: number[]; // for negative
         serial_codes?: string[]; // for positive
-        source_doc_type?: string | null; source_doc_id?: string | null;
+        source_doc_type?: string | null; source_doc_id?: string | null; user_created?: string;
     }): Observable<Movement> {
         const body: any = {
             type: 'ADJ',
@@ -73,6 +75,7 @@ export class MovementsService {
             lot_id: data.lot_id ?? null,
             source_doc_type: data.source_doc_type ?? 'MANUAL',
             source_doc_id: data.source_doc_id ?? null,
+            user_created: data.user_created
         };
         if (data.serial_ids?.length) body.serial_ids = data.serial_ids;
         if (data.serial_codes?.length) body.serial_codes = data.serial_codes;

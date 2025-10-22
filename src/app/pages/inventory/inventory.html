@@ -117,8 +117,8 @@
                                 </span>
                             </div>
 
-                            <div class="serial-list" *ngIf="entrySerialCodes.length">
-                                <table class="data-table">
+                            <div class="serial-list scrollable-y" *ngIf="entrySerialCodes.length">
+                                <table class="data-table sticky-header">
                                     <thead>
                                         <tr>
                                             <th>Serial</th>
@@ -181,8 +181,8 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>Cantidad *</label>
-                            <input type="number" [(ngModel)]="exitForm.qty" class="form-control" min="1"
-                                [disabled]="isLocked">
+                            <input type="number" [(ngModel)]="exitForm.qty" (ngModelChange)="onExitQtyChange($event)"
+                                class="form-control" min="1" [disabled]="isLocked">
                         </div>
                         <div class="form-group">
                             <label>Motivo *</label>
@@ -197,7 +197,8 @@
                     <div class="form-group"
                         *ngIf="selectedProductExit?.manages_expiration && availableLotsForExit.length > 0">
                         <label>Lote * (FEFO sugerido)</label>
-                        <select [(ngModel)]="exitForm.lot_id" class="form-control" [disabled]="isLocked">
+                        <select [(ngModel)]="exitForm.lot_id" class="form-control" [disabled]="isLocked"
+                            (change)="maybeAutoPickExitSerials()">
                             <option *ngFor="let lot of availableLotsForExit" [ngValue]="lot.id">
                                 {{ lot.lot_code }} - Vence: {{ lot.expiration_date | date:'dd/MM/yyyy':'UTC' }} ({{
                                 lot.qty_on_hand }})
@@ -216,10 +217,26 @@
                                 <small class="hint" *ngIf="remainingExitSerials() > 0">
                                     Faltan {{ remainingExitSerials() }} serial(es) por seleccionar
                                 </small>
+
+                                <!-- Controles de autoselección -->
+                                <div class="serial-actions">
+                                    <label class="switch-inline">
+                                        <input type="checkbox" [(ngModel)]="exitAutoSelect"
+                                            (change)="maybeAutoPickExitSerials()">
+                                        Autoseleccionar
+                                    </label>
+
+                                    <button type="button" class="btn-secondary btn-sm" (click)="autoPickExitSerials()">
+                                        Autoseleccionar {{ exitForm.qty || 0 }}
+                                    </button>
+                                    <button type="button" class="btn-secondary btn-sm" (click)="clearExitSelection()">
+                                        Limpiar selección
+                                    </button>
+                                </div>
                             </div>
 
-                            <div class="table-container">
-                                <table class="data-table">
+                            <div class="table-container scrollable-y">
+                                <table class="data-table sticky-header">
                                     <thead>
                                         <tr>
                                             <th width="40"></th>
@@ -336,8 +353,8 @@
                                     {{ adjSelectedSerialIds.length }}/{{ Math.abs(adjustmentForm.qty || 0) }}
                                 </span>
                             </div>
-                            <div class="table-container">
-                                <table class="data-table">
+                            <div class="table-container scrollable-y">
+                                <table class="data-table sticky-header">
                                     <thead>
                                         <tr>
                                             <th width="40"></th>
@@ -401,6 +418,7 @@
                             <th>Costo Prom.</th>
                             <th>Costo Total</th>
                             <th>Actualizado</th>
+                            <th>Seriales</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -428,6 +446,15 @@
                             <td>S/ {{ item.avg_unit_cost?.toFixed(2) }}</td>
                             <td>S/ {{ item.total_cost?.toFixed(2) }}</td>
                             <td>{{ item.updated_at | date:'dd/MM/yyyy HH:mm' }}</td>
+                            <td>
+                                <button class="btn-icon btn-edit"
+                                    *ngIf="getProductBySku(item.product_id)?.is_serialized; else noSerials"
+                                    (click)="openStockSerials(item)" title="Ver seriales en stock">
+                                    <i class="fas fa-barcode"></i>
+                                </button>
+                                <ng-template #noSerials>-</ng-template>
+                            </td>
+
                         </tr>
                     </tbody>
                 </table>
@@ -684,6 +711,45 @@
                                     <input type="number" [(ngModel)]="countEntryForm.qty_counted" class="form-control"
                                         min="0">
                                 </div>
+                                <!-- Builder de seriales (solo si el producto es serializable) -->
+                                <div class="form-group" *ngIf="selectedCountProduct?.is_serialized">
+                                    <label>Seriales * ({{ countEntryForm.qty_counted || 0 }})</label>
+                                    <div class="serial-builder">
+                                        <div class="serial-input-row">
+                                            <input type="text" [(ngModel)]="countEntrySerialInput" class="form-control"
+                                                placeholder="Ingrese serial...">
+                                            <button type="button" class="btn-secondary btn-sm"
+                                                (click)="addCountEntrySerial()">Agregar serial</button>
+                                            <span class="serial-counter" [class.ok]="remainingCountEntrySerials()===0">
+                                                {{ countEntrySerialCodes.length }}/{{ countEntryForm.qty_counted || 0 }}
+                                            </span>
+                                        </div>
+                                        <div class="serial-list scrollable-y" *ngIf="countEntrySerialCodes.length">
+                                            <table class="data-table sticky-header">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Serial</th>
+                                                        <th width="80">Acciones</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr *ngFor="let s of countEntrySerialCodes">
+                                                        <td><code>{{ s }}</code></td>
+                                                        <td>
+                                                            <button class="btn-icon btn-delete"
+                                                                (click)="removeCountEntrySerial(s)">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <small class="hint" *ngIf="remainingCountEntrySerials() > 0">
+                                            Faltan {{ remainingCountEntrySerials() }} serial(es).
+                                        </small>
+                                    </div>
+                                </div>
                                 <div class="form-group">
                                     <button class="btn-primary" (click)="addCountEntry()">
                                         <i class="fas fa-plus"></i>
@@ -780,6 +846,7 @@
                                         <th>Diferencia</th>
                                         <th>Costo Prom.</th>
                                         <th>Valor Dif.</th>
+                                        <th>Seriales</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -802,6 +869,13 @@
                                                 S/ {{ diff.value_difference > 0 ? '+' : '' }}{{
                                                 diff.value_difference?.toFixed(2) }}
                                             </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn-icon btn-edit"
+                                                (click)="openSerialDiffsFor(diff.product_id, diff.lot_id ?? null)"
+                                                title="Ver seriales">
+                                                <i class="fas fa-barcode"></i>
+                                            </button>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -1314,6 +1388,138 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Seriales en Stock -->
+<div class="modal-overlay" *ngIf="showStockSerialsModal" (click)="closeStockSerials()">
+    <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h3>
+                Seriales en Stock
+                <small *ngIf="modalStockCtx?.productName">— {{ modalStockCtx.productName }}</small>
+                <small *ngIf="modalStockCtx?.lotCode"> (Lote: {{ modalStockCtx.lotCode }})</small>
+            </h3>
+            <button class="close-button" (click)="closeStockSerials()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="table-container">
+                <table class="data-table sticky-header">
+                    <thead>
+                        <tr>
+                            <th>Serial</th>
+                            <th>Lote</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let s of currentStockSerials">
+                            <td><code>{{ s.serial_code }}</code></td>
+                            <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
+                        </tr>
+                        <tr *ngIf="currentStockSerials.length === 0">
+                            <td colspan="2" class="empty-message">
+                                <i class="fas fa-inbox"></i>
+                                <p>No hay seriales en stock para este ítem</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeStockSerials()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Modal Serial Diffs -->
+<div class="modal-overlay" *ngIf="showSerialDiffsModal" (click)="closeSerialDiffsModal()">
+    <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h3>Seriales del Conteo ({{ getProductBySku(modalSerials.product_id)?.name }})</h3>
+            <button class="close-button" (click)="closeSerialDiffsModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="serials-legend">
+                <span class="legend-item shortage"><i class="fas fa-arrow-down"></i> Faltantes</span>
+                <span class="legend-item surplus"><i class="fas fa-arrow-up"></i> Sobrantes</span>
+                <span class="legend-item neutral"><i class="fas fa-check"></i> Coincidentes</span>
+            </div>
+
+            <div class="serial-diffs-grid">
+                <!-- Faltantes -->
+                <div class="diff-card shortage">
+                    <div class="diff-header">
+                        <div class="title">
+                            <i class="fas fa-arrow-down"></i>
+                            <span>Faltantes</span>
+                        </div>
+                        <span class="badge">{{ modalSerials.faltantes.length }}</span>
+                    </div>
+
+                    <div class="diff-list">
+                        <ng-container *ngIf="modalSerials.faltantes.length; else emptyShortage">
+                            <span class="serial-chip"
+                                *ngFor="let s of modalSerials.faltantes"><code>{{ s }}</code></span>
+                        </ng-container>
+                        <ng-template #emptyShortage>
+                            <div class="empty-message"><i class="fas fa-inbox"></i> Sin faltantes</div>
+                        </ng-template>
+                    </div>
+                </div>
+
+                <!-- Sobrantes -->
+                <div class="diff-card surplus">
+                    <div class="diff-header">
+                        <div class="title">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>Sobrantes</span>
+                        </div>
+                        <span class="badge">{{ modalSerials.sobrantes.length }}</span>
+                    </div>
+
+                    <div class="diff-list">
+                        <ng-container *ngIf="modalSerials.sobrantes.length; else emptySurplus">
+                            <span class="serial-chip"
+                                *ngFor="let s of modalSerials.sobrantes"><code>{{ s }}</code></span>
+                        </ng-container>
+                        <ng-template #emptySurplus>
+                            <div class="empty-message"><i class="fas fa-inbox"></i> Sin sobrantes</div>
+                        </ng-template>
+                    </div>
+                </div>
+
+                <!-- Coincidentes -->
+                <div class="diff-card neutral">
+                    <div class="diff-header">
+                        <div class="title">
+                            <i class="fas fa-check"></i>
+                            <span>Coincidentes</span>
+                        </div>
+                        <span class="badge">{{ modalSerials.coincidentes.length }}</span>
+                    </div>
+
+                    <div class="diff-list">
+                        <ng-container *ngIf="modalSerials.coincidentes.length; else emptyMatch">
+                            <span class="serial-chip"
+                                *ngFor="let s of modalSerials.coincidentes"><code>{{ s }}</code></span>
+                        </ng-container>
+                        <ng-template #emptyMatch>
+                            <div class="empty-message"><i class="fas fa-inbox"></i> Ninguno</div>
+                        </ng-template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeSerialDiffsModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
 
 
 <!-- Toast Notifications  -->

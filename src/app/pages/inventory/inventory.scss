@@ -2220,3 +2220,288 @@
     padding: 1rem;
     color: #a0aec0;
 }
+
+/* Alturas reutilizables según densidad de info */
+// :root {
+//     --scroll-max-serials: 280px;
+//     /* tablas de selección de seriales */
+//     --scroll-max-chips: 220px;
+//     /* listas simples (entrada seriales + ajuste positivo) */
+//     --table-header-bg: #fff;
+//     /* ajusta si usas tema oscuro */
+//     --table-border: rgba(0, 0, 0, .08);
+// }
+
+/* En vez de :root, colócalo en un contenedor que sí existe en este componente */
+.inventory-container {
+    --scroll-max-serials: 280px;
+    /* tablas de selección de seriales */
+    --scroll-max-chips: 220px;
+    /* listas simples (entrada/ajuste positivo) */
+    --table-header-bg: #fff;
+    --table-border: rgba(0, 0, 0, .08);
+}
+
+/* Cualquier contenedor con esta clase hace scroll vertical */
+.scrollable-y {
+    max-height: var(--scroll-max-serials, 280px);
+    overflow-y: auto;
+    /* quita esta línea para no pelearte con .table-container:
+  overflow-x: hidden; */
+    border: 1px solid var(--table-border, rgba(0, 0, 0, .08));
+    border-radius: 8px;
+}
+
+/* La lista simple de seriales (chips) un poco más baja */
+.serial-list.scrollable-y {
+    max-height: var(--scroll-max-chips, 220px);
+}
+
+/* Header pegajoso (mantén esto) */
+.data-table.sticky-header thead th {
+    position: sticky;
+    top: 0;
+    background: var(--table-header-bg, #fff);
+    z-index: 2;
+    box-shadow: 0 1px 0 var(--table-border, rgba(0, 0, 0, .08));
+}
+
+/* Opcional: que la barra de herramientas del selector quede visible mientras haces scroll */
+// .serial-selector {
+//     display: flex;
+//     flex-direction: column;
+//     gap: .5rem;
+// }
+
+.serial-selector .serial-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--table-header-bg, #fff);
+    padding-bottom: .25rem;
+}
+
+// /* Scrollbar sutil (WebKit) - opcional */
+// .scrollable-y::-webkit-scrollbar {
+//     width: 10px;
+// }
+
+// .scrollable-y::-webkit-scrollbar-track {
+//     background: transparent;
+// }
+
+// .scrollable-y::-webkit-scrollbar-thumb {
+//     background: rgba(0, 0, 0, .15);
+//     border-radius: 8px;
+// }
+
+// .scrollable-y:hover::-webkit-scrollbar-thumb {
+//     background: rgba(0, 0, 0, .25);
+// }
+
+
+
+/* ---------- Serial Diffs (modal de revisión) ---------- */
+
+.serials-legend {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-bottom: .75rem;
+
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .35rem .6rem;
+        border-radius: 999px;
+        font-size: .8rem;
+        font-weight: 600;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+
+        &.shortage {
+            border-color: #feb2b2;
+            background: #fff5f5;
+            color: #9b2c2c;
+        }
+
+        &.surplus {
+            border-color: #9ae6b4;
+            background: #f0fff4;
+            color: #22543d;
+        }
+
+        &.neutral {
+            border-color: #bee3f8;
+            background: #ebf8ff;
+            color: #2c5282;
+        }
+
+        i {
+            font-size: .9rem;
+        }
+    }
+}
+
+.serial-diffs-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+
+    @media (max-width: 900px) {
+        grid-template-columns: 1fr;
+    }
+}
+
+.diff-card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    min-height: 320px;
+    overflow: hidden;
+
+    &.shortage {
+        box-shadow: 0 0 0 2px rgba(229, 62, 62, .06) inset;
+    }
+
+    &.surplus {
+        box-shadow: 0 0 0 2px rgba(56, 161, 105, .06) inset;
+    }
+
+    &.neutral {
+        box-shadow: 0 0 0 2px rgba(49, 130, 206, .06) inset;
+    }
+}
+
+.diff-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(180deg, #f9fafb, #f3f4f6);
+
+    .title {
+        display: inline-flex;
+        align-items: center;
+        gap: .5rem;
+        font-weight: 700;
+        color: #2d3748;
+
+        i {
+            font-size: 1rem;
+        }
+    }
+
+    .badge {
+        background: #edf2f7;
+        color: #2d3748;
+        border-radius: 999px;
+        padding: .25rem .6rem;
+        font-size: .8rem;
+        font-weight: 700;
+    }
+
+    /* tintes por tipo */
+    .title i {
+        opacity: .9;
+    }
+
+    .title,
+    .badge {
+        transition: color .2s ease, background .2s ease;
+    }
+}
+
+.diff-card.shortage .title i {
+    color: #e53e3e;
+}
+
+.diff-card.surplus .title i {
+    color: #38a169;
+}
+
+.diff-card.neutral .title i {
+    color: #3182ce;
+}
+
+.diff-list {
+    padding: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    overflow: auto;
+    max-height: 380px;
+    /* el modal ya tiene max-height global */
+}
+
+.serial-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: #f7fafc;
+    border: 1px dashed #cbd5e0;
+    line-height: 1;
+    user-select: text;
+
+    code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: #2d3748;
+        background: transparent;
+        padding: 0;
+    }
+}
+
+/* colores de chip por tipo de tarjeta */
+.diff-card.shortage .serial-chip {
+    background: #fff5f5;
+    border-color: #feb2b2;
+
+    code {
+        color: #9b2c2c;
+    }
+}
+
+.diff-card.surplus .serial-chip {
+    background: #f0fff4;
+    border-color: #9ae6b4;
+
+    code {
+        color: #22543d;
+    }
+}
+
+.diff-card.neutral .serial-chip {
+    background: #ebf8ff;
+    border-color: #90cdf4;
+
+    code {
+        color: #2c5282;
+    }
+}
+
+.diff-card .empty-message {
+    width: 100%;
+    text-align: center;
+    padding: 1.25rem .5rem;
+    color: #a0aec0;
+    border: 1px dashed #e2e8f0;
+    border-radius: 10px;
+    background: #f9fafb;
+
+    i {
+        margin-right: .5rem;
+    }
+}
+
+
+.modal-header h3 small {
+    font-weight: 500;
+    color: #718096;
+}

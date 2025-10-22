@@ -32,4 +32,6 @@ export interface MovementCreateDto {
     notes?: string | null;
     source_doc_type?: string | null;
     source_doc_id?: string | null;
+    user_created: string | null;
+
 }

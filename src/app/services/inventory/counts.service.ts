@@ -6,6 +6,7 @@ import { Count } from '../../models/inventory/count';
 import { CountSnapshot } from '../../models/inventory/count-snapshot';
 import { CountEntry } from '../../models/inventory/count-entry';
 import { config } from '../../../environments/environment';
+import { CountSerialDiff } from '../../models/inventory/count-serial-diff';
 import {
     CountApi, CountEntryApi, CountSnapshotApi,
     mapCountFromApi, mapCountEntryFromApi, mapCountSnapshotFromApi
@@ -37,31 +38,36 @@ export class CountsHttpService {
     post(id: number): Observable<Count> { return this.baseSvc.put<CountApi>(`${this.base}/${id}/post`, {} as any).pipe(map(mapCountFromApi)); }
     cancel(id: number): Observable<Count> { return this.baseSvc.put<CountApi>(`${this.base}/${id}/cancel`, {} as any).pipe(map(mapCountFromApi)); }
 
-    addEntry(id: number, body: { product_id: number; lot_id?: number | null; qty_counted: number; user?: string }): Observable<CountEntry> {
-        // enviar en camelCase
-        const payload = {
+    // counts.service.ts
+    addEntry(
+        id: number,
+        body: { product_id: number; lot_id?: number | null; qty_counted: number; user?: string; serial_codes?: string[] } // <- NUEVO
+    ): Observable<CountEntry> {
+        const payload: any = {
             productId: body.product_id,
             lotId: body.lot_id ?? null,
             qtyCounted: body.qty_counted,
             user: body.user ?? null,
         };
+        if (body.serial_codes?.length) payload.serialCodes = body.serial_codes; // <-- NUEVO (usar camel)
         return this.baseSvc.post<CountEntryApi>(`${this.base}/${id}/entries`, payload).pipe(
             map(mapCountEntryFromApi)
         );
     }
 
-    addEntriesBulk(id: number, entries: { product_id: number; lot_id?: number | null; qty_counted: number; user?: string }[]):
-        Observable<{ addedOrUpdated: number }> {
+
+    addEntriesBulk(id: number, entries: { product_id: number; lot_id?: number | null; qty_counted: number; user?: string }[]) {
         const payload = {
             entries: (entries || []).map(e => ({
-                productId: e.product_id,
-                lotId: e.lot_id ?? null,
-                qtyCounted: e.qty_counted,
+                product_id: e.product_id,
+                lot_id: e.lot_id ?? null,
+                qty_counted: e.qty_counted,
                 user: e.user ?? null,
             })),
         };
         return this.baseSvc.post<{ addedOrUpdated: number }>(`${this.base}/${id}/entries/bulk`, payload);
     }
+
 
     getSnapshots(id: number): Observable<CountSnapshot[]> {
         return this.baseSvc.get<CountSnapshotApi[]>(`${this.base}/${id}/snapshots`).pipe(
@@ -72,5 +78,9 @@ export class CountsHttpService {
         return this.baseSvc.get<CountEntryApi[]>(`${this.base}/${id}/entries`).pipe(
             map(arr => (arr ?? []).map(mapCountEntryFromApi))
         );
+    }
+
+    getSerialDiffs(id: number): Observable<CountSerialDiff[]> {
+        return this.baseSvc.get<CountSerialDiff[]>(`${this.base}/${id}/serial-diffs`);
     }
 }

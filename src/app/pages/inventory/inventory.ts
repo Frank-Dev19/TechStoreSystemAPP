@@ -11,6 +11,7 @@ import { CountSnapshot } from '../../models/inventory/count-snapshot';
 import { CountEntry } from '../../models/inventory/count-entry';
 
 // ===== Servicios (los que ya construimos) =====
+import { CurrentUserService } from '../../services/current-user.service';
 import { ProductsService } from '../../services/inventory/products.service';
 import { CatalogsService } from '../../services/inventory/catalogs.service';
 import { StockService } from '../../services/inventory/stock.service';
@@ -75,6 +76,7 @@ export class Inventory implements OnInit {
   // --- SALIDA (seriales) ---
   availableSerialsForExit: { id: number; serial_code: string; lot_id?: number | null }[] = [];
   exitSelectedSerialIds: number[] = [];
+  exitAutoSelect = true; // <-- NUEVO: modo auto activado por defecto
 
   // --- AJUSTE (seriales) ---
   adjSerialInput = '';
@@ -85,6 +87,9 @@ export class Inventory implements OnInit {
   showMovementSerialsModal = false;
   currentMovementSerials: Array<{ serial_id: number; serial_code: string; lot_id: number | null }> = [];
 
+  // --- CONTEO (seriales) ---
+  countEntrySerialInput = '';
+  countEntrySerialCodes: string[] = [];
 
 
 
@@ -202,6 +207,7 @@ export class Inventory implements OnInit {
     private movementSvc: MovementsService,
     private lotsSvc: LotsService,
     private serialsSvc: SerialsService,
+    private currentUser: CurrentUserService,
   ) { }
 
   // =========================================================
@@ -216,6 +222,11 @@ export class Inventory implements OnInit {
       this.loadKardex(),
       this.loadCounts(),
     ]);
+  }
+
+  //Usuario aCtual
+  private get currentUserName(): string {
+    return this.currentUser.value?.name || 'Usuario Front';
   }
 
   // =========================================================
@@ -334,6 +345,7 @@ export class Inventory implements OnInit {
         lot_id: lotId ?? undefined,
         notes: this.entryForm.notes || undefined,
         serial_codes: p.is_serialized ? this.entrySerialCodes : undefined,
+        user_created: this.currentUserName
       }).toPromise();
 
       await Promise.all([this.loadStock(), this.loadKardex()]);
@@ -369,6 +381,9 @@ export class Inventory implements OnInit {
     this.exitSelectedSerialIds = [];
     this.exitForm.lot_id = null;
 
+    // Reinicia el modo auto al cambiar de producto
+    this.exitAutoSelect = true;
+
     if (this.selectedProductExit?.manages_expiration) {
       await this.ensureLotsForProduct(this.selectedProductExit.id);
       const fefo = this.getLotsWithStockFEFO(this.selectedProductExit.id);
@@ -376,8 +391,8 @@ export class Inventory implements OnInit {
       this.exitForm.lot_id = this.availableLotsForExit[0]?.id ?? null;
     }
 
-    // Cargar seriales IN_STOCK filtrando por lote si aplica
     await this.loadAvailableSerialsForExit();
+    this.maybeAutoPickExitSerials(); // <-- aquí
   }
 
   async loadAvailableSerialsForExit(): Promise<void> {
@@ -387,18 +402,36 @@ export class Inventory implements OnInit {
     if (!p || !p.is_serialized) return;
 
     try {
+      // ⬇️ Trae TODOS los seriales en stock del producto (sin filtrar por lote).
       const rows = await this.serialsSvc.list({
         product_id: p.id,
-        lot_id: p.manages_expiration ? (this.exitForm.lot_id ?? null) : undefined,
         status: 'IN_STOCK'
       }).toPromise();
 
-      this.availableSerialsForExit = (rows ?? []).map(r => ({ id: r.id, serial_code: r.serial_code, lot_id: r.lot_id ?? null }));
+      this.availableSerialsForExit = (rows ?? []).map(r => ({
+        id: r.id,
+        serial_code: r.serial_code,
+        lot_id: r.lot_id ?? null,
+      }));
+
+      // Si maneja vencimiento, ordena por expiración (FEFO) para que la autoselección sea coherente.
+      if (p.manages_expiration) {
+        await this.ensureLotsForProduct(p.id);
+        this.availableSerialsForExit.sort((a, b) => {
+          const ea = a.lot_id ? this.lotIdMap.get(a.lot_id)?.expiration_date : null;
+          const eb = b.lot_id ? this.lotIdMap.get(b.lot_id)?.expiration_date : null;
+          const da = ea ? this.toUtcDateOnly(ea)!.getTime() : Number.POSITIVE_INFINITY;
+          const db = eb ? this.toUtcDateOnly(eb)!.getTime() : Number.POSITIVE_INFINITY;
+          return da - db;
+        });
+      }
+
+      // Modo auto: seleccionar N
+      this.maybeAutoPickExitSerials();
     } catch {
       this.showToast('error', 'No se pudieron cargar los seriales disponibles');
     }
   }
-
 
 
   async registerExit(): Promise<void> {
@@ -418,17 +451,17 @@ export class Inventory implements OnInit {
         }
         // Si maneja vencimiento, puedes además validar que los seleccionados pertenezcan al lote elegido (opcional)
       }
+      // 1) Asegura lotes y arma la cola FEFO
       if (p.manages_expiration) {
-        // 1) Asegura lotes y arma la cola FEFO
         await this.ensureLotsForProduct(p.id);
-        const fefo = this.getLotsWithStockFEFO(p.id); // trae qty_on_hand de stock
+        const fefo = this.getLotsWithStockFEFO(p.id);
 
         if (fefo.length === 0) {
           this.showToast('error', 'No hay lotes disponibles con stock');
           return;
         }
 
-        // 2) Si el usuario eligió un lote, empezamos por ese y luego seguimos FEFO
+        // Prioriza el lote elegido por el usuario (si hay)
         let ordered = [...fefo];
         if (this.exitForm.lot_id) {
           const idx = ordered.findIndex(l => l.id === this.exitForm.lot_id);
@@ -438,39 +471,69 @@ export class Inventory implements OnInit {
           }
         }
 
+        // Validación seriales (misma que ya haces arriba)
+        if (p.is_serialized) {
+          if (this.exitSelectedSerialIds.length !== Number(this.exitForm.qty)) {
+            this.showToast('error', `Debes seleccionar exactamente ${this.exitForm.qty} serial(es)`);
+            return;
+          }
+        }
+
+        // Agrupa los seriales seleccionados por lote para repartirlos en cada salida parcial
+        const selectedByLot = new Map<number, number[]>();
+        if (p.is_serialized) {
+          for (const sid of this.exitSelectedSerialIds) {
+            const s = this.availableSerialsForExit.find(x => x.id === sid);
+            const lotId = s?.lot_id ?? null;
+            if (lotId == null) continue; // por seguridad
+            const arr = selectedByLot.get(lotId) ?? [];
+            arr.push(sid);
+            selectedByLot.set(lotId, arr);
+          }
+        }
         // 3) Capacidad total y cantidad a despachar
         let remaining = this.exitForm.qty;
         const totalAvailable = ordered.reduce((a, l) => a + l.qty_on_hand, 0);
-
         if (totalAvailable <= 0) {
           this.showToast('error', 'No hay stock disponible por lotes');
           return;
         }
-
-        // (Opcional) Si quieres evitar saldos parciales, corta aquí
-        // if (remaining > totalAvailable) {
-        //   this.showToast('error', `Stock insuficiente por lotes. Disponible: ${totalAvailable}.`);
-        //   return;
-        // }
-
         // 4) Descuenta en varios lotes sin permitir negativos
         for (const l of ordered) {
           if (remaining <= 0) break;
+
           const take = Math.min(remaining, l.qty_on_hand);
           if (take <= 0) continue;
 
+          // Toma los seriales de ESTE lote (si el producto es serializado)
+          const serialIdsForLot = p.is_serialized
+            ? (selectedByLot.get(l.id) ?? []).slice(0, take)
+            : undefined;
+
+          // Si el producto es serializado, asegúrate de mandar exactamente 'take' seriales
+          if (p.is_serialized && (!serialIdsForLot || serialIdsForLot.length !== take)) {
+            this.showToast('error', `La selección de seriales no coincide con el reparto por lote (${l.lot_code}).`);
+            return;
+          }
+
           await this.movementSvc.exit({
             product_id: this.exitForm.product_id!,
-            qty: this.exitForm.qty,
+            qty: take,
             reason_code: this.exitForm.reason_code,
-            lot_id: this.exitForm.lot_id ?? undefined,
-            serial_ids: p.is_serialized ? this.exitSelectedSerialIds : undefined,
+            lot_id: l.id,
+            serial_ids: serialIdsForLot,          // ⬅️ AHORA SÍ SE ENVÍA
             notes: this.exitForm.notes || undefined,
+            user_created: this.currentUserName
           }).toPromise();
+
+          // “Consume” los seriales usados de ese lote
+          if (p.is_serialized && serialIdsForLot) {
+            const rest = (selectedByLot.get(l.id) ?? []).slice(serialIdsForLot.length);
+            selectedByLot.set(l.id, rest);
+          }
 
           remaining -= take;
         }
-
         // 5) Aviso si no alcanzó
         if (remaining > 0) {
           this.showToast('warning', `Stock insuficiente por lotes. Faltó despachar ${remaining}.`);
@@ -483,6 +546,7 @@ export class Inventory implements OnInit {
           reason_code: this.exitForm.reason_code,
           serial_ids: p.is_serialized ? this.exitSelectedSerialIds : undefined,
           notes: this.exitForm.notes || undefined,
+          user_created: this.currentUserName
         }).toPromise();
       }
 
@@ -547,6 +611,7 @@ export class Inventory implements OnInit {
         notes: this.adjustmentForm.notes || undefined,
         serial_codes: p.is_serialized && this.adjustmentForm.qty > 0 ? this.adjSerialCodes : undefined,
         serial_ids: p.is_serialized && this.adjustmentForm.qty < 0 ? this.adjSelectedSerialIds : undefined,
+        user_created: this.currentUserName
       }).toPromise();
 
       await Promise.all([this.loadStock(), this.loadKardex()]);
@@ -673,42 +738,57 @@ export class Inventory implements OnInit {
       return;
     }
 
-    // Calculamos diferencias con la data actual
-    const snaps = this.currentCountSnapshots;
-    const entries = this.currentCountEntries;
+    try {
+      // 1) Cambiar estado en backend a REVIEW
+      const updated = await this.countsSvc.review(this.selectedCount.id).toPromise();
+      await this.refreshCount(updated); // trae cabecera + snapshots/entries frescos
 
-    const diffs: typeof this.differences = [];
-    let surplus = 0;
-    let shortage = 0;
+      // 2) (Re)calcular diferencias con datos actuales
+      const snaps = this.currentCountSnapshots;
+      const entries = this.currentCountEntries;
 
-    for (const s of snaps) {
-      const entry = entries.find((e) => e.product_id === s.product_id && (e.lot_id ?? null) === (s.lot_id ?? null));
-      const counted = Number(entry?.qty_counted ?? 0);
-      const diff = counted - Number(s.qty_system);
-      const val = diff * Number(s.avg_cost_at_freeze);
+      const diffs: typeof this.differences = [];
+      let surplus = 0;
+      let shortage = 0;
 
-      if (diff !== 0) {
-        diffs.push({
-          product_id: s.product_id,
-          lot_id: s.lot_id,
-          qty_system: Number(s.qty_system),
-          qty_counted: counted,
-          difference: diff,
-          avg_cost: Number(s.avg_cost_at_freeze),
-          value_difference: val,
-        });
-        if (val > 0) surplus += val;
-        else shortage += Math.abs(val);
+      for (const s of snaps) {
+        const entry = entries.find(e => e.product_id === s.product_id && (e.lot_id ?? null) === (s.lot_id ?? null));
+        const counted = Number(entry?.qty_counted ?? 0);
+        const diff = counted - Number(s.qty_system);
+        const val = diff * Number(s.avg_cost_at_freeze);
+
+        if (diff !== 0) {
+          diffs.push({
+            product_id: s.product_id,
+            lot_id: s.lot_id,
+            qty_system: Number(s.qty_system),
+            qty_counted: counted,
+            difference: diff,
+            avg_cost: Number(s.avg_cost_at_freeze),
+            value_difference: val,
+          });
+          if (val > 0) surplus += val; else shortage += Math.abs(val);
+        }
+      }
+
+      this.differences = diffs;
+      this.differenceSummary = { surplus, shortage, net: surplus - shortage };
+
+      this.showToast('info', `Se encontraron ${diffs.length} diferencias`);
+    } catch (e: any) {
+      // Si ya estaba en REVIEW, algunos backends devuelven 400/409; toleramos eso.
+      const msg = e?.error?.message?.toString()?.toUpperCase?.() || '';
+      if (msg.includes('REVIEW')) {
+        // ya estaba en REVIEW: seguimos y solo recalculamos
+        await this.reloadCountData(this.selectedCount!.id);
+        this.showToast('info', 'El conteo ya estaba en revisión');
+        // podrías llamar de nuevo a reviewDifferences() aquí, pero evitamos recursión
+      } else {
+        this.showToast('error', e?.error?.message || 'No se pudo pasar a revisión');
       }
     }
-
-    this.differences = diffs;
-    this.differenceSummary = { surplus, shortage, net: surplus - shortage };
-
-    // Marcamos estado REVIEW en UI (el backend cambia al publicar)
-    this.selectedCount.status = 'REVIEW';
-    this.showToast('info', `Se encontraron ${diffs.length} diferencias`);
   }
+
 
   async postAdjustments(): Promise<void> {
     if (!this.selectedCount || this.selectedCount.status !== 'REVIEW') {
@@ -743,6 +823,7 @@ export class Inventory implements OnInit {
 
   async selectCount(c: Count): Promise<void> {
     this.selectedCount = c;
+    this.serialDiffsCache.clear(); // invalidate cache al cambiar de conteo
     await this.reloadCountData(c.id);
   }
 
@@ -782,36 +863,48 @@ export class Inventory implements OnInit {
       ? this.productMap.get(this.countEntryForm.product_id) ?? null
       : null;
 
-    // Si el producto maneja vencimientos, precargar lotes
     if (this.selectedCountProduct?.manages_expiration) {
       await this.ensureLotsForProduct(this.selectedCountProduct.id);
     }
-    // Reinicia el lote seleccionado al cambiar de producto
     this.countEntryForm.lot_id = null;
+
+    // reset seriales de conteo al cambiar producto
+    this.countEntrySerialCodes = [];
+    this.countEntrySerialInput = '';
   }
+
 
 
 
   async addCountEntry(): Promise<void> {
     if (!this.selectedCount || !this.countEntryForm.product_id) {
-      this.showToast('error', 'Complete los campos requeridos');
-      return;
+      this.showToast('error', 'Complete los campos requeridos'); return;
     }
+    const p = this.productMap.get(this.countEntryForm.product_id);
+    const qty = Number(this.countEntryForm.qty_counted || 0);
+
+    if (p?.is_serialized && qty > 0 && this.countEntrySerialCodes.length !== qty) {
+      this.showToast('error', `Debes agregar exactamente ${qty} serial(es)`); return;
+    }
+
     try {
       await this.countsSvc.addEntry(this.selectedCount.id, {
         product_id: this.countEntryForm.product_id,
         lot_id: this.countEntryForm.lot_id ?? null,
-        qty_counted: this.countEntryForm.qty_counted,
-        user: 'Usuario Front',
+        qty_counted: qty,
+        user: this.currentUserName,
+        serial_codes: p?.is_serialized ? this.countEntrySerialCodes : undefined, // <-- NUEVO
       }).toPromise();
 
       await this.reloadCountData(this.selectedCount.id);
       this.resetCountEntryForm();
+      this.countEntrySerialCodes = []; // limpia builder
       this.showToast('success', 'Conteo agregado');
     } catch {
       this.showToast('error', 'No se pudo agregar la entrada');
     }
   }
+
 
   deleteCountEntry(_id: number): void {
     // No tenemos endpoint DELETE de entradas; podrías implementarlo si lo necesitas.
@@ -1340,12 +1433,56 @@ export class Inventory implements OnInit {
     const i = this.exitSelectedSerialIds.indexOf(id);
     if (i >= 0) this.exitSelectedSerialIds.splice(i, 1);
     else this.exitSelectedSerialIds.push(id);
+
+    // El usuario intervino manualmente -> desactivar auto
+    this.exitAutoSelect = false;
   }
 
   remainingExitSerials(): number {
     const required = Number(this.exitForm.qty || 0);
     return Math.max(0, required - this.exitSelectedSerialIds.length);
   }
+
+  autoPickExitSerials(take?: number): void {
+    if (!this.selectedProductExit?.is_serialized) return;
+
+    const qty = Number(take ?? this.exitForm.qty ?? 0);
+    if (!qty) { this.exitSelectedSerialIds = []; return; }
+
+    const chosenLot = this.exitForm.lot_id ?? null;
+
+    // 1) Seriales del lote elegido
+    const preferred = this.availableSerialsForExit
+      .filter(s => s.lot_id === chosenLot)
+      .map(s => s.id);
+
+    // 2) Resto (otros lotes)
+    const others = this.availableSerialsForExit
+      .filter(s => s.lot_id !== chosenLot)
+      .map(s => s.id);
+
+    const pool = [...preferred, ...others];
+    this.exitSelectedSerialIds = pool.slice(0, qty);
+  }
+
+
+  clearExitSelection(): void {
+    this.exitSelectedSerialIds = [];
+  }
+
+  maybeAutoPickExitSerials(): void {
+    if (!this.exitAutoSelect) return;
+    this.autoPickExitSerials();
+  }
+
+  onExitQtyChange(val: number): void {
+    this.exitForm.qty = Number(val) || 0;
+    this.maybeAutoPickExitSerials();
+  }
+
+
+
+
 
 
   //HELPERS AJUSTE
@@ -1377,6 +1514,121 @@ export class Inventory implements OnInit {
     const picked = this.adjustmentForm.qty >= 0 ? this.adjSerialCodes.length : this.adjSelectedSerialIds.length;
     return Math.max(0, required - picked);
   }
+
+
+  //HELPERS DE CONTEO
+  addCountEntrySerial(): void {
+    const code = (this.countEntrySerialInput || '').trim();
+    if (!code) return;
+    if (this.countEntrySerialCodes.includes(code)) {
+      this.showToast('warning', `Serial duplicado: ${code}`); return;
+    }
+    const required = Number(this.countEntryForm.qty_counted || 0);
+    if (required > 0 && this.countEntrySerialCodes.length >= required) {
+      this.showToast('warning', 'Ya alcanzaste la cantidad requerida'); return;
+    }
+    this.countEntrySerialCodes.push(code);
+    this.countEntrySerialInput = '';
+  }
+  removeCountEntrySerial(code: string): void {
+    this.countEntrySerialCodes = this.countEntrySerialCodes.filter(c => c !== code);
+  }
+  remainingCountEntrySerials(): number {
+    const required = Number(this.countEntryForm.qty_counted || 0);
+    return Math.max(0, required - this.countEntrySerialCodes.length);
+  }
+
+
+
+
+  // inventory.ts (dentro de la clase)
+  serialDiffsCache = new Map<string, { faltantes: string[]; sobrantes: string[]; coincidentes: string[] }>();
+
+  showSerialDiffsModal = false;
+  modalSerials = { product_id: 0, lot_id: null as number | null, faltantes: [] as string[], sobrantes: [] as string[], coincidentes: [] as string[] };
+
+
+  private keyFor(pl: { product_id: number; lot_id: number | null }) {
+    return `${pl.product_id}:${pl.lot_id ?? 'null'}`;
+  }
+
+  private async ensureSerialDiffsLoaded(): Promise<void> {
+    if (!this.selectedCount) return;
+    if (this.serialDiffsCache.size > 0) return; // ya cargado
+    try {
+      const rows = await this.countsSvc.getSerialDiffs(this.selectedCount.id).toPromise();
+      (rows || []).forEach(d => {
+        this.serialDiffsCache.set(this.keyFor(d), {
+          faltantes: d.faltantes || [],
+          sobrantes: d.sobrantes || [],
+          coincidentes: d.coincidentes || [],
+        });
+      });
+    } catch {
+      this.showToast('error', 'No se pudieron cargar las diferencias por serial');
+    }
+  }
+
+
+  async openSerialDiffsFor(product_id: number, lot_id: number | null) {
+    await this.ensureSerialDiffsLoaded();
+    const k = this.keyFor({ product_id, lot_id });
+    const d = this.serialDiffsCache.get(k);
+    if (!d) {
+      this.showToast('info', 'No hay diferencias de seriales para esta fila');
+      return;
+    }
+    this.modalSerials = { product_id, lot_id, ...d };
+    this.showSerialDiffsModal = true;
+  }
+
+  closeSerialDiffsModal() {
+    this.showSerialDiffsModal = false;
+  }
+
+
+
+  // --- STOCK (modal de seriales) ---
+  showStockSerialsModal = false;
+  currentStockSerials: Array<{ id: number; serial_code: string; lot_id: number | null }> = [];
+  modalStockCtx: { productId: number; productName: string; lotId: number | null; lotCode: string | null } | null = null;
+
+  async openStockSerials(item: Stock): Promise<void> {
+    try {
+      const p = this.productMap.get(item.product_id);
+      const productName = p?.name ?? '';
+      const lotId = item.lot_id ?? null;
+      const lotCode = lotId ? this.getLotCode(item.product_id, lotId) : null;
+
+      // Trae seriales en stock del producto (y del lote si viene en la fila)
+      const rows = await this.serialsSvc.list({
+        product_id: item.product_id,
+        status: 'IN_STOCK',
+        lot_id: lotId ?? undefined,
+      }).toPromise();
+
+      this.currentStockSerials = (rows ?? []).map(r => ({
+        id: r.id,
+        serial_code: r.serial_code,
+        lot_id: r.lot_id ?? null,
+      }));
+
+      this.modalStockCtx = { productId: item.product_id, productName, lotId, lotCode };
+      this.showStockSerialsModal = true;
+    } catch {
+      this.showToast('error', 'No se pudieron cargar los seriales en stock');
+    }
+  }
+
+  closeStockSerials(): void {
+    this.showStockSerialsModal = false;
+    this.currentStockSerials = [];
+    this.modalStockCtx = null;
+  }
+
+
+
+
 
 
 }
