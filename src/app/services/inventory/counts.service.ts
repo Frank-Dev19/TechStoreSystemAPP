@@ -12,6 +12,8 @@ import {
     mapCountFromApi, mapCountEntryFromApi, mapCountSnapshotFromApi
 } from '../../utils/mappers';
 
+import { CountDifferenceRow, CountDifferenceSummary } from '../../models/inventory/count-difference';
+
 @Injectable({ providedIn: 'root' })
 export class CountsHttpService {
     private base = config.inventory.counts;
@@ -24,7 +26,7 @@ export class CountsHttpService {
         );
     }
 
-    create(body: { code?: string; description?: string }): Observable<Count> {
+    create(body: { code?: string; description?: string; createdBy: string }): Observable<Count> {
         return this.baseSvc.post<CountApi>(this.base, body).pipe(map(mapCountFromApi));
     }
 
@@ -82,5 +84,14 @@ export class CountsHttpService {
 
     getSerialDiffs(id: number): Observable<CountSerialDiff[]> {
         return this.baseSvc.get<CountSerialDiff[]>(`${this.base}/${id}/serial-diffs`);
+    }
+
+
+    getDifferences(countId: number) {
+        return this.baseSvc.get<CountDifferenceRow[]>(`${this.base}/${countId}/differences`);
+    }
+
+    getDifferenceSummary(countId: number) {
+        return this.baseSvc.get<CountDifferenceSummary>(`${this.base}/${countId}/differences/summary`);
     }
 }

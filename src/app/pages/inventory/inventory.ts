@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
 
 // ===== Modelos (usamos los que ya creaste en /models) =====
 import { Product } from '../../models/catalog/product';
@@ -22,6 +22,12 @@ import { LotsService } from '../../services/inventory/lots.service';
 import { SerialsService } from '../../services/inventory/serials.service';
 //import { MovementsService } from '../../services/inventory/movements.service';
 
+//importaciones para el pdf y excel
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
+import autoTable from 'jspdf-autotable';
+
 // ===== Util =====
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -37,7 +43,7 @@ export class Inventory implements OnInit {
   // -----------------------------
   // UI STATE
   // -----------------------------
-  activeTab: 'operations' | 'counts' | 'kardex' | 'catalogs' = 'operations';
+  activeTab: 'operations' | 'counts' | 'kardex' | 'products' | 'catalogs' | 'stock' = 'operations';
   isLocked = false;
   lockReason = '';
   selectedProductAdjustment: Product | null = null;
@@ -47,6 +53,12 @@ export class Inventory implements OnInit {
   searchProduct = '';
   searchCategory = '';
   searchUnit = '';
+
+  //Buscadores para Stock
+  stockFilterText: string = '';
+  stockFilterDateFrom: string = '';
+  stockFilterDateTo: string = '';
+
 
   // Filtros Kardex
   kardexFilters: KardexFilters = {
@@ -91,7 +103,12 @@ export class Inventory implements OnInit {
   countEntrySerialInput = '';
   countEntrySerialCodes: string[] = [];
 
+  // --- CONTEO (seriales) - sobrantes no resueltos ---
+  unresolvedSerials: Array<{ serial_code: string; product_id: number | null; lot_id: number | null; lot_code: string | null }> = [];
+  showUnresolvedModal = false;
 
+  // 👉 NUEVO: este flag decide si el modal debe mostrarse (solo si el producto requiere lote)
+  requireLotsForUnresolved = false;
 
   exitForm = {
     product_id: null as number | null,
@@ -197,6 +214,15 @@ export class Inventory implements OnInit {
 
   // Toasts
   toasts: { type: ToastType; message: string }[] = [];
+
+
+  //Primer chield
+  @ViewChild('reviewSection') reviewSectionRef!: ElementRef;
+
+  // === refs de inputs (para devolver foco tras agregar) ===
+  @ViewChild('entrySerialField') entrySerialField!: ElementRef<HTMLInputElement>;
+  @ViewChild('adjSerialField') adjSerialField!: ElementRef<HTMLInputElement>;
+  @ViewChild('countSerialField') countSerialField!: ElementRef<HTMLInputElement>;
 
   constructor(
     private productsSvc: ProductsService,
@@ -635,16 +661,29 @@ export class Inventory implements OnInit {
   // STOCK (tabla)
   // =========================================================
   get filteredStock(): Stock[] {
-    const term = (this.searchStock || '').toLowerCase();
+    const term = (this.stockFilterText || '').toLowerCase();
+    const from = this.stockFilterDateFrom ? new Date(this.stockFilterDateFrom + 'T00:00:00') : null;
+    const to = this.stockFilterDateTo ? new Date(this.stockFilterDateTo + 'T23:59:59') : null;
+
     return this.stock.filter((s) => {
       const p = this.productMap.get(s.product_id);
-      return (
+      const matchesText =
         !term ||
-        p?.name.toLowerCase().includes(term) ||
-        p?.sku.toLowerCase().includes(term)
-      );
+        (p?.name?.toLowerCase().includes(term)) ||
+        (p?.sku?.toLowerCase().includes(term)) ||
+        (this.getCategoryName(p?.category_id)?.toLowerCase().includes(term));
+
+      let matchesDate = true;
+      if ((from || to) && s.updated_at) {
+        const upd = new Date(s.updated_at);
+        if (from && upd < from) matchesDate = false;
+        if (to && upd > to) matchesDate = false;
+      }
+
+      return matchesText && matchesDate;
     });
   }
+
 
   isLowStock(item: Stock): boolean {
     const p = this.productMap.get(item.product_id);
@@ -689,7 +728,7 @@ export class Inventory implements OnInit {
 
   async createDraftCount(): Promise<void> {
     try {
-      const c = await this.countsSvc.create({ description: 'Conteo cíclico' }).toPromise();
+      const c = await this.countsSvc.create({ description: 'Conteo cíclico', createdBy: this.currentUserName }).toPromise();
       this.counts.unshift(c);
       this.selectCount(c);
       this.showToast('success', 'Conteo creado (Borrador). Ahora puedes congelarlo.');
@@ -737,57 +776,19 @@ export class Inventory implements OnInit {
       this.showToast('error', 'El conteo debe estar en proceso');
       return;
     }
-
     try {
-      // 1) Cambiar estado en backend a REVIEW
       const updated = await this.countsSvc.review(this.selectedCount.id).toPromise();
-      await this.refreshCount(updated); // trae cabecera + snapshots/entries frescos
-
-      // 2) (Re)calcular diferencias con datos actuales
-      const snaps = this.currentCountSnapshots;
-      const entries = this.currentCountEntries;
-
-      const diffs: typeof this.differences = [];
-      let surplus = 0;
-      let shortage = 0;
-
-      for (const s of snaps) {
-        const entry = entries.find(e => e.product_id === s.product_id && (e.lot_id ?? null) === (s.lot_id ?? null));
-        const counted = Number(entry?.qty_counted ?? 0);
-        const diff = counted - Number(s.qty_system);
-        const val = diff * Number(s.avg_cost_at_freeze);
-
-        if (diff !== 0) {
-          diffs.push({
-            product_id: s.product_id,
-            lot_id: s.lot_id,
-            qty_system: Number(s.qty_system),
-            qty_counted: counted,
-            difference: diff,
-            avg_cost: Number(s.avg_cost_at_freeze),
-            value_difference: val,
-          });
-          if (val > 0) surplus += val; else shortage += Math.abs(val);
-        }
-      }
-
-      this.differences = diffs;
-      this.differenceSummary = { surplus, shortage, net: surplus - shortage };
-
-      this.showToast('info', `Se encontraron ${diffs.length} diferencias`);
+      await this.refreshCount(updated);               // recarga cabecera + snaps/entries
+      await this.loadPersistedDifferences(updated.id); // lee lo persistido
+      this.showToast('info', 'Diferencias calculadas y guardadas');
     } catch (e: any) {
-      // Si ya estaba en REVIEW, algunos backends devuelven 400/409; toleramos eso.
-      const msg = e?.error?.message?.toString()?.toUpperCase?.() || '';
-      if (msg.includes('REVIEW')) {
-        // ya estaba en REVIEW: seguimos y solo recalculamos
-        await this.reloadCountData(this.selectedCount!.id);
-        this.showToast('info', 'El conteo ya estaba en revisión');
-        // podrías llamar de nuevo a reviewDifferences() aquí, pero evitamos recursión
-      } else {
-        this.showToast('error', e?.error?.message || 'No se pudo pasar a revisión');
-      }
+      // Si ya estaba en REVIEW, de todas formas carga lo persistido
+      await this.reloadCountData(this.selectedCount!.id);
+      await this.loadPersistedDifferences(this.selectedCount!.id);
+      this.showToast('info', 'El conteo ya estaba en revisión');
     }
   }
+
 
 
   async postAdjustments(): Promise<void> {
@@ -837,20 +838,24 @@ export class Inventory implements OnInit {
 
   private async reloadCountData(id: number) {
     try {
-      // Si tu backend expone GET /inventory/counts/:id úsalo para refrescar cabecera
       const fresh = await this.countsSvc.get(id).toPromise();
       this.selectedCount = fresh;
 
-      // Cargar snapshots/entries
       this.currentCountSnapshots = await this.countsSvc.getSnapshots(id).toPromise();
       this.currentCountEntries = await this.countsSvc.getEntries(id).toPromise();
+
+      if (this.selectedCount?.status === 'REVIEW') {
+        await this.loadPersistedDifferences(id);
+      } else {
+        this.differences = [];
+        this.differenceSummary = { surplus: 0, shortage: 0, net: 0 };
+      }
     } catch {
-      // Si aún no existen endpoints GET snapshots/entries en tu backend,
-      // deja estas colecciones vacías para no romper la UI.
       this.currentCountSnapshots = this.currentCountSnapshots ?? [];
       this.currentCountEntries = this.currentCountEntries ?? [];
     }
   }
+
 
   // onCountProductChange(): void {
   //   this.selectedCountProduct = this.countEntryForm.product_id
@@ -883,6 +888,14 @@ export class Inventory implements OnInit {
     const p = this.productMap.get(this.countEntryForm.product_id);
     const qty = Number(this.countEntryForm.qty_counted || 0);
 
+    // 🔁 NUEVO: si es serializado y el usuario ingresó seriales,
+    // desviamos al flujo "smart" (resolver por servicio y agrupar por lote).
+    if (p?.is_serialized && this.countEntrySerialCodes.length > 0) {
+      await this.resolveSerialsBeforeAdd();
+      return;
+    }
+
+    // (comportamiento previo, mantiene tu validación cuando se usa qty sin seriales)
     if (p?.is_serialized && qty > 0 && this.countEntrySerialCodes.length !== qty) {
       this.showToast('error', `Debes agregar exactamente ${qty} serial(es)`); return;
     }
@@ -893,17 +906,188 @@ export class Inventory implements OnInit {
         lot_id: this.countEntryForm.lot_id ?? null,
         qty_counted: qty,
         user: this.currentUserName,
-        serial_codes: p?.is_serialized ? this.countEntrySerialCodes : undefined, // <-- NUEVO
+        serial_codes: p?.is_serialized ? this.countEntrySerialCodes : undefined, // ← se mantiene por compatibilidad
       }).toPromise();
 
       await this.reloadCountData(this.selectedCount.id);
       this.resetCountEntryForm();
-      this.countEntrySerialCodes = []; // limpia builder
+      this.countEntrySerialCodes = [];
       this.showToast('success', 'Conteo agregado');
     } catch {
       this.showToast('error', 'No se pudo agregar la entrada');
     }
   }
+
+
+
+  /**
+ * 1) Pregunta al backend por cada serial (existe/no existe y lote).
+ * 2) Si existen: los agrupa por lote y llama addEntry por lote.
+ * 3) Si no existen: los guarda como "sobrantes" para que asignes lote manual luego.
+ */
+  private async resolveSerialsBeforeAdd(): Promise<void> {
+    const codes = this.countEntrySerialCodes || [];
+    if (!codes.length) return;
+    if (!this.selectedCount || !this.countEntryForm.product_id) return;
+
+    // producto actual
+    const p = this.productMap.get(this.countEntryForm.product_id);
+    const pid = this.countEntryForm.product_id;
+    const managesLots = !!p?.manages_expiration;   // ← tiene lotes/fecha
+    const isSerialized = !!p?.is_serialized;
+
+    try {
+      const res = await this.serialsSvc.resolve(codes).toPromise();
+
+      const known = (res ?? []).filter(s => s.exists && (s.lot_id != null || !managesLots));
+      const unknown = (res ?? []).filter(s => !s.exists || (managesLots && s.lot_id == null));
+
+      // 1) Agregar los CONOCIDOS
+      if (known.length > 0) {
+        if (managesLots) {
+          // agrupar por lote si maneja vencimiento
+          await this.ensureLotsForProduct(pid);
+          const byLot = known.reduce((acc, s) => {
+            const lid = (s.lot_id ?? null) as number | null;
+            const key = String(lid ?? 'null');
+            (acc[key] ||= []).push(s.serial_code);
+            return acc;
+          }, {} as Record<string, string[]>);
+
+          for (const [lotKey, serials] of Object.entries(byLot)) {
+            const lotId = lotKey === 'null' ? null : Number(lotKey);
+            await this.countsSvc.addEntry(this.selectedCount!.id, {
+              product_id: pid,
+              lot_id: lotId,
+              qty_counted: serials.length,
+              user: this.currentUserName,
+              serial_codes: serials,
+            }).toPromise();
+          }
+        } else {
+          // no maneja vencimiento: todo al mismo lote null
+          const serials = known.map(k => k.serial_code);
+          await this.countsSvc.addEntry(this.selectedCount!.id, {
+            product_id: pid,
+            lot_id: null,
+            qty_counted: serials.length,
+            user: this.currentUserName,
+            serial_codes: serials,
+          }).toPromise();
+        }
+      }
+
+      // 2) ¿Qué hacemos con los DESCONOCIDOS?
+      if (unknown.length > 0) {
+        if (isSerialized && managesLots) {
+          // 🔸 SOLO aquí pedimos asignar lote (modal)
+          this.requireLotsForUnresolved = true;
+          this.unresolvedSerials = unknown.map(u => ({
+            serial_code: u.serial_code,
+            product_id: pid,
+            lot_id: null,
+            lot_code: null,
+          }));
+          await this.ensureLotsForProduct(pid);
+          this.showUnresolvedModal = true;
+          this.showToast('warning', `Se detectaron ${unknown.length} serial(es) sin lote. Asigna un lote para continuar.`);
+        } else if (isSerialized && !managesLots) {
+          // ✔ serializado SIN lotes: los agregamos directo con lot_id null
+          const serials = unknown.map(u => u.serial_code);
+          await this.countsSvc.addEntry(this.selectedCount!.id, {
+            product_id: pid,
+            lot_id: null,
+            qty_counted: serials.length,
+            user: this.currentUserName,
+            serial_codes: serials,
+          }).toPromise();
+          this.showToast('info', `Se agregaron ${serials.length} serial(es) sin lote (producto sin vencimiento).`);
+        } else {
+          // no serializado (con o sin lotes): este flujo no debería activarse, pero por seguridad
+          const qty = unknown.length;
+          await this.countsSvc.addEntry(this.selectedCount!.id, {
+            product_id: pid,
+            lot_id: managesLots ? (this.countEntryForm.lot_id ?? null) : null,
+            qty_counted: qty,
+            user: this.currentUserName,
+          }).toPromise();
+        }
+      }
+
+      // refrescar UI y limpiar
+      await this.reloadCountData(this.selectedCount!.id);
+      this.countEntrySerialCodes = [];
+      this.countEntrySerialInput = '';
+      this.countEntryForm.qty_counted = 0;
+
+      // Mensaje final (solo si no quedó modal abierto)
+      if (!this.showUnresolvedModal) {
+        this.showToast('success', 'Seriales procesados.');
+      }
+    } catch (e) {
+      this.showToast('error', 'Error al resolver seriales');
+    }
+  }
+
+
+
+  // =========================================================
+  // SERIALS SOBRANTES (modal)
+  // =========================================================
+  async saveUnresolvedSerials(): Promise<void> {
+    if (!this.selectedCount) {
+      this.showToast('error', 'No hay conteo seleccionado');
+      return;
+    }
+
+    if (!this.unresolvedSerials || this.unresolvedSerials.length === 0) {
+      this.showToast('info', 'No hay seriales sobrantes por asignar');
+      this.showUnresolvedModal = false;
+      return;
+    }
+
+    // 1️⃣ Validar que todos los seriales tengan un lote asignado
+    const sinLote = this.unresolvedSerials.filter(s => !s.lot_id);
+    if (sinLote.length > 0) {
+      this.showToast('warning', 'Asigna un lote a todos los seriales antes de continuar');
+      return;
+    }
+
+    try {
+      // 2️⃣ Agrupar seriales por producto y lote
+      const grupos = new Map<string, { product_id: number; lot_id: number; serials: string[] }>();
+
+      for (const s of this.unresolvedSerials) {
+        const key = `${s.product_id}:${s.lot_id}`;
+        if (!grupos.has(key)) {
+          grupos.set(key, { product_id: s.product_id!, lot_id: s.lot_id!, serials: [] });
+        }
+        grupos.get(key)!.serials.push(s.serial_code);
+      }
+
+      // 3️⃣ Guardar en el conteo cada grupo
+      for (const g of grupos.values()) {
+        await this.countsSvc.addEntry(this.selectedCount.id, {
+          product_id: g.product_id,
+          lot_id: g.lot_id,
+          qty_counted: g.serials.length,
+          user: this.currentUserName,
+          serial_codes: g.serials,
+        }).toPromise();
+      }
+
+      // 4️⃣ Recargar y limpiar
+      await this.reloadCountData(this.selectedCount.id);
+      this.unresolvedSerials = [];
+      this.showUnresolvedModal = false;
+      this.showToast('success', 'Seriales sobrantes asignados y guardados');
+    } catch (e: any) {
+      console.error(e);
+      this.showToast('error', e?.error?.message || 'No se pudieron guardar las asignaciones');
+    }
+  }
+
+
 
 
   deleteCountEntry(_id: number): void {
@@ -1403,19 +1587,28 @@ export class Inventory implements OnInit {
 
   //HELPERS ENTRADA
   addEntrySerial(): void {
-    const code = (this.entrySerialInput || '').trim();
+    const raw = this.entrySerialInput ?? '';
+    const code = raw.replace(/[\r\n\t]+/g, '').trim();
     if (!code) return;
+
     if (this.entrySerialCodes.includes(code)) {
       this.showToast('warning', `Serial duplicado: ${code}`);
+      this.entrySerialInput = '';
+      setTimeout(() => this.entrySerialField?.nativeElement.focus(), 0);
       return;
     }
+
     const required = Number(this.entryForm.qty || 0);
     if (required > 0 && this.entrySerialCodes.length >= required) {
       this.showToast('warning', 'Ya alcanzaste la cantidad requerida');
+      this.entrySerialInput = '';
+      setTimeout(() => this.entrySerialField?.nativeElement.focus(), 0);
       return;
     }
+
     this.entrySerialCodes.push(code);
     this.entrySerialInput = '';
+    setTimeout(() => this.entrySerialField?.nativeElement.focus(), 0);
   }
 
   removeEntrySerial(code: string): void {
@@ -1487,28 +1680,40 @@ export class Inventory implements OnInit {
 
   //HELPERS AJUSTE
   addAdjSerial(): void {
-    const code = (this.adjSerialInput || '').trim();
+    const raw = this.adjSerialInput ?? '';
+    const code = raw.replace(/[\r\n\t]+/g, '').trim();
     if (!code) return;
+
     if (this.adjSerialCodes.includes(code)) {
       this.showToast('warning', `Serial duplicado: ${code}`);
+      this.adjSerialInput = '';
+      setTimeout(() => this.adjSerialField?.nativeElement.focus(), 0);
       return;
     }
+
     const required = Math.max(0, Number(this.adjustmentForm.qty || 0));
     if (required > 0 && this.adjSerialCodes.length >= required) {
       this.showToast('warning', 'Ya alcanzaste la cantidad requerida');
+      this.adjSerialInput = '';
+      setTimeout(() => this.adjSerialField?.nativeElement.focus(), 0);
       return;
     }
+
     this.adjSerialCodes.push(code);
     this.adjSerialInput = '';
+    setTimeout(() => this.adjSerialField?.nativeElement.focus(), 0);
   }
+
   removeAdjSerial(code: string): void {
     this.adjSerialCodes = this.adjSerialCodes.filter(c => c !== code);
   }
+
   toggleAdjSerial(id: number): void {
     const i = this.adjSelectedSerialIds.indexOf(id);
     if (i >= 0) this.adjSelectedSerialIds.splice(i, 1);
     else this.adjSelectedSerialIds.push(id);
   }
+
   remainingAdjSerialsAbs(): number {
     const required = Math.abs(Number(this.adjustmentForm.qty || 0));
     const picked = this.adjustmentForm.qty >= 0 ? this.adjSerialCodes.length : this.adjSelectedSerialIds.length;
@@ -1518,21 +1723,34 @@ export class Inventory implements OnInit {
 
   //HELPERS DE CONTEO
   addCountEntrySerial(): void {
-    const code = (this.countEntrySerialInput || '').trim();
+    const raw = this.countEntrySerialInput ?? '';
+    const code = raw.replace(/[\r\n\t]+/g, '').trim();
     if (!code) return;
+
     if (this.countEntrySerialCodes.includes(code)) {
-      this.showToast('warning', `Serial duplicado: ${code}`); return;
+      this.showToast('warning', `Serial duplicado: ${code}`);
+      this.countEntrySerialInput = '';
+      setTimeout(() => this.countSerialField?.nativeElement.focus(), 0);
+      return;
     }
+
     const required = Number(this.countEntryForm.qty_counted || 0);
     if (required > 0 && this.countEntrySerialCodes.length >= required) {
-      this.showToast('warning', 'Ya alcanzaste la cantidad requerida'); return;
+      this.showToast('warning', 'Ya alcanzaste la cantidad requerida');
+      this.countEntrySerialInput = '';
+      setTimeout(() => this.countSerialField?.nativeElement.focus(), 0);
+      return;
     }
+
     this.countEntrySerialCodes.push(code);
     this.countEntrySerialInput = '';
+    setTimeout(() => this.countSerialField?.nativeElement.focus(), 0);
   }
+
   removeCountEntrySerial(code: string): void {
     this.countEntrySerialCodes = this.countEntrySerialCodes.filter(c => c !== code);
   }
+
   remainingCountEntrySerials(): number {
     const required = Number(this.countEntryForm.qty_counted || 0);
     return Math.max(0, required - this.countEntrySerialCodes.length);
@@ -1627,8 +1845,291 @@ export class Inventory implements OnInit {
   }
 
 
+  //helpers para carga diferidas
+  private async loadPersistedDifferences(countId: number): Promise<void> {
+    const [rows, summary] = await Promise.all([
+      this.countsSvc.getDifferences(countId).toPromise(),
+      this.countsSvc.getDifferenceSummary(countId).toPromise(),
+    ]);
+
+    this.differences = (rows || []).map(r => ({
+      product_id: r.productId,
+      lot_id: r.lotId ?? null,
+      qty_system: Number(r.qtySystem),
+      qty_counted: Number(r.qtyCounted),
+      difference: Number(r.difference),
+      avg_cost: Number(r.avgCostAtFreeze),
+      value_difference: Number(r.valueDifference),
+    }));
+
+    this.differenceSummary = {
+      surplus: Number(summary?.surplusValue ?? 0),
+      shortage: Number(summary?.shortageValue ?? 0),
+      net: Number(summary?.netValue ?? 0),
+    };
+  }
+
+
+  //Helper para formatear la hora y que no salga 5 horas menos
+  formatLocalDate(raw: string | null | undefined): string {
+    if (!raw) return '-';
+
+    // caso típico: "2025-10-27T16:52:22.000Z" o "2025-10-27T16:52:22.000"
+    // 1. quitamos la Z si viene con Z para que el browser NO haga conversión de zona
+    const sanitized = raw.endsWith('Z') ? raw.replace(/Z$/, '') : raw;
+
+    // 2. creamos un Date como si fuera "local time", no UTC
+    //    truco: dividir a mano en partes en vez de usar new Date() directo
+    const m = sanitized.match(
+      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/
+    );
+    if (!m) return raw; // fallback
+
+    const [_, y, mo, d, h, mi] = m;
+    // armamos string "dd/MM/yyyy HH:mm"
+    return `${d}/${mo}/${y} ${h}:${mi}`;
+  }
 
 
 
+  //Metodos Para esportar en Pdf y Excel la revision de conteos
+
+  exportReviewToPdf(): void {
+    if (!this.selectedCount) {
+      this.showToast('error', 'No hay conteo seleccionado');
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    let y = 15;
+    y = this.buildPdfHeader(doc, y);
+    y = this.buildPdfSummary(doc, y);
+
+    // título antes de la tabla
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Detalle de Diferencias por Ítem', 15, y);
+    y += 4;
+
+    this.buildPdfDifferencesTable(doc, y);
+
+    doc.save(`conteo-${this.selectedCount.code || this.selectedCount.id}.pdf`);
+  }
+
+  exportReviewToExcel(): void {
+    if (!this.selectedCount || this.selectedCount.status !== 'REVIEW') {
+      this.showToast('error', 'Solo puedes exportar cuando el conteo está en Revisión');
+      return;
+    }
+
+    // --- Sheet 1: Resumen
+    const resumenData = [
+      ['Conteo', this.selectedCount.code || this.selectedCount.id],
+      ['Sobrantes (S/)', this.differenceSummary.surplus?.toFixed(2)],
+      ['Faltantes (S/)', this.differenceSummary.shortage?.toFixed(2)],
+      ['Diferencia Neta (S/)', this.differenceSummary.net?.toFixed(2)],
+      ['Requiere Doble Aprobación', this.requiresDoubleApproval() ? 'Sí' : 'No'],
+    ];
+
+    const resumenSheet = XLSX.utils.aoa_to_sheet(resumenData);
+
+    // --- Sheet 2: Detalle Diferencias
+    // armamos filas con headers bonitos
+    const detalleRows: (string | number)[][] = [
+      ['SKU', 'Producto', 'Lote', 'Cant. Sistema', 'Cant. Contada', 'Diferencia', 'Costo Prom.', 'Valor Diferencia']
+    ];
+
+
+    for (const diff of this.differences) {
+      const p = this.getProductBySku(diff.product_id);
+      const lotCode = diff.lot_id ? this.getLotCode(diff.product_id, diff.lot_id) : '-';
+
+      detalleRows.push([
+        p?.sku ?? '',
+        p?.name ?? '',
+        lotCode,
+        String(diff.qty_system),
+        String(diff.qty_counted),
+        String(diff.difference),
+        Number(diff.avg_cost).toFixed(2),
+        Number(diff.value_difference).toFixed(2),
+      ]);
+    }
+
+
+    const detalleSheet = XLSX.utils.aoa_to_sheet(detalleRows);
+
+    // --- Workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, resumenSheet, 'Resumen');
+    XLSX.utils.book_append_sheet(wb, detalleSheet, 'Diferencias');
+
+    const fileName = `conteo-${this.selectedCount.code || this.selectedCount.id}-revision.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    this.showToast('success', 'Excel generado');
+  }
+
+
+  private buildPdfHeader(doc: jsPDF, startY: number): number {
+    // Datos base del conteo
+    const countCode = this.selectedCount?.code || '';
+    const statusLabel = this.getCountStatusLabel(this.selectedCount?.status || '');
+    const fechaConteo = this.selectedCount?.created_at
+      ? this.formatLocalDate(this.selectedCount.created_at)
+      : '-';
+    const responsable = this.selectedCount?.created_by || this.currentUserName;
+
+    // Empresa: si no tienes aún en el front, puedes quemar valores temporales:
+    const empresa = 'TECH STORE SYSTEM S.A.C.';
+    const ruc = 'RUC: 20608226495';
+    const direccion = 'Calle Alfonso Ugarte NRO. 493 - Trujillo, La Libertad';
+    const telefono = 'Telf: 924215320';
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(empresa, 15, startY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(ruc, 15, startY + 5);
+    doc.text(direccion, 15, startY + 10);
+    doc.text(telefono, 15, startY + 15);
+
+    // Caja derecha tipo "document info"
+    const boxX = 120;
+    const boxY = startY;
+    const boxW = 75;
+    const boxH = 25;
+
+    doc.rect(boxX, boxY, boxW, boxH); // borde del recuadro
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('ACTA DE CONTEO', boxX + 5, boxY + 8);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Conteo: ${countCode}`, boxX + 5, boxY + 14);
+    doc.text(`Estado: ${statusLabel}`, boxX + 5, boxY + 19);
+    doc.text(`Fecha: ${fechaConteo}`, boxX + 5, boxY + 24);
+
+    // Bloque info operación (debajo)
+    let y = boxY + boxH + 8;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Información del Conteo', 15, y);
+    y += 4;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Responsable: ${responsable}`, 15, y);
+    y += 4;
+    doc.text(`Código Conteo: ${countCode}`, 15, y);
+    y += 4;
+    doc.text(`Estado Actual: ${statusLabel}`, 15, y);
+    y += 4;
+
+    return y + 4; // devolvemos la Y final para seguir dibujando
+  }
+
+  private buildPdfSummary(doc: jsPDF, startY: number): number {
+    const colX = 15;
+    const rowH = 8;
+    const colW = 180;
+
+    // dibujamos borde "Resumen de diferencias"
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Resumen de diferencias valorizadas (S/)', colX, startY);
+
+    // tabla simple de 3 columnas
+    const headers = ['Sobrantes', 'Faltantes', 'Diferencia Neta'];
+    const values = [
+      `S/ ${Number(this.differenceSummary.surplus).toFixed(2)}`,
+      `S/ ${Number(this.differenceSummary.shortage).toFixed(2)}`,
+      `S/ ${Number(this.differenceSummary.net).toFixed(2)}`
+    ];
+
+    const cellW = colW / 3;
+
+    // header row
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    for (let i = 0; i < 3; i++) {
+      const x = colX + i * cellW;
+      doc.rect(x, startY + 3, cellW, rowH);
+      doc.text(headers[i], x + 2, startY + 3 + 5);
+    }
+
+    // value row
+    doc.setFont('helvetica', 'normal');
+    for (let i = 0; i < 3; i++) {
+      const x = colX + i * cellW;
+      doc.rect(x, startY + 3 + rowH, cellW, rowH);
+      doc.text(values[i], x + 2, startY + 3 + rowH + 5);
+    }
+
+    return startY + 3 + rowH * 2 + 6; // nueva Y
+  }
+
+  private buildPdfDifferencesTable(doc: jsPDF, startY: number): void {
+    const bodyRows = this.differences.map(diff => {
+      const prod = this.getProductBySku(diff.product_id);
+      return [
+        prod?.sku || '',
+        prod?.name || '',
+        diff.lot_id ? this.getLotCode(diff.product_id, diff.lot_id) : '-',
+        diff.qty_system.toString(),
+        diff.qty_counted.toString(),
+        (diff.difference > 0 ? '+' : '') + diff.difference.toString(),
+        Number(diff.avg_cost).toFixed(2),
+        (diff.value_difference > 0 ? '+' : '') + Number(diff.value_difference).toFixed(2),
+      ];
+    });
+
+    (autoTable as any)(doc, {
+      startY,
+      head: [[
+        'SKU',
+        'Nombre',
+        'Lote',
+        'Teórico',
+        'Contado',
+        'Dif.',
+        'Costo Prom.',
+        'Val. Dif.'
+      ]],
+      body: bodyRows,
+      styles: {
+        font: 'helvetica',
+        fontSize: 8,
+        lineColor: [0, 0, 0],
+        lineWidth: 0.1,
+      },
+      headStyles: {
+        fillColor: [230, 230, 230],
+        textColor: 0,
+        fontStyle: 'bold'
+      },
+    });
+  }
+
+
+  // === handlers de Enter para cada input ===
+  onEntrySerialKeydown(): void {
+    this.addEntrySerial();
+  }
+
+  onAdjSerialKeydown(): void {
+    this.addAdjSerial();
+  }
+
+  onCountEntrySerialKeydown(): void {
+    this.addCountEntrySerial();
+  }
 
 }

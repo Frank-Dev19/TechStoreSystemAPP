@@ -31,4 +31,32 @@ export class SerialsService {
     byMovement(movement_id: number): Observable<{ serial_id: number; serial_code: string; lot_id: number | null }[]> {
         return this.baseSvc.get<any[]>(`${this.base}/by-movement/${movement_id}`);
     }
+
+
+    // Resuelve si cada serial existe y a qué lote/producto pertenece
+    // resolve(serial_codes: string[]) {
+    //   return this.baseSvc.post<Array<{
+    //     serial_code: string;
+    //     exists: boolean;
+    //     product_id: number | null;
+    //     lot_id: number | null;
+    //     lot_code: string | null;
+    //   }>>(
+    //     `${config.inventory.serials}/resolve`,
+    //     { serial_codes }
+    //   );
+    // }
+
+
+    // ✅ NUEVO: resolver seriales
+    resolve(serialCodes: string[]): Observable<Array<{
+        serial_code: string;
+        product_id: number | null;
+        lot_id: number | null;
+        lot_code: string | null;
+        exists: boolean;
+    }>> {
+        return this.baseSvc.post<any[]>(`${this.base}/resolve`, { serial_codes: serialCodes });
+    }
+
 }

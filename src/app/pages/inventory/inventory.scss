@@ -2505,3 +2505,203 @@
     font-weight: 500;
     color: #718096;
 }
+
+
+/* ====== Barra de filtros Stock Actual (buscador + fechas) ====== */
+
+.filters-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+
+    @media (max-width: 768px) {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* buscador (copiado del .stock-section .section-header .search-box para que luzca igual) */
+    .search-box {
+        position: relative;
+        flex: 1;
+        min-width: 250px;
+        max-width: 400px;
+
+        i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #a0aec0;
+            font-size: 1rem;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            background: #fff;
+            transition: all 0.3s ease;
+
+            &::placeholder {
+                color: #a0aec0;
+            }
+
+            &:focus {
+                outline: none;
+                border-color: #3498db;
+                box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+            }
+        }
+    }
+
+    /* bloque fechas */
+    .date-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem 0.5rem;
+        font-size: 0.9rem;
+        color: #2d3748;
+
+        label {
+            font-weight: 600;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+
+            i {
+                color: #3498db;
+                font-size: .9rem;
+            }
+        }
+
+        input[type="date"] {
+            padding: 0.6rem 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            line-height: 1.2;
+            background: #fff;
+            transition: all 0.3s ease;
+            min-width: 150px;
+
+            &:focus {
+                outline: none;
+                border-color: #3498db;
+                box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+            }
+        }
+
+        @media (max-width: 768px) {
+            width: 100%;
+            justify-content: space-between;
+
+            input[type="date"] {
+                flex: 1;
+                min-width: 0;
+            }
+        }
+    }
+}
+
+
+/* ==== FIX: botones tipo tarjeta horizontales con ícono centrado ==== */
+.count-details-panel .count-details-content .btn-action {
+    /* de columna -> fila con 2 columnas: [icono fijo][texto fluido] */
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    align-items: center;
+    text-align: left;
+    gap: .75rem;
+    padding: 1rem 1.25rem;
+}
+
+/* cuadradito del icono centrado */
+.count-details-panel .count-details-content .btn-action i {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    /* quita el margen inferior heredado */
+    font-size: 1.1rem;
+    /* tamaño más proporcionado */
+    border-radius: 10px;
+    /* leve redondeo para el cuadrado */
+    background: #f7fafc;
+    /* fondo suave para que “se vea el cuadradito” */
+    border: 2px solid #e2e8f0;
+}
+
+/* bloque de textos a la derecha del icono */
+.count-details-panel .count-details-content .btn-action span {
+    display: block;
+    line-height: 1.1;
+}
+
+.count-details-panel .count-details-content .btn-action small {
+    display: block;
+    line-height: 1.2;
+}
+
+/* En móviles, que se mantenga en dos filas si falta ancho, sin montarse */
+@media (max-width: 480px) {
+    .count-details-panel .count-details-content .btn-action {
+        grid-template-columns: 40px 1fr;
+        gap: .6rem;
+    }
+
+    .count-details-panel .count-details-content .action-buttons-grid {
+        grid-template-columns: 1fr;
+        /* una por fila para evitar traslapes */
+    }
+}
+
+
+/* Fila superior de Captura de Conteos: 3 columnas adaptables */
+.entry-form-card .form-row.three {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+
+    @media (max-width: 900px) {
+        grid-template-columns: 1fr 1fr;
+        /* producto + (lote o cantidad) */
+    }
+
+    @media (max-width: 600px) {
+        grid-template-columns: 1fr;
+        /* una por fila en móviles */
+    }
+}
+
+/* Seriales ocupan todo el ancho */
+.serial-builder.wide {
+    width: 100%;
+}
+
+/* Que el input del serial crezca realmente a todo el ancho disponible */
+.serial-input-row .form-control {
+    flex: 1;
+    min-width: 280px;
+    /* lectura cómoda de seriales largos */
+}
+
+/* Pequeño layout para el bloque de acciones (botón Agregar) */
+.entry-form-card .form-actions {
+    margin-top: 0.75rem;
+    display: flex;
+    justify-content: flex-start;
+    /* o flex-end si lo prefieres a la derecha */
+}

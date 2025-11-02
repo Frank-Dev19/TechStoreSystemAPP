@@ -35,6 +35,10 @@
             <i class="fas fa-exchange-alt"></i>
             Operaciones
         </button>
+        <button class="tab-button" [class.active]="activeTab === 'stock'" (click)="activeTab = 'stock'">
+            <i class="fas fa-chart-bar"></i>
+            Stock
+        </button>
         <button class="tab-button" [class.active]="activeTab === 'counts'" (click)="activeTab = 'counts'">
             <i class="fas fa-clipboard-check"></i>
             Conteos
@@ -47,6 +51,105 @@
             <i class="fas fa-database"></i>
             Catálogos
         </button>
+        <button class="tab-button" [class.active]="activeTab === 'products'" (click)="activeTab = 'products'">
+            <i class="fas fa-database"></i>
+            Productos
+        </button>
+    </div>
+
+
+    <div class="tab-content" *ngIf="activeTab === 'stock'">
+        <div class="operations-header">
+            <h2 class="operations-title">
+                <i class="fas fa-chart-bar"></i>
+                Sotck Actual
+            </h2>
+            <p class="operations-subtitle">Visualizar Stock de productos</p>
+        </div>
+
+        <!-- Current Stock Table  -->
+        <div class="stock-section">
+            <div class="section-header">
+                <div class="header-left">
+                    <h3>
+                        <i class="fas fa-boxes"></i>
+                        Stock Actual
+                    </h3>
+                    <span class="stock-count">{{ filteredStock.length }} productos en stock</span>
+                </div>
+                <div class="filters-bar">
+
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="Buscar producto, SKU o categoría..."
+                            [(ngModel)]="stockFilterText">
+                    </div>
+
+                    <div class="date-filters">
+                        <label>Desde</label>
+                        <input type="date" [(ngModel)]="stockFilterDateFrom">
+                        <label>Hasta</label>
+                        <input type="date" [(ngModel)]="stockFilterDateTo">
+                    </div>
+
+                </div>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>Nombre</th>
+                            <th>Categoría</th>
+                            <th>Lote</th>
+                            <th>Vencimiento</th>
+                            <th>Cantidad</th>
+                            <th>Costo Prom.</th>
+                            <th>Costo Total</th>
+                            <th>Actualizado</th>
+                            <th>Seriales</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let item of filteredStock">
+                            <td><code>{{ getProductBySku(item.product_id)?.sku }}</code></td>
+                            <td>
+                                <strong>{{ getProductBySku(item.product_id)?.name }}</strong>
+                                <div class="stock-alerts">
+                                    <span class="alert-badge low-stock" *ngIf="isLowStock(item)">
+                                        <i class="fas fa-exclamation-triangle"></i> Bajo stock
+                                    </span>
+                                    <span class="alert-badge expiring-soon" *ngIf="isExpiringSoon(item)">
+                                        <i class="fas fa-clock"></i> Vence pronto
+                                    </span>
+                                </div>
+                            </td>
+                            <td>{{ getCategoryName(getProductBySku(item.product_id)?.category_id) }}</td>
+                            <td>{{ item.lot_id ? getLotCode(item.product_id, item.lot_id) : '-' }}</td>
+                            <td>
+                                {{ item.lot_id ? (getLotExpiration(item.product_id, item.lot_id) |
+                                date:'dd/MM/yyyy':'UTC') : '-' }}
+                            </td>
+
+                            <td><strong>{{ item.qty_on_hand }}</strong></td>
+                            <td>S/ {{ item.avg_unit_cost?.toFixed(2) }}</td>
+                            <td>S/ {{ item.total_cost?.toFixed(2) }}</td>
+                            <td>{{ formatLocalDate(item.updated_at) }}</td>
+                            <td>
+                                <button class="btn-icon btn-edit"
+                                    *ngIf="getProductBySku(item.product_id)?.is_serialized; else noSerials"
+                                    (click)="openStockSerials(item)" title="Ver seriales en stock">
+                                    <i class="fas fa-barcode"></i>
+                                </button>
+                                <ng-template #noSerials>-</ng-template>
+                            </td>
+
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
 
     <!-- OPERATIONS TAB  -->
@@ -108,14 +211,17 @@
 
                         <div class="serial-builder">
                             <div class="serial-input-row">
-                                <input type="text" [(ngModel)]="entrySerialInput" class="form-control"
-                                    placeholder="Ingrese serial...">
-                                <button type="button" class="btn-secondary btn-sm" (click)="addEntrySerial()">Agregar
-                                    serial</button>
+                                <input #entrySerialField id="entry-serial" class="form-control"
+                                    [(ngModel)]="entrySerialInput" (keydown.enter)="onEntrySerialKeydown()"
+                                    placeholder="Escanea o escribe el serial" autocomplete="off" inputmode="text" />
+                                <button type="button" class="btn-secondary btn-sm" (click)="addEntrySerial()">
+                                    <i class="fas fa-plus"></i> Agregar serial
+                                </button>
                                 <span class="serial-counter" [class.ok]="remainingEntrySerials()===0">
                                     {{ entrySerialCodes.length }}/{{ entryForm.qty || 0 }}
                                 </span>
                             </div>
+
 
                             <div class="serial-list scrollable-y" *ngIf="entrySerialCodes.length">
                                 <table class="data-table sticky-header">
@@ -312,15 +418,19 @@
                     <div class="form-group" *ngIf="selectedProductAdjustment?.is_serialized && adjustmentForm.qty > 0">
                         <label>Seriales * ({{ adjustmentForm.qty }})</label>
                         <div class="serial-builder">
-                            <div class="serial-input-row">
-                                <input type="text" [(ngModel)]="adjSerialInput" class="form-control"
-                                    placeholder="Ingrese serial...">
-                                <button type="button" class="btn-secondary btn-sm" (click)="addAdjSerial()">Agregar
-                                    serial</button>
-                                <span class="serial-counter" [class.ok]="remainingAdjSerialsAbs()===0">
-                                    {{ adjSerialCodes.length }}/{{ adjustmentForm.qty || 0 }}
+                            <div class="serial-input-row"
+                                *ngIf="adjustmentForm.qty > 0 && selectedProductAdjustment?.is_serialized">
+                                <input #adjSerialField id="adj-serial" class="form-control" [(ngModel)]="adjSerialInput"
+                                    (keydown.enter)="onAdjSerialKeydown()" placeholder="Escanea o escribe el serial"
+                                    autocomplete="off" />
+                                <button type="button" class="btn-secondary btn-sm" (click)="addAdjSerial()">
+                                    <i class="fas fa-plus"></i> Agregar serial
+                                </button>
+                                <span class="serial-counter">
+                                    {{ adjSerialCodes.length }}/{{ Math.max(0, adjustmentForm.qty || 0) }}
                                 </span>
                             </div>
+
                             <div class="serial-list" *ngIf="adjSerialCodes.length">
                                 <table class="data-table">
                                     <thead>
@@ -391,7 +501,7 @@
         </div>
 
         <!-- Current Stock Table  -->
-        <div class="stock-section">
+        <!-- <div class="stock-section">
             <div class="section-header">
                 <div class="header-left">
                     <h3>
@@ -459,7 +569,7 @@
                     </tbody>
                 </table>
             </div>
-        </div>
+        </div> -->
     </div>
 
     <!-- COUNTS TAB  -->
@@ -545,7 +655,7 @@
                         <p class="count-description">{{ c.description }}</p>
                         <div class="count-meta">
                             <span><i class="fas fa-user"></i> {{ c.created_by }}</span>
-                            <span><i class="fas fa-calendar"></i> {{ c.created_at | date:'dd/MM/yyyy' }}</span>
+                            <span><i class="fas fa-calendar"></i> {{ formatLocalDate(c.created_at) }}</span>
                         </div>
                     </div>
                     <div class="empty-state" *ngIf="counts.length === 0">
@@ -585,7 +695,7 @@
                         </div>
                         <div class="info-item">
                             <label><i class="fas fa-calendar"></i> Fecha creación</label>
-                            <span>{{ selectedCount.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                            <span>{{ formatLocalDate(selectedCount?.created_at) }}</span>
                         </div>
                     </div>
 
@@ -685,7 +795,8 @@
                             </h3>
                         </div>
                         <div class="entry-form-card">
-                            <div class="form-row">
+                            <!-- Fila 1: producto / lote (si aplica) / cantidad -->
+                            <div class="form-row three">
                                 <div class="form-group">
                                     <label>Producto *</label>
                                     <select [(ngModel)]="countEntryForm.product_id" class="form-control"
@@ -696,6 +807,7 @@
                                         </option>
                                     </select>
                                 </div>
+
                                 <div class="form-group" *ngIf="selectedCountProduct?.manages_expiration">
                                     <label>Lote</label>
                                     <select [(ngModel)]="countEntryForm.lot_id" class="form-control">
@@ -706,58 +818,70 @@
                                         </option>
                                     </select>
                                 </div>
+
                                 <div class="form-group">
                                     <label>Cantidad Contada *</label>
                                     <input type="number" [(ngModel)]="countEntryForm.qty_counted" class="form-control"
                                         min="0">
                                 </div>
-                                <!-- Builder de seriales (solo si el producto es serializable) -->
-                                <div class="form-group" *ngIf="selectedCountProduct?.is_serialized">
-                                    <label>Seriales * ({{ countEntryForm.qty_counted || 0 }})</label>
-                                    <div class="serial-builder">
-                                        <div class="serial-input-row">
-                                            <input type="text" [(ngModel)]="countEntrySerialInput" class="form-control"
-                                                placeholder="Ingrese serial...">
-                                            <button type="button" class="btn-secondary btn-sm"
-                                                (click)="addCountEntrySerial()">Agregar serial</button>
-                                            <span class="serial-counter" [class.ok]="remainingCountEntrySerials()===0">
-                                                {{ countEntrySerialCodes.length }}/{{ countEntryForm.qty_counted || 0 }}
-                                            </span>
-                                        </div>
-                                        <div class="serial-list scrollable-y" *ngIf="countEntrySerialCodes.length">
-                                            <table class="data-table sticky-header">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Serial</th>
-                                                        <th width="80">Acciones</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <tr *ngFor="let s of countEntrySerialCodes">
-                                                        <td><code>{{ s }}</code></td>
-                                                        <td>
-                                                            <button class="btn-icon btn-delete"
-                                                                (click)="removeCountEntrySerial(s)">
-                                                                <i class="fas fa-trash"></i>
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        <small class="hint" *ngIf="remainingCountEntrySerials() > 0">
-                                            Faltan {{ remainingCountEntrySerials() }} serial(es).
-                                        </small>
+                            </div>
+
+                            <!-- Fila 2: Seriales a ancho completo -->
+                            <div class="form-group" *ngIf="selectedCountProduct?.is_serialized">
+                                <label>Seriales * ({{ countEntryForm.qty_counted || 0 }})</label>
+
+                                <div class="serial-builder wide">
+                                    <div class="serial-input-row">
+                                        <input #countSerialField id="count-serial" class="form-control"
+                                            [(ngModel)]="countEntrySerialInput"
+                                            (keydown.enter)="onCountEntrySerialKeydown()"
+                                            placeholder="Escanea o escribe el serial" autocomplete="off" />
+                                        <button type="button" class="btn-secondary btn-sm"
+                                            (click)="addCountEntrySerial()">
+                                            <i class="fas fa-plus"></i> Agregar serial
+                                        </button>
+                                        <span class="serial-counter">
+                                            {{ countEntrySerialCodes.length }}/{{ countEntryForm.qty_counted || 0 }}
+                                        </span>
                                     </div>
-                                </div>
-                                <div class="form-group">
-                                    <button class="btn-primary" (click)="addCountEntry()">
-                                        <i class="fas fa-plus"></i>
-                                        Agregar
-                                    </button>
+
+                                    <div class="serial-list scrollable-y" *ngIf="countEntrySerialCodes.length">
+                                        <table class="data-table sticky-header">
+                                            <thead>
+                                                <tr>
+                                                    <th>Serial</th>
+                                                    <th width="80">Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr *ngFor="let s of countEntrySerialCodes">
+                                                    <td><code>{{ s }}</code></td>
+                                                    <td>
+                                                        <button class="btn-icon btn-delete"
+                                                            (click)="removeCountEntrySerial(s)">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <small class="hint" *ngIf="remainingCountEntrySerials() > 0">
+                                        Faltan {{ remainingCountEntrySerials() }} serial(es).
+                                    </small>
                                 </div>
                             </div>
+
+                            <!-- Fila 3: botón Agregar -->
+                            <div class="form-actions">
+                                <button class="btn-primary" (click)="addCountEntry()">
+                                    <i class="fas fa-plus"></i>
+                                    Agregar
+                                </button>
+                            </div>
                         </div>
+
 
                         <div class="table-container">
                             <table class="data-table">
@@ -796,92 +920,109 @@
                                 <i class="fas fa-balance-scale"></i>
                                 Revisión de Diferencias
                             </h3>
-                        </div>
 
-                        <div class="differences-summary">
-                            <div class="summary-card surplus">
-                                <div class="card-icon">
-                                    <i class="fas fa-arrow-up"></i>
-                                </div>
-                                <div class="card-content">
-                                    <label>Sobrantes</label>
-                                    <span class="value">S/ {{ differenceSummary.surplus?.toFixed(2) }}</span>
-                                </div>
-                            </div>
-                            <div class="summary-card shortage">
-                                <div class="card-icon">
-                                    <i class="fas fa-arrow-down"></i>
-                                </div>
-                                <div class="card-content">
-                                    <label>Faltantes</label>
-                                    <span class="value">S/ {{ differenceSummary.shortage?.toFixed(2) }}</span>
-                                </div>
-                            </div>
-                            <div class="summary-card net" [class.positive]="differenceSummary.net >= 0"
-                                [class.negative]="differenceSummary.net < 0">
-                                <div class="card-icon">
-                                    <i class="fas fa-balance-scale"></i>
-                                </div>
-                                <div class="card-content">
-                                    <label>Diferencia Neta</label>
-                                    <span class="value">S/ {{ differenceSummary.net?.toFixed(2) }}</span>
-                                </div>
+                            <!-- NUEVO: botones de exportación -->
+                            <div class="header-actions" style="display: flex; gap: .5rem; flex-wrap: wrap;">
+                                <button class="btn-secondary btn-sm" (click)="exportReviewToExcel()">
+                                    <i class="fas fa-file-excel"></i>
+                                    Excel Contabilidad
+                                </button>
+                                <button class="btn-secondary btn-sm" (click)="exportReviewToPdf()">
+                                    <i class="fas fa-file-pdf"></i>
+                                    PDF Revisión
+                                </button>
                             </div>
                         </div>
 
-                        <div class="approval-warning" *ngIf="requiresDoubleApproval()">
-                            <i class="fas fa-exclamation-circle"></i>
-                            <span>Las diferencias superan el 3% de valorización. Se requiere doble aprobación.</span>
-                        </div>
+                        <!-- 🔻 ESTA CAJA completa es la que mandamos a PDF -->
+                        <div #reviewSection>
+                            <div class="differences-summary">
+                                <div class="summary-card surplus">
+                                    <div class="card-icon">
+                                        <i class="fas fa-arrow-up"></i>
+                                    </div>
+                                    <div class="card-content">
+                                        <label>Sobrantes</label>
+                                        <span class="value">S/ {{ differenceSummary.surplus?.toFixed(2) }}</span>
+                                    </div>
+                                </div>
+                                <div class="summary-card shortage">
+                                    <div class="card-icon">
+                                        <i class="fas fa-arrow-down"></i>
+                                    </div>
+                                    <div class="card-content">
+                                        <label>Faltantes</label>
+                                        <span class="value">S/ {{ differenceSummary.shortage?.toFixed(2) }}</span>
+                                    </div>
+                                </div>
+                                <div class="summary-card net" [class.positive]="differenceSummary.net >= 0"
+                                    [class.negative]="differenceSummary.net < 0">
+                                    <div class="card-icon">
+                                        <i class="fas fa-balance-scale"></i>
+                                    </div>
+                                    <div class="card-content">
+                                        <label>Diferencia Neta</label>
+                                        <span class="value">S/ {{ differenceSummary.net?.toFixed(2) }}</span>
+                                    </div>
+                                </div>
+                            </div>
 
-                        <div class="table-container">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>SKU</th>
-                                        <th>Nombre</th>
-                                        <th>Lote</th>
-                                        <th>Teórico</th>
-                                        <th>Contado</th>
-                                        <th>Diferencia</th>
-                                        <th>Costo Prom.</th>
-                                        <th>Valor Dif.</th>
-                                        <th>Seriales</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr *ngFor="let diff of differences">
-                                        <td><code>{{ getProductBySku(diff.product_id)?.sku }}</code></td>
-                                        <td>{{ getProductBySku(diff.product_id)?.name }}</td>
-                                        <td>{{ diff.lot_id ? getLotCode(diff.lot_id) : '-' }}</td>
-                                        <td>{{ diff.qty_system }}</td>
-                                        <td>{{ diff.qty_counted }}</td>
-                                        <td>
-                                            <span class="diff-badge" [class.positive]="diff.difference > 0"
-                                                [class.negative]="diff.difference < 0">
-                                                {{ diff.difference > 0 ? '+' : '' }}{{ diff.difference }}
-                                            </span>
-                                        </td>
-                                        <td>S/ {{ diff.avg_cost?.toFixed(2) }}</td>
-                                        <td>
-                                            <span class="diff-badge" [class.positive]="diff.value_difference > 0"
-                                                [class.negative]="diff.value_difference < 0">
-                                                S/ {{ diff.value_difference > 0 ? '+' : '' }}{{
-                                                diff.value_difference?.toFixed(2) }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <button class="btn-icon btn-edit"
-                                                (click)="openSerialDiffsFor(diff.product_id, diff.lot_id ?? null)"
-                                                title="Ver seriales">
-                                                <i class="fas fa-barcode"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                            <div class="approval-warning" *ngIf="requiresDoubleApproval()">
+                                <i class="fas fa-exclamation-circle"></i>
+                                <span>Las diferencias superan el 3% de valorización. Se requiere doble
+                                    aprobación.</span>
+                            </div>
+
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>SKU</th>
+                                            <th>Nombre</th>
+                                            <th>Lote</th>
+                                            <th>Teórico</th>
+                                            <th>Contado</th>
+                                            <th>Diferencia</th>
+                                            <th>Costo Prom.</th>
+                                            <th>Valor Dif.</th>
+                                            <th>Seriales</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr *ngFor="let diff of differences">
+                                            <td><code>{{ getProductBySku(diff.product_id)?.sku }}</code></td>
+                                            <td>{{ getProductBySku(diff.product_id)?.name }}</td>
+                                            <td>{{ diff.lot_id ? getLotCode(diff.lot_id) : '-' }}</td>
+                                            <td>{{ diff.qty_system }}</td>
+                                            <td>{{ diff.qty_counted }}</td>
+                                            <td>
+                                                <span class="diff-badge" [class.positive]="diff.difference > 0"
+                                                    [class.negative]="diff.difference < 0">
+                                                    {{ diff.difference > 0 ? '+' : '' }}{{ diff.difference }}
+                                                </span>
+                                            </td>
+                                            <td>S/ {{ diff.avg_cost?.toFixed(2) }}</td>
+                                            <td>
+                                                <span class="diff-badge" [class.positive]="diff.value_difference > 0"
+                                                    [class.negative]="diff.value_difference < 0">
+                                                    S/ {{ diff.value_difference > 0 ? '+' : '' }}{{
+                                                    diff.value_difference?.toFixed(2) }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <button class="btn-icon btn-edit"
+                                                    (click)="openSerialDiffsFor(diff.product_id, diff.lot_id ?? null)"
+                                                    title="Ver seriales">
+                                                    <i class="fas fa-barcode"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div> <!-- /#reviewSection -->
                     </div>
+
 
                 </div>
             </div>
@@ -1030,14 +1171,14 @@
         </div>
     </div>
 
-    <!-- CATALOGS TAB  -->
-    <div class="tab-content" *ngIf="activeTab === 'catalogs'">
+    <!-- PRODUCTS TAB  -->
+    <div class="tab-content" *ngIf="activeTab === 'products'">
         <div class="catalogs-header">
             <h2 class="section-title">
                 <i class="fas fa-database"></i>
                 Catálogos Maestros
             </h2>
-            <p class="section-subtitle">Gestiona productos, categorías y unidades de medida</p>
+            <p class="section-subtitle">Gestiona Productos</p>
         </div>
 
         <div class="catalogs-grid">
@@ -1101,6 +1242,81 @@
                     </table>
                 </div>
             </div>
+        </div>
+
+    </div>
+
+    <!-- CATALOGS TAB  -->
+    <div class="tab-content" *ngIf="activeTab === 'catalogs'">
+        <div class="catalogs-header">
+            <h2 class="section-title">
+                <i class="fas fa-database"></i>
+                Catálogos Maestros
+            </h2>
+            <p class="section-subtitle">Gestiona categorías y unidades de medida</p>
+        </div>
+
+        <div class="catalogs-grid">
+            <!-- Products -->
+            <!-- <div class="catalog-section">
+                <div class="section-header">
+                    <div class="header-left">
+                        <h3>
+                            <i class="fas fa-box"></i>
+                            Productos
+                        </h3>
+                        <span class="item-count">{{ products.length }} productos</span>
+                    </div>
+                    <button class="btn-primary btn-sm" (click)="openProductModal()">
+                        <i class="fas fa-plus"></i>
+                        Nuevo Producto
+                    </button>
+                </div>
+                <div class="search-box-catalog">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Buscar por SKU o nombre..." [(ngModel)]="searchProduct">
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Nombre</th>
+                                <th>Categoría</th>
+                                <th>Serial</th>
+                                <th>Venc.</th>
+                                <th width="120">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let product of products">
+                                <td><code>{{ product.sku }}</code></td>
+                                <td><strong>{{ product.name }}</strong></td>
+                                <td>{{ getCategoryName(product.category_id) }}</td>
+                                <td>
+                                    <span class="badge-yes" *ngIf="product.is_serialized">Sí</span>
+                                    <span class="badge-no" *ngIf="!product.is_serialized">No</span>
+                                </td>
+                                <td>
+                                    <span class="badge-yes" *ngIf="product.manages_expiration">Sí</span>
+                                    <span class="badge-no" *ngIf="!product.manages_expiration">No</span>
+                                </td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button class="btn-icon btn-edit" (click)="editProduct(product)" title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn-icon btn-delete" (click)="deleteProduct(product.id)"
+                                            title="Eliminar">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div> -->
 
             <!-- Categories  -->
             <div class="catalog-section">
@@ -1203,7 +1419,11 @@
 
         </div>
     </div>
+
+
 </div>
+
+<!-- SECCION PARA LOS MODALES   -->
 
 <!-- Product Modal -->
 <div class="modal-overlay" *ngIf="showProductModal" (click)="closeProductModal()">
@@ -1520,6 +1740,66 @@
     </div>
 </div>
 
+
+<!-- Modal: Seriales Sobrantes -->
+<div class="modal-overlay" *ngIf="showUnresolvedModal && requireLotsForUnresolved"
+    (click)="showUnresolvedModal = false">
+    <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h3>
+                <i class="fas fa-exclamation-triangle"></i>
+                Seriales sobrantes sin lote
+            </h3>
+            <button class="close-button" (click)="showUnresolvedModal = false">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="modal-body">
+            <p class="hint">
+                Se detectaron seriales que no existen en el sistema. Asigne un lote para poder publicar el conteo.
+            </p>
+
+            <div class="table-container">
+                <table class="data-table sticky-header">
+                    <thead>
+                        <tr>
+                            <th>Serial</th>
+                            <th>Producto</th>
+                            <th>Lote asignado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let s of unresolvedSerials">
+                            <td><code>{{ s.serial_code }}</code></td>
+                            <td>{{ getProductBySku(s.product_id)?.name || '-' }}</td>
+                            <td>
+                                <select [(ngModel)]="s.lot_id" class="form-control">
+                                    <option [ngValue]="null">-- Seleccionar lote --</option>
+                                    <option *ngFor="let l of getLotsForProduct(s.product_id)" [ngValue]="l.id">
+                                        {{ l.lot_code }}
+                                    </option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr *ngIf="unresolvedSerials.length === 0">
+                            <td colspan="3" class="empty-message">
+                                <i class="fas fa-inbox"></i> No hay seriales sobrantes pendientes
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-secondary" (click)="showUnresolvedModal = false">Cancelar</button>
+            <button class="btn-primary" (click)="saveUnresolvedSerials()">
+                <i class="fas fa-save"></i> Guardar asignaciones
+            </button>
+        </div>
+    </div>
+</div>
 
 
 <!-- Toast Notifications  -->
