@@ -1,0 +1,266 @@
+<div class="technician-panel">
+  <div class="panel-header">
+    <div class="title-section">
+      <h1 class="page-title">Panel del Técnico</h1>
+      <p class="page-subtitle">Gestiona los equipos asignados, diagnósticos y SLA</p>
+    </div>
+  </div>
+
+  <div class="panel-container">
+    <div class="tabs-navigation">
+      <button class="tab-btn" [class.active]="activeTab === 'pending'" (click)="activeTab = 'pending'">
+        <i class="fas fa-clock"></i>
+        Pendientes ({{ pendingItems.length }})
+      </button>
+      <button class="tab-btn" [class.active]="activeTab === 'diagnosis'" (click)="activeTab = 'diagnosis'">
+        <i class="fas fa-stethoscope"></i>
+        En diagnóstico ({{ diagnosisItems.length }})
+      </button>
+      <button class="tab-btn" [class.active]="activeTab === 'repair'" (click)="activeTab = 'repair'">
+        <i class="fas fa-wrench"></i>
+        En reparación ({{ repairItems.length }})
+      </button>
+    </div>
+
+    <div class="items-grid">
+      @if (activeTab === 'pending') {
+        @if (pendingItems.length === 0) {
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>No hay items pendientes</p>
+          </div>
+        } @else {
+          @for (item of pendingItems; track item.id) {
+            <div class="item-card" (click)="selectItem(item)">
+              <div class="card-header">
+                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
+              </div>
+              <div class="card-body">
+                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
+                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
+                <div class="sla-info">
+                  <span [class]="'badge ' + getSLABadgeClass(item)">
+                    {{ getSLAText(item) }}
+                  </span>
+                </div>
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-sm btn-primary" (click)="selectItem(item); startDiagnosis(item); $event.stopPropagation()">
+                  <i class="fas fa-play"></i> Iniciar diagnóstico
+                </button>
+              </div>
+            </div>
+          }
+        }
+      }
+
+      @if (activeTab === 'diagnosis') {
+        @if (diagnosisItems.length === 0) {
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>No hay items en diagnóstico</p>
+          </div>
+        } @else {
+          @for (item of diagnosisItems; track item.id) {
+            <div class="item-card active-item" (click)="selectItem(item)">
+              <div class="active-indicator">EN DIAGNÓSTICO</div>
+              <div class="card-header">
+                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <span class="badge badge-warning">{{ getItemStatusLabel(item.status) }}</span>
+              </div>
+              <div class="card-body">
+                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
+                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
+                <div class="sla-info">
+                  <span [class]="'badge ' + getSLABadgeClass(item)">
+                    {{ getSLAText(item) }}
+                  </span>
+                </div>
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-sm btn-primary" (click)="selectItem(item); openDiagnosisModal(); $event.stopPropagation()">
+                  <i class="fas fa-plus"></i> Registrar diagnóstico
+                </button>
+              </div>
+            </div>
+          }
+        }
+      }
+
+      @if (activeTab === 'repair') {
+        @if (repairItems.length === 0) {
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>No hay items en reparación</p>
+          </div>
+        } @else {
+          @for (item of repairItems; track item.id) {
+            <div class="item-card" (click)="selectItem(item)">
+              <div class="card-header">
+                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
+              </div>
+              <div class="card-body">
+                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
+                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
+                <div class="sla-info">
+                  <span [class]="'badge ' + getSLABadgeClass(item)">
+                    {{ getSLAText(item) }}
+                  </span>
+                </div>
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-sm btn-success" (click)="selectItem(item); markReadyForDelivery(item); $event.stopPropagation()">
+                  <i class="fas fa-check"></i> Marcar listo
+                </button>
+              </div>
+            </div>
+          }
+        }
+      }
+    </div>
+
+    @if (selectedItem) {
+      <div class="detail-view">
+        <div class="detail-header">
+          <h2>{{ selectedItem.ticket?.code || 'Ticket' }} - {{ selectedItem.ticket?.contactName || 'Cliente' }}</h2>
+          <button class="btn-close" (click)="clearSelectedItem()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="detail-content">
+          <section class="detail-section">
+            <h3><i class="fas fa-info-circle"></i> Información del equipo</h3>
+            <p><strong>Tipo:</strong> {{ selectedItem.equipmentType | titlecase }}</p>
+            <p><strong>Técnico asignado:</strong> {{ getTechnicianName(selectedItem) }}</p>
+            <p><strong>Recibido:</strong> {{ selectedItem.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</p>
+          </section>
+
+          <section class="detail-section">
+            <h3><i class="fas fa-signal"></i> Estado actual</h3>
+            <div [class]="'state-badge state-' + selectedItem.status">
+              {{ getItemStatusLabel(selectedItem.status) }}
+            </div>
+            <p class="sla-deadline">
+              <strong>Deadline SLA:</strong> {{ selectedItem.slaDeadline | date: 'dd/MM/yyyy' }}
+            </p>
+            @if (selectedItem.slaBreached) {
+              <p class="sla-breach-warning">
+                <i class="fas fa-exclamation-triangle"></i> SLA vencido
+              </p>
+            }
+          </section>
+
+          <section class="detail-section">
+            <h3><i class="fas fa-user"></i> Cliente</h3>
+            <p><strong>Nombre:</strong> {{ selectedItem.ticket?.contactName || 'Sin registro' }}</p>
+            <p><strong>Contacto:</strong> {{ selectedItem.ticket?.contactPhone || 'Sin registro' }}</p>
+            <p><strong>Correo:</strong> {{ selectedItem.ticket?.contactEmail || 'Sin registro' }}</p>
+          </section>
+
+          @if (selectedItem.status === 'IN_DIAGNOSIS' || selectedItem.status === 'DIAGNOSED') {
+            <section class="detail-section full-width">
+              <h3><i class="fas fa-history"></i> Historial de diagnósticos</h3>
+              @if (diagnosticHistory.length === 0) {
+                <div class="empty-text">Sin diagnósticos registrados</div>
+              } @else {
+                @for (dx of diagnosticHistory; track dx.id) {
+                  <div class="history-card">
+                    <div class="history-header">
+                      <span class="history-number">DX #{{ dx.sequenceNumber }}</span>
+                      <span [class]="'badge badge-' + (dx.status === 'CURRENT' ? 'primary' : 'secondary')">
+                        {{ dx.status }}
+                      </span>
+                    </div>
+                    <p class="history-summary"><strong>{{ dx.summary }}</strong></p>
+                    <p class="history-details">{{ dx.details }}</p>
+                    <small class="history-meta">{{ dx.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
+                  </div>
+                }
+              }
+
+              @if (selectedItem.status === 'IN_DIAGNOSIS') {
+                <button class="btn btn-primary" (click)="completeDiagnosis()">
+                  <i class="fas fa-check"></i> Completar diagnóstico
+                </button>
+              }
+              @if (selectedItem.status === 'DIAGNOSED') {
+                <button class="btn btn-success" (click)="startRepair(selectedItem)">
+                  <i class="fas fa-tools"></i> Iniciar reparación
+                </button>
+              }
+            </section>
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  @if (showDiagnosisModal) {
+    <div class="modal-overlay" (click)="closeDiagnosisModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Registrar diagnóstico</h2>
+          <button class="btn-close" (click)="closeDiagnosisModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <form [formGroup]="diagnosisForm" (ngSubmit)="submitDiagnosis()" class="modal-body">
+          <div class="form-group">
+            <label for="summary">Resumen del diagnóstico *</label>
+            <input
+              type="text"
+              id="summary"
+              class="form-control"
+              formControlName="summary"
+              placeholder="Ej: Falla en disco duro"
+              [class.is-invalid]="diagnosisForm.get('summary')?.invalid && diagnosisForm.get('summary')?.touched"
+            >
+            @if (diagnosisForm.get('summary')?.invalid && diagnosisForm.get('summary')?.touched) {
+              <div class="invalid-feedback">
+                El resumen es requerido (5-100 caracteres)
+              </div>
+            }
+          </div>
+
+          <div class="form-group">
+            <label for="details">Detalles técnicos *</label>
+            <textarea
+              id="details"
+              class="form-control"
+              formControlName="details"
+              rows="5"
+              placeholder="Describe los hallazgos detallados..."
+              [class.is-invalid]="diagnosisForm.get('details')?.invalid && diagnosisForm.get('details')?.touched"
+            ></textarea>
+            @if (diagnosisForm.get('details')?.invalid && diagnosisForm.get('details')?.touched) {
+              <div class="invalid-feedback">
+                Los detalles son requeridos (10-1000 caracteres)
+              </div>
+            }
+          </div>
+        </form>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" (click)="closeDiagnosisModal()">Cancelar</button>
+          <button class="btn btn-primary" (click)="submitDiagnosis()" [disabled]="diagnosisForm.invalid || isSavingDiagnosis">
+            <i class="fas fa-save"></i> Guardar diagnóstico
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <div class="alert-container" [class.show]="showAlert">
+    <div class="alert" [ngClass]="alertType">
+      <i [class]="alertIcon"></i>
+      <span>{{ alertMessage }}</span>
+      <button class="alert-close" type="button" (click)="showAlert = false">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+  </div>
+</div>

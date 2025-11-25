@@ -55,8 +55,4 @@ export class BusinessPartnersApiService {
             ids,
         });
     }
-
-    hardRemove(id: number): Observable<{ ok: boolean; message: string }> {
-        return this.baseService.delete<{ ok: boolean; message: string }>(`${this.resource}/${id}/hard-delete`);
-    }
 }

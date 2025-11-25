@@ -1,0 +1,712 @@
+<div class="reception-panel-container">
+  <div class="header-section">
+    <div class="title-section">
+      <h1 class="page-title">Panel de Recepción</h1>
+      <p class="page-subtitle">Coordina tickets, pagos y cotizaciones desde una sola pantalla</p>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon primary">
+        <i class="fas fa-ticket-alt"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">Tickets activos</span>
+        <h3 class="stat-value">{{ tickets.length }}</h3>
+        <p class="stat-meta">Registrados en el sistema</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon warning">
+        <i class="fas fa-tasks"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">En seguimiento</span>
+        <h3 class="stat-value">{{ runningTicketsCount }}</h3>
+        <p class="stat-meta">Abiertos o en progreso</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon danger">
+        <i class="fas fa-exclamation-circle"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">Pagos pendientes</span>
+        <h3 class="stat-value">{{ pendingPaymentsCount }}</h3>
+        <p class="stat-meta">Tickets sin pago total</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon info">
+        <i class="fas fa-bolt"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">Alta prioridad</span>
+        <h3 class="stat-value">{{ highPriorityTicketsCount }}</h3>
+        <p class="stat-meta">Requieren atención inmediata</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-card filters-card">
+    <div class="content-header">
+      <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input
+          type="text"
+          placeholder="Buscar por código, cliente o correo..."
+          [(ngModel)]="searchTerm"
+          (input)="onSearchChange()"
+        >
+      </div>
+      <div class="filters-wrapper">
+        <div class="filter-control">
+          <label for="filter-state">Estado</label>
+          <select
+            id="filter-state"
+            class="select-control"
+            [(ngModel)]="filterState"
+            (change)="onFilterChange()"
+          >
+            <option value="all">Todos</option>
+            <option value="OPEN">Abierto</option>
+            <option value="IN_PROGRESS">En progreso</option>
+            <option value="PARTIALLY_COMPLETED">Parcialmente completado</option>
+            <option value="COMPLETED">Completado</option>
+            <option value="CANCELLED">Cancelado</option>
+          </select>
+        </div>
+        <div class="filter-control">
+          <label for="filter-priority">Prioridad</label>
+          <select
+            id="filter-priority"
+            class="select-control"
+            [(ngModel)]="filterPriority"
+            (change)="onFilterChange()"
+          >
+            <option value="all">Todas</option>
+            <option value="HIGH">Alta</option>
+            <option value="MEDIUM">Media</option>
+            <option value="LOW">Baja</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary new-ticket-btn" (click)="openCreateTicketModal()">
+        <i class="fas fa-plus"></i>
+        Nuevo Ticket
+      </button>
+    </div>
+  </div>
+
+  <div class="panel-grid">
+    <div class="panel-card tickets-card">
+      <div class="panel-card-header">
+        <div>
+          <h2>Tickets recibidos</h2>
+          <p>Selecciona un ticket para revisar su detalle</p>
+        </div>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          (click)="clearSelectedTicket()"
+          [disabled]="!selectedTicket"
+        >
+          <i class="fas fa-times-circle"></i>
+          Limpiar selección
+        </button>
+      </div>
+
+      @if (filteredTickets.length === 0) {
+        <div class="empty-state">
+          <div class="empty-icon">
+            <i class="fas fa-inbox"></i>
+          </div>
+          <h3>Sin resultados</h3>
+          <p>No se encontraron tickets que coincidan con los filtros actuales.</p>
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="data-table tickets-table">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Cliente</th>
+                <th>Prioridad</th>
+                <th>Estado</th>
+                <th>Items</th>
+                <th>Pago</th>
+                <th class="actions-column">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (ticket of filteredTickets; track ticket.id) {
+                <tr (click)="selectTicket(ticket)" [class.selected]="selectedTicket?.id === ticket.id">
+                  <td class="code-cell">
+                    <strong>{{ ticket.code }}</strong>
+                    <small>{{ ticket.createdAt | date: 'dd/MM HH:mm' }}</small>
+                  </td>
+                  <td>
+                    <div class="client-name">{{ ticket.contactName || 'Sin contacto' }}</div>
+                    <div class="client-contact">{{ ticket.contactEmail || 'Sin correo' }}</div>
+                  </td>
+                  <td>
+                    <span [class]="'badge ' + getPriorityBadgeClass(ticket.priority)">
+                      {{ getPriorityLabel(ticket.priority) }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="status-chip" [ngClass]="ticket.status.toLowerCase()">
+                      {{ getTicketStatusLabel(ticket.status) }}
+                    </span>
+                  </td>
+                  <td>
+                    <strong>{{ ticket.completedItemsCount }}/{{ ticket.itemsCount }}</strong>
+                    <small>Completado</small>
+                  </td>
+                  <td>
+                    <span [class]="'badge ' + getPaymentStatusBadgeClass(ticket.paymentStatus)">
+                      {{ getPaymentStatusLabel(ticket.paymentStatus) }}
+                    </span>
+                    <div class="amount">
+                      ${{ ticket.totalPaidAmount | number: '1.0-0' }} / ${{ ticket.totalQuotedAmount | number: '1.0-0' }}
+                    </div>
+                  </td>
+                  <td class="actions-column">
+                    <div class="action-buttons">
+                      <button
+                        class="btn-icon btn-edit"
+                        type="button"
+                        (click)="selectTicket(ticket); $event.stopPropagation()"
+                        title="Ver detalle"
+                      >
+                        <i class="fas fa-eye"></i>
+                      </button>
+                      <button
+                        class="btn-icon btn-primary"
+                        type="button"
+                        (click)="openCreateQuoteModal(ticket); $event.stopPropagation()"
+                        title="Crear cotización"
+                      >
+                        <i class="fas fa-file-invoice-dollar"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+
+    <div class="panel-card detail-card">
+      @if (selectedTicket) {
+        <div class="detail-header">
+          <div>
+            <p class="detail-label">Ticket seleccionado</p>
+            <h2>{{ selectedTicket.code }} · {{ selectedTicket.contactName || 'Sin contacto' }}</h2>
+          </div>
+          <button class="btn-close" type="button" (click)="clearSelectedTicket()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="detail-body">
+          <section class="detail-section">
+            <h3><i class="fas fa-user"></i> Información del cliente</h3>
+            <div class="info-grid">
+              <div>
+                <span class="label">Nombre</span>
+                <p>{{ selectedTicket.contactName || 'Sin registro' }}</p>
+              </div>
+              <div>
+                <span class="label">Teléfono</span>
+                <p>{{ selectedTicket.contactPhone || 'Sin registro' }}</p>
+              </div>
+              <div>
+                <span class="label">Correo</span>
+                <p>{{ selectedTicket.contactEmail || 'Sin registro' }}</p>
+              </div>
+              <div>
+                <span class="label">Prioridad</span>
+                <p>
+                  <span [class]="'badge ' + getPriorityBadgeClass(selectedTicket.priority)">
+                    {{ getPriorityLabel(selectedTicket.priority) }}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section class="detail-section">
+            <h3><i class="fas fa-dollar-sign"></i> Información financiera</h3>
+            <div class="financial-grid">
+              <div class="financial-item">
+                <span class="financial-label">Cotizado</span>
+                <strong>${{ selectedTicket.totalQuotedAmount | number: '1.2-2' }}</strong>
+              </div>
+              <div class="financial-item">
+                <span class="financial-label">Pagado</span>
+                <strong class="paid">${{ selectedTicket.totalPaidAmount | number: '1.2-2' }}</strong>
+              </div>
+              <div class="financial-item">
+                <span class="financial-label">Pendiente</span>
+                <strong>${{ (selectedTicket.totalQuotedAmount - selectedTicket.totalPaidAmount) | number: '1.2-2' }}</strong>
+              </div>
+              <div class="financial-item">
+                <span class="financial-label">Estado de pago</span>
+                <span [class]="'badge ' + getPaymentStatusBadgeClass(selectedTicket.paymentStatus)">
+                  {{ getPaymentStatusLabel(selectedTicket.paymentStatus) }}
+                </span>
+              </div>
+            </div>
+            <button class="btn btn-primary" type="button" (click)="openCreateQuoteModal(selectedTicket)">
+              <i class="fas fa-file-invoice-dollar"></i>
+              Crear Cotización
+            </button>
+          </section>
+
+          <section class="detail-section">
+            <h3><i class="fas fa-info-circle"></i> Seguimiento</h3>
+            <div class="timeline">
+              <div class="timeline-item">
+                <span>Items completados</span>
+                <strong>{{ selectedTicket.completedItemsCount }} / {{ selectedTicket.itemsCount }}</strong>
+              </div>
+              <div class="timeline-item">
+                <span>Estado actual</span>
+                <strong>{{ getTicketStatusLabel(selectedTicket.status) }}</strong>
+              </div>
+              <div class="timeline-item">
+                <span>Creado</span>
+                <strong>{{ selectedTicket.createdAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
+              </div>
+              <div class="timeline-item">
+                <span>Entrega estimada</span>
+                <strong>{{ selectedTicket.estimatedDeliveryDate | date: 'dd/MM/yyyy' }}</strong>
+              </div>
+              <div class="timeline-item">
+                <span>Días restantes</span>
+                <strong>{{ getDaysUntilDeadline(selectedTicket.estimatedDeliveryDate) }} días</strong>
+              </div>
+            </div>
+          </section>
+        </div>
+      } @else {
+        <div class="empty-state">
+          <div class="empty-icon">
+            <i class="fas fa-clipboard-check"></i>
+          </div>
+          <h3>Selecciona un ticket</h3>
+          <p>Haz clic en un registro de la tabla para ver su información detallada.</p>
+        </div>
+      }
+    </div>
+  </div>
+
+  @if (showCreateTicketModal) {
+    <div class="modal-overlay" (click)="closeCreateTicketModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <p class="modal-eyebrow">Recepción</p>
+            <h2>Crear nuevo ticket</h2>
+          </div>
+          <button class="btn-close" type="button" (click)="closeCreateTicketModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <form [formGroup]="createTicketForm" (ngSubmit)="submitCreateTicket()" class="modal-body">
+          <div class="form-grid">
+            <input type="hidden" formControlName="businessPartnerId">
+            <div class="form-group">
+              <label for="documentNumber">Documento del cliente *</label>
+              <input
+                type="text"
+                id="documentNumber"
+                class="form-control"
+                formControlName="documentNumber"
+                maxlength="11"
+                (input)="onDocumentNumberInput()"
+                placeholder="Ingresa DNI (8) o RUC (11)"
+              >
+              @if (createTicketForm.get('documentNumber')?.invalid && createTicketForm.get('documentNumber')?.touched) {
+                <div class="invalid-feedback">
+                  Ingresa solo números (8 u 11 dígitos).
+                </div>
+              }
+              <div class="input-hint" *ngIf="isSearchingPartner">
+                <i class="fas fa-spinner fa-spin"></i> Buscando cliente...
+              </div>
+              <div class="input-hint success" *ngIf="documentSearchMessage">
+                {{ documentSearchMessage }}
+              </div>
+              <div class="input-hint error" *ngIf="documentSearchError">
+                {{ documentSearchError }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="documentTypeId">Tipo de documento *</label>
+              <select
+                id="documentTypeId"
+                class="form-control"
+                formControlName="documentTypeId"
+                [disabled]="!documentTypes.length"
+              >
+                <option [ngValue]="null">Selecciona un tipo</option>
+                @for (docType of documentTypes; track docType.id) {
+                  <option [ngValue]="docType.id">{{ docType.name }} ({{ docType.digits }} dígitos)</option>
+                }
+              </select>
+              @if (createTicketForm.get('documentTypeId')?.invalid && createTicketForm.get('documentTypeId')?.touched) {
+                <div class="invalid-feedback">
+                  Selecciona un tipo de documento válido
+                </div>
+              }
+            </div>
+
+            <div class="form-group">
+              <label for="contactName">Nombre de contacto *</label>
+              <input
+                type="text"
+                id="contactName"
+                class="form-control"
+                formControlName="contactName"
+                placeholder="Ej: Carlos Ramos"
+                [class.is-invalid]="createTicketForm.get('contactName')?.invalid && createTicketForm.get('contactName')?.touched"
+              >
+              @if (createTicketForm.get('contactName')?.invalid && createTicketForm.get('contactName')?.touched) {
+                <div class="invalid-feedback">
+                  Ingresa un nombre
+                </div>
+              }
+            </div>
+
+            <div class="form-group">
+              <label for="contactPhone">Teléfono</label>
+              <input
+                type="text"
+                id="contactPhone"
+                class="form-control"
+                formControlName="contactPhone"
+                placeholder="Ej: 999-123456"
+                [class.is-invalid]="createTicketForm.get('contactPhone')?.invalid && createTicketForm.get('contactPhone')?.touched"
+              >
+              @if (createTicketForm.get('contactPhone')?.invalid && createTicketForm.get('contactPhone')?.touched) {
+                <div class="invalid-feedback">
+                  Ingresa un teléfono válido
+                </div>
+              }
+            </div>
+
+            <div class="form-group">
+              <label for="contactEmail">Correo</label>
+              <input
+                type="email"
+                id="contactEmail"
+                class="form-control"
+                formControlName="contactEmail"
+                placeholder="contacto@empresa.com"
+                [class.is-invalid]="createTicketForm.get('contactEmail')?.invalid && createTicketForm.get('contactEmail')?.touched"
+              >
+              @if (createTicketForm.get('contactEmail')?.invalid && createTicketForm.get('contactEmail')?.touched) {
+                <div class="invalid-feedback">
+                  Ingresa un correo válido
+                </div>
+              }
+            </div>
+
+            <div class="form-group">
+              <label for="tradeName">Nombre comercial</label>
+              <input
+                type="text"
+                id="tradeName"
+                class="form-control"
+                formControlName="tradeName"
+                placeholder="Ej: Empresa XYZ"
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="address">Dirección</label>
+              <input type="text" id="address" class="form-control" formControlName="address" placeholder="Dirección fiscal">
+            </div>
+
+            <div class="form-group">
+              <label for="city">Ciudad</label>
+              <input type="text" id="city" class="form-control" formControlName="city" placeholder="Ciudad">
+            </div>
+
+            <div class="form-group">
+              <label for="country">País</label>
+              <input type="text" id="country" class="form-control" formControlName="country" placeholder="País">
+            </div>
+
+            <div class="form-group">
+              <label for="priority">Prioridad *</label>
+              <select id="priority" class="form-control" formControlName="priority">
+                <option value="LOW">Baja</option>
+                <option value="MEDIUM">Media</option>
+                <option value="HIGH">Alta</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="ticket-items-builder" formArrayName="ticketItems">
+            <div class="ticket-items-header">
+              <h4>Equipos del ticket</h4>
+              <button class="btn btn-sm btn-info" type="button" (click)="addTicketItem()">
+                <i class="fas fa-plus"></i>
+                Agregar equipo
+              </button>
+            </div>
+
+            @for (item of ticketItems.controls; let i = $index; track i) {
+              <div class="ticket-item-card" [formGroupName]="i">
+                <div class="ticket-item-card-header">
+                  <div class="item-title">
+                    <i class="fas fa-laptop"></i>
+                    Equipo #{{ i + 1 }}
+                  </div>
+                  @if (ticketItems.length > 1) {
+                    <button class="btn-icon btn-delete" type="button" (click)="removeTicketItem(i)">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  }
+                </div>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label>Tipo de equipo *</label>
+                    <select class="form-control" formControlName="equipmentType">
+                      @for (equipment of equipmentTypeOptions; track equipment) {
+                        <option [ngValue]="equipment">{{ equipment | titlecase }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Marca</label>
+                    <input type="text" class="form-control" formControlName="brand" placeholder="Ej: Lenovo">
+                  </div>
+                  <div class="form-group">
+                    <label>Modelo</label>
+                    <input type="text" class="form-control" formControlName="model" placeholder="Ej: ThinkPad X1">
+                  </div>
+                  <div class="form-group">
+                    <label>Serie</label>
+                    <input type="text" class="form-control" formControlName="serialNumber" placeholder="Ej: SN123456">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Descripción del problema *</label>
+                  <textarea
+                    class="form-control"
+                    formControlName="initialIssue"
+                    rows="3"
+                    placeholder="Describe brevemente la falla reportada"
+                    [class.is-invalid]="getTicketItemControl(i, 'initialIssue')?.invalid && getTicketItemControl(i, 'initialIssue')?.touched"
+                  ></textarea>
+                  @if (getTicketItemControl(i, 'initialIssue')?.invalid && getTicketItemControl(i, 'initialIssue')?.touched) {
+                    <div class="invalid-feedback">
+                      Describe el problema (mínimo 5 caracteres)
+                    </div>
+                  }
+                </div>
+                <div class="form-group">
+                  <label>Accesorios</label>
+                  <textarea
+                    class="form-control"
+                    formControlName="accessories"
+                    rows="2"
+                    placeholder="Listado de accesorios entregados (cargador, mouse, etc.)"
+                  ></textarea>
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="form-group">
+            <label for="notes">Notas</label>
+            <textarea id="notes" class="form-control" formControlName="notes" rows="2" placeholder="Notas adicionales"></textarea>
+          </div>
+        </form>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" (click)="closeCreateTicketModal()">Cancelar</button>
+          <button class="btn btn-primary" type="button" (click)="submitCreateTicket()" [disabled]="createTicketForm.invalid || isCreatingTicket">
+            <i class="fas fa-save"></i>
+            Crear Ticket
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showCreateQuoteModal && selectedTicket) {
+    <div class="modal-overlay" (click)="closeCreateQuoteModal()">
+      <div class="modal-content modal-lg" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <p class="modal-eyebrow">Cotización</p>
+            <h2>Nuevo documento · {{ selectedTicket.code }}</h2>
+          </div>
+          <button class="btn-close" type="button" (click)="closeCreateQuoteModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <form [formGroup]="createQuoteForm" class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="quote-item">Item a cotizar *</label>
+              <select
+                id="quote-item"
+                class="form-control"
+                [(ngModel)]="selectedTicketItemId"
+                [ngModelOptions]="{ standalone: true }"
+              >
+                <option [ngValue]="null">Selecciona un item</option>
+                @for (item of selectedTicket.items ?? []; track item.id) {
+                  <option [ngValue]="item.id">{{ getTicketItemLabel(item) }}</option>
+                }
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="currency">Moneda *</label>
+              <select id="currency" class="form-control" formControlName="currency">
+                <option value="PEN">PEN - Sol Peruano</option>
+                <option value="USD">USD - Dólar</option>
+                <option value="EUR">EUR - Euro</option>
+              </select>
+            </div>
+            <div class="form-group full-width">
+              <label for="notes">Notas generales</label>
+              <textarea id="notes" class="form-control" formControlName="notes" rows="2" placeholder="Observaciones o notas adicionales..."></textarea>
+            </div>
+          </div>
+
+          <div class="quote-items-section">
+            <div class="section-header">
+              <h4>Items de cotización</h4>
+              <div class="add-item-buttons">
+                <button type="button" class="btn btn-sm btn-info" (click)="addProductToQuote()">
+                  <i class="fas fa-box"></i>
+                  Producto
+                </button>
+                <button type="button" class="btn btn-sm btn-info" (click)="addServiceToQuote()">
+                  <i class="fas fa-tools"></i>
+                  Servicio
+                </button>
+              </div>
+            </div>
+
+            @if (quoteItems.length === 0) {
+              <div class="empty-state-small">
+                <p>No hay items agregados. Comienza por agregar productos o servicios.</p>
+              </div>
+            } @else {
+              <div class="quote-items-list">
+                @for (item of quoteItems; let i = $index; track item.id) {
+                  <div class="quote-item">
+                    @if (item.type === 'product') {
+                      <div class="item-type">
+                        <i class="fas fa-box"></i>
+                        Producto
+                      </div>
+                      <div class="item-row">
+                        <div class="item-input">
+                          <label>Producto</label>
+                          <select [(ngModel)]="item.productId" [ngModelOptions]="{ standalone: true }">
+                            <option [ngValue]="null">Selecciona</option>
+                            @for (product of products; track product.id) {
+                              <option [ngValue]="product.id">{{ product.sku }} · {{ product.name }}</option>
+                            }
+                          </select>
+                        </div>
+                        <div class="item-input">
+                          <label>Cantidad</label>
+                          <input type="number" min="1" [(ngModel)]="item.quantity" [ngModelOptions]="{ standalone: true }">
+                        </div>
+                        <div class="item-input">
+                          <label>Precio Unitario</label>
+                          <input type="number" min="0" step="0.01" [(ngModel)]="item.unitPrice" [ngModelOptions]="{ standalone: true }">
+                        </div>
+                      </div>
+                      <div class="item-row">
+                        <div class="item-input checkbox-input">
+                          <label>
+                            <input type="checkbox" [(ngModel)]="item.requiresPurchase" [ngModelOptions]="{ standalone: true }">
+                            Requiere compra
+                          </label>
+                        </div>
+                        <div class="item-input full-width">
+                          <label>Notas</label>
+                          <input type="text" placeholder="Observaciones" [(ngModel)]="item.notes" [ngModelOptions]="{ standalone: true }">
+                        </div>
+                      </div>
+                    }
+                    @if (item.type === 'service') {
+                      <div class="item-type">
+                        <i class="fas fa-tools"></i>
+                        Servicio
+                      </div>
+                      <div class="item-row">
+                        <div class="item-input">
+                          <label>Servicio</label>
+                          <select [(ngModel)]="item.serviceId" [ngModelOptions]="{ standalone: true }">
+                            <option [ngValue]="null">Selecciona</option>
+                            @for (service of services; track service.id) {
+                              <option [ngValue]="service.id">{{ service.code }} · {{ service.name }}</option>
+                            }
+                          </select>
+                        </div>
+                        <div class="item-input full-width">
+                          <label>Notas</label>
+                          <input type="text" placeholder="Observaciones" [(ngModel)]="item.notes" [ngModelOptions]="{ standalone: true }">
+                        </div>
+                      </div>
+                    }
+                    <div class="item-footer">
+                      <div>
+                        <strong>Subtotal:</strong>
+                        ${{ calculateItemSubtotal(item) | number: '1.2-2' }}
+                      </div>
+                      <button type="button" class="btn-icon btn-delete" (click)="removeQuoteItem(i)" title="Eliminar">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+
+            <div class="quote-total">
+              <strong>Total cotización:</strong>
+              <span class="total-amount">${{ calculateQuoteTotal() | number: '1.2-2' }}</span>
+            </div>
+          </div>
+        </form>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" (click)="closeCreateQuoteModal()">Cancelar</button>
+          <button class="btn btn-primary" type="button" (click)="submitCreateQuote()" [disabled]="quoteItems.length === 0 || isCreatingQuote">
+            <i class="fas fa-check"></i>
+            Crear Cotización
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <div class="alert-container" [class.show]="showAlert">
+    <div class="alert" [ngClass]="alertType">
+      <i [class]="alertIcon"></i>
+      <span>{{ alertMessage }}</span>
+      <button class="alert-close" type="button" (click)="showAlert = false">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+  </div>
+</div>

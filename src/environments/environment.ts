@@ -23,4 +23,14 @@ export const config = {
     units: '/inventory/catalogs/units',
     lots: '/lots',               // si tu backend lo expone
   },
+  serviceCatalog: {
+    categories: '/service-categories',
+    services: '/services',
+  },
+  tickets: {
+    tickets: '/ticket',
+    ticketItems: '/ticket/items',
+    quotes: '/quotes',
+    diagnostics: '/diagnostics',
+  },
 };

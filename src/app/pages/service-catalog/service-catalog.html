@@ -1,0 +1,477 @@
+<div class="service-catalog-container">
+    <div class="header-section">
+        <div class="title-section">
+            <h1 class="page-title">Catálogo de Servicios</h1>
+            <p class="page-subtitle">Administra los servicios y sus categorías</p>
+        </div>
+    </div>
+
+    <div class="tabs-navigation">
+        <button class="tab-button" [class.active]="activeTab === 'services'" (click)="activeTab = 'services'">
+            <span class="tab-icon"><i class="fas fa-concierge-bell"></i></span>
+            Servicios
+        </button>
+        <button class="tab-button" [class.active]="activeTab === 'categories'" (click)="activeTab = 'categories'">
+            <span class="tab-icon"><i class="fas fa-layer-group"></i></span>
+            Categorías de Servicios
+        </button>
+    </div>
+
+    @if (activeTab === 'services') {
+    <div class="tab-panel">
+        <div class="content-header">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Buscar por código o nombre..." [(ngModel)]="serviceSearchTerm"
+                    (input)="onServiceSearch()">
+            </div>
+            <div class="header-actions">
+                <select class="permission-filter" [(ngModel)]="serviceStatusFilter"
+                    (change)="onServiceStatusFilterChange()">
+                    <option value="active">Vigentes</option>
+                    <option value="deleted">Eliminados</option>
+                </select>
+                <select class="permission-filter" [(ngModel)]="serviceCategoryFilter"
+                    (change)="onServiceCategoryFilterChange()">
+                    <option value="all">Todas las categorías</option>
+                    @for (category of categoryOptions; track category.id) {
+                    <option [ngValue]="category.id">{{category.name}}</option>
+                    }
+                </select>
+                <button class="btn btn-primary" (click)="openCreateServiceModal()">
+                    <i class="fas fa-plus"></i>
+                    Nuevo Servicio
+                </button>
+            </div>
+        </div>
+
+        @if (selectedServiceIds.length > 0) {
+        <div class="bulk-actions">
+            <div class="selected-info">
+                {{selectedServiceIds.length}} servicio(s) seleccionados
+            </div>
+            <div class="bulk-buttons">
+                <button class="btn" [ngClass]="isServiceDeletedView ? 'btn-success' : 'btn-danger'"
+                    (click)="isServiceDeletedView ? confirmServiceBulkRestore() : confirmServiceBulkDelete()">
+                    <i class="fas" [ngClass]="isServiceDeletedView ? 'fa-undo' : 'fa-trash'"></i>
+                    {{isServiceDeletedView ? 'Restaurar seleccionados' : 'Eliminar seleccionados'}}
+                </button>
+            </div>
+        </div>
+        }
+
+        <div class="table-container">
+            <div class="table-wrapper">
+                <table class="services-table">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-column">
+                                <input type="checkbox" class="checkbox-input" [checked]="areAllServicesSelected()"
+                                    [indeterminate]="areServiceSelectionsIndeterminate()" (change)="toggleAllServices()">
+                            </th>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                            <th>Categoría</th>
+                            <th>Precio</th>
+                            <th>Duración</th>
+                            <th>Garantía</th>
+                            <th>Estado</th>
+                            <th>{{isServiceDeletedView ? 'Fecha Eliminación' : 'Fecha Creación'}}</th>
+                            <th class="actions-column">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (service of filteredServices; track service.id) {
+                        <tr [class.selected]="isServiceSelected(service.id)">
+                            <td class="checkbox-column">
+                                <input type="checkbox" class="checkbox-input" [checked]="isServiceSelected(service.id)"
+                                    (change)="toggleServiceSelection(service.id)">
+                            </td>
+                            <td class="code-cell">
+                                <code>{{service.code}}</code>
+                            </td>
+                            <td class="name-cell">
+                                <div class="service-name">{{service.name}}</div>
+                                @if (service.description) {
+                                <div class="service-description">{{service.description}}</div>
+                                }
+                            </td>
+                            <td>
+                                <div class="category-chip">
+                                    <i class="fas fa-tag"></i>
+                                    {{getCategoryName(service.categoryId)}}
+                                </div>
+                            </td>
+                            <td>{{formatCurrency(service.price)}}</td>
+                            <td>{{service.estimatedDurationMinutes}} min</td>
+                            @if (service.warrantyDays > 0) {
+                                <td>{{service.warrantyDays}} días</td>
+                            } @else {
+                                <td>Sin garantía</td>
+                            }
+                            <td>
+                                <span class="status-badge" [class.inactive]="!service.isActive">
+                                    {{service.isActive ? 'Activo' : 'Inactivo'}}
+                                </span>
+                            </td>
+                            <td>{{formatDate(isServiceDeletedView ? service.deletedAt : service.createdAt)}}</td>
+                            <td class="actions-column">
+                                <div class="action-buttons">
+                                    <button class="btn-icon btn-edit" (click)="openEditServiceModal(service)"
+                                        title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    @if (!isServiceDeletedView) {
+                                    <button class="btn-icon btn-delete" (click)="confirmServiceDelete(service)"
+                                        title="Eliminar">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    } @else {
+                                    <button class="btn-icon btn-restore" (click)="confirmServiceRestore(service)"
+                                        title="Restaurar">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (filteredServices.length === 0) {
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-concierge-bell"></i>
+                </div>
+                <h3>No hay servicios disponibles</h3>
+                <p>No se encontraron servicios que coincidan con tu búsqueda.</p>
+            </div>
+            }
+        </div>
+
+        @if (filteredServices.length > 0) {
+        <div class="pagination-container">
+            <div class="pagination-info">
+                Mostrando {{(servicePage - 1) * serviceItemsPerPage + 1}} -
+                {{Math.min(servicePage * serviceItemsPerPage, serviceTotalItems)}} de {{serviceTotalItems}} servicios
+            </div>
+            <div class="pagination-controls">
+                <button class="btn-pagination" [disabled]="servicePage === 1" (click)="previousServicePage()">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <span class="page-info">{{servicePage}} / {{serviceTotalPages}}</span>
+                <button class="btn-pagination" [disabled]="servicePage === serviceTotalPages"
+                    (click)="nextServicePage()">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+        }
+    </div>
+    } @else {
+    <div class="tab-panel">
+        <div class="content-header">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Buscar por código o nombre..." [(ngModel)]="categorySearchTerm"
+                    (input)="onCategorySearch()">
+            </div>
+            <div class="header-actions">
+                <select class="permission-filter" [(ngModel)]="categoryStatusFilter"
+                    (change)="onCategoryStatusFilterChange()">
+                    <option value="active">Vigentes</option>
+                    <option value="deleted">Eliminadas</option>
+                </select>
+                <button class="btn btn-primary" (click)="openCreateCategoryModal()">
+                    <i class="fas fa-plus"></i>
+                    Nueva Categoría
+                </button>
+            </div>
+        </div>
+        @if (selectedCategoryIds.length > 0) {
+        <div class="bulk-actions">
+            <div class="selected-info">
+                {{selectedCategoryIds.length}} categoría(s) seleccionadas
+            </div>
+            <div class="bulk-buttons">
+                <button class="btn" [ngClass]="isCategoryDeletedView ? 'btn-success' : 'btn-danger'"
+                    (click)="isCategoryDeletedView ? confirmCategoryBulkRestore() : confirmCategoryBulkDelete()">
+                    <i class="fas" [ngClass]="isCategoryDeletedView ? 'fa-undo' : 'fa-trash'"></i>
+                    {{isCategoryDeletedView ? 'Restaurar seleccionadas' : 'Eliminar seleccionadas'}}
+                </button>
+            </div>
+        </div>
+        }
+
+        <div class="table-container">
+            <div class="table-wrapper">
+                <table class="categories-table">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-column">
+                                <input type="checkbox" class="checkbox-input" [checked]="areAllCategoriesSelected()"
+                                    [indeterminate]="areCategorySelectionsIndeterminate()"
+                                    (change)="toggleAllCategories()">
+                            </th>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                            <th>Descripción</th>
+                            <th>Estado</th>
+                            <th>{{isCategoryDeletedView ? 'Fecha Eliminación' : 'Fecha Creación'}}</th>
+                            <th class="actions-column">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (category of filteredCategories; track category.id) {
+                        <tr [class.selected]="isCategorySelected(category.id)">
+                            <td class="checkbox-column">
+                                <input type="checkbox" class="checkbox-input"
+                                    [checked]="isCategorySelected(category.id)"
+                                    (change)="toggleCategorySelection(category.id)">
+                            </td>
+                            <td><code>{{category.code}}</code></td>
+                            <td class="name-cell">
+                                <div class="category-name">{{category.name}}</div>
+                            </td>
+                            <td class="description-cell">{{category.description || 'Sin descripción'}}</td>
+                            <td>
+                                <span class="status-badge" [class.inactive]="!category.isActive">
+                                    {{category.isActive ? 'Activo' : 'Inactivo'}}
+                                </span>
+                            </td>
+                            <td>{{formatDate(isCategoryDeletedView ? category.deletedAt : category.createdAt)}}</td>
+                            <td class="actions-column">
+                                <div class="action-buttons">
+                                    <button class="btn-icon btn-edit" (click)="openEditCategoryModal(category)"
+                                        title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    @if (!isCategoryDeletedView) {
+                                    <button class="btn-icon btn-delete" (click)="confirmCategoryDelete(category)"
+                                        title="Eliminar">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    } @else {
+                                    <button class="btn-icon btn-restore" (click)="confirmCategoryRestore(category)"
+                                        title="Restaurar">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (filteredCategories.length === 0) {
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-layer-group"></i>
+                </div>
+                <h3>No hay categorías disponibles</h3>
+                <p>No se encontraron categorías que coincidan con tu búsqueda.</p>
+            </div>
+            }
+        </div>
+
+        @if (filteredCategories.length > 0) {
+        <div class="pagination-container">
+            <div class="pagination-info">
+                Mostrando {{(categoryPage - 1) * categoryItemsPerPage + 1}} -
+                {{Math.min(categoryPage * categoryItemsPerPage, categoryTotalItems)}} de {{categoryTotalItems}}
+                categorías
+            </div>
+            <div class="pagination-controls">
+                <button class="btn-pagination" [disabled]="categoryPage === 1" (click)="previousCategoryPage()">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <span class="page-info">{{categoryPage}} / {{categoryTotalPages}}</span>
+                <button class="btn-pagination" [disabled]="categoryPage === categoryTotalPages"
+                    (click)="nextCategoryPage()">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+        }
+    </div>
+    }
+</div>
+
+@if (showServiceModal) {
+<div class="modal-overlay" (click)="closeServiceModal()">
+    <div class="modal-container large" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>{{isServiceEditMode ? 'Editar Servicio' : 'Nuevo Servicio'}}</h2>
+            <button class="btn-close" (click)="closeServiceModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form [formGroup]="serviceForm" (ngSubmit)="saveService()">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="service-name">Nombre *</label>
+                        <input id="service-name" type="text" class="form-input" formControlName="name"
+                            [class.error]="serviceForm.get('name')?.invalid && serviceForm.get('name')?.touched">
+                        @if (serviceForm.get('name')?.invalid && serviceForm.get('name')?.touched) {
+                        <div class="error-message">Ingresa un nombre válido.</div>
+                        }
+                    </div>
+                    <div class="form-group">
+                        <label for="service-category">Categoría *</label>
+                        <select id="service-category" class="form-input" formControlName="categoryId"
+                            [disabled]="!categoryOptions.length"
+                            [class.error]="serviceForm.get('categoryId')?.invalid && serviceForm.get('categoryId')?.touched">
+                            <option [ngValue]="null" disabled>Selecciona una categoría</option>
+                            @for (category of categoryOptions; track category.id) {
+                            <option [ngValue]="category.id">{{category.name}}</option>
+                            }
+                        </select>
+                        @if (serviceForm.get('categoryId')?.invalid && serviceForm.get('categoryId')?.touched) {
+                        <div class="error-message">Selecciona una categoría.</div>
+                        }
+                        @if (!categoryOptions.length) {
+                        <div class="form-hint">
+                            Crea una categoría activa antes de registrar servicios.
+                        </div>
+                        }
+                    </div>
+                    <div class="form-group">
+                        <label for="service-price">Precio *</label>
+                        <input id="service-price" type="number" class="form-input" formControlName="price" min="0"
+                            step="0.01"
+                            [class.error]="serviceForm.get('price')?.invalid && serviceForm.get('price')?.touched">
+                        @if (serviceForm.get('price')?.invalid && serviceForm.get('price')?.touched) {
+                        <div class="error-message">El precio debe ser igual o mayor a 0.</div>
+                        }
+                    </div>
+                    <div class="form-group">
+                        <label for="service-duration">Duración (min) *</label>
+                        <input id="service-duration" type="number" class="form-input"
+                            formControlName="estimatedDurationMinutes" min="0"
+                            [class.error]="serviceForm.get('estimatedDurationMinutes')?.invalid && serviceForm.get('estimatedDurationMinutes')?.touched">
+                        @if (serviceForm.get('estimatedDurationMinutes')?.invalid &&
+                        serviceForm.get('estimatedDurationMinutes')?.touched) {
+                        <div class="error-message">Ingresa una duración válida.</div>
+                        }
+                    </div>
+                    <div class="form-group">
+                        <label for="service-warranty">Garantía (días)</label>
+                        <input id="service-warranty" type="number" class="form-input" formControlName="warrantyDays"
+                            min="0"
+                            [class.error]="serviceForm.get('warrantyDays')?.invalid && serviceForm.get('warrantyDays')?.touched">
+                        @if (serviceForm.get('warrantyDays')?.invalid && serviceForm.get('warrantyDays')?.touched) {
+                        <div class="error-message">Ingresa un número válido.</div>
+                        }
+                    </div>
+                    <div class="form-group full-width">
+                        <label for="service-description">Descripción</label>
+                        <textarea id="service-description" class="form-input" formControlName="description" rows="3"></textarea>
+                    </div>
+                    <div class="form-group switch-group full-width">
+                        <label>Estado</label>
+                        <label class="switch">
+                            <input type="checkbox" formControlName="isActive">
+                            <span class="slider"></span>
+                        </label>
+                        <span class="switch-label">{{serviceForm.get('isActive')?.value ? 'Activo' : 'Inactivo'}}</span>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeServiceModal()">Cancelar</button>
+            <button type="submit" class="btn btn-primary" (click)="saveService()" [disabled]="serviceForm.invalid">
+                {{isServiceEditMode ? 'Actualizar' : 'Crear'}} Servicio
+            </button>
+        </div>
+    </div>
+</div>
+}
+
+@if (showCategoryModal) {
+<div class="modal-overlay" (click)="closeCategoryModal()">
+    <div class="modal-container" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>{{isCategoryEditMode ? 'Editar Categoría' : 'Nueva Categoría'}}</h2>
+            <button class="btn-close" (click)="closeCategoryModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form [formGroup]="categoryForm" (ngSubmit)="saveCategory()">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="category-name">Nombre *</label>
+                        <input id="category-name" type="text" class="form-input" formControlName="name"
+                            [class.error]="categoryForm.get('name')?.invalid && categoryForm.get('name')?.touched">
+                        @if (categoryForm.get('name')?.invalid && categoryForm.get('name')?.touched) {
+                        <div class="error-message">Ingresa un nombre válido.</div>
+                        }
+                    </div>
+                    <div class="form-group full-width">
+                        <label for="category-description">Descripción</label>
+                        <textarea id="category-description" class="form-input" rows="3"
+                            formControlName="description"></textarea>
+                    </div>
+                    <div class="form-group switch-group full-width">
+                        <label>Estado</label>
+                        <label class="switch">
+                            <input type="checkbox" formControlName="isActive">
+                            <span class="slider"></span>
+                        </label>
+                        <span class="switch-label">{{categoryForm.get('isActive')?.value ? 'Activo' : 'Inactivo'}}</span>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeCategoryModal()">Cancelar</button>
+            <button type="submit" class="btn btn-primary" (click)="saveCategory()" [disabled]="categoryForm.invalid">
+                {{isCategoryEditMode ? 'Actualizar' : 'Crear'}} Categoría
+            </button>
+        </div>
+    </div>
+</div>
+}
+
+@if (showConfirmModal) {
+<div class="modal-overlay" (click)="closeConfirmModal()">
+    <div class="modal-container confirm-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>{{isRestoreConfirm ? 'Confirmar Restauración' : 'Confirmar Eliminación'}}</h2>
+        </div>
+        <div class="modal-body">
+            <div class="confirm-content">
+                <div class="confirm-icon" [ngClass]="isRestoreConfirm ? 'restore' : 'delete'">
+                    <i class="fas" [ngClass]="isRestoreConfirm ? 'fa-undo' : 'fa-exclamation-triangle'"></i>
+                </div>
+                <p>{{confirmMessage}}</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeConfirmModal()">
+                Cancelar
+            </button>
+            <button type="button" class="btn" [ngClass]="isRestoreConfirm ? 'btn-success' : 'btn-danger'"
+                (click)="executeConfirmAction()">
+                {{isRestoreConfirm ? 'Restaurar' : 'Eliminar'}}
+            </button>
+        </div>
+    </div>
+</div>
+}
+
+<div class="alert-container" [class.show]="showAlert">
+    <div class="alert" [class]="AlertType">
+        <i [class]="AlertIcon"></i>
+        <span>{{AlertMessage}}</span>
+        <button type="button" class="alert-close" (click)="closeAlert()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>
