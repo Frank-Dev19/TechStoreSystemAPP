@@ -140,7 +140,7 @@
               </tr>
             </thead>
             <tbody>
-              @for (ticket of filteredTickets; track ticket.id) {
+              @for (ticket of paginatedTickets; track ticket.id) {
                 <tr (click)="selectTicket(ticket)" [class.selected]="selectedTicket?.id === ticket.id">
                   <td class="code-cell">
                     <strong>{{ ticket.code }}</strong>
@@ -198,8 +198,27 @@
           </table>
         </div>
       }
+      @if (filteredTickets.length > 0) {
+    <div class="pagination-container">
+      <div class="pagination-info">
+        Mostrando
+        {{ (currentPage - 1) * itemsPerPage + 1 }}
+        -
+        {{ Math.min(currentPage * itemsPerPage, filteredTickets.length) }}
+        de {{ filteredTickets.length }} tickets
+      </div>
+      <div class="pagination-controls">
+        <button class="btn-pagination" type="button" [disabled]="currentPage === 1" (click)="previousPage()">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
+        <button class="btn-pagination" type="button" [disabled]="currentPage === totalPages" (click)="nextPage()">
+          <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
     </div>
-
+  }
+    </div>
     <div class="panel-card detail-card">
       @if (selectedTicket) {
         <div class="detail-header">
@@ -304,7 +323,7 @@
       }
     </div>
   </div>
-
+  
   @if (showCreateTicketModal) {
     <div class="modal-overlay" (click)="closeCreateTicketModal()">
       <div class="modal-content" (click)="$event.stopPropagation()">

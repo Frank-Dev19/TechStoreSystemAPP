@@ -69,12 +69,17 @@ const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
 export class ReceptionPanel implements OnInit, OnDestroy {
   tickets: Ticket[] = []
   filteredTickets: Ticket[] = []
+  paginatedTickets: Ticket[] = []
   selectedTicket: Ticket | null = null
   selectedTicketItemId: number | null = null
 
   filterState: "all" | TicketStatus = "all"
   filterPriority: "all" | TicketPriority = "all"
   searchTerm = ""
+  currentPage = 1
+  itemsPerPage = 10
+  totalPages = 1
+  readonly Math = Math
 
   showCreateTicketModal = false
   showCreateQuoteModal = false
@@ -168,6 +173,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       .subscribe({
         next: ({ data }) => {
           this.tickets = data ?? []
+          this.currentPage = 1
           this.applyFilters()
         },
         error: () => {
@@ -271,14 +277,45 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         (ticket.contactEmail ?? "").toLowerCase().includes(term)
       return matchState && matchPriority && matchSearch
     })
+    this.updatePagination()
   }
 
   onSearchChange(): void {
+    this.currentPage = 1
     this.applyFilters()
   }
 
   onFilterChange(): void {
+    this.currentPage = 1
     this.applyFilters()
+  }
+
+  private updatePagination(): void {
+    const calculatedPages = Math.ceil(this.filteredTickets.length / this.itemsPerPage) || 1
+    this.totalPages = Math.max(1, calculatedPages)
+    if (this.currentPage > this.totalPages) {
+      this.currentPage = this.totalPages
+    }
+    if (this.currentPage < 1) {
+      this.currentPage = 1
+    }
+    const start = (this.currentPage - 1) * this.itemsPerPage
+    const end = start + this.itemsPerPage
+    this.paginatedTickets = this.filteredTickets.slice(start, end)
+  }
+
+  previousPage(): void {
+    if (this.currentPage > 1) {
+      this.currentPage--
+      this.updatePagination()
+    }
+  }
+
+  nextPage(): void {
+    if (this.currentPage < this.totalPages) {
+      this.currentPage++
+      this.updatePagination()
+    }
   }
 
   selectTicket(ticket: Ticket): void {
@@ -427,6 +464,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     return this.businessPartnersService.create(payload).pipe(
+      map((partner) => ({
+        ...partner,
+        id: Number(partner.id),
+        companyId: Number(partner.companyId),
+        documentTypeId: Number(partner.documentTypeId),
+      })),
       tap((partner) => {
         this.businessPartners = [partner, ...this.businessPartners]
         this.createTicketForm.patchValue({ businessPartnerId: partner.id })

@@ -1,111 +1,114 @@
 <div class="document-types-container">
-    <!-- Header Section -->
     <div class="header-section">
         <div class="title-section">
             <h1 class="page-title">Gestión de Tipos de Documento</h1>
             <p class="page-subtitle">Administra y gestiona la información de tus tipos de documento</p>
         </div>
-        <div class="actions-section">
-            <button class="btn btn-primary" (click)="openCreateModal()">
-                <i class="fas fa-plus"></i>
-                Nuevo Tipo de Documento
-            </button>
-            <button class="btn btn-secondary" (click)="refreshData()">
-                <i class="fas fa-sync-alt"></i>
-                Actualizar
-            </button>
-        </div>
     </div>
 
-    <!-- Search Section -->
-    <div class="search-section">
-        <div class="search-container">
-            <div class="search-input-wrapper">
-                <i class="fas fa-search search-icon"></i>
-                <input type="text" class="search-input" placeholder="Buscar por nombre..."
-                    [(ngModel)]="searchTerm" (input)="onSearch()">
+    <div class="panel-card filters-card">
+        <div class="content-header">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Buscar por nombre..." [(ngModel)]="searchTerm" (input)="onSearch()">
             </div>
-            <div class="filter-select-wrapper">
-                <select class="filter-select" [(ngModel)]="statusFilter" (change)="onStatusFilterChange()">
-                    <option value="active">Vigentes</option>
-                    <option value="deleted">Eliminados</option>
-                </select>
+            <div class="filters-wrapper">
+                <div class="filter-control">
+                    <label for="status-filter">Estado</label>
+                    <select id="status-filter" class="select-control" [(ngModel)]="statusFilter"
+                        (change)="onStatusFilterChange()">
+                        <option value="active">Vigentes</option>
+                        <option value="deleted">Eliminados</option>
+                    </select>
+                </div>
+            </div>
+            <div class="actions-wrapper">
+                <button class="btn btn-primary" (click)="openCreateModal()">
+                    <i class="fas fa-plus"></i>
+                    Nuevo Tipo de Documento
+                </button>
+                <button class="btn btn-secondary" (click)="refreshData()">
+                    <i class="fas fa-sync-alt"></i>
+                    Actualizar
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Bulk Actions Section -->
-     @if (selectedDocumentTypes.length > 0) {
-    <div class="bulk-actions">
-        <div class="selected-info">
-            <span>{{selectedDocumentTypes.length}} tipo(s) de documento seleccionados</span>
+    <div class="panel-card table-card">
+        @if (selectedDocumentTypes.length > 0) {
+        <div class="bulk-actions">
+            <div class="selected-info">
+                <span>{{selectedDocumentTypes.length}} tipo(s) de documento seleccionados</span>
+            </div>
+            <div class="bulk-buttons">
+                <button class="btn" [ngClass]="isDeletedView ? 'btn-success' : 'btn-danger'"
+                    (click)="isDeletedView ? confirmBulkRestore() : confirmBulkDelete()">
+                    <i class="fas" [ngClass]="isDeletedView ? 'fa-undo' : 'fa-trash'"></i>
+                    {{isDeletedView ? 'Restaurar seleccionados' : 'Eliminar seleccionados'}}
+                </button>
+            </div>
         </div>
-        <div class="bulk-buttons">
-            <button class="btn" [ngClass]="isDeletedView ? 'btn-success' : 'btn-danger'"
-                (click)="isDeletedView ? confirmBulkRestore() : confirmBulkDelete()">
-                <i class="fas" [ngClass]="isDeletedView ? 'fa-undo' : 'fa-trash'"></i>
-                {{isDeletedView ? 'Restaurar seleccionados' : 'Eliminar seleccionados'}}
-            </button>
-        </div>
-    </div>
-    }
+        }
 
-    <!-- Table Section -->
-    <div class="table-container">
-        <div class="table-wrapper">
-            <table class="document-types-table">
-                <thead>
-                    <tr>
-                        <th class="checkbox-column">
-                            <input type="checkbox" [checked]="isAllSelected()" [indeterminate]="isIndeterminate()"
-                                (change)="toggleSelectAll()" class="checkbox-input">
-                        </th>
-                        <th>Nombre</th>
-                        <th>Descripción</th>
-                        <th>Dígitos</th>
-                        <th>{{isDeletedView ? 'Fecha Eliminación' : 'Fecha Creación'}}</th>
-                        <th class="actions-column">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                @for (documentType of filteredDocumentTypes; track $index) {
-                    <tr [class.selected]="isSelected(documentType.id)">
-                    <td class="checkbox-column">
-                        <input type="checkbox" [checked]="isSelected(documentType.id)"
-                            (change)="toggleSelect(documentType.id)" class="checkbox-input">
-                    </td>
-                    <td class="name-cell">
-                        <div class="document-type-name">{{documentType.name}}</div>
-                    </td>
-                    <td class="description-cell">{{documentType.description}}</td>
-                    <td>{{documentType.digits}}</td>
-                    <td class="date-cell">{{formatDate(isDeletedView ? documentType.deletedAt : documentType.createdAt)}}</td>
-                    <td class="actions-column">
-                        <div class="action-buttons">
-                            <button class="btn-icon btn-edit" (click)="openEditModal(documentType)" title="Editar">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            @if (!isDeletedView) {
-                                <button class="btn-icon btn-delete" (click)="confirmDelete(documentType)"
-                                    title="Eliminar">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            } @else {
-                                <button class="btn-icon btn-restore" (click)="confirmRestore(documentType)"
-                                    title="Restaurar">
-                                    <i class="fas fa-undo"></i>
-                                </button>
-                            }
-                        </div>
-                    </td>
-                </tr>
-                    }
-                </tbody>
-            </table>
+        <div class="table-container">
+            <div class="table-wrapper">
+                <table class="data-table document-types-table">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-column">
+                                <input type="checkbox" [checked]="isAllSelected()" [indeterminate]="isIndeterminate()"
+                                    (change)="toggleSelectAll()" class="checkbox-input">
+                            </th>
+                            <th>Nombre</th>
+                            <th>Descripción</th>
+                            <th>Dígitos</th>
+                            <th>{{isDeletedView ? 'Fecha Eliminación' : 'Fecha Creación'}}</th>
+                            <th class="actions-column">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (documentType of filteredDocumentTypes; track $index) {
+                            <tr [class.selected]="isSelected(documentType.id)">
+                                <td class="checkbox-column">
+                                    <input type="checkbox" [checked]="isSelected(documentType.id)"
+                                        (change)="toggleSelect(documentType.id)" class="checkbox-input">
+                                </td>
+                                <td class="name-cell">
+                                    <div class="document-type-name">{{documentType.name}}</div>
+                                </td>
+                                <td class="description-cell">{{documentType.description}}</td>
+                                <td>{{documentType.digits}}</td>
+                                <td class="date-cell">
+                                    {{formatDate(isDeletedView ? documentType.deletedAt : documentType.createdAt)}}
+                                </td>
+                                <td class="actions-column">
+                                    <div class="action-buttons">
+                                        <button class="btn-icon btn-edit" (click)="openEditModal(documentType)"
+                                            title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        @if (!isDeletedView) {
+                                            <button class="btn-icon btn-delete" (click)="confirmDelete(documentType)"
+                                                title="Eliminar">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        } @else {
+                                            <button class="btn-icon btn-restore" (click)="confirmRestore(documentType)"
+                                                title="Restaurar">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         </div>
 
-        <!-- Empty State -->
-         @if (filteredDocumentTypes.length === 0) {
+        @if (filteredDocumentTypes.length === 0) {
         <div class="empty-state">
             <div class="empty-icon">
                 <i class="fas fa-users"></i>
@@ -113,27 +116,26 @@
             <h3>No se encontraron tipos de documentos</h3>
             <p>No hay tipos de documentos que coincidan con tu búsqueda</p>
         </div>
-         }
-    </div>
+        }
 
-    <!-- Pagination -->
-     @if (filteredDocumentTypes.length > 0) {
-    <div class="pagination-container">
-        <div class="pagination-info">
-            Mostrando {{(currentPage - 1) * itemsPerPage + 1}} - {{Math.min(currentPage * itemsPerPage,
-            filteredDocumentTypes.length)}} de {{filteredDocumentTypes.length}} tipos de documentos
+        @if (filteredDocumentTypes.length > 0) {
+        <div class="pagination-container">
+            <div class="pagination-info">
+                Mostrando {{(currentPage - 1) * itemsPerPage + 1}} - {{Math.min(currentPage * itemsPerPage,
+                filteredDocumentTypes.length)}} de {{filteredDocumentTypes.length}} tipos de documentos
+            </div>
+            <div class="pagination-controls">
+                <button class="btn-pagination" [disabled]="currentPage === 1" (click)="previousPage()">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <span class="page-info">{{currentPage}} / {{totalPages}}</span>
+                <button class="btn-pagination" [disabled]="currentPage === totalPages" (click)="nextPage()">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
         </div>
-        <div class="pagination-controls">
-            <button class="btn-pagination" [disabled]="currentPage === 1" (click)="previousPage()">
-                <i class="fas fa-chevron-left"></i>
-            </button>
-            <span class="page-info">{{currentPage}} / {{totalPages}}</span>
-            <button class="btn-pagination" [disabled]="currentPage === totalPages" (click)="nextPage()">
-                <i class="fas fa-chevron-right"></i>
-            </button>
-        </div>
+        }
     </div>
-    }
 </div>
 
 <!-- Create/Edit Modal -->

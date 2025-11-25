@@ -4,102 +4,108 @@
             <h1 class="page-title">Gestión de Socios Comerciales</h1>
             <p class="page-subtitle">Administra clientes y proveedores desde un solo lugar</p>
         </div>
-        <div class="actions-section">
-            <button class="btn btn-primary" (click)="openCreateModal()">
-                <i class="fas fa-plus"></i>
-                Nuevo socio
-            </button>
-            <button class="btn btn-secondary" (click)="refreshData()">
-                <i class="fas fa-sync-alt"></i>
-                Actualizar
-            </button>
-        </div>
     </div>
 
-    <div class="search-section">
-        <div class="search-container">
-            <div class="search-input-wrapper">
-                <i class="fas fa-search search-icon"></i>
-                <input type="text" class="search-input" placeholder="Buscar por nombre, documento o correo..."
-                    [(ngModel)]="searchTerm" (keyup.enter)="onSearch()" (blur)="onSearch()">
+    <div class="panel-card filters-card">
+        <div class="content-header">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Buscar por nombre, documento o correo..." [(ngModel)]="searchTerm"
+                    (keyup.enter)="onSearch()" (blur)="onSearch()">
             </div>
-            <div class="filter-select-wrapper">
-                <select class="filter-select" [(ngModel)]="statusFilter" (change)="onStatusFilterChange()">
-                    <option value="active">Vigentes</option>
-                    <option value="deleted">Eliminados</option>
-                </select>
+            <div class="filters-wrapper">
+                <div class="filter-control">
+                    <label for="status-filter">Estado</label>
+                    <select id="status-filter" class="select-control" [(ngModel)]="statusFilter"
+                        (change)="onStatusFilterChange()">
+                        <option value="active">Vigentes</option>
+                        <option value="deleted">Eliminados</option>
+                    </select>
+                </div>
+            </div>
+            <div class="actions-wrapper">
+                <button class="btn btn-primary" (click)="openCreateModal()">
+                    <i class="fas fa-plus"></i>
+                    Nuevo socio
+                </button>
+                <button class="btn btn-secondary" (click)="refreshData()">
+                    <i class="fas fa-sync-alt"></i>
+                    Actualizar
+                </button>
             </div>
         </div>
     </div>
 
-    <div class="bulk-actions" *ngIf="selectedPartnerIds.length > 0">
-        <div class="selected-info">
-            <span>{{selectedPartnerIds.length}} socio(s) seleccionado(s)</span>
+    <div class="panel-card table-card">
+        <div class="bulk-actions" *ngIf="selectedPartnerIds.length > 0">
+            <div class="selected-info">
+                <span>{{selectedPartnerIds.length}} socio(s) seleccionado(s)</span>
+            </div>
+            <div class="bulk-buttons">
+                <button class="btn" [ngClass]="isDeletedView ? 'btn-success' : 'btn-danger'"
+                    (click)="isDeletedView ? confirmBulkRestore() : confirmBulkDelete()">
+                    <i class="fas" [ngClass]="isDeletedView ? 'fa-undo' : 'fa-trash'"></i>
+                    {{isDeletedView ? 'Restaurar seleccionados' : 'Eliminar seleccionados'}}
+                </button>
+            </div>
         </div>
-        <div class="bulk-buttons">
-            <button class="btn" [ngClass]="isDeletedView ? 'btn-success' : 'btn-danger'"
-                (click)="isDeletedView ? confirmBulkRestore() : confirmBulkDelete()">
-                <i class="fas" [ngClass]="isDeletedView ? 'fa-undo' : 'fa-trash'"></i>
-                {{isDeletedView ? 'Restaurar seleccionados' : 'Eliminar seleccionados'}}
-            </button>
-        </div>
-    </div>
 
-    <div class="table-container">
-        <div class="table-wrapper">
-            <table class="partners-table">
-                <thead>
-                    <tr>
-                        <th class="checkbox-column">
-                            <input type="checkbox" [checked]="isAllSelected()" [indeterminate]="isIndeterminate()"
-                                (change)="toggleSelectAll()" class="checkbox-input">
-                        </th>
-                        <th>Nombre</th>
-                        <th>Nombre Comercial</th>
-                        <th>Tipo Doc.</th>
-                        <th>N° Documento</th>
-                        <th>Rol</th>
-                        <th>Correo</th>
-                        <th>Teléfono</th>
-                        <th>Ciudad</th>
-                        <th>País</th>
-                        <th>{{isDeletedView ? 'Eliminado' : 'Creado'}}</th>
-                        <th class="actions-column">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr *ngFor="let partner of visiblePartners" [class.selected]="isSelected(partner.id)">
-                        <td class="checkbox-column">
-                            <input type="checkbox" [checked]="isSelected(partner.id)"
-                                (change)="toggleSelect(partner.id)" class="checkbox-input">
-                        </td>
-                        <td class="name-cell">
-                            <div class="partner-name">{{partner.name}}</div>
-                        </td>
-                        <td>{{partner.tradeName || '—'}}</td>
-                        <td>
-                            <span class="doc-type-badge">
-                                {{getDocTypeName(partner.documentTypeId)}}
-                            </span>
-                        </td>
-                        <td class="document-cell">{{partner.documentNumber}}</td>
-                        <td>
-                            <span class="role-badge" [ngClass]="{
-                                'client': partner.isClient,
-                                'supplier': partner.isSupplier,
-                                'both': partner.isClient && partner.isSupplier
-                            }">
-                                {{getRoleLabels(partner)}}
-                            </span>
-                        </td>
-                        <td class="contact-cell">{{partner.email || '—'}}</td>
-                        <td class="contact-cell">{{partner.phone || '—'}}
-                        </td>
-                        <td>{{partner.city || '—'}}</td>
-                        <td>{{partner.country || '—'}}</td>
-                        <td class="date-cell">{{formatDate(isDeletedView ? partner.deletedAt : partner.createdAt)}}</td>
-                        <td class="actions-column">
-                            <div class="action-buttons">
+        <div class="table-container">
+            <div class="table-wrapper">
+                <table class="data-table partners-table">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-column">
+                                <input type="checkbox" [checked]="isAllSelected()" [indeterminate]="isIndeterminate()"
+                                    (change)="toggleSelectAll()" class="checkbox-input">
+                            </th>
+                            <th>Nombre</th>
+                            <th>Nombre Comercial</th>
+                            <th>Tipo Doc.</th>
+                            <th>N° Documento</th>
+                            <th>Rol</th>
+                            <th>Correo</th>
+                            <th>Teléfono</th>
+                            <th>Ciudad</th>
+                            <th>País</th>
+                            <th>{{isDeletedView ? 'Eliminado' : 'Creado'}}</th>
+                            <th class="actions-column">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let partner of visiblePartners" [class.selected]="isSelected(partner.id)">
+                            <td class="checkbox-column">
+                                <input type="checkbox" [checked]="isSelected(partner.id)"
+                                    (change)="toggleSelect(partner.id)" class="checkbox-input">
+                            </td>
+                            <td class="name-cell">
+                                <div class="partner-name">{{partner.name}}</div>
+                            </td>
+                            <td>{{partner.tradeName || '—'}}</td>
+                            <td>
+                                <span class="doc-type-badge">
+                                    {{getDocTypeName(partner.documentTypeId)}}
+                                </span>
+                            </td>
+                            <td class="document-cell">{{partner.documentNumber}}</td>
+                            <td>
+                                <span class="role-badge" [ngClass]="{
+                                    'client': partner.isClient,
+                                    'supplier': partner.isSupplier,
+                                    'both': partner.isClient && partner.isSupplier
+                                }">
+                                    {{getRoleLabels(partner)}}
+                                </span>
+                            </td>
+                            <td class="contact-cell">{{partner.email || '—'}}</td>
+                            <td class="contact-cell">{{partner.phone || '—'}}
+                            </td>
+                            <td>{{partner.city || '—'}}</td>
+                            <td>{{partner.country || '—'}}</td>
+                            <td class="date-cell">{{formatDate(isDeletedView ? partner.deletedAt : partner.createdAt)}}
+                            </td>
+                            <td class="actions-column">
+                                <div class="action-buttons">
                                 <button class="btn-icon btn-edit" (click)="openEditModal(partner)" title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </button>
@@ -120,15 +126,26 @@
             </table>
         </div>
 
-        <div class="empty-state" *ngIf="!visiblePartners.length && !isLoading">
-            <div class="empty-icon">
-                <i class="fas fa-users"></i>
+        @if (!visiblePartners.length && !isLoading) {
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <h3>No se encontraron socios comerciales</h3>
+                <p>Intenta ajustar tu búsqueda o registrar un nuevo socio.</p>
             </div>
-            <h3>No se encontraron socios comerciales</h3>
-            <p>Intenta ajustar tu búsqueda o registrar un nuevo socio.</p>
-        </div>
+        }
 
-        <div class="pagination" *ngIf="totalPages > 1">
+    </div>
+    @if (visiblePartners.length > 0) {
+    <div class="pagination-container">
+        <div class="pagination-info">
+            Mostrando
+            {{ (currentPage - 1) * itemsPerPage + 1 }} -
+            {{ Math.min(currentPage * itemsPerPage, totalItems) }}
+            de {{ totalItems }} socios
+        </div>
+        <div class="pagination-controls">
             <button class="btn-pagination" [disabled]="currentPage === 1" (click)="previousPage()">
                 <i class="fas fa-chevron-left"></i>
             </button>
@@ -138,6 +155,7 @@
             </button>
         </div>
     </div>
+}
 </div>
 
 <div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
