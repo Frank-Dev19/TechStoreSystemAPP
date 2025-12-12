@@ -11,6 +11,7 @@ import { Inventory } from '../../pages/inventory/inventory';
 import { ServiceCatalog } from '../../pages/service-catalog/service-catalog';
 import { ReceptionPanel } from '../../pages/reception-panel/reception-panel';
 import { TechnicianPanel } from '../../pages/technician-panel/technician-panel';
+import { SupervisorPanel } from '../../pages/supervisor-panel/supervisor-panel';
 
 export const AdminLayoutRoutes: Routes = [
     { path: 'home', component: Home },
@@ -24,4 +25,5 @@ export const AdminLayoutRoutes: Routes = [
     { path: 'catalogo-servicios', component: ServiceCatalog },
     { path: 'reception-panel', component: ReceptionPanel },
     { path: 'technician-panel', component: TechnicianPanel },
+    { path: 'supervisor-panel', component: SupervisorPanel },
 ];

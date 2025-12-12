@@ -49,4 +49,35 @@ export class QuoteService {
   bulkRestore(ids: number[]): Observable<{ ok: boolean; message: string }> {
     return this.base.post<{ ok: boolean; message: string }>(`${config.tickets.quotes}/bulk-restore`, { ids });
   }
+
+  // Supervisor actions
+  approveBySupervisor(id: number, supervisorId: number, notes?: string): Observable<Quote> {
+    return this.base.patch<Quote>(`${config.tickets.quotes}/${id}/approve-supervisor`, { supervisorId, notes });
+  }
+
+  rejectBySupervisor(id: number, supervisorId: number, notes: string): Observable<Quote> {
+    return this.base.patch<Quote>(`${config.tickets.quotes}/${id}/reject-supervisor`, { supervisorId, notes });
+  }
+
+  // Client actions
+  sendToClient(id: number, notes?: string): Observable<Quote> {
+    return this.base.patch<Quote>(`${config.tickets.quotes}/${id}/send-to-client`, { notes });
+  }
+
+  approveByClient(id: number, notes?: string): Observable<Quote> {
+    return this.base.patch<Quote>(`${config.tickets.quotes}/${id}/approve-client`, { notes });
+  }
+
+  rejectByClient(id: number, notes?: string): Observable<Quote> {
+    return this.base.patch<Quote>(`${config.tickets.quotes}/${id}/reject-client`, { notes });
+  }
+
+  // Resubmit actions
+  resubmitQuote(id: number, payload: { products?: any[]; services?: any[]; notes?: string }): Observable<Quote> {
+    return this.base.patch<Quote>(`${config.tickets.quotes}/${id}/resubmit`, payload);
+  }
+
+  resubmitAfterClientRejection(id: number, payload: { products?: any[]; services?: any[]; notes?: string }): Observable<Quote> {
+    return this.base.patch<Quote>(`${config.tickets.quotes}/${id}/resubmit-after-client-rejection`, payload);
+  }
 }

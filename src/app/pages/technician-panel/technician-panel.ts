@@ -8,6 +8,9 @@ import { Diagnostic } from "../../models/tickets/diagnostic"
 import { DiagnosticSaveRequest } from "../../models/tickets/diagnostic-request"
 import { UsersApiService } from "../../services/rbac/users-api.service"
 import { UserApi } from "../../models/rbac/user.model"
+import { CurrentUserService } from "../../services/current-user.service"
+import { User } from "../../models/user/user"
+import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
 
 @Component({
   selector: "app-technician-panel",
@@ -16,11 +19,14 @@ import { UserApi } from "../../models/rbac/user.model"
   styleUrls: ["./technician-panel.scss"],
 })
 export class TechnicianPanel implements OnInit {
-  activeTab: "pending" | "diagnosis" | "repair" = "pending"
+  activeTab: "todo" | "diagnosis" | "pending_approval" | "repair" | "ready" | "all" = "todo"
 
-  pendingItems: TicketItem[] = []
-  diagnosisItems: TicketItem[] = []
-  repairItems: TicketItem[] = []
+  todoItems: TicketItem[] = []           // Asignados y listos para reparar
+  diagnosisItems: TicketItem[] = []      // En diagnóstico activo
+  pendingApprovalItems: TicketItem[] = [] // Diagnosticados/cotizados esperando aprobación
+  repairItems: TicketItem[] = []         // En reparación
+  readyItems: TicketItem[] = []          // Listos para entrega
+  allItems: TicketItem[] = []
   selectedItem: TicketItem | null = null
 
   showDiagnosisModal = false
@@ -38,13 +44,8 @@ export class TechnicianPanel implements OnInit {
   isLoadingItems = false
   isSavingDiagnosis = false
 
-  private readonly statusFilter = [
-    TicketItemStatus.RECEIVED,
-    TicketItemStatus.ASSIGNED,
-    TicketItemStatus.IN_DIAGNOSIS,
-    TicketItemStatus.DIAGNOSED,
-    TicketItemStatus.IN_REPAIR,
-  ]
+  private currentUser: User | null = null
+  private isTechnician = false
 
   private techniciansMap = new Map<number, string>()
 
@@ -53,11 +54,13 @@ export class TechnicianPanel implements OnInit {
     private readonly ticketItemService: TicketItemService,
     private readonly diagnosticService: DiagnosticService,
     private readonly usersApi: UsersApiService,
+    private readonly currentUserService: CurrentUserService,
   ) {
     this.diagnosisForm = this.createDiagnosisForm()
   }
 
   ngOnInit(): void {
+    this.syncCurrentUserContext()
     this.loadTechnicianItems()
     this.loadTechnicians()
   }
@@ -71,8 +74,13 @@ export class TechnicianPanel implements OnInit {
 
   private loadTechnicianItems(): void {
     this.isLoadingItems = true
+    const params: Record<string, string | number | boolean | undefined> = {
+      page: 1,
+      limit: 50,
+      assignedToMe: true,
+    }
     this.ticketItemService
-      .findAll({ page: 1, limit: 50, assignedToMe: true, status: this.statusFilter.join(",") })
+      .findAll(params)
       .pipe(finalize(() => (this.isLoadingItems = false)))
       .subscribe({
         next: ({ data }) => this.hydrateLists(data ?? []),
@@ -81,23 +89,44 @@ export class TechnicianPanel implements OnInit {
   }
 
   private hydrateLists(items: TicketItem[]): void {
-    this.pendingItems = items.filter((item) =>
-      [TicketItemStatus.RECEIVED, TicketItemStatus.ASSIGNED].includes(item.status),
+    this.allItems = [...items]
+
+    // Por hacer: Asignados + Aprobados por cliente (listos para reparar)
+    this.todoItems = items.filter((item) =>
+      [
+        TicketItemStatus.ASSIGNED,
+        TicketItemStatus.CLIENT_APPROVED,
+      ].includes(item.status),
     )
+
+    // En diagnóstico: Solo items activamente en diagnóstico
     this.diagnosisItems = items.filter((item) =>
-      [TicketItemStatus.IN_DIAGNOSIS, TicketItemStatus.DIAGNOSED].includes(item.status),
+      item.status === TicketItemStatus.IN_DIAGNOSIS
     )
+
+    // Esperando aprobación: Diagnosticados o cotizados esperando aprobación
+    this.pendingApprovalItems = items.filter((item) =>
+      [
+        TicketItemStatus.DIAGNOSED,
+        TicketItemStatus.QUOTED,
+        TicketItemStatus.SUPERVISOR_APPROVED,
+        TicketItemStatus.SENT_TO_CLIENT,
+        TicketItemStatus.AWAITING_CLIENT_RESPONSE,
+      ].includes(item.status),
+    )
+
     this.repairItems = items.filter((item) => item.status === TicketItemStatus.IN_REPAIR)
+    this.readyItems = items.filter((item) => item.status === TicketItemStatus.READY_FOR_DELIVERY)
 
     const activeDiagnosis = this.diagnosisItems.find((item) => item.status === TicketItemStatus.IN_DIAGNOSIS)
     this.itemInDiagnosis = !!activeDiagnosis
-    this.currentItemInDiagnosisId = activeDiagnosis?.id ?? null
+    this.currentItemInDiagnosisId = activeDiagnosis?.id ? Number(activeDiagnosis.id) : null
 
     if (this.selectedItem) {
-      const updated = items.find((entry) => entry.id === this.selectedItem?.id)
+      const updated = items.find((entry) => Number(entry.id) === Number(this.selectedItem?.id))
       this.selectedItem = updated ?? null
       if (this.selectedItem) {
-        this.loadDiagnosticHistory(this.selectedItem.id)
+        this.loadDiagnosticHistory(Number(this.selectedItem.id))
       } else {
         this.diagnosticHistory = []
       }
@@ -106,7 +135,10 @@ export class TechnicianPanel implements OnInit {
 
   selectItem(item: TicketItem): void {
     this.selectedItem = item
-    this.loadDiagnosticHistory(item.id)
+    const itemId = Number(item.id)
+    if (itemId) {
+      this.loadDiagnosticHistory(itemId)
+    }
   }
 
   clearSelectedItem(): void {
@@ -115,7 +147,7 @@ export class TechnicianPanel implements OnInit {
   }
 
   startDiagnosis(item: TicketItem): void {
-    if (this.itemInDiagnosis && this.currentItemInDiagnosisId !== item.id) {
+    if (this.itemInDiagnosis && this.currentItemInDiagnosisId !== Number(item.id)) {
       this.showMessage("warning", "fas fa-exclamation-circle", "Completa el diagnóstico activo antes de iniciar otro.")
       return
     }
@@ -140,7 +172,7 @@ export class TechnicianPanel implements OnInit {
     }
 
     const payload: DiagnosticSaveRequest = {
-      ticketItemId: this.selectedItem.id,
+      ticketItemId: Number(this.selectedItem.id),
       summary: this.diagnosisForm.get("summary")?.value,
       details: this.diagnosisForm.get("details")?.value,
     }
@@ -160,15 +192,64 @@ export class TechnicianPanel implements OnInit {
   }
 
   startRepair(item: TicketItem): void {
-    if (item.status !== TicketItemStatus.DIAGNOSED) {
-      this.showMessage("warning", "fas fa-exclamation-circle", "Finaliza el diagnóstico antes de iniciar la reparación.")
+    if (item.status !== TicketItemStatus.CLIENT_APPROVED) {
+      this.showMessage(
+        "warning",
+        "fas fa-exclamation-circle",
+        "Finaliza el diagnóstico y aprueba la cotización antes de iniciar la reparación.",
+      )
       return
     }
     this.transitionItemStatus(item, TicketItemStatus.IN_REPAIR, "Reparación iniciada.")
   }
 
   markReadyForDelivery(item: TicketItem): void {
-    this.transitionItemStatus(item, TicketItemStatus.READY_FOR_DELIVERY, "Item marcado como listo para entrega.")
+    const finalizeReady = () => {
+      this.transitionItemStatus(item, TicketItemStatus.READY_FOR_DELIVERY, "Item marcado como listo para entrega.")
+    }
+
+    if (item.status === TicketItemStatus.IN_REPAIR) {
+      const itemId = Number(item.id)
+      if (!itemId) {
+        this.showMessage("danger", "fas fa-times-circle", "ID de item inválido.")
+        return
+      }
+      this.ticketItemService.changeStatus(itemId, TicketItemStatus.REPAIRED).subscribe({
+        next: () => finalizeReady(),
+        error: () =>
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos marcar el equipo como reparado antes de la entrega."),
+      })
+      return
+    }
+
+    if (item.status === TicketItemStatus.REPAIRED) {
+      finalizeReady()
+      return
+    }
+
+    if (item.status === TicketItemStatus.READY_FOR_DELIVERY) {
+      const itemId = Number(item.id)
+      if (!itemId) {
+        this.showMessage("danger", "fas fa-times-circle", "ID de item inválido.")
+        return
+      }
+      this.ticketItemService.changeStatus(itemId, TicketItemStatus.DELIVERED).subscribe({
+        next: () => {
+          this.showMessage("success", "fas fa-check-circle", "Equipo entregado al cliente.")
+          this.loadTechnicianItems()
+        },
+        error: () => {
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar la entrega del equipo.")
+        },
+      })
+      return
+    }
+
+    this.showMessage(
+      "warning",
+      "fas fa-exclamation-circle",
+      "Debes finalizar la reparación antes de marcar el equipo como listo.",
+    )
   }
 
   completeDiagnosis(): void {
@@ -177,7 +258,12 @@ export class TechnicianPanel implements OnInit {
   }
 
   private transitionItemStatus(item: TicketItem, status: TicketItemStatus, successMessage: string): void {
-    this.ticketItemService.changeStatus(item.id, status).subscribe({
+    const itemId = Number(item.id)
+    if (!itemId) {
+      this.showMessage("danger", "fas fa-times-circle", "ID de item inválido.")
+      return
+    }
+    this.ticketItemService.changeStatus(itemId, status).subscribe({
       next: () => {
         this.showMessage("success", "fas fa-check-circle", successMessage)
         this.loadTechnicianItems()
@@ -197,10 +283,23 @@ export class TechnicianPanel implements OnInit {
   }
 
   private loadDiagnosticHistory(itemId: number): void {
-    this.diagnosticService.findAll({ ticketItemId: itemId, limit: 20 }).subscribe({
+    const normalizedId = Number(itemId)
+    if (!normalizedId) {
+      this.diagnosticHistory = []
+      return
+    }
+    this.diagnosticService.findAll({ ticketItemId: normalizedId, limit: 20 }).subscribe({
       next: ({ data }) => (this.diagnosticHistory = data ?? []),
       error: () => this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el historial de diagnósticos."),
     })
+  }
+
+  canStartDiagnosis(item: TicketItem): boolean {
+    return item.status === TicketItemStatus.ASSIGNED && item.serviceType === 'DIAGNOSIS'
+  }
+
+  canStartRepairDirectly(item: TicketItem): boolean {
+    return item.status === TicketItemStatus.CLIENT_APPROVED
   }
 
   getSLABadgeClass(item: TicketItem): string {
@@ -251,9 +350,9 @@ export class TechnicianPanel implements OnInit {
         this.techniciansMap.clear()
         const list = users ?? []
         list.forEach((user: UserApi) => {
-          const hasTechRole = user.roles?.some((role) => role.name?.toLowerCase() === "technician")
+          const hasTechRole = hasAnyRole(user.roles, TECHNICIAN_ROLE_NAMES)
           if (hasTechRole) {
-            this.techniciansMap.set(user.id, user.name)
+            this.techniciansMap.set(Number(user.id), user.name)
           }
         })
       },
@@ -263,10 +362,26 @@ export class TechnicianPanel implements OnInit {
     })
   }
 
+  private syncCurrentUserContext(): void {
+    const current = this.currentUserService.value ?? this.restoreUserFromStorage()
+    this.currentUser = current
+    this.isTechnician = hasAnyRole(current?.roles, TECHNICIAN_ROLE_NAMES)
+  }
+
+  private restoreUserFromStorage(): User | null {
+    const raw = localStorage.getItem("current_user")
+    if (!raw) {
+      return null
+    }
+    try {
+      return JSON.parse(raw) as User
+    } catch {
+      return null
+    }
+  }
+
   getItemStatusLabel(status: TicketItemStatus): string {
     switch (status) {
-      case TicketItemStatus.RECEIVED:
-        return "Recibido"
       case TicketItemStatus.ASSIGNED:
         return "Asignado"
       case TicketItemStatus.IN_DIAGNOSIS:
@@ -275,12 +390,18 @@ export class TechnicianPanel implements OnInit {
         return "Diagnosticado"
       case TicketItemStatus.QUOTED:
         return "Cotizado"
-      case TicketItemStatus.QUOTE_SENT:
-        return "Cotización enviada"
-      case TicketItemStatus.QUOTE_APPROVED:
-        return "Cotización aprobada"
-      case TicketItemStatus.QUOTE_REJECTED:
-        return "Cotización rechazada"
+      case TicketItemStatus.SUPERVISOR_APPROVED:
+        return "Aprobado por supervisor"
+      case TicketItemStatus.SUPERVISOR_REJECTED:
+        return "Rechazado por supervisor"
+      case TicketItemStatus.SENT_TO_CLIENT:
+        return "Enviado al cliente"
+      case TicketItemStatus.AWAITING_CLIENT_RESPONSE:
+        return "Esperando respuesta del cliente"
+      case TicketItemStatus.CLIENT_APPROVED:
+        return "Aprobado por cliente"
+      case TicketItemStatus.CLIENT_REJECTED:
+        return "Rechazado por cliente"
       case TicketItemStatus.AWAITING_PARTS:
         return "Esperando repuestos"
       case TicketItemStatus.IN_REPAIR:

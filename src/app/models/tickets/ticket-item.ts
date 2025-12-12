@@ -5,16 +5,18 @@ export interface TicketItem {
   ticketId: number;
   itemNumber: number;
   equipmentType: EquipmentType;
+  serviceType: ServiceType;
   brand: string | null;
   model: string | null;
   serialNumber: string | null;
   initialIssue: string;
   accessories: string | null;
-  requiresDiagnosis: boolean;
   status: TicketItemStatus;
   assignedToTechnicianId: number | null;
-  assignedAt: string | null;
   assignedToTechnicianName?: string | null;
+  assignedToSupervisorId?: number | null;
+  assignedToSupervisorName?: string | null;
+  assignedAt: string | null;
   serviceLocation: ServiceLocation;
   serviceAddress: string | null;
   serviceAddressReference: string | null;
@@ -62,15 +64,22 @@ export interface TicketItem {
   ticket?: Ticket;
 }
 
+export enum ServiceType {
+  DIAGNOSIS = 'DIAGNOSIS',
+  STANDARD_SERVICE = 'STANDARD_SERVICE',
+}
+
 export enum TicketItemStatus {
-  RECEIVED = 'RECEIVED',
   ASSIGNED = 'ASSIGNED',
   IN_DIAGNOSIS = 'IN_DIAGNOSIS',
   DIAGNOSED = 'DIAGNOSED',
   QUOTED = 'QUOTED',
-  QUOTE_SENT = 'QUOTE_SENT',
-  QUOTE_APPROVED = 'QUOTE_APPROVED',
-  QUOTE_REJECTED = 'QUOTE_REJECTED',
+  SUPERVISOR_APPROVED = 'SUPERVISOR_APPROVED',
+  SUPERVISOR_REJECTED = 'SUPERVISOR_REJECTED',
+  SENT_TO_CLIENT = 'SENT_TO_CLIENT',
+  AWAITING_CLIENT_RESPONSE = 'AWAITING_CLIENT_RESPONSE',
+  CLIENT_APPROVED = 'CLIENT_APPROVED',
+  CLIENT_REJECTED = 'CLIENT_REJECTED',
   AWAITING_PARTS = 'AWAITING_PARTS',
   IN_REPAIR = 'IN_REPAIR',
   REPAIRED = 'REPAIRED',

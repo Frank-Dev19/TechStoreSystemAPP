@@ -9,6 +9,15 @@ export interface Quote {
     notes: string;
     productItems: QuoteProduct[];
     serviceItems: QuoteService[];
+    approvedBySupervisorId: number | null;
+    approvedBySupervisorAt: Date | null;
+    rejectedBySupervisorId: number | null;
+    rejectedBySupervisorAt: Date | null;
+    supervisorNotes: string | null;
+    sentToClientAt: Date | null;
+    clientApprovedAt: Date | null;
+    clientRejectedAt: Date | null;
+    clientNotes: string | null;
     createdAt: Date;
     updatedAt: Date;
     deletedAt: Date | null;
@@ -40,6 +49,13 @@ export interface QuoteService {
 }
 
 export enum QuoteStatus {
+    PENDING_SUPERVISOR_APPROVAL = 'PENDING_SUPERVISOR_APPROVAL',
+    SUPERVISOR_APPROVED = 'SUPERVISOR_APPROVED',
+    SUPERVISOR_REJECTED = 'SUPERVISOR_REJECTED',
+    SENT_TO_CLIENT = 'SENT_TO_CLIENT',
+    AWAITING_CLIENT_RESPONSE = 'AWAITING_CLIENT_RESPONSE',
+    CLIENT_APPROVED = 'CLIENT_APPROVED',
+    CLIENT_REJECTED = 'CLIENT_REJECTED',
     CURRENT = 'CURRENT',
     ARCHIVED = 'ARCHIVED'
 }

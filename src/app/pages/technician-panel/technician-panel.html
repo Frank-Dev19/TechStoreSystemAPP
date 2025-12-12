@@ -8,29 +8,41 @@
 
   <div class="panel-container">
     <div class="tabs-navigation">
-      <button class="tab-btn" [class.active]="activeTab === 'pending'" (click)="activeTab = 'pending'">
-        <i class="fas fa-clock"></i>
-        Pendientes ({{ pendingItems.length }})
+      <button class="tab-btn" [class.active]="activeTab === 'todo'" (click)="activeTab = 'todo'">
+        <i class="fas fa-tasks"></i>
+        Por hacer ({{ todoItems.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'diagnosis'" (click)="activeTab = 'diagnosis'">
         <i class="fas fa-stethoscope"></i>
         En diagnóstico ({{ diagnosisItems.length }})
       </button>
+      <button class="tab-btn" [class.active]="activeTab === 'pending_approval'" (click)="activeTab = 'pending_approval'">
+        <i class="fas fa-hourglass-half"></i>
+        Esperando aprobación ({{ pendingApprovalItems.length }})
+      </button>
       <button class="tab-btn" [class.active]="activeTab === 'repair'" (click)="activeTab = 'repair'">
         <i class="fas fa-wrench"></i>
         En reparación ({{ repairItems.length }})
       </button>
+      <button class="tab-btn" [class.active]="activeTab === 'ready'" (click)="activeTab = 'ready'">
+        <i class="fas fa-box-open"></i>
+        Listos ({{ readyItems.length }})
+      </button>
+      <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="activeTab = 'all'">
+        <i class="fas fa-list"></i>
+        Todos ({{ allItems.length }})
+      </button>
     </div>
 
     <div class="items-grid">
-      @if (activeTab === 'pending') {
-        @if (pendingItems.length === 0) {
+      @if (activeTab === 'todo') {
+        @if (todoItems.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay items pendientes</p>
+            <p>No hay items por hacer</p>
           </div>
         } @else {
-          @for (item of pendingItems; track item.id) {
+          @for (item of todoItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
                 <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
@@ -46,8 +58,19 @@
                 </div>
               </div>
               <div class="card-actions">
-                <button class="btn btn-sm btn-primary" (click)="selectItem(item); startDiagnosis(item); $event.stopPropagation()">
+                <button
+                  class="btn btn-sm btn-primary"
+                  *ngIf="canStartDiagnosis(item)"
+                  (click)="selectItem(item); startDiagnosis(item); $event.stopPropagation()"
+                >
                   <i class="fas fa-play"></i> Iniciar diagnóstico
+                </button>
+                <button
+                  class="btn btn-sm btn-success"
+                  *ngIf="canStartRepairDirectly(item)"
+                  (click)="selectItem(item); startRepair(item); $event.stopPropagation()"
+                >
+                  <i class="fas fa-tools"></i> Iniciar reparación
                 </button>
               </div>
             </div>
@@ -88,6 +111,37 @@
         }
       }
 
+      @if (activeTab === 'pending_approval') {
+        @if (pendingApprovalItems.length === 0) {
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>No hay items esperando aprobación</p>
+          </div>
+        } @else {
+          @for (item of pendingApprovalItems; track item.id) {
+            <div class="item-card" (click)="selectItem(item)">
+              <div class="card-header">
+                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <span class="badge badge-warning">{{ getItemStatusLabel(item.status) }}</span>
+              </div>
+              <div class="card-body">
+                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
+                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
+                <div class="sla-info">
+                  <span [class]="'badge ' + getSLABadgeClass(item)">
+                    {{ getSLAText(item) }}
+                  </span>
+                </div>
+                <p class="info-text">
+                  <i class="fas fa-info-circle"></i>
+                  Esperando aprobación de cotización
+                </p>
+              </div>
+            </div>
+          }
+        }
+      }
+
       @if (activeTab === 'repair') {
         @if (repairItems.length === 0) {
           <div class="empty-state">
@@ -119,6 +173,70 @@
           }
         }
       }
+
+      @if (activeTab === 'ready') {
+        @if (readyItems.length === 0) {
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>No hay equipos listos para entrega</p>
+          </div>
+        } @else {
+          @for (item of readyItems; track item.id) {
+            <div class="item-card" (click)="selectItem(item)">
+              <div class="card-header">
+                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <span class="badge badge-success">{{ getItemStatusLabel(item.status) }}</span>
+              </div>
+              <div class="card-body">
+                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
+                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
+                <div class="sla-info">
+                  <span [class]="'badge ' + getSLABadgeClass(item)">
+                    {{ getSLAText(item) }}
+                  </span>
+                </div>
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-sm btn-info" (click)="selectItem(item); markReadyForDelivery(item); $event.stopPropagation()">
+                  <i class="fas fa-truck"></i> Entregar
+                </button>
+              </div>
+            </div>
+          }
+        }
+      }
+
+      @if (activeTab === 'all') {
+        @if (allItems.length === 0) {
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>No hay equipos registrados</p>
+          </div>
+        } @else {
+          @for (item of allItems; track item.id) {
+            <div class="item-card" (click)="selectItem(item)">
+              <div class="card-header">
+                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
+              </div>
+              <div class="card-body">
+                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
+                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
+                <div class="sla-info">
+                  <span [class]="'badge ' + getSLABadgeClass(item)">
+                    {{ getSLAText(item) }}
+                  </span>
+                </div>
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-sm btn-outline-primary" (click)="selectItem(item); openDiagnosisModal(); $event.stopPropagation()">
+                  <i class="fas fa-notes-medical"></i> Nuevo diagnóstico
+                </button>
+              </div>
+            </div>
+          }
+        }
+      }
     </div>
 
     @if (selectedItem) {
@@ -144,20 +262,13 @@
               {{ getItemStatusLabel(selectedItem.status) }}
             </div>
             <p class="sla-deadline">
-              <strong>Deadline SLA:</strong> {{ selectedItem.slaDeadline | date: 'dd/MM/yyyy' }}
+              <strong>Fecha límite SLA:</strong> {{ selectedItem.slaDeadline | date: 'dd/MM/yyyy' }}
             </p>
             @if (selectedItem.slaBreached) {
               <p class="sla-breach-warning">
                 <i class="fas fa-exclamation-triangle"></i> SLA vencido
               </p>
             }
-          </section>
-
-          <section class="detail-section">
-            <h3><i class="fas fa-user"></i> Cliente</h3>
-            <p><strong>Nombre:</strong> {{ selectedItem.ticket?.contactName || 'Sin registro' }}</p>
-            <p><strong>Contacto:</strong> {{ selectedItem.ticket?.contactPhone || 'Sin registro' }}</p>
-            <p><strong>Correo:</strong> {{ selectedItem.ticket?.contactEmail || 'Sin registro' }}</p>
           </section>
 
           @if (selectedItem.status === 'IN_DIAGNOSIS' || selectedItem.status === 'DIAGNOSED') {

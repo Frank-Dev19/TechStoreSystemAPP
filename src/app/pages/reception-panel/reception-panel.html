@@ -47,6 +47,16 @@
         <p class="stat-meta">Requieren atención inmediata</p>
       </div>
     </div>
+    <div class="stat-card">
+      <div class="stat-icon secondary">
+        <i class="fas fa-tools"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">Equipos por cotizar</span>
+        <h3 class="stat-value">{{ diagnosticPendingQuotesCount }}</h3>
+        <p class="stat-meta">Diagnosticados sin cotización</p>
+      </div>
+    </div>
   </div>
 
   <div class="panel-card filters-card">
@@ -92,10 +102,12 @@
           </select>
         </div>
       </div>
-      <button class="btn btn-primary new-ticket-btn" (click)="openCreateTicketModal()">
-        <i class="fas fa-plus"></i>
-        Nuevo Ticket
-      </button>
+      <div class="actions-wrapper">
+        <button class="btn btn-primary new-ticket-btn" type="button" (click)="openCreateTicketModal()">
+          <i class="fas fa-plus"></i>
+          Nuevo Ticket
+        </button>
+      </div>
     </div>
   </div>
 
@@ -106,15 +118,6 @@
           <h2>Tickets recibidos</h2>
           <p>Selecciona un ticket para revisar su detalle</p>
         </div>
-        <button
-          class="btn btn-secondary"
-          type="button"
-          (click)="clearSelectedTicket()"
-          [disabled]="!selectedTicket"
-        >
-          <i class="fas fa-times-circle"></i>
-          Limpiar selección
-        </button>
       </div>
 
       @if (filteredTickets.length === 0) {
@@ -130,6 +133,7 @@
           <table class="data-table tickets-table">
             <thead>
               <tr>
+                <th class="toggle-column"></th>
                 <th>Código</th>
                 <th>Cliente</th>
                 <th>Prioridad</th>
@@ -141,7 +145,16 @@
             </thead>
             <tbody>
               @for (ticket of paginatedTickets; track ticket.id) {
-                <tr (click)="selectTicket(ticket)" [class.selected]="selectedTicket?.id === ticket.id">
+                <ng-container>
+                  <tr
+                    (click)="toggleTicketExpansion(ticket.id)"
+                    [class.pending-quote]="hasPendingQuoteItems(ticket)"
+                  >
+                    <td class="toggle-column">
+                      <button class="btn-toggle" type="button" (click)="toggleTicketExpansion(ticket.id, $event)">
+                        <i class="fas" [ngClass]="isTicketExpanded(ticket.id) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                      </button>
+                    </td>
                   <td class="code-cell">
                     <strong>{{ ticket.code }}</strong>
                     <small>{{ ticket.createdAt | date: 'dd/MM HH:mm' }}</small>
@@ -171,34 +184,106 @@
                     <div class="amount">
                       ${{ ticket.totalPaidAmount | number: '1.0-0' }} / ${{ ticket.totalQuotedAmount | number: '1.0-0' }}
                     </div>
-                  </td>
-                  <td class="actions-column">
-                    <div class="action-buttons">
-                      <button
-                        class="btn-icon btn-edit"
-                        type="button"
-                        (click)="selectTicket(ticket); $event.stopPropagation()"
-                        title="Ver detalle"
-                      >
-                        <i class="fas fa-eye"></i>
-                      </button>
+                </td>
+                <td class="actions-column">
+                  <div class="action-buttons">
                       <button
                         class="btn-icon btn-primary"
                         type="button"
-                        (click)="openCreateQuoteModal(ticket); $event.stopPropagation()"
-                        title="Crear cotización"
+                        (click)="toggleTicketExpansion(ticket.id, $event)"
+                        title="Ver items"
                       >
-                        <i class="fas fa-file-invoice-dollar"></i>
+                        <i class="fas fa-layer-group"></i>
+                      </button>
+                      <button
+                        class="btn-icon btn-secondary"
+                        type="button"
+                        (click)="openEditTicketModal(ticket, $event)"
+                        title="Editar ticket"
+                      >
+                        <i class="fas fa-edit"></i>
                       </button>
                     </div>
                   </td>
                 </tr>
+                @if (isTicketExpanded(ticket.id)) {
+                  <tr class="ticket-items-row">
+                    <td [attr.colspan]="8">
+                      <div class="ticket-items-header">
+                        <h4>Equipos del ticket</h4>
+                        <span>{{ ticket.items?.length || 0 }} registrados</span>
+                      </div>
+                      @if (ticket.items?.length) {
+                        <div class="ticket-items-list">
+                          @for (item of ticket.items; track item.id) {
+                            <div class="ticket-item-card" [class.selected]="selectedTicketItemId === item.id">
+                              <div class="item-main">
+                                <div>
+                                  <p class="item-title">
+                                    Equipo #{{ item.itemNumber }} · {{ getEquipmentTypeLabel(item.equipmentType) }}
+                                  </p>
+                                  <p class="item-meta">{{ item.brand || 'Sin marca' }} · {{ item.model || 'Sin modelo' }}</p>
+                                </div>
+                                <div class="item-status">
+                                  {{ getTicketItemStatusLabel(item.status) }}
+                                </div>
+                              </div>
+                              <p class="item-issue">{{ item.initialIssue || 'Sin descripción' }}</p>
+                              <div class="item-actions">
+                                <button
+                                  type="button"
+                                  class="btn btn-sm btn-primary"
+                                  [disabled]="item.status !== ticketItemStatusEnum.DIAGNOSED"
+                                  (click)="openCreateQuoteModal(ticket, item, $event)"
+                                >
+                                  <i class="fas fa-file-invoice-dollar"></i>
+                                  Cotizar
+                                </button>
+                                <button
+                                  type="button"
+                                  class="btn btn-sm btn-secondary"
+                                  (click)="viewItemQuotes(ticket, item, $event)"
+                                >
+                                  <i class="fas fa-list"></i>
+                                  Ver cotizaciones
+                                </button>
+                                <button
+                                  type="button"
+                                  class="btn btn-sm btn-info"
+                                  (click)="openReassignTechnicianModal(item, $event)"
+                                >
+                                  <i class="fas fa-user-cog"></i>
+                                  Reasignar técnico
+                                </button>
+                                <button
+                                  type="button"
+                                  class="btn btn-sm btn-warning"
+                                  (click)="openEditItemModal(item, $event)"
+                                >
+                                  <i class="fas fa-edit"></i>
+                                  Editar item
+                                </button>
+                              </div>
+                            </div>
+                          }
+                        </div>
+                      } @else {
+                        <div class="empty-ticket-items">
+                          <p>Este ticket aún no tiene items registrados.</p>
+                        </div>
+                      }
+                    </td>
+                  </tr>
+                }
+                </ng-container>
               }
             </tbody>
           </table>
         </div>
       }
-      @if (filteredTickets.length > 0) {
+    </div>
+  </div>
+  @if (filteredTickets.length > 0) {
     <div class="pagination-container">
       <div class="pagination-info">
         Mostrando
@@ -218,111 +303,6 @@
       </div>
     </div>
   }
-    </div>
-    <div class="panel-card detail-card">
-      @if (selectedTicket) {
-        <div class="detail-header">
-          <div>
-            <p class="detail-label">Ticket seleccionado</p>
-            <h2>{{ selectedTicket.code }} · {{ selectedTicket.contactName || 'Sin contacto' }}</h2>
-          </div>
-          <button class="btn-close" type="button" (click)="clearSelectedTicket()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-
-        <div class="detail-body">
-          <section class="detail-section">
-            <h3><i class="fas fa-user"></i> Información del cliente</h3>
-            <div class="info-grid">
-              <div>
-                <span class="label">Nombre</span>
-                <p>{{ selectedTicket.contactName || 'Sin registro' }}</p>
-              </div>
-              <div>
-                <span class="label">Teléfono</span>
-                <p>{{ selectedTicket.contactPhone || 'Sin registro' }}</p>
-              </div>
-              <div>
-                <span class="label">Correo</span>
-                <p>{{ selectedTicket.contactEmail || 'Sin registro' }}</p>
-              </div>
-              <div>
-                <span class="label">Prioridad</span>
-                <p>
-                  <span [class]="'badge ' + getPriorityBadgeClass(selectedTicket.priority)">
-                    {{ getPriorityLabel(selectedTicket.priority) }}
-                  </span>
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section class="detail-section">
-            <h3><i class="fas fa-dollar-sign"></i> Información financiera</h3>
-            <div class="financial-grid">
-              <div class="financial-item">
-                <span class="financial-label">Cotizado</span>
-                <strong>${{ selectedTicket.totalQuotedAmount | number: '1.2-2' }}</strong>
-              </div>
-              <div class="financial-item">
-                <span class="financial-label">Pagado</span>
-                <strong class="paid">${{ selectedTicket.totalPaidAmount | number: '1.2-2' }}</strong>
-              </div>
-              <div class="financial-item">
-                <span class="financial-label">Pendiente</span>
-                <strong>${{ (selectedTicket.totalQuotedAmount - selectedTicket.totalPaidAmount) | number: '1.2-2' }}</strong>
-              </div>
-              <div class="financial-item">
-                <span class="financial-label">Estado de pago</span>
-                <span [class]="'badge ' + getPaymentStatusBadgeClass(selectedTicket.paymentStatus)">
-                  {{ getPaymentStatusLabel(selectedTicket.paymentStatus) }}
-                </span>
-              </div>
-            </div>
-            <button class="btn btn-primary" type="button" (click)="openCreateQuoteModal(selectedTicket)">
-              <i class="fas fa-file-invoice-dollar"></i>
-              Crear Cotización
-            </button>
-          </section>
-
-          <section class="detail-section">
-            <h3><i class="fas fa-info-circle"></i> Seguimiento</h3>
-            <div class="timeline">
-              <div class="timeline-item">
-                <span>Items completados</span>
-                <strong>{{ selectedTicket.completedItemsCount }} / {{ selectedTicket.itemsCount }}</strong>
-              </div>
-              <div class="timeline-item">
-                <span>Estado actual</span>
-                <strong>{{ getTicketStatusLabel(selectedTicket.status) }}</strong>
-              </div>
-              <div class="timeline-item">
-                <span>Creado</span>
-                <strong>{{ selectedTicket.createdAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
-              </div>
-              <div class="timeline-item">
-                <span>Entrega estimada</span>
-                <strong>{{ selectedTicket.estimatedDeliveryDate | date: 'dd/MM/yyyy' }}</strong>
-              </div>
-              <div class="timeline-item">
-                <span>Días restantes</span>
-                <strong>{{ getDaysUntilDeadline(selectedTicket.estimatedDeliveryDate) }} días</strong>
-              </div>
-            </div>
-          </section>
-        </div>
-      } @else {
-        <div class="empty-state">
-          <div class="empty-icon">
-            <i class="fas fa-clipboard-check"></i>
-          </div>
-          <h3>Selecciona un ticket</h3>
-          <p>Haz clic en un registro de la tabla para ver su información detallada.</p>
-        </div>
-      }
-    </div>
-  </div>
   
   @if (showCreateTicketModal) {
     <div class="modal-overlay" (click)="closeCreateTicketModal()">
@@ -373,7 +353,6 @@
                 id="documentTypeId"
                 class="form-control"
                 formControlName="documentTypeId"
-                [disabled]="!documentTypes.length"
               >
                 <option [ngValue]="null">Selecciona un tipo</option>
                 @for (docType of documentTypes; track docType.id) {
@@ -501,9 +480,23 @@
                     <label>Tipo de equipo *</label>
                     <select class="form-control" formControlName="equipmentType">
                       @for (equipment of equipmentTypeOptions; track equipment) {
-                        <option [ngValue]="equipment">{{ equipment | titlecase }}</option>
+                        <option [ngValue]="equipment">{{ getEquipmentTypeLabel(equipment) }}</option>
                       }
                     </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Tipo de servicio *</label>
+                    <select class="form-control" formControlName="serviceType">
+                      <option [ngValue]="null">Selecciona un tipo de servicio</option>
+                      @for (serviceType of serviceTypeOptions; track serviceType) {
+                        <option [ngValue]="serviceType">{{ getServiceTypeLabel(serviceType) }}</option>
+                      }
+                    </select>
+                    @if (ticketItems.controls[i].get('serviceType')?.invalid && ticketItems.controls[i].get('serviceType')?.touched) {
+                      <div class="invalid-feedback">
+                        Selecciona un tipo de servicio
+                      </div>
+                    }
                   </div>
                   <div class="form-group">
                     <label>Marca</label>
@@ -563,13 +556,18 @@
     </div>
   }
 
-  @if (showCreateQuoteModal && selectedTicket) {
+  @if (showCreateQuoteModal && quoteTicket) {
     <div class="modal-overlay" (click)="closeCreateQuoteModal()">
       <div class="modal-content modal-lg" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <div>
             <p class="modal-eyebrow">Cotización</p>
-            <h2>Nuevo documento · {{ selectedTicket.code }}</h2>
+            <h2>{{ isResubmittingQuote ? 'Reenviar cotización' : 'Nuevo documento' }} · {{ quoteTicket.code }}</h2>
+            @if (isResubmittingQuote && selectedQuoteDetail) {
+              <p style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">
+                Editando cotización #{{ selectedQuoteDetail.sequenceNumber }}
+              </p>
+            }
           </div>
           <button class="btn-close" type="button" (click)="closeCreateQuoteModal()">
             <i class="fas fa-times"></i>
@@ -579,18 +577,16 @@
         <form [formGroup]="createQuoteForm" class="modal-body">
           <div class="form-grid">
             <div class="form-group">
-              <label for="quote-item">Item a cotizar *</label>
-              <select
-                id="quote-item"
-                class="form-control"
-                [(ngModel)]="selectedTicketItemId"
-                [ngModelOptions]="{ standalone: true }"
-              >
-                <option [ngValue]="null">Selecciona un item</option>
-                @for (item of selectedTicket.items ?? []; track item.id) {
-                  <option [ngValue]="item.id">{{ getTicketItemLabel(item) }}</option>
-                }
-              </select>
+              <label>Equipo a cotizar *</label>
+              @if (selectedTicketItem) {
+                <div class="selected-item">
+                  {{ getTicketItemLabel(selectedTicketItem) }}
+                </div>
+              } @else {
+                <div class="selected-item empty">
+                  Selecciona un equipo desde la tabla principal.
+                </div>
+              }
             </div>
             <div class="form-group">
               <label for="currency">Moneda *</label>
@@ -637,12 +633,22 @@
                       <div class="item-row">
                         <div class="item-input">
                           <label>Producto</label>
-                          <select [(ngModel)]="item.productId" [ngModelOptions]="{ standalone: true }">
-                            <option [ngValue]="null">Selecciona</option>
-                            @for (product of products; track product.id) {
-                              <option [ngValue]="product.id">{{ product.sku }} · {{ product.name }}</option>
-                            }
-                          </select>
+                          <ng-select
+                            [items]="products"
+                            bindValue="id"
+                            [searchFn]="productSearchFn"
+                            [clearable]="true"
+                            placeholder="Selecciona"
+                            [(ngModel)]="item.productId"
+                            [ngModelOptions]="{ standalone: true }"
+                          >
+                            <ng-template ng-label-tmp let-product="item">
+                              {{ product?.sku }} · {{ product?.name }}
+                            </ng-template>
+                            <ng-template ng-option-tmp let-product="item">
+                              {{ product?.sku }} · {{ product?.name }}
+                            </ng-template>
+                          </ng-select>
                         </div>
                         <div class="item-input">
                           <label>Cantidad</label>
@@ -674,12 +680,22 @@
                       <div class="item-row">
                         <div class="item-input">
                           <label>Servicio</label>
-                          <select [(ngModel)]="item.serviceId" [ngModelOptions]="{ standalone: true }">
-                            <option [ngValue]="null">Selecciona</option>
-                            @for (service of services; track service.id) {
-                              <option [ngValue]="service.id">{{ service.code }} · {{ service.name }}</option>
-                            }
-                          </select>
+                          <ng-select
+                            [items]="services"
+                            bindValue="id"
+                            [searchFn]="serviceSearchFn"
+                            [clearable]="true"
+                            placeholder="Selecciona"
+                            [(ngModel)]="item.serviceId"
+                            [ngModelOptions]="{ standalone: true }"
+                          >
+                            <ng-template ng-label-tmp let-service="item">
+                              {{ service?.code }} · {{ service?.name }}
+                            </ng-template>
+                            <ng-template ng-option-tmp let-service="item">
+                              {{ service?.code }} · {{ service?.name }}
+                            </ng-template>
+                          </ng-select>
                         </div>
                         <div class="item-input full-width">
                           <label>Notas</label>
@@ -712,7 +728,393 @@
           <button class="btn btn-secondary" type="button" (click)="closeCreateQuoteModal()">Cancelar</button>
           <button class="btn btn-primary" type="button" (click)="submitCreateQuote()" [disabled]="quoteItems.length === 0 || isCreatingQuote">
             <i class="fas fa-check"></i>
-            Crear Cotización
+            {{ isResubmittingQuote ? 'Reenviar Cotización' : 'Crear Cotización' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showQuotesModal && quotesTicket && quotesTicketItem) {
+    <div class="modal-overlay" (click)="closeQuotesModal()">
+      <div class="modal-content modal-md" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <p class="modal-eyebrow">Cotizaciones</p>
+            <h2>{{ quotesTicket.code }} · Equipo #{{ quotesTicketItem.itemNumber }}</h2>
+          </div>
+          <button class="btn-close" type="button" (click)="closeQuotesModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="modal-body quotes-modal-body">
+          @if (isLoadingQuotes) {
+            <div class="empty-state-small">
+              <p>
+                <i class="fas fa-spinner fa-spin"></i>
+                Cargando cotizaciones...
+              </p>
+            </div>
+          } @else if (quotesError) {
+            <div class="empty-state-small">
+              <p>{{ quotesError }}</p>
+            </div>
+          } @else if (!ticketItemQuotes.length) {
+            <div class="empty-state-small">
+              <p>Este item aún no tiene cotizaciones registradas.</p>
+            </div>
+          } @else {
+            <div class="quotes-list">
+              @for (quote of ticketItemQuotes; track quote.id) {
+                <div class="quote-card" [class.quote-selected]="selectedQuoteDetail?.id === quote.id">
+                  <div class="quote-header">
+                    <div class="quote-title">
+                      <i class="fas fa-file-invoice-dollar"></i>
+                      <strong>Cotización #{{ quote.sequenceNumber }}</strong>
+                    </div>
+                    <span class="quote-status" [ngClass]="getQuoteStatusClass(quote.status)">
+                      {{ getQuoteStatusLabel(quote.status) }}
+                    </span>
+                  </div>
+                  <div class="quote-body">
+                    <div class="quote-meta">
+                      <div class="quote-meta-item">
+                        <i class="fas fa-money-bill-wave"></i>
+                        <span><strong>Total:</strong> {{ quote.totalAmount | number: '1.2-2' }} {{ quote.currency }}</span>
+                      </div>
+                      <div class="quote-meta-item">
+                        <i class="fas fa-calendar-alt"></i>
+                        <span><strong>Registrada:</strong> {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                      </div>
+                    </div>
+                    @if (quote.notes) {
+                      <div class="quote-notes">
+                        <i class="fas fa-sticky-note"></i>
+                        <p>{{ quote.notes }}</p>
+                      </div>
+                    }
+                  </div>
+                  <div class="quote-actions">
+                    <button class="btn btn-sm btn-primary" type="button" (click)="viewQuoteDetail(quote)">
+                      <i class="fas fa-eye"></i>
+                      Ver detalle
+                    </button>
+                    @if (quote.status === 'SUPERVISOR_APPROVED') {
+                      <button class="btn btn-sm btn-info" type="button" (click)="sendQuoteToClient(quote)">
+                        <i class="fas fa-paper-plane"></i>
+                        Enviar al cliente
+                      </button>
+                    }
+                    @if (quote.status === 'SUPERVISOR_REJECTED' || quote.status === 'CLIENT_REJECTED') {
+                      <button class="btn btn-sm btn-warning" type="button" (click)="resubmitQuote(quote)">
+                        <i class="fas fa-redo"></i>
+                        Reenviar cotización
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+            <div class="quote-detail-column" *ngIf="selectedQuoteDetail">
+              <div class="quote-detail-panel">
+                <div class="quote-detail-header">
+                  <h4>
+                    <i class="fas fa-list-ul"></i>
+                    Detalle de la cotización
+                  </h4>
+                </div>
+                <div class="quote-detail-summary">
+                  <div class="detail-summary-item">
+                    <span class="detail-label">Versión:</span>
+                    <span class="detail-value">#{{ selectedQuoteDetail.sequenceNumber }}</span>
+                  </div>
+                  <div class="detail-summary-item">
+                    <span class="detail-label">Estado:</span>
+                    <span class="quote-status" [ngClass]="getQuoteStatusClass(selectedQuoteDetail.status)">
+                      {{ getQuoteStatusLabel(selectedQuoteDetail.status) }}
+                    </span>
+                  </div>
+                  <div class="detail-summary-item">
+                    <span class="detail-label">Total: </span>
+                    <span class="detail-value">{{ selectedQuoteDetail.totalAmount | number: '1.2-2' }} {{ selectedQuoteDetail.currency }}</span>
+                  </div>
+                  @if (selectedQuoteDetail.notes) {
+                    <div class="detail-summary-item full-width">
+                      <span class="detail-label">Notas:</span>
+                      <span class="detail-value">{{ selectedQuoteDetail.notes }}</span>
+                    </div>
+                  }
+                  @if (selectedQuoteDetail.approvedBySupervisorAt) {
+                    <div class="detail-summary-item full-width">
+                      <span class="detail-label">Aprobado por supervisor:</span>
+                      <span class="detail-value">{{ selectedQuoteDetail.approvedBySupervisorAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                  }
+                  @if (selectedQuoteDetail.rejectedBySupervisorAt) {
+                    <div class="detail-summary-item full-width">
+                      <span class="detail-label">Rechazado por supervisor:</span>
+                      <span class="detail-value">{{ selectedQuoteDetail.rejectedBySupervisorAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                  }
+                  @if (selectedQuoteDetail.supervisorNotes) {
+                    <div class="detail-summary-item full-width">
+                      <span class="detail-label">Notas del supervisor:</span>
+                      <span class="detail-value">{{ selectedQuoteDetail.supervisorNotes }}</span>
+                    </div>
+                  }
+                  @if (selectedQuoteDetail.sentToClientAt) {
+                    <div class="detail-summary-item full-width">
+                      <span class="detail-label">Enviado al cliente:</span>
+                      <span class="detail-value">{{ selectedQuoteDetail.sentToClientAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                  }
+                  @if (selectedQuoteDetail.clientApprovedAt) {
+                    <div class="detail-summary-item full-width">
+                      <span class="detail-label">Aprobado por cliente:</span>
+                      <span class="detail-value">{{ selectedQuoteDetail.clientApprovedAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                  }
+                  @if (selectedQuoteDetail.clientRejectedAt) {
+                    <div class="detail-summary-item full-width">
+                      <span class="detail-label">Rechazado por cliente:</span>
+                      <span class="detail-value">{{ selectedQuoteDetail.clientRejectedAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                  }
+                  @if (selectedQuoteDetail.clientNotes) {
+                    <div class="detail-summary-item full-width">
+                      <span class="detail-label">Notas del cliente:</span>
+                      <span class="detail-value">{{ selectedQuoteDetail.clientNotes }}</span>
+                    </div>
+                  }
+                </div>
+                <div class="quote-detail-list" *ngIf="selectedQuoteDetail.productItems?.length">
+                  <h5>
+                    <i class="fas fa-box"></i>
+                    Productos
+                  </h5>
+                  <div class="detail-items">
+                    @for (product of selectedQuoteDetail.productItems; track product.id) {
+                      <div class="detail-item">
+                        <div class="detail-item-name">{{ getProductLabel(product.productId) }}</div>
+                        <div class="detail-item-info">
+                          <div class="detail-info-row">
+                            <span class="detail-badge">Cant: {{ product.quantity | number: '1.2-2' }}</span>
+                          </div>
+                          <div class="detail-info-row">
+                            <span class="detail-price">Unitario: {{ product.unitPrice | number: '1.2-2' }} {{ selectedQuoteDetail.currency }}</span>
+                          </div>
+                          <div class="detail-info-row">
+                            <span class="detail-total">Importe: {{ (product.quantity * product.unitPrice) | number: '1.2-2' }} {{ selectedQuoteDetail.currency }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                </div>
+                <div class="quote-detail-list" *ngIf="selectedQuoteDetail.serviceItems?.length">
+                  <h5>
+                    <i class="fas fa-wrench"></i>
+                    Servicios
+                  </h5>
+                  <div class="detail-items">
+                    @for (service of selectedQuoteDetail.serviceItems; track service.id) {
+                      <div class="detail-item">
+                        <div class="detail-item-name">{{ getServiceLabel(service.serviceId) }}</div>
+                        <div class="detail-item-info">
+                          <div class="detail-info-row">
+                            <span class="detail-price">Importe: {{ service.unitPrice | number: '1.2-2' }} {{ selectedQuoteDetail.currency }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                </div>
+                <div class="empty-state-small" *ngIf="!selectedQuoteDetail.productItems?.length && !selectedQuoteDetail.serviceItems?.length">
+                  <p>Esta cotización no tiene items registrados.</p>
+                </div>
+              </div>
+              <div class="quote-detail-actions">
+                <button class="btn btn-secondary btn-sm" type="button" (click)="selectedQuoteDetail = null">
+                  Cerrar detalle
+                </button>
+              </div>
+            </div>
+            <div class="empty-state-small" *ngIf="quoteDetailError">
+              <p>{{ quoteDetailError }}</p>
+            </div>
+            <div class="empty-state-small" *ngIf="isLoadingQuoteDetail">
+              <p>
+                <i class="fas fa-spinner fa-spin"></i>
+                Cargando detalle...
+              </p>
+            </div>
+          }
+        </div>
+
+        <div class="modal-footer">
+          
+          <button class="btn btn-secondary" type="button" (click)="closeQuotesModal()">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Modal de edición de ticket -->
+  @if (showEditTicketModal) {
+    <div class="modal-overlay" (click)="closeEditTicketModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Editar Ticket {{ editingTicket?.code }}</h2>
+          <button class="btn-close" type="button" (click)="closeEditTicketModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <form [formGroup]="editTicketForm" class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="edit-contactName">Nombre de contacto *</label>
+              <input id="edit-contactName" class="form-control" formControlName="contactName" type="text">
+            </div>
+            <div class="form-group">
+              <label for="edit-contactEmail">Correo electrónico</label>
+              <input id="edit-contactEmail" class="form-control" formControlName="contactEmail" type="email">
+            </div>
+            <div class="form-group">
+              <label for="edit-contactPhone">Teléfono *</label>
+              <input id="edit-contactPhone" class="form-control" formControlName="contactPhone" type="text">
+            </div>
+            <div class="form-group">
+              <label for="edit-priority">Prioridad *</label>
+              <select id="edit-priority" class="form-control" formControlName="priority">
+                <option value="LOW">Baja</option>
+                <option value="MEDIUM">Media</option>
+                <option value="HIGH">Alta</option>
+              </select>
+            </div>
+            <div class="form-group full-width">
+              <label for="edit-notes">Notas</label>
+              <textarea id="edit-notes" class="form-control" formControlName="notes" rows="3"></textarea>
+            </div>
+          </div>
+        </form>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" (click)="closeEditTicketModal()">Cancelar</button>
+          <button class="btn btn-primary" type="button" (click)="submitEditTicket()" [disabled]="editTicketForm.invalid || isSaving">
+            <i class="fas fa-save"></i>
+            Guardar cambios
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Modal de edición de item -->
+  @if (showEditItemModal) {
+    <div class="modal-overlay" (click)="closeEditItemModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Editar Equipo #{{ editingItem?.itemNumber }}</h2>
+          <button class="btn-close" type="button" (click)="closeEditItemModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <form [formGroup]="editItemForm" class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="edit-equipmentType">Tipo de equipo *</label>
+              <select id="edit-equipmentType" class="form-control" formControlName="equipmentType">
+                <option value="LAPTOP">Laptop</option>
+                <option value="DESKTOP_PC">PC de Escritorio</option>
+                <option value="ALL_IN_ONE">All-in-One</option>
+                <option value="PRINTER">Impresora</option>
+                <option value="SCANNER">Escáner</option>
+                <option value="PROJECTOR">Proyector</option>
+                <option value="MONITOR">Monitor</option>
+                <option value="SERVER">Servidor</option>
+                <option value="NETWORK_DEVICE">Dispositivo de red</option>
+                <option value="OTHER">Otro</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="edit-serviceType">Tipo de servicio *</label>
+              <select id="edit-serviceType" class="form-control" formControlName="serviceType">
+                <option value="DIAGNOSIS">Diagnóstico</option>
+                <option value="STANDARD_SERVICE">Servicio estándar</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="edit-brand">Marca</label>
+              <input id="edit-brand" class="form-control" formControlName="brand" type="text">
+            </div>
+            <div class="form-group">
+              <label for="edit-model">Modelo</label>
+              <input id="edit-model" class="form-control" formControlName="model" type="text">
+            </div>
+            <div class="form-group">
+              <label for="edit-serialNumber">Número de serie</label>
+              <input id="edit-serialNumber" class="form-control" formControlName="serialNumber" type="text">
+            </div>
+            <div class="form-group">
+              <label for="edit-serviceLocation">Ubicación del servicio *</label>
+              <select id="edit-serviceLocation" class="form-control" formControlName="serviceLocation">
+                <option value="ON_SITE">En sitio</option>
+                <option value="OFF_SITE">Fuera de sitio</option>
+              </select>
+            </div>
+            <div class="form-group full-width">
+              <label for="edit-initialIssue">Problema inicial *</label>
+              <textarea id="edit-initialIssue" class="form-control" formControlName="initialIssue" rows="3"></textarea>
+            </div>
+            <div class="form-group full-width">
+              <label for="edit-accessories">Accesorios</label>
+              <textarea id="edit-accessories" class="form-control" formControlName="accessories" rows="2"></textarea>
+            </div>
+          </div>
+        </form>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" (click)="closeEditItemModal()">Cancelar</button>
+          <button class="btn btn-primary" type="button" (click)="submitEditItem()" [disabled]="editItemForm.invalid || isSaving">
+            <i class="fas fa-save"></i>
+            Guardar cambios
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Modal de reasignación de técnico -->
+  @if (showReassignTechnicianModal) {
+    <div class="modal-overlay" (click)="closeReassignTechnicianModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Reasignar Técnico - Equipo #{{ reassigningItem?.itemNumber }}</h2>
+          <button class="btn-close" type="button" (click)="closeReassignTechnicianModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <form [formGroup]="reassignTechnicianForm" class="modal-body">
+          <div class="form-group">
+            <label for="reassign-technician">Técnico *</label>
+            <select id="reassign-technician" class="form-control" formControlName="technicianId">
+              <option [ngValue]="null">Seleccione un técnico</option>
+              @for (tech of technicians; track tech.id) {
+                <option [ngValue]="tech.id">{{ tech.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="info-box">
+            <i class="fas fa-info-circle"></i>
+            <p>Técnico actual: {{ reassigningItem?.assignedToTechnicianName || 'Sin asignar' }}</p>
+          </div>
+        </form>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" (click)="closeReassignTechnicianModal()">Cancelar</button>
+          <button class="btn btn-primary" type="button" (click)="submitReassignTechnician()" [disabled]="reassignTechnicianForm.invalid || isSaving">
+            <i class="fas fa-user-check"></i>
+            Reasignar
           </button>
         </div>
       </div>

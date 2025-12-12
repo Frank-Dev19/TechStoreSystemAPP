@@ -1,16 +1,27 @@
-// Color variables
-$header-primary: #3d5a80;
-$header-secondary: #4a6fa5;
-$sidebar-dark: #2c3e50;
-$background-light: #f5f5f5;
-$text-primary: #2c3e50;
-$border-color: #e0e0e0;
+// Color variables - Aligned with reception-panel
+$primary: #2c5282;
+$primary-dark: #1a365d;
+$secondary: #3b6ba8;
+$accent: #3182ce;
+$success: #22c55e;
+$warning: #fbbf24;
+$danger: #ef4444;
+$info: #0ea5e9;
+$text-muted: #6b7280;
+$border: #e2e8f0;
+$bg-light: #f5f7fa;
 
-// State colors
-$color-success: #27ae60;
-$color-warning: #e67e22;
-$color-danger: #e74c3c;
-$color-info: #3498db;
+// Legacy aliases for backward compatibility
+$header-primary: $primary;
+$header-secondary: $secondary;
+$sidebar-dark: $primary-dark;
+$background-light: $bg-light;
+$text-primary: $primary-dark;
+$border-color: $border;
+$color-success: $success;
+$color-warning: $warning;
+$color-danger: $danger;
+$color-info: $info;
 
 .technician-panel {
   background-color: $background-light;

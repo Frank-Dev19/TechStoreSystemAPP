@@ -47,4 +47,12 @@ export class TicketService {
     bulkRestore(ids: number[]): Observable<{ ok: boolean; message: string }> {
         return this.base.post<{ ok: boolean; message: string }>(`${config.tickets.tickets}/bulk-restore`, { ids });
     }
+
+    updateItem(itemId: number, payload: any): Observable<any> {
+        return this.base.patch<any>(`${config.tickets.ticketItems}/${itemId}`, payload);
+    }
+
+    reassignTechnician(itemId: number, technicianId: number): Observable<any> {
+        return this.base.patch<any>(`${config.tickets.ticketItems}/${itemId}/assign-technician`, { technicianId });
+    }
 }

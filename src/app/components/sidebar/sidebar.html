@@ -172,10 +172,13 @@
                             <li><a class="nav-link submenu-link" routerLink="/catalogo-servicios">
                                     <i class="submenu-dot"></i>Catálogo de servicios
                                 </a></li>
-                            <li><a class="nav-link submenu-link" routerLink="/reception-panel">
+                            <li *ngIf="isSupervisor()"><a class="nav-link submenu-link" routerLink="/supervisor-panel">
+                                <i class="submenu-dot"></i>Panel de supervisor
+                            </a></li>
+                            <li *ngIf="isReceptionist()"><a class="nav-link submenu-link" routerLink="/reception-panel">
                                     <i class="submenu-dot"></i>Panel de recepción
                                 </a></li>
-                            <li><a class="nav-link submenu-link" routerLink="/technician-panel">
+                            <li *ngIf="isTechnician()"><a class="nav-link submenu-link" routerLink="/technician-panel">
                                     <i class="submenu-dot"></i>Panel de técnico
                                 </a></li>
                         </ul>

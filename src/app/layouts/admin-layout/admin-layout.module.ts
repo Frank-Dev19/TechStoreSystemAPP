@@ -5,6 +5,7 @@ import { CommonModule, DatePipe } from "@angular/common";
 import { NgbModule, NgbCollapseModule } from '@ng-bootstrap/ng-bootstrap';
 import { FormsModule, ReactiveFormsModule } from "@angular/forms";
 import { NgApexchartsModule } from 'ng-apexcharts';
+import { NgSelectModule } from '@ng-select/ng-select';
 
 import { AdminLayoutRoutes } from "./admin-layout.routing";
 import { Dashboard } from "../../components/dashboard/dashboard";
@@ -20,6 +21,7 @@ import { Inventory } from "../../pages/inventory/inventory";
 import { ServiceCatalog } from "../../pages/service-catalog/service-catalog";
 import { TechnicianPanel } from "../../pages/technician-panel/technician-panel";
 import { ReceptionPanel } from "../../pages/reception-panel/reception-panel";
+import { SupervisorPanel } from "../../pages/supervisor-panel/supervisor-panel";
 
 @NgModule({
     imports: [
@@ -30,7 +32,8 @@ import { ReceptionPanel } from "../../pages/reception-panel/reception-panel";
         HttpClientModule,
         NgbModule,
         NgbCollapseModule,
-        NgApexchartsModule
+        NgApexchartsModule,
+        NgSelectModule
     ],
     declarations: [
         Home,
@@ -44,6 +47,7 @@ import { ReceptionPanel } from "../../pages/reception-panel/reception-panel";
         ServiceCatalog,
         TechnicianPanel,
         ReceptionPanel,
+        SupervisorPanel,
         //ForgotPassword,
         //ResetPassword
 

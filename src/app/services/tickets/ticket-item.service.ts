@@ -51,7 +51,11 @@ export class TicketItemService {
     }
 
     assignTechnician(itemId: number, technicianId: number): Observable<TicketItem> {
-        return this.base.patch<TicketItem>(`${config.tickets.ticketItems}/${itemId}/assign`, { technicianId });
+        return this.base.patch<TicketItem>(`${config.tickets.ticketItems}/${itemId}/assign-technician`, { technicianId });
+    }
+
+    assignSupervisor(itemId: number, supervisorId: number): Observable<TicketItem> {
+        return this.base.patch<TicketItem>(`${config.tickets.ticketItems}/${itemId}/assign-supervisor`, { supervisorId });
     }
 
     changeStatus(itemId: number, status: TicketItemStatus): Observable<TicketItem> {
