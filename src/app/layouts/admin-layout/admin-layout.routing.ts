@@ -8,6 +8,9 @@ import { Perfil } from '../../pages/perfil/perfil';
 import { DocumentTypes } from '../../pages/document-types/document-types';
 import { Rbac } from '../../pages/rbac/rbac';
 import { Inventory } from '../../pages/inventory/inventory';
+import { Auditoria } from '../../pages/auditoria/auditoria';
+import { Ventas } from '../../pages/ventas/ventas';
+import { Pricing } from '../../pages/pricing/pricing';
 import { ServiceCatalog } from '../../pages/service-catalog/service-catalog';
 import { ReceptionPanel } from '../../pages/reception-panel/reception-panel';
 import { TechnicianPanel } from '../../pages/technician-panel/technician-panel';
@@ -22,6 +25,9 @@ export const AdminLayoutRoutes: Routes = [
     { path: 'tipos-documento', component: DocumentTypes },
     { path: 'rbac', component: Rbac },
     { path: 'inventory', component: Inventory },
+    { path: 'auditoria', component: Auditoria },
+    { path: 'ventas', component: Ventas },
+    { path: 'pricing', component: Pricing },
     { path: 'catalogo-servicios', component: ServiceCatalog },
     { path: 'reception-panel', component: ReceptionPanel },
     { path: 'technician-panel', component: TechnicianPanel },

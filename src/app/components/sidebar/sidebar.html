@@ -120,6 +120,9 @@
                             <li><a class="nav-link submenu-link" routerLink="/inventory">
                                     <i class="submenu-dot"></i>Resumen de Inventario
                                 </a></li>
+                            <li><a class="nav-link submenu-link" routerLink="/auditoria">
+                                    <i class="submenu-dot"></i>Auditoria
+                                </a></li>
                         </ul>
                     </li>
 
@@ -142,7 +145,7 @@
                             </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo4')">
-                            <li><a class="nav-link submenu-link" routerLink="/realizarventas">
+                            <li><a class="nav-link submenu-link" routerLink="/ventas">
                                     <i class="submenu-dot"></i>Realizar Ventas
                                 </a></li>
                             <li><a class="nav-link submenu-link" routerLink="/ventasver">
@@ -150,6 +153,35 @@
                                 </a></li>
                         </ul>
                     </li>
+
+                    <!-- MÓDULO PRECIOS -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('ModuloPrecios')">
+                            <div class="nav-icon-wrapper">
+                                <!-- Icono tipo etiqueta de precio -->
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path
+                                        d="M21 11.5 12.5 3l-9 9 8.5 8.5 9-9ZM6.5 9.5C5.67 9.5 5 8.83 5 8s.67-1.5 1.5-1.5S8 7.17 8 8s-.67 1.5-1.5 1.5Z" />
+                                </svg>
+                            </div>
+                            <div class="nav-content">
+                                <span class="nav-title">Precios</span>
+                                <span class="nav-subtitle">Listas y descuentos</span>
+                            </div>
+                            <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('ModuloPrecios')" width="16"
+                                height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
+                        </a>
+                        <ul class="nav submenu" [class.show]="isSubMenuOpen('ModuloPrecios')">
+                            <li>
+                                <a class="nav-link submenu-link" routerLink="/pricing">
+                                    <i class="submenu-dot"></i>Gestión de Precios
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
 
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo5')">

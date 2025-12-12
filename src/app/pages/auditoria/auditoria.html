@@ -1,0 +1,400 @@
+<div class="auditoria-container">
+    <!-- Header/Toolbar -->
+    <div class="auditoria-header">
+        <div class="header-content">
+            <div class="header-title-section">
+                <h1 class="title">
+                    <i class="fas fa-shield-alt"></i> Auditoría
+                </h1>
+                <p class="subtitle">
+                    <i class="fas fa-calendar-alt"></i>
+                    Rango: {{ filters.from }} a {{ filters.to }}
+                </p>
+            </div>
+
+            <div class="header-actions">
+                <button class="btn-secondary btn-sm" (click)="loadAuditLogs()" [disabled]="isLoading"
+                    title="Actualizar">
+                    <i class="fas fa-sync-alt" [class.rotating]="isLoading"></i>
+                    Actualizar
+                </button>
+
+                <button class="btn-secondary btn-sm" [class.active]="isLiveMode" (click)="toggleLiveMode()"
+                    title="Modo Live">
+                    <i class="fas fa-circle"></i>
+                    {{ isLiveMode ? 'Live (Activo)' : 'Live' }}
+                </button>
+
+                <button class="btn-secondary btn-sm" (click)="exportCsv()" title="Exportar CSV">
+                    <i class="fas fa-file-csv"></i>
+                    Exportar CSV
+                </button>
+
+                <button class="btn-secondary btn-sm" (click)="saveCurrentFilters()" title="Guardar filtros">
+                    <i class="fas fa-bookmark"></i>
+                    Guardar Filtros
+                </button>
+
+                <button class="btn-secondary btn-sm" (click)="resetFilters()" title="Reset">
+                    <i class="fas fa-redo"></i>
+                    Reset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Date Pills -->
+    <div class="quick-date-pills">
+        <button class="date-pill" *ngFor="let range of dateRanges" (click)="applyQuickDateRange(range)">
+            <i class="fas fa-clock"></i> {{ range.label }}
+        </button>
+    </div>
+
+    <!-- Filters Block -->
+    <div class="filters-block">
+        <div class="filters-grid">
+            <div class="form-group">
+                <label><i class="fas fa-calendar-day"></i> Desde</label>
+                <input type="date" [(ngModel)]="filters.from" class="form-control" />
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-calendar-day"></i> Hasta</label>
+                <input type="date" [(ngModel)]="filters.to" class="form-control" />
+            </div>
+
+           <div class="form-group">
+    <label><i class="fas fa-user"></i> Usuario</label>
+    <select [(ngModel)]="filters.userId" class="form-control">
+        <option [value]="null">Todos</option>
+        <option *ngFor="let u of users" [value]="u.id">
+            {{ u.name }} ({{ u.email }})
+        </option>
+    </select>
+</div>
+
+            <div class="form-group">
+                <label><i class="fas fa-exchange-alt"></i> Acción</label>
+                <select [(ngModel)]="filters.action" class="form-control">
+                    <option [value]="null">Todas</option>
+                    <option value="HTTP">HTTP</option>
+                    <option value="LOGIN_SUCCESS">Login Exitoso</option>
+                    <option value="LOGIN_FAILURE">Login Fallido</option>
+                    <option value="LOGOUT">Logout</option>
+                    <option value="ENTITY_CREATE">Crear</option>
+                    <option value="ENTITY_UPDATE">Actualizar</option>
+                    <option value="ENTITY_DELETE">Eliminar</option>
+                    <option value="BUSINESS">Negocio</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-database"></i> Entidad</label>
+                <select [(ngModel)]="filters.entity" class="form-control">
+                    <option [value]="null">Todas</option>
+                    <option value="AUTH">AUTH</option>
+                    <option value="USER">USER</option>
+                    <option value="PRODUCT">PRODUCT</option>
+                    <option value="MOVEMENT">MOVEMENT</option>
+                    <option value="STOCK">STOCK</option>
+                    <option value="LOT">LOT</option>
+                    <option value="SERIAL">SERIAL</option>
+                    <option value="CLIENT">CLIENT</option>
+                    <option value="DOC_TYPE">DOC_TYPE</option>
+                    <option value="SYSTEM">SYSTEM</option>
+                    <option value="CATEGORY">CATEGORY</option>
+                    <option value="UNIT">UNIT</option>
+                    <option value="COUNTDIFFERENCESUMMARY">COUNTDIFFERENCESUMMARY</option>
+                    <option value="COUNTDIFFERENCE">COUNTDIFFERENCE</option>
+                    <option value="COUNTENTRYSERIAL">COUNTENTRYSERIAL</option>
+                    <option value="COUNTENTRY">COUNTENTRY</option>
+                    <option value="COUNTSNAPSHOT">COUNTSNAPSHOT</option>
+                    <option value="COUNT">COUNT</option>
+                    <option value="MOVEMENTSERIAL">MOVEMENTSERIAL</option>
+                    <option value="OTHER">OTHER</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-code"></i> Método</label>
+                <select [(ngModel)]="filters.method" class="form-control">
+                    <option [value]="null">Todos</option>
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-exclamation-triangle"></i> Status</label>
+                <input type="number" [(ngModel)]="filters.status" class="form-control" placeholder="ej: 200" />
+            </div>
+
+            <div class="form-group full-width">
+                <label><i class="fas fa-search"></i> Búsqueda Libre</label>
+                <div class="search-wrap">
+                    <i class="fas fa-search"></i>
+                    <input type="text" [(ngModel)]="filters.searchText" class="form-control search-input"
+                        placeholder="Path, entityId, requestId, IP, etc." />
+                </div>
+            </div>
+        </div>
+
+        <div class="filter-actions">
+            <button class="btn-primary" (click)="refreshSearch()">
+                <i class="fas fa-search"></i> Buscar
+            </button>
+            <button class="btn-secondary" (click)="resetFilters()">
+                <i class="fas fa-times"></i> Limpiar
+            </button>
+        </div>
+    </div>
+
+    <!-- Saved Filters Chips -->
+    <div class="saved-filters-chips" *ngIf="savedFilters.length > 0">
+        <span class="chip-label"><i class="fas fa-bookmark"></i> Filtros guardados:</span>
+        <div class="chips-container">
+            <div class="chip" *ngFor="let filter of savedFilters">
+                <button class="chip-apply" (click)="applySavedFilter(filter)">{{ filter.name }}</button>
+                <button class="chip-delete" (click)="deleteSavedFilter(filter.id)" title="Eliminar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-icon"><i class="fas fa-clipboard-list"></i></div>
+            <div>
+                <div class="metric-label">Total</div>
+                <div class="metric-value">{{ metrics.total }}</div>
+            </div>
+        </div>
+        <div class="metric-card success">
+            <div class="metric-icon"><i class="fas fa-check-circle"></i></div>
+            <div>
+                <div class="metric-label">2xx (Exito)</div>
+                <div class="metric-value">{{ metrics.success2xx }}</div>
+            </div>
+        </div>
+        <div class="metric-card warning">
+            <div class="metric-icon"><i class="fas fa-exclamation-circle"></i></div>
+            <div>
+                <div class="metric-label">4xx (Cliente)</div>
+                <div class="metric-value">{{ metrics.client4xx }}</div>
+            </div>
+        </div>
+        <div class="metric-card danger">
+            <div class="metric-icon"><i class="fas fa-times-circle"></i></div>
+            <div>
+                <div class="metric-label">5xx (Servidor)</div>
+                <div class="metric-value">{{ metrics.server5xx }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+        <table class="audit-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>User ID</th>
+                    <th>Actor</th>
+                    <th>Descripcion</th>
+                    <th>Acción</th>
+                    <th>Entidad</th>
+                    <th>Entity ID</th>
+                    <th>Método</th>
+                    <th>Path</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>IP</th>
+                    <!-- <th>Request ID</th> -->
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr *ngFor="let log of filteredLogs">
+                    <td>{{ log.createdAt | date: 'dd/MM/yyyy HH:mm:ss':'UTC' }}</td>
+                    <td>{{ log.userId || '-' }}</td>
+                    <td>{{ log.actorName || '-' }}</td>
+                    <td>{{ log.reason || '-' }}</td>
+                    <td><span class="action-badge"><i class="fas fa-bolt"></i> {{ getActionLabel(log.action) }}</span>
+                    </td>
+                    <td>{{ log.entity }}</td>
+                    <td><code>{{ log.entityId || '-' }}</code></td>
+                    <td>
+                        <span class="method-badge" [ngClass]="log.method?.toLowerCase()">{{ log.method || '-' }}</span>
+                    </td>
+                    <td><small>{{ log.path || '-' }}</small></td>
+                    <td>
+                        <span class="status-badge" [ngClass]="getStatusClass(log.status)">{{ log.status }}</span>
+                    </td>
+                    <td>{{ log.durationMs }}ms</td>
+                    <td><small>{{ log.ip || '-' }}</small></td>
+                    <!-- <td><code>{{ log.requestId }}</code></td> -->
+                    <td>
+                        <button class="btn-icon" (click)="selectLog(log)" title="Ver detalle">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+        <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
+            <i class="fas fa-chevron-left"></i> Anterior
+        </button>
+        <span class="pagination-info">Página {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span>
+        <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
+            Siguiente <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
+
+    <!-- Detail Drawer Overlay -->
+    <div class="detail-drawer-overlay" *ngIf="selectedLog" (click)="closeDetailDrawer()"></div>
+
+    <!-- Detail Drawer -->
+    <div class="detail-drawer" *ngIf="selectedLog">
+        <div class="drawer-header">
+            <h3><i class="fas fa-info-circle"></i> Detalles del Log</h3>
+            <button class="close-button" (click)="closeDetailDrawer()"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div class="drawer-body">
+            <!-- HTTP Section -->
+            <div class="detail-section">
+                <h4><i class="fas fa-globe"></i> HTTP</h4>
+                <div class="detail-row"><label>Método:</label><span class="mono">{{ selectedLog.method }}</span></div>
+                <div class="detail-row"><label>Path:</label><span class="mono">{{ selectedLog.path }}</span></div>
+                <div class="detail-row">
+                    <label>Status:</label>
+                    <span class="status-badge" [ngClass]="getStatusClass(selectedLog.status)">
+                        {{ selectedLog.status }} - {{ getStatusLabel(selectedLog.status) }}
+                    </span>
+                </div>
+                <div class="detail-row"><label>Duration:</label><span>{{ selectedLog.durationMs }}ms</span></div>
+                <div class="detail-row"><label>IP:</label><span class="mono">{{ selectedLog.ip }}</span></div>
+                <div class="detail-row"><label>User Agent:</label><span>{{ selectedLog.userAgent || '-' }}</span></div>
+
+            </div>
+
+            <!-- Entity Section -->
+            <div class="detail-section">
+                <h4><i class="fas fa-database"></i> Entidad</h4>
+                <div class="detail-row"><label>Acción:</label><span>{{ getActionLabel(selectedLog.action) }}</span>
+                </div>
+                <div class="detail-row"><label>Entidad:</label><span>{{ selectedLog.entity }}</span></div>
+                <div class="detail-row"><label>Entity ID:</label><span class="mono">{{ selectedLog.entityId || '-'
+                        }}</span></div>
+                <div class="detail-row"><label>User ID:</label><span>{{ selectedLog.userId || '-' }}</span></div>
+                <div class="detail-row"><label>Session ID:</label><span class="mono">{{ selectedLog.sessionId || '-'
+                        }}</span></div>
+                <div class="detail-row">
+                    <label>Request ID:</label>
+                    <span class="mono">
+                        <code>{{ selectedLog.requestId }}</code>
+                        <button class="btn-copy" (click)="copyToClipboard(selectedLog.requestId || '')">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </span>
+                </div>
+                <div class="detail-row">
+                    <label>Actor:</label>
+                    <span>
+                        {{ selectedLog.actorName || '-' }}
+                        <span *ngIf="selectedLog.actorEmail">
+                            (<span class="mono">{{ selectedLog.actorEmail }}</span>)
+                        </span>
+                    </span>
+                </div>
+
+
+            </div>
+
+            <!-- Changes Section (Before/After) -->
+            <div class="detail-section" *ngIf="selectedLog.before || selectedLog.after">
+                <h4><i class="fas fa-code-branch"></i> Cambios</h4>
+                <div class="json-diff">
+                    <div class="json-panel">
+                        <h5>Antes</h5>
+                        <pre>{{ JSON.stringify(selectedLog.before, null, 2) }}</pre>
+                        <button class="btn-copy" (click)="copyToClipboard(JSON.stringify(selectedLog.before))">
+                            <i class="fas fa-copy"></i> Copiar JSON
+                        </button>
+                    </div>
+                    <div class="json-panel">
+                        <h5>Después</h5>
+                        <pre>{{ JSON.stringify(selectedLog.after, null, 2) }}</pre>
+                        <button class="btn-copy" (click)="copyToClipboard(JSON.stringify(selectedLog.after))">
+                            <i class="fas fa-copy"></i> Copiar JSON
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Related Logs -->
+            <div class="detail-section" *ngIf="getRelatedLogs().length > 0">
+                <h4><i class="fas fa-link"></i> Logs Relacionados (Request ID)</h4>
+                <div class="table-container">
+                    <table class="related-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Acción</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let related of getRelatedLogs()">
+                                <td>{{ related.createdAt | date: 'HH:mm:ss':'UTC' }}</td>
+                                <td>{{ getActionLabel(related.action) }}</td>
+                                <td>
+                                    <span class="status-badge" [ngClass]="getStatusClass(related.status)">{{
+                                        related.status }}</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Guardar Filtros -->
+    <div class="modal-overlay" *ngIf="showSaveFilterModal" (click)="closeSaveFilterModal()">
+        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3><i class="fas fa-bookmark"></i> Guardar Filtros</h3>
+                <button class="close-button" (click)="closeSaveFilterModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label><i class="fas fa-tag"></i> Nombre del Filtro *</label>
+                    <input type="text" [(ngModel)]="filterNameToSave" class="form-control"
+                        placeholder="ej: Errores últimas 24h" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeSaveFilterModal()">Cancelar</button>
+                <button class="btn-primary" (click)="confirmSaveFilters()"><i class="fas fa-save"></i> Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container">
+        <div class="toast" *ngFor="let toast of toasts" [class]="toast.type">
+            <i [class]="getToastIcon(toast.type)"></i>
+            <span>{{ toast.message }}</span>
+        </div>
+    </div>
+</div>

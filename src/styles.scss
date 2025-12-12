@@ -34,3 +34,18 @@ body {
     margin: 0;
     font-family: Roboto, "Helvetica Neue", sans-serif;
 }
+
+:root {
+    --primary: #2c5282;
+    --primary-600: #3b6ba8;
+    --bg: #f8f9fa;
+    --surface: #ffffff;
+    --text: #2d3748;
+    --text-muted: #718096;
+    --border: #e2e8f0;
+    --success: #38a169;
+    --warning: #dd6b20;
+    --danger: #e53e3e;
+    --info: #3182ce;
+    --radius: 12px;
+}
