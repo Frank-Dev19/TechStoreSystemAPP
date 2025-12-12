@@ -17,6 +17,9 @@ import { Perfil } from "../../pages/perfil/perfil";
 import { DocumentTypes } from "../../pages/document-types/document-types";
 import { Rbac } from "../../pages/rbac/rbac";
 import { Inventory } from "../../pages/inventory/inventory";
+import { Auditoria } from "../../pages/auditoria/auditoria";
+import { Ventas } from "../../pages/ventas/ventas";
+import { Pricing } from "../../pages/pricing/pricing";
 
 @NgModule({
     imports: [
@@ -37,7 +40,10 @@ import { Inventory } from "../../pages/inventory/inventory";
         Tests,
         Perfil,
         Rbac,
-        Inventory
+        Inventory,
+        Auditoria,
+        Ventas,
+        Pricing,
         //ForgotPassword,
         //ResetPassword
 

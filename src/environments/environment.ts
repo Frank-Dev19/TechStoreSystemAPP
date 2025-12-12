@@ -23,4 +23,23 @@ export const config = {
     units: '/inventory/catalogs/units',
     lots: '/lots',               // si tu backend lo expone
   },
+
+  audit: {
+    base: '/audit',
+    search: '/audit/search',   // GET con SearchAuditDto
+    stream: '/audit/stream',   // SSE
+    byId: '/audit',            // GET /audit/:id
+  },
+
+  pricing: {
+    base: '/pricing',
+    priceLists: '/pricing/price-lists',
+    productPrices: '/pricing/product-prices',
+    discountRules: '/pricing/discount-rules',
+    combos: '/pricing/combos',
+    // prefijo para /pricing/query/product/:id y /best
+    queryProduct: '/pricing/query/product',
+  },
+
+
 };

@@ -1,0 +1,759 @@
+<div class="ventas-container">
+    <!-- HEADER -->
+    <div class="ventas-header">
+        <div class="header-content">
+            <div class="header-title-section">
+                <h1 class="title"><i class="fas fa-shopping-cart"></i> Ventas</h1>
+                <p class="subtitle">
+                    <i class="fas fa-calendar-alt"></i>
+                    {{ salesFilters.dateFrom }} a {{ salesFilters.dateTo }}
+                </p>
+            </div>
+            <div class="header-actions">
+                <button class="btn-action" (click)="onNewSale()" title="Registrar nueva venta">
+                    <i class="fas fa-plus"></i>
+                    Registrar Venta
+                </button>
+                <button class="btn-action" (click)="loadSales()" [disabled]="isLoading" title="Actualizar">
+                    <i class="fas fa-sync-alt" [class.spinning]="isLoading"></i>
+                </button>
+                <button class="btn-action" (click)="exportCsv()" title="Exportar CSV">
+                    <i class="fas fa-download"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="tabs-section">
+        <button class="tab-button" [class.active]="activeTab === 'sales'" (click)="activeTab = 'sales'">
+            <i class="fas fa-list"></i>
+            Listado de Ventas
+        </button>
+        <button class="tab-button" [class.active]="activeTab === 'create'" (click)="onNewSale()">
+            <i class="fas fa-plus-circle"></i>
+            Nueva Venta
+        </button>
+        <button class="tab-button" [class.active]="activeTab === 'cashflow'" (click)="activeTab = 'cashflow'">
+            <i class="fas fa-money-bill-wave"></i>
+            Flujo de Caja
+        </button>
+    </div>
+
+    <!-- LISTADO DE VENTAS TAB -->
+    <div *ngIf="activeTab === 'sales'" class="sales-tab-content">
+        <!-- FILTERS -->
+        <div class="filters-card">
+            <div class="filters-header">
+                <h3><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                <span class="results-indicator">{{ sales.length }} resultados</span>
+            </div>
+
+            <div class="filters-grid">
+                <div class="form-group">
+                    <label><i class="fas fa-calendar-alt"></i> Desde</label>
+                    <input type="date" [(ngModel)]="salesFilters.dateFrom" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-calendar-alt"></i> Hasta</label>
+                    <input type="date" [(ngModel)]="salesFilters.dateTo" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-user"></i> Cliente</label>
+                    <input type="text" [(ngModel)]="salesFilters.customerName" class="form-control"
+                        placeholder="Nombre del cliente">
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-file-alt"></i> Tipo Documento</label>
+                    <select [(ngModel)]="salesFilters.documentType" class="form-control">
+                        <option [ngValue]="null">Todos</option>
+                        <option value="NOTA_PEDIDO">Nota de Pedido</option>
+                        <option value="BOLETA">Boleta</option>
+                        <option value="FACTURA">Factura</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-info-circle"></i> Estado</label>
+                    <select [(ngModel)]="salesFilters.status" class="form-control">
+                        <option [ngValue]="null">Todos</option>
+                        <option value="PENDIENTE">Pendiente</option>
+                        <option value="EMITIDO">Emitido</option>
+                        <option value="ANULADO">Anulado</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="search-section">
+                <button class="btn-primary" (click)="applyCashFlowFilters()">
+                    <i class="fas fa-search"></i>
+                    Buscar
+                </button>
+                <button class="btn-secondary" (click)="resetCashFlowFilters()">
+                    <i class="fas fa-eraser"></i>
+                    Limpiar
+                </button>
+            </div>
+        </div>
+
+        <!-- METRICS -->
+        <div class="metrics-grid">
+            <div class="metric-card total">
+                <div class="metric-icon"><i class="fas fa-receipt"></i></div>
+                <div class="metric-content">
+                    <label>Total Ventas</label>
+                    <span class="metric-value">{{ metrics.totalSales }}</span>
+                </div>
+            </div>
+            <div class="metric-card success">
+                <div class="metric-icon"><i class="fas fa-check-circle"></i></div>
+                <div class="metric-content">
+                    <label>Emitidas</label>
+                    <span class="metric-value">{{ metrics.totalEmitted }}</span>
+                </div>
+            </div>
+            <div class="metric-card danger">
+                <div class="metric-icon"><i class="fas fa-times-circle"></i></div>
+                <div class="metric-content">
+                    <label>Anuladas</label>
+                    <span class="metric-value">{{ metrics.totalCancelled }}</span>
+                </div>
+            </div>
+            <div class="metric-card info">
+                <div class="metric-icon"><i class="fas fa-coins"></i></div>
+                <div class="metric-content">
+                    <label>Monto Total</label>
+                    <span class="metric-value">S/ {{ metrics.totalAmount.toFixed(2) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE -->
+        <div class="table-section">
+            <div class="table-loading" *ngIf="isLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Cargando ventas...</span>
+            </div>
+
+            <div class="table-container" *ngIf="!isLoading">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Tipo</th>
+                            <th>Número</th>
+                            <th>Cliente</th>
+                            <th>Total</th>
+                            <th>Forma de Pago</th>
+                            <th>Estado</th>
+                            <th width="200">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let sale of sales" class="sale-row">
+                            <td>{{ sale.saleDate | date:'dd/MM/yyyy' }}</td>
+                            <td>
+                                <span class="doc-type-badge">
+                                    {{ sale.documentType === 'NOTA_PEDIDO' ? 'Nota Pedido' : (sale.documentType ===
+                                    'BOLETA' ? 'Boleta' : 'Factura') }}
+                                </span>
+                            </td>
+                            <td><strong>{{ sale.documentSeries }}-{{ sale.documentNumber }}</strong></td>
+                            <td>{{ sale.customerName }}</td>
+                            <td>S/ {{ sale.total.toFixed(2) }}</td>
+                            <td>
+                                <span class="payment-badge">{{ getPaymentLabel(sale.paymentType) }}</span>
+                            </td>
+                            <td>
+                                <span class="status-badge" [ngClass]="'status-' + sale.status.toLowerCase()">
+                                    {{ getStatusLabel(sale.status) }}
+                                </span>
+                            </td>
+                            <td class="actions">
+                                <button class="btn-icon" (click)="onViewSale(sale)" title="Ver detalle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn-icon" (click)="onDownloadSalePdf(sale)" title="Descargar PDF">
+                                    <i class="fas fa-file-pdf"></i>
+                                </button>
+                                <button class="btn-icon" *ngIf="sale.status === 'EMITIDO'"
+                                    (click)="onOpenCreditNoteModal(sale)" title="Nota de Crédito">
+                                    <i class="fas fa-file-invoice-dollar"></i>
+                                </button>
+                                <button class="btn-icon" *ngIf="sale.status === 'EMITIDO'"
+                                    (click)="onOpenDispatchGuideModal(sale)" title="Guía de Remisión">
+                                    <i class="fas fa-truck"></i>
+                                </button>
+                                <button class="btn-icon danger" *ngIf="sale.status !== 'ANULADO'"
+                                    (click)="onCancelSale(sale)" title="Anular Venta">
+                                    <i class="fas fa-ban"></i>
+                                </button>
+                            </td>
+                        </tr>
+
+                        <tr *ngIf="sales.length === 0">
+                            <td colspan="8" class="empty-message">
+                                <i class="fas fa-inbox"></i>
+                                <p>No se encontraron ventas</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- NUEVA VENTA TAB -->
+    <div *ngIf="activeTab === 'create'" class="create-sale-tab">
+        <div class="sale-form-container">
+            <div class="sale-form-left">
+
+                <!-- Sección Productos -->
+                <div class="form-section">
+                    <h3 class="section-title"><i class="fas fa-box"></i> Productos</h3>
+                    <div class="form-group product-autocomplete">
+                        <label>Producto</label>
+                        <!-- BUSCADOR DE PRODUCTO -->
+                        <input #productSearchInput type="text" [(ngModel)]="currentSaleItem.productName"
+                            (input)="filterProducts()" class="form-control" placeholder="Buscar producto...">
+
+
+                        <ul class="autocomplete-list" *ngIf="filteredProducts.length > 0">
+                            <li class="autocomplete-item" *ngFor="let p of filteredProducts" (click)="selectProduct(p)">
+                                <div class="item-main">
+                                    <span class="item-name">{{ p.name }}</span>
+                                    <span class="item-price">S/ {{ p.salePrice | number:'1.2-2' }}</span>
+                                </div>
+                                <div class="item-meta">
+                                    <span class="item-sku">{{ p.sku }}</span>
+                                    <span class="item-stock">Stock: {{ p.stock }}</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Cantidad</label>
+                            <input #quantityInput type="number" [(ngModel)]="currentSaleItem.quantity"
+                                class="form-control" min="1" (keydown.enter)="onQuantityEnter()">
+
+                        </div>
+                        <div class="form-group">
+                            <label>Precio Unit.</label>
+                            <input type="number" [(ngModel)]="currentSaleItem.unitPrice" class="form-control" min="0"
+                                step="0.01">
+                        </div>
+                    </div>
+                    <button class="btn-primary btn-block" (click)="onAddSaleItem()">
+                        <i class="fas fa-plus"></i>
+                        Agregar Producto
+                    </button>
+
+                    <!-- Tabla de Productos en la Venta -->
+                    <div *ngIf="saleFormData?.lines && saleFormData.lines.length > 0" class="items-table">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Precio</th>
+                                    <th>Total</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let line of saleFormData.lines; let i = index">
+                                    <td>{{ line.productName }}</td>
+                                    <td>{{ line.quantity }}</td>
+                                    <td>S/ {{ line.unitPrice.toFixed(2) }}</td>
+                                    <td>S/ {{ line.lineTotal.toFixed(2) }}</td>
+                                    <td>
+                                        <button class="btn-icon danger" (click)="onRemoveSaleItem(i)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sección Cliente -->
+                <div class="form-section">
+                    <h3 class="section-title"><i class="fas fa-user"></i> Cliente</h3>
+
+                    <div class="form-group">
+                        <label>DNI/RUC</label>
+                        <div class="input-group">
+                            <input type="text" [(ngModel)]="customerSearchText" class="form-control"
+                                placeholder="Ingrese DNI o RUC">
+                            <button class="btn-primary" type="button" (click)="onSearchCustomer()">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+
+                        <!-- Acción manual para abrir el modal -->
+                        <div class="client-extra-actions">
+                            <button type="button" class="btn-secondary btn-sm" (click)="onOpenNewCustomerModal()">
+                                <i class="fas fa-user-plus"></i>
+                                Registrar nuevo cliente
+                            </button>
+                        </div>
+                    </div>
+
+                    <div *ngIf="foundCustomer" class="customer-card">
+                        <p class="customer-name">{{ foundCustomer.name }}</p>
+                        <p class="customer-detail">{{ foundCustomer.documentNumber }}</p>
+                        <p class="customer-detail">{{ foundCustomer.address }}</p>
+                    </div>
+                </div>
+
+
+            </div>
+
+            <div class="sale-form-right">
+                <!-- Resumen -->
+                <!-- Resumen (panel destacado) -->
+                <div class="form-section resumen-section">
+                    <h3 class="section-title"><i class="fas fa-calculator"></i> Resumen</h3>
+                    <div class="summary-box">
+                        <div class="summary-row">
+                            <span>Subtotal</span>
+                            <span>S/ {{ (saleFormData?.subtotal || 0).toFixed(2) }}</span>
+                        </div>
+                        <div class="summary-row">
+                            <span>IGV (18%)</span>
+                            <span>S/ {{ (saleFormData?.igv || 0).toFixed(2) }}</span>
+                        </div>
+                        <div class="summary-row total">
+                            <span>Total</span>
+                            <span class="summary-total-amount">
+                                S/ {{ (saleFormData?.total || 0).toFixed(2) }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tipo de Comprobante -->
+                <div class="form-section">
+                    <h3 class="section-title"><i class="fas fa-file-alt"></i> Comprobante</h3>
+                    <div class="form-group">
+                        <label>Tipo</label>
+                        <select [(ngModel)]="saleFormData.documentType" class="form-control">
+                            <option value="NOTA_PEDIDO">Nota de Pedido</option>
+                            <option value="BOLETA">Boleta</option>
+                            <option value="FACTURA">Factura</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Forma de Pago -->
+                <div class="form-section">
+                    <h3 class="section-title"><i class="fas fa-credit-card"></i> Pago</h3>
+
+                    <div class="form-group">
+                        <label>Forma de Pago</label>
+                        <select [(ngModel)]="saleFormData.paymentType" class="form-control">
+                            <option value="EFECTIVO">Efectivo</option>
+                            <option value="TARJETA">Tarjeta</option>
+                            <option value="TRANSFERENCIA">Transferencia</option>
+                            <option value="CREDITO">Crédito</option>
+                        </select>
+                    </div>
+
+                    <!-- Campo dinámico para N° de operación -->
+                    <div class="form-group"
+                        *ngIf="saleFormData?.paymentType && saleFormData.paymentType !== 'EFECTIVO'">
+                        <label>N° de operación</label>
+                        <input type="text" class="form-control" [(ngModel)]="paymentOperationNumber"
+                            placeholder="Ingrese el N° de operación o código de transacción">
+                    </div>
+                </div>
+
+
+                <!-- Botones de Acción -->
+                <div class="form-section">
+                    <div class="action-buttons">
+                        <button class="btn-secondary btn-block" (click)="onCancelSaleForm()">
+                            <i class="fas fa-times"></i>
+                            Cancelar
+                        </button>
+                        <button class="btn-primary btn-block" (click)="onConfirmSale()"
+                            [disabled]="!saleFormData?.lines || saleFormData.lines.length === 0 || !foundCustomer">
+                            <i class="fas fa-check"></i>
+                            Registrar Venta
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FLUJO DE CAJA TAB -->
+    <div *ngIf="activeTab === 'cashflow'" class="cashflow-tab-content">
+        <!-- FILTERS -->
+        <div class="filters-card">
+            <div class="filters-header">
+                <h3><i class="fas fa-filter"></i> Filtros Flujo de Caja</h3>
+                <span class="results-indicator">{{ cashFlowEntries.length }} movimientos</span>
+            </div>
+
+            <div class="filters-grid">
+                <div class="form-group">
+                    <label><i class="fas fa-calendar-alt"></i> Desde</label>
+                    <input type="date" [(ngModel)]="cashFlowFilters.dateFrom" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-calendar-alt"></i> Hasta</label>
+                    <input type="date" [(ngModel)]="cashFlowFilters.dateTo" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-wallet"></i> Tipo de Pago</label>
+                    <select [(ngModel)]="cashFlowFilters.paymentType" class="form-control">
+                        <option [ngValue]="null">Todos</option>
+                        <option value="EFECTIVO">Efectivo</option>
+                        <option value="TARJETA">Tarjeta</option>
+                        <option value="TRANSFERENCIA">Transferencia</option>
+                        <option value="CREDITO">Crédito</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="search-section">
+                <button class="btn-primary" (click)="applySalesFilters()">
+                    <i class="fas fa-search"></i>
+                    Buscar
+                </button>
+                <button class="btn-secondary" (click)="resetSalesFilters()">
+                    <i class="fas fa-eraser"></i>
+                    Limpiar
+                </button>
+            </div>
+        </div>
+
+        <!-- CASH FLOW METRICS -->
+        <div class="metrics-grid">
+            <div class="metric-card total">
+                <div class="metric-icon"><i class="fas fa-coins"></i></div>
+                <div class="metric-content">
+                    <label>Total Ventas</label>
+                    <span class="metric-value">S/ {{ cashFlowMetrics.total.toFixed(2) }}</span>
+                </div>
+            </div>
+            <div class="metric-card success">
+                <div class="metric-icon"><i class="fas fa-money-bill"></i></div>
+                <div class="metric-content">
+                    <label>Efectivo</label>
+                    <span class="metric-value">S/ {{ cashFlowMetrics.cash.toFixed(2) }}</span>
+                </div>
+            </div>
+            <div class="metric-card info">
+                <div class="metric-icon"><i class="fas fa-bank"></i></div>
+                <div class="metric-content">
+                    <label>Transferencias</label>
+                    <span class="metric-value">S/ {{ cashFlowMetrics.transfer.toFixed(2) }}</span>
+                </div>
+            </div>
+            <div class="metric-card warning">
+                <div class="metric-icon"><i class="fas fa-credit-card"></i></div>
+                <div class="metric-content">
+                    <label>Tarjeta</label>
+                    <span class="metric-value">S/ {{ cashFlowMetrics.card.toFixed(2) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CASH FLOW TABLE -->
+        <div class="table-section">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>N° Documento</th>
+                            <th>Cliente</th>
+                            <th>Tipo de Pago</th>
+                            <th>Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let entry of cashFlowEntries">
+                            <td>{{ entry.saleDate | date:'dd/MM/yyyy' }}</td>
+                            <td><strong>{{ entry.documentSeries }}-{{ entry.documentNumber }}</strong></td>
+                            <td>{{ entry.customerName }}</td>
+                            <td><span class="payment-badge">{{ getPaymentLabel(entry.paymentType) }}</span></td>
+                            <td><strong>S/ {{ entry.total.toFixed(2) }}</strong></td>
+                        </tr>
+
+                        <tr *ngIf="cashFlowEntries.length === 0">
+                            <td colspan="5" class="empty-message">
+                                <i class="fas fa-inbox"></i>
+                                <p>No hay movimientos de flujo de caja</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+
+    <!-- Cancel Confirmation Modal -->
+    <div class="modal-overlay" *ngIf="showCancelConfirmModal" (click)="closeCancelModal()">
+        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Anular Venta</h3>
+                <button class="close-button" (click)="closeCancelModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Está seguro de anular la venta <strong>{{ saleToCancel?.documentSeries }}-{{
+                        saleToCancel?.documentNumber }}</strong>?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeCancelModal()">Cancelar</button>
+                <button class="btn-primary" (click)="confirmCancelSale()">Anular Venta</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Credit Note Modal -->
+    <div class="modal-overlay" *ngIf="showCreditNoteModal" (click)="showCreditNoteModal = false">
+        <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3><i class="fas fa-file-invoice-dollar"></i> Nota de Crédito</h3>
+                <button class="close-button" (click)="showCreditNoteModal = false"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Motivo</label>
+                    <select [(ngModel)]="creditNoteFormData.reasonCode" class="form-control">
+                        <option value="ANULACION">Anulación de la operación</option>
+                        <option value="DESCUENTO">Descuento</option>
+                        <option value="DEVOLUCION">Devolución parcial</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Observaciones</label>
+                    <textarea [(ngModel)]="creditNoteFormData.observations" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="totals-summary">
+                    <div class="total-row">
+                        <span>Monto</span>
+                        <span>S/ {{ (creditNoteFormData?.grandTotal || 0).toFixed(2) }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="showCreditNoteModal = false">Cancelar</button>
+                <button class="btn-primary" (click)="onConfirmCreditNote()">
+                    <i class="fas fa-check"></i>
+                    Emitir Nota de Crédito
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dispatch Guide Modal -->
+    <div class="modal-overlay" *ngIf="showDispatchGuideModal" (click)="showDispatchGuideModal = false">
+        <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3><i class="fas fa-truck"></i> Guía de Remisión</h3>
+                <button class="close-button" (click)="showDispatchGuideModal = false"><i
+                        class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Motivo de Traslado</label>
+                        <select [(ngModel)]="dispatchGuideFormData.transferReason" class="form-control">
+                            <option value="VENTA">Venta</option>
+                            <option value="TRASLADO_INTERNO">Traslado Interno</option>
+                            <option value="DEVOLUCION">Devolución</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Dirección de Llegada</label>
+                        <input type="text" [(ngModel)]="dispatchGuideFormData.arrivalAddress" class="form-control">
+                    </div>
+                </div>
+                <div class="totals-summary">
+                    <div class="total-row">
+                        <span>Items</span>
+                        <span>{{ dispatchGuideFormData?.items?.length || 0 }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="showDispatchGuideModal = false">Cancelar</button>
+                <button class="btn-primary" (click)="onConfirmDispatchGuide()">
+                    <i class="fas fa-check"></i>
+                    Emitir Guía
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- DETAIL DRAWER -->
+    <!-- Agregado drawer overlay para mostrar detalles de la venta -->
+    <!-- DETAIL DRAWER -->
+    <div class="drawer-overlay" *ngIf="selectedSale" (click)="closeDetailDrawer()"></div>
+    <div class="detail-drawer" *ngIf="selectedSale">
+        <div class="drawer-header">
+            <h3>Detalles de Venta</h3>
+            <button class="close-button" (click)="closeDetailDrawer()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="drawer-content">
+            <!-- Información General -->
+            <div class="detail-section">
+                <h4 class="detail-section-title">Información General</h4>
+                <div class="detail-row">
+                    <span class="detail-label">Documento:</span>
+                    <span class="detail-value">{{ selectedSale.documentSeries }}-{{ selectedSale.documentNumber
+                        }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Tipo:</span>
+                    <span class="detail-value">
+                        {{ selectedSale.documentType === 'NOTA_PEDIDO' ? 'Nota de Pedido' : (selectedSale.documentType
+                        === 'BOLETA' ? 'Boleta' : 'Factura') }}
+                    </span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Fecha:</span>
+                    <span class="detail-value">{{ selectedSale.saleDate | date:'dd/MM/yyyy' }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Estado:</span>
+                    <span class="detail-value status" [class]="'status-' + selectedSale.status.toLowerCase()">
+                        {{ getStatusLabel(selectedSale.status) }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Cliente -->
+            <div class="detail-section">
+                <h4 class="detail-section-title">Cliente</h4>
+                <div class="detail-row">
+                    <span class="detail-label">Nombre:</span>
+                    <span class="detail-value">{{ selectedSale.customerName }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">RUC/DNI:</span>
+                    <span class="detail-value">{{ selectedSale.customerDocumentNumber }}</span>
+                </div>
+            </div>
+
+            <!-- Productos -->
+            <div class="detail-section">
+                <h4 class="detail-section-title">Productos</h4>
+                <div class="items-detail-table">
+                    <div class="table-header">
+                        <div class="col-producto">Producto</div>
+                        <div class="col-cant">Cantidad</div>
+                        <div class="col-precio">Precio</div>
+                        <div class="col-total">Total</div>
+                    </div>
+                    <div class="table-body">
+                        <div class="table-row" *ngFor="let line of selectedSale.lines">
+                            <div class="col-producto">{{ line.productName }}</div>
+                            <div class="col-cant">{{ line.quantity }}</div>
+                            <div class="col-precio">S/ {{ line.unitPrice.toFixed(2) }}</div>
+                            <div class="col-total">S/ {{ line.lineTotal.toFixed(2) }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Totales -->
+            <div class="detail-section">
+                <h4 class="detail-section-title">Totales</h4>
+                <div class="detail-row">
+                    <span class="detail-label">Subtotal:</span>
+                    <span class="detail-value">S/ {{ selectedSale.subtotal.toFixed(2) }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">IGV (18%):</span>
+                    <span class="detail-value">S/ {{ selectedSale.igv.toFixed(2) }}</span>
+                </div>
+                <div class="detail-row total">
+                    <span class="detail-label">Total:</span>
+                    <span class="detail-value">S/ {{ selectedSale.total.toFixed(2) }}</span>
+                </div>
+            </div>
+
+            <!-- Pago -->
+            <div class="detail-section">
+                <h4 class="detail-section-title">Forma de Pago</h4>
+                <div class="detail-row">
+                    <span class="detail-label">Método:</span>
+                    <span class="detail-value">{{ getPaymentLabel(selectedSale.paymentType) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- NEW CUSTOMER MODAL -->
+    <div class="modal-overlay" *ngIf="showNewCustomerModal" (click)="showNewCustomerModal=false">
+        <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-plus"></i> Registrar Cliente</h3>
+                <button class="close-button" (click)="showNewCustomerModal=false"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nombre</label>
+                    <input type="text" class="form-control" [(ngModel)]="newCustomerForm.name">
+                </div>
+
+                <div class="form-group">
+                    <label>DNI / RUC</label>
+                    <input type="text" class="form-control" [(ngModel)]="newCustomerForm.documentNumber">
+                </div>
+
+                <div class="form-group">
+                    <label>Dirección</label>
+                    <input type="text" class="form-control" [(ngModel)]="newCustomerForm.address">
+                </div>
+
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="text" class="form-control" [(ngModel)]="newCustomerForm.email">
+                </div>
+
+                <div class="form-group">
+                    <label>Teléfono</label>
+                    <input type="text" class="form-control" [(ngModel)]="newCustomerForm.phone">
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="showNewCustomerModal=false">Cancelar</button>
+                <button class="btn-primary" (click)="onConfirmCreateCustomer()">Registrar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div class="toast-container">
+        <div class="toast" *ngFor="let toast of toasts" [class]="toast.type">
+            <i [class]="getToastIcon(toast.type)"></i>
+            <span>{{ toast.message }}</span>
+        </div>
+    </div>
+
+</div>

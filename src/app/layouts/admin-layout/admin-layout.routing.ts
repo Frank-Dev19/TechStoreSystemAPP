@@ -8,6 +8,9 @@ import { Perfil } from '../../pages/perfil/perfil';
 import { DocumentTypes } from '../../pages/document-types/document-types';
 import { Rbac } from '../../pages/rbac/rbac';
 import { Inventory } from '../../pages/inventory/inventory';
+import { Auditoria } from '../../pages/auditoria/auditoria';
+import { Ventas } from '../../pages/ventas/ventas';
+import { Pricing } from '../../pages/pricing/pricing';
 
 export const AdminLayoutRoutes: Routes = [
     { path: 'home', component: Home },
@@ -18,4 +21,7 @@ export const AdminLayoutRoutes: Routes = [
     { path: 'tipos-documento', component: DocumentTypes },
     { path: 'rbac', component: Rbac },
     { path: 'inventory', component: Inventory },
+    { path: 'auditoria', component: Auditoria },
+    { path: 'ventas', component: Ventas },
+    { path: 'pricing', component: Pricing },
 ];
