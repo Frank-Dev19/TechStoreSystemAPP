@@ -20,6 +20,9 @@ export const ROUTES: RouteInfo[] = [
   { path: "/perfil", title: "GESTION DE PERFIL", icon: "icon-chart-pie-36", class: "" },
   { path: "/rbac", title: "GESTION DE CONTROL DE ACCESO", icon: "icon-chart-pie-36", class: "" },
   { path: "/inventory", title: "GESTION DE CONTROL DE INVENTARIO", icon: "icon-chart-pie-36", class: "" },
+  { path: "/ventas", title: "GESTION DE VENTAS", icon: "icon-chart-pie-36", class: "" },
+  { path: "/auditoria", title: "GESTION DE AUDITORIA", icon: "icon-chart-pie-36", class: "" },
+  { path: "/pricing", title: "GESTION DE PRECIOS", icon: "icon-chart-pie-36", class: "" },
 ]
 
 @Component({
