@@ -34,7 +34,7 @@ export class Login {
     this.loginService.login(email, password).subscribe({
       next: () => {
         this.triggerService.fireHideLoader();
-        this.router.navigate(['/home']);
+        this.router.navigate(['/rbac']);
       },
       error: () => {
         this.errorMessage = 'Credenciales inválidas o servicio no disponible';

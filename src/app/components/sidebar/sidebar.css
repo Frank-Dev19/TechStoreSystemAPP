@@ -107,10 +107,19 @@
         transform: translateX(-100%);
         z-index: 1030;
         min-width: 280px;
+
+        /* ⭐ SOLUCIÓN: Deshabilitar interacción cuando está cerrado */
+        pointer-events: none;
+        transition: transform 0.3s ease, pointer-events 0s 0.3s;
+        /* Delay en pointer-events */
     }
 
+    /* ⭐ Cuando está abierto, permitir interacción */
     .sidebar-panel.open {
         transform: translateX(0);
+        pointer-events: auto;
+        transition: transform 0.3s ease, pointer-events 0s 0s;
+        /* Sin delay cuando se abre */
     }
 
     .logo {
