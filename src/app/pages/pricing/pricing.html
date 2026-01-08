@@ -93,9 +93,9 @@
                             <td>{{ pl.description }}</td>
                             <td><span class="badge badge-info">{{ pl.type }}</span></td>
                             <td>
-                                {{ pl.activeFrom ? (pl.activeFrom | date:'yyyy-MM-dd') : '-' }}
+                                {{ pl.activeFrom ? formatDateForDisplay(pl.activeFrom, 'yyyy-MM-dd') : '-' }}
                                 hasta
-                                {{ pl.activeTo ? (pl.activeTo | date:'yyyy-MM-dd') : '-' }}
+                                {{ pl.activeTo ? formatDateForDisplay(pl.activeTo, 'yyyy-MM-dd') : '-' }}
                             </td>
                             <td>
                                 <i *ngIf="pl.isDefault" class="fas fa-check text-success"></i>
@@ -230,9 +230,9 @@
                             </td>
                             <td>{{ pp.currencyCode }} {{ pp.unitPrice | number:'1.2-2' }}</td>
                             <td>
-                                {{ pp.validFrom ? (pp.validFrom | date:'yyyy-MM-dd') : '-' }}
+                                {{ pp.validFrom ? (pp.validFrom | date:'dd-MM-yyyy':'UTC') : '-' }}
                                 hasta
-                                {{ pp.validTo ? (pp.validTo | date:'yyyy-MM-dd') : '-' }}
+                                {{ pp.validTo ? (pp.validTo | date:'dd-MM-yyyy':'UTC') : '-' }}
                             </td>
                             <td class="actions">
                                 <button class="btn-icon" (click)="openProductPriceForm(pp)" title="Editar">
@@ -265,6 +265,7 @@
     </div>
 
     <!-- TAB 3: REGLAS DE DESCUENTO -->
+    <!-- TAB 3: REGLAS DE DESCUENTO -->
     <div *ngIf="activeTab === 'discountTab'" class="tab-content">
         <div class="filters-card">
             <div class="filters-header">
@@ -278,21 +279,32 @@
             <div class="filters-grid">
                 <div class="form-group">
                     <label>Buscar</label>
-                    <input type="text" [(ngModel)]="discountRuleSearchText" class="form-control" placeholder="Nombre">
+                    <input type="text" [(ngModel)]="discountRuleSearchText" class="form-control"
+                        placeholder="Nombre o descripción">
                 </div>
-                <div class="form-group">
+
+                <!-- CAMBIAR ESTE SELECT POR AUTOCOMPLETE -->
+                <div class="form-group autocomplete-group">
                     <label>Producto</label>
-                    <select [(ngModel)]="discountFilterProductId" class="form-control">
-                        <option [ngValue]="null">Todos</option>
-                        <option *ngFor="let p of products" [ngValue]="p.id">
-                            {{ p.name }} ({{ p.sku }})
-                        </option>
-                    </select>
+                    <input type="text" [(ngModel)]="discountFilterProductSearch" class="form-control"
+                        placeholder="Buscar producto por nombre o SKU" (input)="onDiscountProductSearch()">
+
+                    <div class="autocomplete-panel"
+                        *ngIf="discountFilterProductSearch && discountProductSuggestions.length">
+                        <div class="autocomplete-item" *ngFor="let p of discountProductSuggestions"
+                            (click)="onSelectDiscountProductFilter(p)">
+                            <div class="item-main">
+                                <span class="item-name">{{ p.name }}</span>
+                                <span class="item-sku">{{ p.sku }}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group">
                     <label>Estado</label>
-                    <select [(ngModel)]="discountActiveFilter" class="form-control">
+                    <select [(ngModel)]="discountActiveFilter" class="form-control"
+                        (ngModelChange)="applyDiscountFilters()">
                         <option value="">Todos</option>
                         <option value="active">Activos</option>
                         <option value="inactive">Inactivos</option>
@@ -302,63 +314,163 @@
                 <div class="form-group">
                     <label>&nbsp;</label>
                     <div>
-                        <button class="btn-secondary" (click)="applyDiscountFilters()">
-                            <i class="fas fa-search"></i> Buscar
-                        </button>
-                        <button class="btn-secondary" style="margin-left:.5rem" (click)="resetDiscountFilters()">
+                        <button class="btn-secondary" (click)="resetDiscountFilters()">
                             <i class="fas fa-eraser"></i> Limpiar
                         </button>
                     </div>
                 </div>
-
             </div>
         </div>
 
-        <div class="table-section">
-            <div class="table-container">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Nombre</th>
-                            <th>Tipo</th>
-                            <th>Monto</th>
-                            <th>Mín Qty</th>
-                            <th>Prioridad</th>
-                            <th>Chips</th>
-                            <th>Estado</th>
-                            <th width="120">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr *ngFor="let dr of filteredDiscountRules">
-                            <td>{{ dr.name }}</td>
-                            <td><span class="badge badge-primary">{{ dr.discountType }}</span></td>
-                            <td>{{ dr.discountType === 'PERCENT' ? dr.amount + '%' : 'S/' + (dr.amount | number:'1.2-2')
-                                }}</td>
-                            <td>{{ (dr.minQty | number:'1.0-1') || '-' }}</td>
-                            <td>{{ dr.priority }}</td>
-                            <td>
-                                <span *ngIf="dr.autoApply" class="chip">Auto</span>
-                                <span *ngIf="dr.isExclusive" class="chip">Exclusiva</span>
-                            </td>
-                            <td>
-                                <span class="status-badge" [class.active]="dr.isActive" [class.inactive]="!dr.isActive">
-                                    {{ dr.isActive ? 'Activa' : 'Inactiva' }}
+        <!-- TARJETAS DE DESCUENTOS -->
+        <div class="card-section" *ngIf="filteredDiscountRules.length > 0">
+            <div class="card-container">
+                <div *ngFor="let dr of filteredDiscountRules" class="discount-card">
+                    <!-- Cabecera de la tarjeta -->
+                    <div class="card-header">
+                        <div class="header-left">
+                            <h4>{{ dr.name }}</h4>
+                            <div class="discount-badge">
+                                <span class="discount-amount">
+                                    {{ dr.discountType === 'PERCENT' ? dr.amount + '%' : 'S/ ' + (dr.amount |
+                                    number:'1.2-2') }}
                                 </span>
-                            </td>
-                            <td class="actions">
-                                <button class="btn-icon" (click)="openDiscountRuleForm(dr)" title="Editar">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn-icon" (click)="toggleDiscountRuleActive(dr)" title="Cambiar estado">
-                                    <i class="fas fa-power-off"></i>
-                                </button>
+                                <span class="discount-type">
+                                    {{ dr.discountType === 'PERCENT' ? 'DESCUENTO' : 'MONTO FIJO' }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="header-right">
+                            <span class="status-badge" [class.active]="dr.isActive" [class.inactive]="!dr.isActive">
+                                {{ dr.isActive ? 'Activa' : 'Inactiva' }}
+                            </span>
+                        </div>
+                    </div>
 
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                    <!-- Cuerpo de la tarjeta -->
+                    <div class="card-body">
+                        <!-- Alcance del descuento -->
+                        <div class="scope-info">
+                            <span class="scope-icon" [ngClass]="getDiscountScope(dr).type">
+                                <i [class]="getDiscountScope(dr).icon"></i>
+                                {{ getDiscountScope(dr).type | uppercase }}
+                            </span>
+                            <span class="scope-name">{{ getDiscountScope(dr).name }}</span>
+                            <!-- 👇 NUEVA LÍNEA para mostrar alcance de lista -->
+                            <small class="scope-description" *ngIf="getDiscountScope(dr).description">
+                                {{ getDiscountScope(dr).description }}
+                            </small>
+                        </div>
+                        <!-- Descripción -->
+                        <div class="description" *ngIf="dr.description">
+                            <i class="fas fa-align-left"></i>
+                            <p>{{ dr.description }}</p>
+                        </div>
+
+                        <!-- Detalles del descuento -->
+                        <div class="details-grid">
+                            <div class="detail">
+                                <i class="fas fa-sort-amount-up"></i>
+                                <div class="detail-content">
+                                    <span class="label">Cantidad Mínima</span>
+                                    <span class="value">{{ dr.minQty || '1' }}</span>
+                                </div>
+                            </div>
+
+                            <div class="detail">
+                                <i class="fas fa-star"></i>
+                                <div class="detail-content">
+                                    <span class="label">Prioridad</span>
+                                    <span class="value">{{ dr.priority }}</span>
+                                </div>
+                            </div>
+
+                            <div class="detail" *ngIf="dr.autoApply">
+                                <i class="fas fa-bolt"></i>
+                                <div class="detail-content">
+                                    <span class="label">Aplicación</span>
+                                    <span class="value">Automática</span>
+                                </div>
+                            </div>
+
+                            <div class="detail" *ngIf="!dr.autoApply">
+                                <i class="fas fa-hand-paper"></i>
+                                <div class="detail-content">
+                                    <span class="label">Aplicación</span>
+                                    <span class="value">Manual</span>
+                                </div>
+                            </div>
+
+                            <div class="detail" *ngIf="dr.isExclusive">
+                                <i class="fas fa-crown"></i>
+                                <div class="detail-content">
+                                    <span class="label">Exclusividad</span>
+                                    <span class="value">Exclusivo</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Vigencia -->
+                        <!-- En la tarjeta de descuentos -->
+                        <div class="validity" *ngIf="dr.startsAt || dr.endsAt">
+                            <i class="fas fa-calendar-alt"></i>
+                            <div class="validity-content">
+                                <span class="label">Vigencia:</span>
+                                <span class="value">
+                                    {{ dr.startsAt ? formatDateForDisplay(dr.startsAt) : 'Inmediato' }}
+                                    <span *ngIf="dr.endsAt"> hasta {{ formatDateForDisplay(dr.endsAt) }}</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Mostrar estado más detallado -->
+                        <!-- <div class="card-header">
+                            <div class="header-right">
+                                <span class="status-badge"
+                                    [class]="getDiscountStatus(dr).isActive ? 'active' : 'inactive'">
+                                    {{ getDiscountStatus(dr).statusText }}
+                                </span>
+                            </div>
+                        </div> -->
+                    </div>
+
+                    <!-- Pie de la tarjeta (acciones) -->
+                    <div class="card-footer">
+                        <button class="btn-secondary" (click)="openDiscountRuleForm(dr)">
+                            <i class="fas fa-edit"></i> Editar
+                        </button>
+                        <button class="btn-icon" (click)="toggleDiscountRuleActive(dr)"
+                            [title]="dr.isActive ? 'Desactivar' : 'Activar'">
+                            <i class="fas fa-power-off"></i> {{ dr.isActive ? 'Desactivar' : 'Activar' }}
+                        </button>
+                    </div>
+                </div>
             </div>
+        </div>
+
+        <!-- Mensaje cuando no hay resultados -->
+        <div *ngIf="filteredDiscountRules.length === 0" class="empty-state">
+            <div class="empty-icon">
+                <i class="fas fa-percent"></i>
+            </div>
+            <h3>No hay reglas de descuento</h3>
+            <p *ngIf="discountRuleSearchText || discountFilterProductId || discountActiveFilter">
+                No se encontraron resultados con los filtros aplicados.
+            </p>
+            <p *ngIf="!discountRuleSearchText && !discountFilterProductId && !discountActiveFilter">
+                Crea tu primera regla de descuento haciendo clic en "Nueva Regla".
+            </p>
+            <button class="btn-primary" (click)="openDiscountRuleForm()">
+                <i class="fas fa-plus"></i> Crear primera regla
+            </button>
+        </div>
+
+        <div class="pagination" *ngIf="allDiscountRules.length > 0">
+            <button (click)="changeDiscountPage(currentDiscountRulesPage - 1)"
+                [disabled]="currentDiscountRulesPage === 1">Anterior</button>
+            <span>Página {{ currentDiscountRulesPage }} de {{ discountRulesTotalPages }}</span>
+            <button (click)="changeDiscountPage(currentDiscountRulesPage + 1)"
+                [disabled]="currentDiscountRulesPage === discountRulesTotalPages">Siguiente</button>
         </div>
     </div>
 
@@ -405,42 +517,132 @@
                         <option value="inactive">Inactivos</option>
                     </select>
                 </div>
+
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <div>
+                        <button class="btn-secondary" (click)="resetComboFilters()">
+                            <i class="fas fa-eraser"></i> Limpiar
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- Tarjetas de Combos -->
-        <div class="card-section">
+        <div class="card-section" *ngIf="filteredCombos.length > 0">
             <div class="card-container">
                 <div *ngFor="let combo of filteredCombos" class="combo-card">
-                    <div class="card-header">
-                        <h4>{{ combo.name }}</h4>
-                        <span class="status-badge" [class.active]="combo.isActive" [class.inactive]="!combo.isActive">
-                            {{ combo.isActive ? 'Activo' : 'Inactivo' }}
-                        </span>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>Descripción:</strong> {{ combo.description || 'Sin descripción' }}</p>
-                        <p><strong>Tipo:</strong> {{ combo.comboType === 'FIXED_PRICE' ? 'Precio Fijo' : 'Descuento (%)'
-                            }}</p>
-                        <p><strong>Precio/Descuento:</strong>
-                            {{ combo.comboType === 'FIXED_PRICE' ? 'S/' + (combo.comboPrice | number:'1.2-2') :
-                            combo.discountPercent + '%' }}
-                        </p>
-                        <div class="combo-items">
-                            <h5>Productos:</h5>
-                            <ul>
-                                <li *ngFor="let item of combo.items">{{ item.productName }} x {{ item.qty |
-                                    number:'1.0-1' }}</li>
-                            </ul>
+                    <!-- Encabezado con gradiente -->
+                    <div class="combo-card-header">
+                        <div class="header-top">
+                            <h4 class="combo-title">{{ combo.name }}</h4>
+                            <div class="combo-badge" [class]="combo.comboType.toLowerCase()">
+                                <span>{{ combo.comboType === 'FIXED_PRICE' ? 'PRECIO FIJO' : 'DESCUENTO %' }}</span>
+                            </div>
+                        </div>
+
+                        <div class="header-bottom">
+                            <span class="combo-code">
+                                <i class="fas fa-hashtag"></i>
+                                {{ combo.code }}
+                            </span>
+                            <span class="status-badge" [class.active]="combo.isActive"
+                                [class.inactive]="!combo.isActive">
+                                {{ combo.isActive ? 'Activo' : 'Inactivo' }}
+                            </span>
                         </div>
                     </div>
-                    <div class="card-footer">
-                        <button class="btn-secondary" (click)="openComboForm(combo)">
+
+                    <!-- Precio destacado -->
+                    <div class="combo-price-section">
+                        <div class="price-display">
+                            <span class="price-label">Precio del combo:</span>
+                            <span class="price-value">
+                                {{ combo.comboType === 'FIXED_PRICE'
+                                ? ('S/ ' + (combo.comboPrice | number:'1.2-2'))
+                                : (combo.discountPercent + '% de descuento') }}
+                            </span>
+                        </div>
+                        <div class="price-helper" *ngIf="combo.comboType === 'PERCENT'">
+                            <small>Aplicado sobre el total de productos</small>
+                        </div>
+                    </div>
+
+                    <!-- Descripción -->
+                    <div class="combo-description" *ngIf="combo.description">
+                        <i class="fas fa-align-left"></i>
+                        <p>{{ combo.description }}</p>
+                    </div>
+
+                    <!-- Productos - ¡SECCIÓN DESTACADA! -->
+                    <div class="combo-products-section">
+                        <div class="section-header">
+                            <i class="fas fa-boxes"></i>
+                            <h5>Productos incluidos</h5>
+                            <span class="product-count">{{ combo.items?.length || 0 }} productos</span>
+                        </div>
+
+                        <div class="products-grid" *ngIf="combo.items && combo.items.length > 0">
+                            <div class="product-item" *ngFor="let item of combo.items">
+                                <div class="product-icon">
+                                    <i class="fas fa-box"></i>
+                                </div>
+                                <div class="product-info">
+                                    <span class="product-name">{{ item.productName }}</span>
+                                    <div class="product-details">
+                                        <span class="product-qty">
+                                            <i class="fas fa-times"></i>
+                                            {{ item.qty | number:'1.0-1' }} unidades
+                                        </span>
+                                        <!-- <span class="product-sku" *ngIf="item.productSku">
+                                    SKU: {{ item.productSku }}
+                                </span> -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="empty-products" *ngIf="!combo.items || combo.items.length === 0">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span>No hay productos en este combo</span>
+                        </div>
+                    </div>
+
+                    <!-- Vigencia -->
+                    <div class="combo-validity" *ngIf="combo.startsAt || combo.endsAt">
+                        <div class="validity-header">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>Vigencia</span>
+                        </div>
+                        <div class="validity-dates">
+                            <div class="date-item">
+                                <span class="date-label">Desde:</span>
+                                <span class="date-value">{{ combo.startsAt ? formatDateForDisplay(combo.startsAt) :
+                                    'Inmediato' }}</span>
+                            </div>
+                            <div class="date-item" *ngIf="combo.endsAt">
+                                <span class="date-label">Hasta:</span>
+                                <span class="date-value">{{ formatDateForDisplay(combo.endsAt) }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pie de tarjeta (acciones) -->
+                    <div class="combo-card-footer">
+                        <button class="combo-btn-edit" (click)="openComboForm(combo)">
+                            <i class="fas fa-edit"></i>
                             Editar
                         </button>
-                        <button class="btn-icon" (click)="toggleComboActive(combo)">
-                            <i class="fas fa-power-off"></i> Cambiar estado
+                        <button class="combo-btn-toggle" (click)="toggleComboActive(combo)"
+                            [title]="combo.isActive ? 'Desactivar combo' : 'Activar combo'">
+                            <i class="fas fa-power-off"></i>
+                            {{ combo.isActive ? 'Desactivar' : 'Activar' }}
                         </button>
+                        <!-- <button class="combo-btn-view" (click)="viewComboDetails(combo)">
+                    <i class="fas fa-eye"></i>
+                    Ver detalles
+                </button> -->
                     </div>
                 </div>
             </div>
@@ -461,12 +663,21 @@
             <h3><i class="fas fa-calculator"></i> Simulador de Precios</h3>
 
             <div class="simulator-inputs">
-                <div class="form-group">
+                <div class="form-group autocomplete-group">
                     <label>Producto</label>
-                    <select [(ngModel)]="simulatorProduct" class="form-control">
-                        <option [ngValue]="null">Selecciona un producto</option>
-                        <option *ngFor="let p of products" [ngValue]="p">{{ p.name }} ({{ p.sku }})</option>
-                    </select>
+                    <input type="text" [(ngModel)]="simulatorProductSearch" class="form-control"
+                        placeholder="Buscar producto por nombre o SKU" (input)="onSimulatorProductSearch()">
+
+                    <div class="autocomplete-panel"
+                        *ngIf="simulatorProductSearch && simulatorProductSuggestions.length">
+                        <div class="autocomplete-item" *ngFor="let p of simulatorProductSuggestions"
+                            (click)="onSelectSimulatorProduct(p)">
+                            <div class="item-main">
+                                <span class="item-name">{{ p.name }}</span>
+                                <span class="item-sku">{{ p.sku }}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -668,24 +879,32 @@
                     <label>Descripción</label>
                     <textarea [(ngModel)]="newDiscountRuleForm.description" class="form-control"></textarea>
                 </div>
-                <div class="form-group">
+                <div class="form-group autocomplete-group">
                     <label>Producto</label>
-                    <select [(ngModel)]="newDiscountRuleForm.productId" class="form-control">
-                        <option [ngValue]="null">Todos</option>
-                        <option *ngFor="let p of products" [ngValue]="p.id">
-                            {{ p.name }} ({{ p.sku }})
-                        </option>
-                    </select>
+                    <input type="text" [(ngModel)]="modalProductSearch" class="form-control"
+                        placeholder="Buscar producto por nombre o SKU" (input)="onModalProductSearch()">
+
+                    <div class="autocomplete-panel" *ngIf="modalProductSearch && modalProductSuggestions.length">
+                        <div class="autocomplete-item" *ngFor="let p of modalProductSuggestions"
+                            (click)="onSelectModalProduct(p)">
+                            <div class="item-main">
+                                <span class="item-name">{{ p.name }}</span>
+                                <span class="item-sku">{{ p.sku }}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group">
                     <label>Lista de Precios</label>
+                    <!-- 👇 CAMBIO IMPORTANTE: Agrega opción "Todas las listas" -->
                     <select [(ngModel)]="newDiscountRuleForm.priceListId" class="form-control">
-                        <option [ngValue]="null">Todas</option>
+                        <option [ngValue]="null">Todas las listas</option>
                         <option *ngFor="let pl of priceLists" [ngValue]="pl.id">
                             {{ pl.code }} - {{ pl.name }}
                         </option>
                     </select>
+                    <!-- 👆 Nota: [ngValue]="null" hace que sea null, no undefined -->
                 </div>
                 <div class="form-group">
                     <label>Vigente Desde</label>
@@ -801,14 +1020,37 @@
                     </div>
                 </div>
 
+                <!-- REEMPLAZAR ESTA SECCIÓN: -->
                 <div class="form-group">
                     <label>Agregar Producto</label>
                     <div class="add-item">
-                        <select [(ngModel)]="selectedProductForPrice" class="form-control">
-                            <option [ngValue]="null">Selecciona un producto</option>
-                            <option *ngFor="let p of products" [ngValue]="p">{{ p.name }}</option>
-                        </select>
-                        <button class="btn-primary" (click)="addComboItem()">
+                        <!-- Input con autocomplete -->
+                        <div class="autocomplete-group">
+                            <input type="text" class="form-control" [(ngModel)]="comboProductSearch"
+                                (input)="onComboProductSearch()" placeholder="Buscar producto por nombre o SKU">
+
+                            <div class="autocomplete-panel"
+                                *ngIf="comboProductSearch && comboProductSuggestions.length">
+                                <div class="autocomplete-item" *ngFor="let product of comboProductSuggestions"
+                                    (click)="onSelectComboProduct(product)">
+                                    <div class="item-main">
+                                        <span class="item-name">{{ product.name }}</span>
+                                        <span class="item-sku">{{ product.sku }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Cantidad -->
+                        <div class="qty-input" style="display: flex; align-items: center; margin-left: 10px;">
+                            <label style="margin-right: 10px; white-space: nowrap;">Cantidad:</label>
+                            <input type="number" class="form-control" style="width: 100px;" [(ngModel)]="comboItemQty"
+                                min="0.0001" step="0.0001" placeholder="1.0000">
+                        </div>
+
+                        <!-- Botón agregar -->
+                        <button class="btn-primary" (click)="addComboItemFromSearch()"
+                            [disabled]="!selectedComboProduct">
                             <i class="fas fa-plus"></i>
                         </button>
                     </div>

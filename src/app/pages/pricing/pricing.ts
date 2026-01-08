@@ -8,6 +8,7 @@ import {
   ProductLite,
   ProductPriceRow,
   DiscountRuleUi,
+  DiscountRule,
   ComboUi,
   ComboItemUi,
   ComboTypeUi,
@@ -72,6 +73,16 @@ export class Pricing implements OnInit {
   productPrices: ProductPriceRow[] = [];
   discountRules: DiscountRuleUi[] = [];
   combos: ComboUi[] = [];
+  allCombos: ComboUi[] = [];  // Todos los combos (para búsqueda global)
+  currentPageCombos: ComboUi[] = [];  // Combos de la página actual
+
+  // ============================================
+  // NUEVAS PROPIEDADES PARA AUTOCOMPLETE DE COMBOS
+  // ============================================
+  comboProductSearch = '';
+  comboProductSuggestions: ProductLite[] = [];
+  selectedComboProduct: ProductLite | null = null;
+  comboItemQty = 1; // Cantidad por defecto
 
   // SIMULADOR
   simulatorProduct: ProductLite | null = null;
@@ -105,9 +116,38 @@ export class Pricing implements OnInit {
   // Pricing class
   selectedPriceListForPriceForm: PriceList | null = null;
 
-
+  discountCardView = 'grid'; // 'grid' o 'list' para alternar vista si quieres
 
   productPriceFilterProductId: number | null = null;
+
+
+  allDiscountRules: DiscountRuleUi[] = [];  // Todos los descuentos (para búsqueda global)
+  currentDiscountRulesPage = 1;  // Página actual de descuentos
+  discountRulesTotalPages = 1;  // Total de páginas de descuentos
+  discountRulesLimit = 10;  // Límite por página
+
+
+
+
+  // ============================================
+  // NUEVAS PROPIEDADES PARA AUTOCOMPLETE DE DESCUENTOS
+  // ============================================
+
+  // Para los filtros de la pestaña de descuentos
+  discountFilterProductSearch = '';
+  discountProductSuggestions: ProductLite[] = [];
+  selectedDiscountProduct: ProductLite | null = null;
+
+  // Para el modal de descuentos
+  modalProductSearch = '';
+  modalProductSuggestions: ProductLite[] = [];
+  selectedModalProduct: ProductLite | null = null;
+
+
+  // Para el simulador
+  simulatorProductSearch = '';
+  simulatorProductSuggestions: ProductLite[] = [];
+
 
   applyProductPriceFilters(): void {
     // La tabla ya se filtra reactivo, así que este método puede quedarse vacío.
@@ -120,13 +160,29 @@ export class Pricing implements OnInit {
   }
 
   applyDiscountFilters(): void {
-    // Igual que antes, todo es reactivo, el botón es UX.
+    this.currentDiscountRulesPage = 1;
+
+    // Recargar TODOS los descuentos con los filtros aplicados
+    this.loadAllDiscountRules();
+  }
+
+  changeDiscountPage(page: number): void {
+    if (page < 1 || page > this.discountRulesTotalPages) return;
+    this.currentDiscountRulesPage = page;
+    // No necesitamos recargar del backend porque todo está en allDiscountRules
   }
 
   resetDiscountFilters(): void {
     this.discountRuleSearchText = '';
+    this.discountFilterProductSearch = '';
     this.discountFilterProductId = null;
+    this.selectedDiscountProduct = null;
+    this.discountProductSuggestions = [];
     this.discountActiveFilter = '';
+    this.currentDiscountRulesPage = 1;
+
+    // Recargar TODOS los descuentos sin filtros
+    this.loadAllDiscountRules();
   }
 
   // TOASTS
@@ -242,11 +298,14 @@ export class Pricing implements OnInit {
   ngOnInit(): void {
     this.loadInitialData();
     this.loadCombos();
+    this.loadAllDiscountRules();
   }
 
   private loadInitialData(): void {
     this.loadPriceLists();
     this.loadProducts();
+    this.loadAllDiscountRules(); // Primero cargar todos
+    this.loadCurrentPageDiscountRules(); // Luego cargar página actual
     this.loadDiscountRules();
     this.loadCombos();
   }
@@ -295,39 +354,161 @@ export class Pricing implements OnInit {
   }
 
   private loadDiscountRules(): void {
-    this.discountRulesApi.list().subscribe({
-      next: (rows) => {
-        this.discountRules = rows;
+    // Cargar TODOS los descuentos para búsqueda global
+    this.loadAllDiscountRules();
+
+    // Cargar descuentos de la página actual
+    this.loadCurrentPageDiscountRules();
+  }
+
+
+  private loadAllDiscountRules(): void {
+    this.discountRulesApi.listAll({
+      active_only: this.discountActiveFilter === 'active',
+      product_id: this.discountFilterProductId,
+      auto_check: true,
+    }).subscribe({
+      next: (response: any) => {  // 👈 Usar 'any' temporalmente
+        console.log('📊 Full response:', response);
+
+        // Extraer los datos de la respuesta paginada
+        const rows = response.data || response || [];
+
+        console.log(`📊 Extracted ${rows.length} discount rules`);
+
+        this.allDiscountRules = rows.map((dr: any) => this.enrichDiscountRule(dr));
+        console.log('✅ allDiscountRules loaded:', this.allDiscountRules.length);
+
+        // Forzar actualización de la vista
+        setTimeout(() => {
+          // Actualizar también discountRules con los primeros X items
+          const start = (this.currentDiscountRulesPage - 1) * this.discountRulesLimit;
+          this.discountRules = [...this.allDiscountRules.slice(start, start + this.discountRulesLimit)];
+          this.discountRulesTotalPages = Math.ceil(this.allDiscountRules.length / this.discountRulesLimit);
+        }, 0);
       },
-      error: () => this.showToast('error', 'Error al cargar reglas de descuento'),
+      error: (err) => {
+        console.error('❌ Error:', err);
+        this.showToast('error', 'Error al cargar descuentos');
+      },
+    });
+  }
+
+  private loadCurrentPageDiscountRules(): void {
+    // Cargar solo la página actual para mostrar
+    this.discountRulesApi.listPaginated({
+      active_only: this.discountActiveFilter === 'active',
+      product_id: this.discountFilterProductId,
+      page: this.currentDiscountRulesPage,
+      limit: this.discountRulesLimit,
+      auto_check: true,
+      // Agregar búsqueda por nombre si existe
+      search: this.discountRuleSearchText || undefined,
+    }).subscribe({
+      next: (response) => {
+        this.discountRules = response.data.map(dr => this.enrichDiscountRule(dr));
+        this.discountRulesTotalPages = response.pagination.totalPages;
+      },
+      error: () => this.showToast('error', 'Error al cargar página de descuentos'),
     });
   }
 
 
+  // Nuevo método para enriquecer datos
+  private enrichDiscountRule(dr: DiscountRule): DiscountRuleUi {
+    const enriched: DiscountRuleUi = {
+      ...dr,
+      productName: this.getProductNameById(dr.productId),
+      categoryName: this.getCategoryNameById(dr.categoryId),
+      priceListName: this.getPriceListNameById(dr.priceListId),
+      priceListCode: this.getPriceListCodeById(dr.priceListId),
+    };
+    return enriched;
+  }
+
+  // Métodos helper para obtener nombres
+  private getProductNameById(id?: number | null): string | null {
+    if (!id) return null;
+    const product = this.products.find(p => p.id === id);
+    return product ? product.name : `ID ${id}`;
+  }
+
+  private getCategoryNameById(id?: number | null): string | null {
+    if (!id) return null;
+    const category = this.categories.find(c => c.id === id);
+    return category ? category.name : `ID ${id}`;
+  }
+
+  private getPriceListNameById(id?: number | null): string | null {
+    if (!id) return null;
+    const priceList = this.priceLists.find(pl => pl.id === id);
+    return priceList ? priceList.name : `ID ${id}`;
+  }
+
+  private getPriceListCodeById(id?: number | null): string | null {
+    if (!id) return null;
+    const priceList = this.priceLists.find(pl => pl.id === id);
+    return priceList ? priceList.code : `ID ${id}`;
+  }
 
 
   loadCombos(): void {
+    // Cargar TODOS los combos para búsqueda global
+    this.loadAllCombos();
+
+    // Cargar combos de la página actual
+    this.loadCurrentPageCombos();
+  }
+
+
+  private loadAllCombos(): void {
+    // Cargar TODOS los combos sin paginación CON validación automática
+    this.combosApi.listAll(`${this.comboActiveFilter || ''}${this.comboActiveFilter ? '&' : '?'}auto_check=true`).subscribe({
+      next: (data) => {
+        this.allCombos = data.map(combo => this.mapComboBackendToUi(combo));
+        // Actualizar sugerencias de autocomplete
+        this.updateComboSearchSuggestions();
+      },
+      error: () => this.showToast('error', 'Error al cargar todos los combos'),
+    });
+  }
+
+  private loadCurrentPageCombos(): void {
+    // Cargar solo la página actual para mostrar CON validación automática
     this.combosApi.list({
       page: this.currentPage,
       limit: this.limit,
-      activeOnly: this.comboActiveFilter || ''
+      activeOnly: this.comboActiveFilter || '',
+      autoCheck: true
     }).subscribe({
       next: (response) => {
-        // response es de tipo PaginatedResponse<ComboUi>
-        this.combos = response.data.map(combo => this.mapComboBackendToUi(combo));
+        this.currentPageCombos = response.data.map(combo => this.mapComboBackendToUi(combo));
         this.totalPages = response.pagination.totalPages;
       },
-      error: () => this.showToast('error', 'Error al cargar combos'),
+      error: () => this.showToast('error', 'Error al cargar página de combos'),
     });
   }
 
 
 
   changePage(page: number): void {
-    if (page < 1 || page > this.totalPages) return; // Si la página es inválida, no hacer nada
+    if (page < 1 || page > this.totalPages) return;
     this.currentPage = page;
-    this.loadCombos();
+    this.loadCurrentPageCombos(); // Solo recarga la página actual
   }
+
+
+  resetComboFilters(): void {
+    this.comboSearchText = '';
+    this.comboSearchSuggestions = [];
+    this.comboActiveFilter = '';
+    this.currentPage = 1;
+
+    // Recargar TODOS los combos sin filtros
+    this.loadAllCombos();
+    this.loadCurrentPageCombos();
+  }
+
 
   // helper: mapear ProductPriceBackend -> ProductPriceRow (lo que usa el HTML)
   private mapProductPriceBackendToRow(r: ProductPriceBackend): ProductPriceRow {
@@ -641,7 +822,7 @@ export class Pricing implements OnInit {
       product_id: this.selectedProductForPrice.id,
       price_list_id: this.selectedPriceListForPriceForm.id,
       unit_price: unitPrice,
-      currency_code: 'USD',
+      currency_code: 'PEN',
       min_qty: minQty,
       max_qty: maxQty,
       valid_from: this.newProductPriceForm.validFrom || undefined,
@@ -686,23 +867,83 @@ export class Pricing implements OnInit {
   // ============================================
 
   get filteredDiscountRules(): DiscountRuleUi[] {
-    return this.discountRules.filter((dr) => {
-      const matchesSearch =
-        dr.name.toLowerCase().includes(this.discountRuleSearchText.toLowerCase());
+    console.log('🔍 allDiscountRules length:', this.allDiscountRules.length);
+    console.log('🔍 filteredDiscountRules called');
 
-      const matchesProduct =
-        !this.discountFilterProductId ||
-        dr.productId === this.discountFilterProductId;
+    // Usar TODOS los descuentos para búsqueda global
+    let filtered = this.allDiscountRules;
 
-      const matchesActive =
-        this.discountActiveFilter === ''
-          ? true
-          : this.discountActiveFilter === 'active'
-            ? dr.isActive
-            : !dr.isActive;
+    // Aplicar filtro de búsqueda de texto
+    if (this.discountRuleSearchText && this.discountRuleSearchText.trim() !== '') {
+      const searchTerm = this.discountRuleSearchText.toLowerCase().trim();
+      filtered = filtered.filter(dr => {
+        const matchesName = dr.name.toLowerCase().includes(searchTerm);
+        const matchesDescription = dr.description?.toLowerCase().includes(searchTerm) || false;
+        return matchesName || matchesDescription;
+      });
+    }
 
-      return matchesSearch && matchesProduct && matchesActive;
-    });
+    // Aplicar filtro de estado
+    if (this.discountActiveFilter === 'active') {
+      filtered = filtered.filter(dr => dr.isActive);
+    } else if (this.discountActiveFilter === 'inactive') {
+      filtered = filtered.filter(dr => !dr.isActive);
+    }
+
+    // Aplicar filtro de producto
+    if (this.discountFilterProductId) {
+      filtered = filtered.filter(dr => dr.productId === this.discountFilterProductId);
+    }
+
+    // Calcular paginación local
+    const startIndex = (this.currentDiscountRulesPage - 1) * this.discountRulesLimit;
+    const endIndex = startIndex + this.discountRulesLimit;
+
+    // Actualizar total de páginas
+    this.discountRulesTotalPages = Math.ceil(filtered.length / this.discountRulesLimit);
+
+    // Devolver solo la página actual
+    return filtered.slice(startIndex, endIndex);
+  }
+
+  getDiscountScope(dr: DiscountRuleUi): { type: string; name: string; icon: string; description: string } {
+    if (dr.productId && dr.productName) {
+      return {
+        type: 'producto',
+        name: dr.productName,
+        icon: 'fas fa-box',
+        description: dr.priceListId
+          ? `Solo lista: ${dr.priceListName || dr.priceListCode || 'ID ' + dr.priceListId}`
+          : 'Todas las listas de precios'
+      };
+    }
+
+    if (dr.categoryId && dr.categoryName) {
+      return {
+        type: 'categoría',
+        name: dr.categoryName,
+        icon: 'fas fa-folder',
+        description: dr.priceListId
+          ? `Solo lista: ${dr.priceListName || dr.priceListCode || 'ID ' + dr.priceListId}`
+          : 'Todas las listas de precios'
+      };
+    }
+
+    if (dr.priceListId && dr.priceListName) {
+      return {
+        type: 'lista',
+        name: dr.priceListName || '',
+        icon: 'fas fa-list',
+        description: `Solo para: ${dr.priceListCode || 'ID ' + dr.priceListId}`
+      };
+    }
+
+    return {
+      type: 'general',
+      name: 'Aplicación general',
+      icon: 'fas fa-globe',
+      description: 'Todas las listas de precios'
+    };
   }
 
   openDiscountRuleForm(discountRule?: DiscountRuleUi): void {
@@ -718,10 +959,23 @@ export class Pricing implements OnInit {
         autoApply: discountRule.autoApply,
         isExclusive: discountRule.isExclusive,
         productId: discountRule.productId ?? null,
+        // 👇 IMPORTANTE: Asegurar que priceListId sea null si es undefined
         priceListId: discountRule.priceListId ?? null,
         startsAt: this.toDateInputValue(discountRule.startsAt),
         endsAt: this.toDateInputValue(discountRule.endsAt),
       };
+
+      // Si hay un producto asociado, configurar la búsqueda en el modal
+      if (discountRule.productId && discountRule.productName) {
+        const product = this.products.find(p => p.id === discountRule.productId);
+        if (product) {
+          this.selectedModalProduct = product;
+          this.modalProductSearch = `${product.name} (${product.sku})`;
+        }
+      } else {
+        this.selectedModalProduct = null;
+        this.modalProductSearch = '';
+      }
     } else {
       this.editingDiscountRule = null;
       this.newDiscountRuleForm = {
@@ -734,14 +988,22 @@ export class Pricing implements OnInit {
         autoApply: false,
         isExclusive: false,
         productId: null,
-        priceListId: null,
+        priceListId: null,  // 👈 Por defecto: null (todas las listas)
         startsAt: null,
         endsAt: null,
       };
+
+      // Resetear la búsqueda del modal
+      this.selectedModalProduct = null;
+      this.modalProductSearch = '';
+      this.modalProductSuggestions = [];
     }
+
+    // Resetear sugerencias del modal
+    this.modalProductSuggestions = [];
+
     this.showDiscountRuleForm = true;
   }
-
 
   saveDiscountRule(): void {
     if (!this.newDiscountRuleForm.name || this.newDiscountRuleForm.amount <= 0) {
@@ -750,11 +1012,11 @@ export class Pricing implements OnInit {
     }
 
     const amount = Number(this.newDiscountRuleForm.amount);
-    const minQty =
-      this.newDiscountRuleForm.minQty !== null && this.newDiscountRuleForm.minQty !== undefined
-        ? Number(this.newDiscountRuleForm.minQty)
-        : undefined;
+    const minQty = this.newDiscountRuleForm.minQty !== null
+      ? Number(this.newDiscountRuleForm.minQty)
+      : undefined;
 
+    // 👇 CONSTRUCCIÓN DEL PAYLOAD CORRECTA
     const payload: SaveDiscountRuleDto = {
       name: this.newDiscountRuleForm.name,
       description: this.newDiscountRuleForm.description || undefined,
@@ -765,7 +1027,8 @@ export class Pricing implements OnInit {
       auto_apply: !!this.newDiscountRuleForm.autoApply,
       is_exclusive: !!this.newDiscountRuleForm.isExclusive,
       product_id: this.newDiscountRuleForm.productId ?? undefined,
-      price_list_id: this.newDiscountRuleForm.priceListId ?? undefined,
+      // 👇 CAMBIO CRÍTICO: ENVIAR null EXPLÍCITAMENTE
+      price_list_id: this.newDiscountRuleForm.priceListId, // <-- ¡SIN el ??
       starts_at: this.newDiscountRuleForm.startsAt || undefined,
       ends_at: this.newDiscountRuleForm.endsAt || undefined,
       is_active: true,
@@ -797,7 +1060,77 @@ export class Pricing implements OnInit {
   closeDiscountRuleForm(): void {
     this.showDiscountRuleForm = false;
     this.editingDiscountRule = null;
+
+    // Limpiar la búsqueda del modal
+    this.selectedModalProduct = null;
+    this.modalProductSearch = '';
+    this.modalProductSuggestions = [];
   }
+
+
+  // ============================================
+  // MÉTODOS PARA AUTOCOMPLETE DE DESCUENTOS
+  // ============================================
+
+  // Método para buscar productos en los filtros
+  onDiscountProductSearch(): void {
+    if (!this.discountFilterProductSearch || this.discountFilterProductSearch.trim() === '') {
+      this.discountProductSuggestions = [];
+      this.selectedDiscountProduct = null;
+      return;
+    }
+
+    const searchTerm = this.discountFilterProductSearch.toLowerCase().trim();
+
+    this.discountProductSuggestions = this.products
+      .filter(product => {
+        const matchesName = product.name.toLowerCase().includes(searchTerm);
+        const matchesSku = product.sku.toLowerCase().includes(searchTerm);
+        return matchesName || matchesSku;
+      })
+      .slice(0, 10); // Mostrar máximo 10 sugerencias
+  }
+
+  // Método para seleccionar producto en los filtros
+  onSelectDiscountProductFilter(product: ProductLite): void {
+    this.selectedDiscountProduct = product;
+    this.discountFilterProductSearch = `${product.name} (${product.sku})`;
+    this.discountFilterProductId = product.id;
+    this.discountProductSuggestions = [];
+
+    // Aplicar filtros automáticamente
+    this.applyDiscountFilters();
+  }
+
+  // Método para buscar productos en el modal
+  onModalProductSearch(): void {
+    if (!this.modalProductSearch || this.modalProductSearch.trim() === '') {
+      this.modalProductSuggestions = [];
+      this.selectedModalProduct = null;
+      return;
+    }
+
+    const searchTerm = this.modalProductSearch.toLowerCase().trim();
+
+    this.modalProductSuggestions = this.products
+      .filter(product => {
+        const matchesName = product.name.toLowerCase().includes(searchTerm);
+        const matchesSku = product.sku.toLowerCase().includes(searchTerm);
+        return matchesName || matchesSku;
+      })
+      .slice(0, 10); // Mostrar máximo 10 sugerencias
+  }
+
+  // Método para seleccionar producto en el modal
+  onSelectModalProduct(product: ProductLite): void {
+    this.selectedModalProduct = product;
+    this.modalProductSearch = `${product.name} (${product.sku})`;
+    this.newDiscountRuleForm.productId = product.id;
+    this.modalProductSuggestions = [];
+  }
+
+
+
 
   // ============================================
   // COMBOS TAB
@@ -806,9 +1139,12 @@ export class Pricing implements OnInit {
   //filteredCombos: ComboUi[] = [];
 
   get filteredCombos(): ComboUi[] {
-    // Primero, filtrar por texto de búsqueda
-    let filtered = this.combos;
+    // Usar TODOS los combos para búsqueda global
+    console.log('🔍 Combos length:', this.allCombos.length);
+    console.log('🔍 filteredCombos called');
+    let filtered = this.allCombos; // <- ¡IMPORTANTE! Cambia esto
 
+    // Aplicar filtro de búsqueda de texto
     if (this.comboSearchText && this.comboSearchText.trim() !== '') {
       const searchTerm = this.comboSearchText.toLowerCase().trim();
       filtered = filtered.filter(combo => {
@@ -818,15 +1154,97 @@ export class Pricing implements OnInit {
       });
     }
 
-    // Luego filtrar por estado si hay filtro aplicado
+    // Aplicar filtro de estado
     if (this.comboActiveFilter === 'active') {
       filtered = filtered.filter(combo => combo.isActive);
     } else if (this.comboActiveFilter === 'inactive') {
       filtered = filtered.filter(combo => !combo.isActive);
     }
 
-    return filtered;
+    // Calcular paginación local basada en los resultados filtrados
+    const startIndex = (this.currentPage - 1) * this.limit;
+    const endIndex = startIndex + this.limit;
+
+    // Actualizar totalPages basado en filtered.length
+    this.totalPages = Math.ceil(filtered.length / this.limit);
+
+    // Ajustar currentPage si es necesario
+    if (this.currentPage > this.totalPages && this.totalPages > 0) {
+      this.currentPage = this.totalPages;
+      this.loadCurrentPageCombos();
+    }
+
+    // Devolver solo los combos de la página actual
+    return filtered.slice(startIndex, endIndex);
   }
+
+
+  // Método para buscar productos cuando se escribe
+  onComboProductSearch(): void {
+    if (!this.comboProductSearch || this.comboProductSearch.trim() === '') {
+      this.comboProductSuggestions = [];
+      this.selectedComboProduct = null;
+      return;
+    }
+
+    const searchTerm = this.comboProductSearch.toLowerCase().trim();
+
+    this.comboProductSuggestions = this.products
+      .filter(product => {
+        const matchesName = product.name.toLowerCase().includes(searchTerm);
+        const matchesSku = product.sku.toLowerCase().includes(searchTerm);
+        return matchesName || matchesSku;
+      })
+      .slice(0, 10); // Mostrar máximo 10 sugerencias
+  }
+
+  // Método para seleccionar un producto del autocomplete
+  onSelectComboProduct(product: ProductLite): void {
+    this.selectedComboProduct = product;
+    this.comboProductSearch = `${product.name} (${product.sku})`;
+    this.comboProductSuggestions = [];
+
+    // Enfocar el campo de cantidad
+    setTimeout(() => {
+      const qtyInput = document.querySelector('.qty-input input') as HTMLInputElement;
+      if (qtyInput) {
+        qtyInput.focus();
+        qtyInput.select();
+      }
+    }, 50);
+  }
+
+  // Método para agregar producto al combo desde la búsqueda
+  addComboItemFromSearch(): void {
+    if (!this.selectedComboProduct || this.comboItemQty <= 0) {
+      this.showToast('error', 'Selecciona un producto y especifica una cantidad válida');
+      return;
+    }
+
+    // Verificar si el producto ya está en la lista
+    const alreadyAdded = this.newComboItems.some(
+      item => item.productId === this.selectedComboProduct!.id
+    );
+
+    if (alreadyAdded) {
+      this.showToast('warning', 'Este producto ya está en el combo');
+      return;
+    }
+
+    // Agregar a la lista
+    this.newComboItems.push({
+      productId: this.selectedComboProduct.id,
+      productName: this.selectedComboProduct.name,
+      qty: this.comboItemQty,
+    });
+
+    // Resetear la búsqueda
+    this.comboProductSearch = '';
+    this.selectedComboProduct = null;
+    this.comboProductSuggestions = [];
+    this.comboItemQty = 1;
+  }
+
 
   openComboForm(combo?: ComboUi): void {
     if (combo) {
@@ -836,8 +1254,8 @@ export class Pricing implements OnInit {
         name: combo.name,
         description: combo.description ?? '',
         comboType: combo.comboType,
-        comboPrice: combo.comboPrice ?? 0,
-        discountPercent: combo.discountPercent ?? 0,
+        comboPrice: combo.comboPrice ? Number(combo.comboPrice) : 0,
+        discountPercent: combo.discountPercent ? Number(combo.discountPercent) : 0,
         autoApply: combo.autoApply,
         startsAt: this.toDateInputValue(combo.startsAt),
         endsAt: this.toDateInputValue(combo.endsAt),
@@ -858,8 +1276,16 @@ export class Pricing implements OnInit {
       };
       this.newComboItems = [];
     }
+
+    // RESETEAR LA BÚSQUEDA DE PRODUCTOS
+    this.comboProductSearch = '';
+    this.selectedComboProduct = null;
+    this.comboProductSuggestions = [];
+    this.comboItemQty = 1;
+
     this.showComboForm = true;
   }
+
 
   addComboItem(): void {
     if (this.selectedProductForPrice) {
@@ -881,24 +1307,40 @@ export class Pricing implements OnInit {
       return;
     }
 
+    // CONVERTIR comboPrice y discountPercent a números
+    const comboPrice = this.newComboForm.comboType === 'FIXED_PRICE'
+      ? Number(this.newComboForm.comboPrice)  // <-- Convertir explícitamente
+      : undefined;
+
+    const discountPercent = this.newComboForm.comboType === 'PERCENT'
+      ? Number(this.newComboForm.discountPercent)  // <-- Convertir explícitamente
+      : undefined;
+
+    // Validar que sean números válidos
+    if (this.newComboForm.comboType === 'FIXED_PRICE' && isNaN(comboPrice!)) {
+      this.showToast('error', 'El precio del combo debe ser un número válido');
+      return;
+    }
+
+    if (this.newComboForm.comboType === 'PERCENT' && isNaN(discountPercent!)) {
+      this.showToast('error', 'El porcentaje de descuento debe ser un número válido');
+      return;
+    }
+
     const payload: SaveComboDto = {
       code: this.newComboForm.code,
       name: this.newComboForm.name,
       description: this.newComboForm.description || undefined,
       combo_type: this.newComboForm.comboType,
-      combo_price: this.newComboForm.comboType === 'FIXED_PRICE'
-        ? this.newComboForm.comboPrice ?? 0
-        : undefined,
-      discount_percent: this.newComboForm.comboType === 'PERCENT'
-        ? this.newComboForm.discountPercent ?? 0
-        : undefined,
+      combo_price: comboPrice,  // <-- Usar la variable convertida
+      discount_percent: discountPercent,  // <-- Usar la variable convertida
       auto_apply: this.newComboForm.autoApply,
       starts_at: this.newComboForm.startsAt || undefined,
       ends_at: this.newComboForm.endsAt || undefined,
-      is_active: true,
+      //is_active: true,
       items: this.newComboItems.map((it) => ({
         product_id: it.productId,
-        qty: it.qty,
+        qty: Number(it.qty),  // <-- También convertir qty por si acaso
       })),
     };
 
@@ -912,7 +1354,10 @@ export class Pricing implements OnInit {
         this.showComboForm = false;
         this.editingCombo = null;
         this.newComboItems = [];
-        this.loadCombos();
+
+        // Recargar ambos conjuntos de datos
+        this.loadAllCombos();
+        this.loadCurrentPageCombos();
       },
       error: () => this.showToast('error', 'Error al guardar combo'),
     });
@@ -922,6 +1367,12 @@ export class Pricing implements OnInit {
     this.showComboForm = false;
     this.editingCombo = null;
     this.newComboItems = [];
+
+    // Limpiar la búsqueda
+    this.comboProductSearch = '';
+    this.selectedComboProduct = null;
+    this.comboProductSuggestions = [];
+    this.comboItemQty = 1;
   }
 
   // ============================================
@@ -981,18 +1432,98 @@ export class Pricing implements OnInit {
     this.combosApi.update(combo.id, { is_active: newStatus }).subscribe({
       next: (updated) => {
         combo.isActive = updated.isActive;
-        this.showToast(
-          'success',
-          `Combo ${updated.isActive ? 'activado' : 'desactivado'}`,
-        );
+        this.showToast('success', `Combo ${updated.isActive ? 'activado' : 'desactivado'}`);
+
+        // Recargar ambos conjuntos de datos
+        this.loadAllCombos();
+        this.loadCurrentPageCombos();
       },
       error: () => this.showToast('error', 'No se pudo cambiar el estado del combo'),
     });
   }
 
+
+  // Métodos para el simulador
+  onSimulatorProductSearch(): void {
+    if (!this.simulatorProductSearch || this.simulatorProductSearch.trim() === '') {
+      this.simulatorProductSuggestions = [];
+      return;
+    }
+
+    const searchTerm = this.simulatorProductSearch.toLowerCase().trim();
+
+    this.simulatorProductSuggestions = this.products
+      .filter(product => {
+        const matchesName = product.name.toLowerCase().includes(searchTerm);
+        const matchesSku = product.sku.toLowerCase().includes(searchTerm);
+        return matchesName || matchesSku;
+      })
+      .slice(0, 10);
+  }
+
+  onSelectSimulatorProduct(product: ProductLite): void {
+    this.simulatorProduct = product;
+    this.simulatorProductSearch = `${product.name} (${product.sku})`;
+    this.simulatorProductSuggestions = [];
+  }
+
+
+
   private toDateInputValue(date: string | null): string {
     if (!date) return '';
-    return date.split('T')[0];
+
+    try {
+      // Parsear la fecha desde el string
+      const utcDate = new Date(date);
+
+      // Devolver solo la fecha (YYYY-MM-DD) 
+      // El backend la interpretará como inicio del día UTC
+      const year = utcDate.getUTCFullYear();
+      const month = String(utcDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(utcDate.getUTCDate()).padStart(2, '0');
+
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      console.warn('Error formateando fecha:', date, error);
+      const parts = date.split('T')[0].split('-');
+      if (parts.length === 3) {
+        return `${parts[0]}-${parts[1]}-${parts[2]}`;
+      }
+      return '';
+    }
+  }
+
+  formatDateForDisplay(dateString: string | null, format: string = 'dd/MM/yyyy'): string {
+    if (!dateString) return '';
+
+    try {
+      const date = new Date(dateString);
+
+      // Asegurar que interpretamos la fecha como UTC
+      const year = date.getUTCFullYear();
+      const month = date.getUTCMonth();
+      const day = date.getUTCDate();
+
+      // Crear fecha local sin ajustes de zona horaria
+      const localDate = new Date(year, month, day);
+
+      if (format === 'dd/MM/yyyy') {
+        const dayStr = String(localDate.getDate()).padStart(2, '0');
+        const monthStr = String(localDate.getMonth() + 1).padStart(2, '0');
+        const yearStr = localDate.getFullYear();
+        return `${dayStr}/${monthStr}/${yearStr}`;
+      } else if (format === 'yyyy-MM-dd') {
+        const dayStr = String(localDate.getDate()).padStart(2, '0');
+        const monthStr = String(localDate.getMonth() + 1).padStart(2, '0');
+        const yearStr = localDate.getFullYear();
+        return `${yearStr}-${monthStr}-${dayStr}`;
+      }
+
+      return dateString;
+    } catch (error) {
+      console.warn('Error formateando fecha para display:', dateString, error);
+      return dateString || '';
+    }
   }
 
 
@@ -1049,22 +1580,159 @@ export class Pricing implements OnInit {
 
     const searchTerm = this.comboSearchText.toLowerCase().trim();
 
-    // Filtrar combos existentes para mostrar sugerencias
-    this.comboSearchSuggestions = this.combos.filter(combo => {
+    // Filtrar TODOS los combos para sugerencias
+    this.comboSearchSuggestions = this.allCombos.filter(combo => {
       const matchesName = combo.name.toLowerCase().includes(searchTerm);
       const matchesCode = combo.code.toLowerCase().includes(searchTerm);
       return matchesName || matchesCode;
     }).slice(0, 8); // Limitar a 8 sugerencias máximo
   }
 
+  private updateComboSearchSuggestions(): void {
+    if (!this.comboSearchText || this.comboSearchText.trim() === '') {
+      this.comboSearchSuggestions = [];
+      return;
+    }
+
+    this.onComboSearchChange(); // Recalcular sugerencias con todos los combos
+  }
+
   onSelectComboSearchFilter(combo: ComboUi): void {
-    // Cuando se selecciona una sugerencia, llenar el campo de búsqueda
     this.comboSearchText = combo.name;
     this.comboSearchSuggestions = [];
 
-    // También puedes filtrar automáticamente la lista de combos
-    // O puedes dejar que el getter filteredCombos haga el trabajo
+    // Resetear a página 1 cuando se selecciona un combo
+    this.currentPage = 1;
+
+    // No necesitas recargar, el getter filteredCombos ya filtra
   }
+
+
+  // En pricing.ts
+  private isDiscountActiveBasedOnDates(discount: DiscountRuleUi): boolean {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Si tiene fecha de inicio y es futura
+    if (discount.startsAt) {
+      const startDate = new Date(discount.startsAt);
+      startDate.setHours(0, 0, 0, 0);
+
+      if (startDate > today) {
+        return false;
+      }
+    }
+
+    // Si tiene fecha de fin y ya pasó
+    if (discount.endsAt) {
+      const endDate = new Date(discount.endsAt);
+      endDate.setHours(0, 0, 0, 0);
+
+      if (endDate < today) {
+        return false;
+      }
+    }
+
+    return discount.isActive;
+  }
+
+  // Usar en la vista para mostrar estado correcto
+  getDiscountStatus(dr: DiscountRuleUi): { isActive: boolean, statusText: string } {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (dr.startsAt) {
+      const startDate = new Date(dr.startsAt);
+      startDate.setHours(0, 0, 0, 0);
+
+      if (startDate > today) {
+        return {
+          isActive: false,
+          statusText: `Programado (inicia ${this.formatDateForDisplay(dr.startsAt)})`
+        };
+      }
+    }
+
+    if (dr.endsAt) {
+      const endDate = new Date(dr.endsAt);
+      endDate.setHours(0, 0, 0, 0);
+
+      if (endDate < today) {
+        return {
+          isActive: false,
+          statusText: 'Expirado'
+        };
+      }
+    }
+
+    return {
+      isActive: dr.isActive,
+      statusText: dr.isActive ? 'Activo' : 'Inactivo'
+    };
+  }
+
+
+  private isComboActiveBasedOnDates(combo: ComboUi): boolean {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Si tiene fecha de inicio y es futura
+    if (combo.startsAt) {
+      const startDate = new Date(combo.startsAt);
+      startDate.setHours(0, 0, 0, 0);
+
+      if (startDate > today) {
+        return false;
+      }
+    }
+
+    // Si tiene fecha de fin y ya pasó
+    if (combo.endsAt) {
+      const endDate = new Date(combo.endsAt);
+      endDate.setHours(0, 0, 0, 0);
+
+      if (endDate < today) {
+        return false;
+      }
+    }
+
+    return combo.isActive;
+  }
+
+  getComboStatus(combo: ComboUi): { isActive: boolean, statusText: string } {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (combo.startsAt) {
+      const startDate = new Date(combo.startsAt);
+      startDate.setHours(0, 0, 0, 0);
+
+      if (startDate > today) {
+        return {
+          isActive: false,
+          statusText: `Programado (inicia ${this.formatDateForDisplay(combo.startsAt)})`
+        };
+      }
+    }
+
+    if (combo.endsAt) {
+      const endDate = new Date(combo.endsAt);
+      endDate.setHours(0, 0, 0, 0);
+
+      if (endDate < today) {
+        return {
+          isActive: false,
+          statusText: 'Expirado'
+        };
+      }
+    }
+
+    return {
+      isActive: combo.isActive,
+      statusText: combo.isActive ? 'Activo' : 'Inactivo'
+    };
+  }
+
 
 
 

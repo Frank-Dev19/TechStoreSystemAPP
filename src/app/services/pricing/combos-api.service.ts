@@ -15,11 +15,15 @@ export class CombosApiService {
 
     constructor(private base: BaseService) { }
 
-    list(filters: { page: number, limit: number, activeOnly?: string }): Observable<PaginatedResponse<ComboUi>> {
+    list(filters: { page: number, limit: number, activeOnly?: string, autoCheck?: boolean }): Observable<PaginatedResponse<ComboUi>> {
         let queryParams = `?page=${filters.page}&limit=${filters.limit}`;
 
         if (filters.activeOnly !== undefined) {
             queryParams += `&activeOnly=${filters.activeOnly}`;
+        }
+
+        if (filters.autoCheck === true) {
+            queryParams += '&auto_check=true';
         }
 
         return this.base.get<PaginatedResponse<any>>(`${this.baseUrl}${queryParams}`);
@@ -35,5 +39,20 @@ export class CombosApiService {
 
     remove(id: number) {
         return this.base.delete<void>(`${this.baseUrl}/${id}`);
+    }
+
+    // Agrega este método en CombosApiService
+    listAll(activeOnly?: string, autoCheck?: boolean): Observable<ComboUi[]> {
+        let queryParams = '';
+
+        if (activeOnly !== undefined) {
+            queryParams = `?activeOnly=${activeOnly}`;
+        }
+
+        if (autoCheck === true) {
+            queryParams += '&auto_check=true';
+        }
+
+        return this.base.get<any[]>(`${this.baseUrl}/all${queryParams}`);
     }
 }

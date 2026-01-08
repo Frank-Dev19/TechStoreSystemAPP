@@ -144,6 +144,7 @@ export interface DiscountRule {
 export interface DiscountRuleUi extends DiscountRule {
     productName?: string | null;
     categoryName?: string | null;
+    priceListName?: string | null;
     priceListCode?: string | null;
 }
 
