@@ -1,4 +1,4 @@
-import { EquipmentType, ServiceLocation, ServiceType } from './ticket-item';
+import { EquipmentType, ServiceType } from './ticket-item';
 
 export interface TicketItemSaveRequest {
   equipmentType: EquipmentType;
@@ -8,12 +8,6 @@ export interface TicketItemSaveRequest {
   serialNumber?: string | null;
   initialIssue: string;
   accessories?: string | null;
-  serviceLocation?: ServiceLocation;
-  serviceAddress?: string | null;
-  serviceAddressReference?: string | null;
-  scheduledServiceDate?: string | null;
-  slaTargetDays?: number;
-  requiresParts?: boolean;
   estimatedRepairHours?: number;
 }
 

@@ -7,6 +7,7 @@ import { BusinessPartnersApiService } from "../../services/business-partners-api
 import { BusinessPartnerResponse } from "../../models/business-partners/business-partners-response"
 import { BusinessPartnerSaveRequest } from "../../models/business-partners/business-partners-request"
 import { TicketService } from "../../services/tickets/ticket.service"
+import { TicketItemService } from "../../services/tickets/ticket-item.service"
 import { Ticket, TicketPriority, TicketStatus, PaymentStatus } from "../../models/tickets/ticket"
 import { TicketSaveRequest } from "../../models/tickets/ticket-request"
 import { TicketItemSaveRequest } from "../../models/tickets/ticket-item-request"
@@ -15,15 +16,20 @@ import { ProductsService } from "../../services/inventory/products.service"
 import { Product } from "../../models/catalog/product"
 import { ServiceService } from "../../services/service-catalog/service.service"
 import { Service } from "../../models/service-catalog/service"
+import { ServiceCategoryService } from "../../services/service-catalog/service-category.service"
+import { ServiceCategory } from "../../models/service-catalog/service-category"
 import { QuoteService } from "../../services/tickets/quote.service"
 import { QuoteRequest } from "../../models/tickets/quote-request"
-import { Quote } from "../../models/tickets/quote"
+import { Quote, QuoteStatus } from "../../models/tickets/quote"
+import { DiagnosticService } from "../../services/tickets/diagnostic.service"
+import { Diagnostic } from "../../models/tickets/diagnostic"
 import { config } from "../../../environments/environment"
 import { DocumentTypesApiService } from "../../services/document-types-api.service"
 import { DocumentTypeResponse } from "../../models/document-types/document-types-response"
 import { UsersApiService } from "../../services/rbac/users-api.service"
 import { UserApi } from "../../models/rbac/user.model"
 import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
+import { PricingQueryApiService } from "../../services/pricing/pricing-query-api.service"
 
 interface QuoteProductComposer {
   id: number
@@ -74,11 +80,12 @@ const TICKET_ITEM_STATUS_LABELS: Record<TicketItemStatus, string> = {
   [TicketItemStatus.SENT_TO_CLIENT]: "Enviado al cliente",
   [TicketItemStatus.AWAITING_CLIENT_RESPONSE]: "Esperando respuesta del cliente",
   [TicketItemStatus.CLIENT_APPROVED]: "Aprobado por cliente",
+  [TicketItemStatus.QUOTE_EXPIRED]: "Cotización expirada",
+  [TicketItemStatus.READY_FOR_REPAIR]: "Listo para reparación",
   [TicketItemStatus.CLIENT_REJECTED]: "Rechazado por cliente",
   [TicketItemStatus.AWAITING_PARTS]: "Esperando repuestos",
   [TicketItemStatus.IN_REPAIR]: "En reparación",
   [TicketItemStatus.REPAIRED]: "Reparado",
-  [TicketItemStatus.READY_FOR_DELIVERY]: "Listo para entrega",
   [TicketItemStatus.DELIVERED]: "Entregado",
   [TicketItemStatus.CANCELLED]: "Cancelado",
 }
@@ -113,8 +120,15 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   paginatedTickets: Ticket[] = []
   selectedTicketItemId: number | null = null
   selectedTicketItem: TicketItem | null = null
+  currentDiagnosis: Diagnostic | null = null
+  isLoadingDiagnosis = false
+  readonly serviceTypeEnum = ServiceType
+  expectedDocumentDigits: number | null = null
+  private itemQuoteTotals: Record<number, number> = {}
   filterState: "all" | TicketStatus = "all"
   filterPriority: "all" | TicketPriority = "all"
+  filterStartDate = ""
+  filterEndDate = ""
   searchTerm = ""
   currentPage = 1
   itemsPerPage = 10
@@ -132,6 +146,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   documentTypes: DocumentTypeResponse[] = []
   products: Product[] = []
   services: Service[] = []
+  diagnosticFeeService: Service | null = null
+  serviceCategories: ServiceCategory[] = []
+  private serviceCategoryMap = new Map<number, string>()
   quoteItems: QuoteComposerItem[] = []
   documentSearchMessage = ""
   documentSearchError = ""
@@ -161,6 +178,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   selectedQuoteDetail: Quote | null = null
   quoteDetailError = ""
   readonly ticketItemStatusEnum = TicketItemStatus
+  productPriceLoading: Record<number, boolean> = {}
 
   // Modales de edición
   showEditTicketModal = false
@@ -180,12 +198,16 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   constructor(
     private readonly formBuilder: FormBuilder,
     private readonly ticketService: TicketService,
+    private readonly ticketItemService: TicketItemService,
     private readonly businessPartnersService: BusinessPartnersApiService,
     private readonly productsService: ProductsService,
     private readonly serviceCatalog: ServiceService,
+    private readonly serviceCategoryService: ServiceCategoryService,
     private readonly quoteService: QuoteService,
+    private readonly diagnosticService: DiagnosticService,
     private readonly documentTypesService: DocumentTypesApiService,
     private readonly usersApi: UsersApiService,
+    private readonly pricingQuery: PricingQueryApiService,
   ) {
     this.createTicketForm = this.createTicketFormGroup()
     this.createQuoteForm = this.createQuoteFormGroup()
@@ -217,12 +239,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       documentNumber: ["", [Validators.required, Validators.pattern(/^[0-9]*$/)]],
       documentTypeId: [null, Validators.required],
       contactName: ["", Validators.required],
-      contactPhone: ["", Validators.pattern(/^[0-9+\-\s]*$/)],
+      contactPhone: ["", [Validators.required, Validators.pattern(/^[0-9+\-\s]*$/)]],
       contactEmail: ["", Validators.email],
-      tradeName: [""],
-      address: [""],
-      city: [""],
-      country: [""],
       priority: [TicketPriority.MEDIUM, Validators.required],
       notes: [""],
       ticketItems: this.formBuilder.array([this.createTicketItemGroup()]),
@@ -253,7 +271,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       brand: [""],
       model: [""],
       serialNumber: [""],
-      serviceLocation: ["ON_SITE", Validators.required],
       initialIssue: ["", Validators.required],
       accessories: [""],
     })
@@ -267,20 +284,64 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private loadTickets(): void {
     this.isLoadingTickets = true
+    const expandedSnapshot = this.snapshotExpandedItems()
     this.ticketService
-      .findAll({ page: 1, limit: 50 })
+      .findAll({ page: 1, limit: 50, includeItems: false })
       .pipe(finalize(() => (this.isLoadingTickets = false)))
       .subscribe({
         next: ({ data }) => {
           this.tickets = data ?? []
+          this.restoreExpandedItems(expandedSnapshot)
           this.currentPage = 1
           this.applyFilters()
+          this.refreshExpandedTickets()
         },
         error: () => {
           this.tickets = []
           this.filteredTickets = []
           this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar los tickets.")
         },
+      })
+  }
+
+  private snapshotExpandedItems(): Map<number, TicketItem[]> {
+    if (!this.expandedTickets.size) return new Map()
+    const snapshot = new Map<number, TicketItem[]>()
+    this.tickets
+      .filter((ticket) => this.expandedTickets.has(ticket.id))
+      .forEach((ticket) => {
+        if (ticket.items?.length) {
+          snapshot.set(ticket.id, ticket.items)
+        }
+      })
+    return snapshot
+  }
+
+  private restoreExpandedItems(snapshot: Map<number, TicketItem[]>): void {
+    if (!snapshot.size) return
+    this.tickets.forEach((ticket) => {
+      const cached = snapshot.get(ticket.id)
+      if (cached?.length) {
+        ticket.items = cached
+      }
+    })
+  }
+
+  private refreshExpandedTickets(): void {
+    if (!this.expandedTickets.size) return
+    const expandedIds = new Set(this.expandedTickets)
+    this.tickets
+      .filter((ticket) => expandedIds.has(ticket.id))
+      .forEach((ticket) => {
+        this.ticketService.findOne(ticket.id).subscribe({
+          next: (full) => {
+            ticket.items = full.items ?? []
+            ticket.items.forEach((item) => this.loadItemQuoteTotal(item))
+          },
+          error: () => {
+            // silencio: se puede reintentar al volver a expandir
+          },
+        })
       })
   }
 
@@ -304,31 +365,39 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     })
 
     this.serviceCatalog.findAll({ page: 1, limit: 100 }).subscribe({
-      next: ({ data }) => (this.services = data ?? []),
+      next: ({ data }) => {
+        this.services = data ?? []
+        this.diagnosticFeeService = this.services.find((svc) => svc.code === "DIAGNOSIS_FEE") ?? null
+      },
       error: () => this.showMessage("warning", "fas fa-concierge-bell", "No pudimos cargar los servicios."),
+    })
+
+    this.serviceCategoryService.findAll({ page: 1, limit: 200 }).subscribe({
+      next: ({ data }) => {
+        this.serviceCategories = data ?? []
+        this.serviceCategoryMap = new Map(
+          this.serviceCategories.map((category) => [Number(category.id), category.name]),
+        )
+      },
+      error: () => this.showMessage("warning", "fas fa-tags", "No pudimos cargar las categorías de servicios."),
     })
   }
 
   private loadDocumentTypes(): void {
     const documentTypeIdControl = this.createTicketForm.get("documentTypeId")
-    documentTypeIdControl?.disable()
 
     this.documentTypesService.findAll({ page: 1, limit: 50 }).subscribe(({ data }) => {
       this.documentTypes = data ?? []
 
-      if (this.documentTypes.length > 0) {
-        documentTypeIdControl?.enable()
+      const documentTypeId = documentTypeIdControl?.value
+      const documentNumber = (this.createTicketForm.get("documentNumber")?.value ?? "").toString().trim()
+      const hasNumber = documentNumber.length > 0
+      if (!hasNumber) {
+        documentTypeIdControl?.enable({ emitEvent: false })
       }
 
-      const documentTypeId = documentTypeIdControl?.value
-      const documentNumber = this.createTicketForm.get("documentNumber")?.value
-      if (documentNumber && Number(documentNumber)) {
-        const detectedType = this.documentTypes.find((type) => type.digits === String(documentNumber).length)
-        if (detectedType) {
-          this.createTicketForm.patchValue({ documentTypeId: detectedType.id }, { emitEvent: false })
-        }
-      } else if (documentTypeId === null) {
-        this.createTicketForm.patchValue({ documentTypeId: null }, { emitEvent: false })
+      if (!hasNumber) {
+        this.createTicketForm.patchValue({ documentTypeId: documentTypeId ?? null }, { emitEvent: false })
       }
     })
   }
@@ -337,22 +406,41 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.documentSearchMessage = ""
     this.documentSearchError = ""
     const documentNumber = (this.createTicketForm.get("documentNumber")?.value ?? "").trim()
+    console.debug("[docNumberInput] value", documentNumber, "expected", this.expectedDocumentDigits)
     this.createTicketForm.patchValue({ businessPartnerId: null }, { emitEvent: false })
 
+    const docTypeControl = this.createTicketForm.get("documentTypeId")
+    if (documentNumber) {
+      docTypeControl?.disable({ emitEvent: false })
+    } else {
+      docTypeControl?.enable({ emitEvent: false })
+    }
+
     if (!documentNumber) {
+      console.debug("[docNumberInput] empty, docType stays", this.createTicketForm.get("documentTypeId")?.value)
       return
     }
 
-    const detectedType = this.documentTypes.find((type) => type.digits === documentNumber.length)
-    if (detectedType) {
-      this.createTicketForm.patchValue({ documentTypeId: detectedType.id }, { emitEvent: false })
-    } else {
-      this.createTicketForm.patchValue({ documentTypeId: null }, { emitEvent: false })
+    const docTypeId = this.createTicketForm.get("documentTypeId")?.value
+    const docType = this.documentTypes.find((type) => Number(type.id) === Number(docTypeId))
+    if (!docType) {
+      this.documentSearchError = "Selecciona primero el tipo de documento."
+      this.setCustomerFieldsEnabled(true)
+      return
     }
 
-    if (detectedType && documentNumber.length === detectedType.digits) {
+    if (docType.digits && documentNumber.length > docType.digits) {
+      const trimmed = documentNumber.slice(0, docType.digits)
+      console.debug("[docNumberInput] trim to", trimmed)
+      this.createTicketForm.get("documentNumber")?.setValue(trimmed)
+      return
+    }
+
+    if (docType.digits && documentNumber.length === docType.digits) {
       this.lookupBusinessPartnerByDocument(documentNumber)
     }
+
+    console.debug("[docNumberInput] docType after input", this.createTicketForm.get("documentTypeId")?.value)
   }
 
   getSelectedDocumentTypeName(): string {
@@ -375,15 +463,18 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   applyFilters(): void {
     const term = this.searchTerm.trim().toLowerCase()
+    const startDate = this.parseDateFilter(this.filterStartDate, false)
+    const endDate = this.parseDateFilter(this.filterEndDate, true)
     this.filteredTickets = this.tickets.filter((ticket) => {
       const matchState = this.filterState === "all" || ticket.status === this.filterState
       const matchPriority = this.filterPriority === "all" || ticket.priority === this.filterPriority
+      const matchDate = this.matchesDateRange(ticket.createdAt, startDate, endDate)
       const matchSearch =
         term === "" ||
         ticket.code.toLowerCase().includes(term) ||
         (ticket.contactName ?? "").toLowerCase().includes(term) ||
         (ticket.contactEmail ?? "").toLowerCase().includes(term)
-      return matchState && matchPriority && matchSearch
+      return matchState && matchPriority && matchDate && matchSearch
     })
     this.updatePagination()
   }
@@ -393,9 +484,44 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.applyFilters()
   }
 
+  onDocumentTypeChange(): void {
+    const typeId = this.createTicketForm.get("documentTypeId")?.value
+    console.debug("[docTypeChange] typeId", typeId)
+    this.updateExpectedDocumentDigits(typeId)
+    this.documentSearchMessage = ""
+    this.documentSearchError = ""
+    this.createTicketForm.get("documentNumber")?.setValue("")
+  }
+
   onFilterChange(): void {
     this.currentPage = 1
     this.applyFilters()
+  }
+
+  private parseDateFilter(value: string, endOfDay: boolean): Date | null {
+    if (!value) return null
+    const parts = value.split("-").map((part) => Number(part))
+    if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+      return null
+    }
+    const [year, month, day] = parts
+    const date = new Date(year, month - 1, day)
+    if (endOfDay) {
+      date.setHours(23, 59, 59, 999)
+    } else {
+      date.setHours(0, 0, 0, 0)
+    }
+    return date
+  }
+
+  private matchesDateRange(value: string | Date | null | undefined, start: Date | null, end: Date | null): boolean {
+    if (!start && !end) return true
+    if (!value) return false
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return false
+    if (start && date < start) return false
+    if (end && date > end) return false
+    return true
   }
 
   private updatePagination(): void {
@@ -432,6 +558,21 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       this.expandedTickets.delete(ticketId)
     } else {
       this.expandedTickets.add(ticketId)
+      const ticket = this.tickets.find((t) => t.id === ticketId)
+      if (!ticket) return
+      if (!ticket.items?.length) {
+        this.ticketService.findOne(ticketId).subscribe({
+          next: (full) => {
+            ticket.items = full.items ?? []
+            ticket.items.forEach((item) => this.loadItemQuoteTotal(item))
+          },
+          error: () => {
+            this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar los items del ticket.")
+          },
+        })
+        return
+      }
+      ticket.items.forEach((item) => this.loadItemQuoteTotal(item))
     }
   }
 
@@ -439,8 +580,77 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return this.expandedTickets.has(ticketId)
   }
 
+  isFinalTicket(ticket?: Ticket | null): boolean {
+    if (!ticket) return false
+    return [TicketStatus.COMPLETED, TicketStatus.CANCELLED].includes(ticket.status)
+  }
+
   hasPendingQuoteItems(ticket: Ticket): boolean {
     return (ticket.items ?? []).some((item) => item.status === TicketItemStatus.DIAGNOSED)
+  }
+
+  hasRejectedQuoteItems(ticket: Ticket): boolean {
+    return (ticket.items ?? []).some((item) =>
+      [
+        TicketItemStatus.SUPERVISOR_REJECTED,
+        TicketItemStatus.CLIENT_REJECTED,
+      ].includes(item.status),
+    )
+  }
+
+  hasPendingDeliveryItems(ticket: Ticket): boolean {
+    return (ticket.items ?? []).some((item) => item.status === TicketItemStatus.REPAIRED)
+  }
+
+  canMarkClientApproved(item: TicketItem): boolean {
+    if (!item) return false
+    return item.status === TicketItemStatus.SUPERVISOR_APPROVED
+  }
+
+  canDeliverItem(item: TicketItem): boolean {
+    return !!item && item.status === TicketItemStatus.REPAIRED
+  }
+
+  canReassignTechnician(item?: TicketItem | null): boolean {
+    if (!item) return false
+    return ![
+      TicketItemStatus.REPAIRED,
+      TicketItemStatus.DELIVERED,
+    ].includes(item.status)
+  }
+
+  markItemClientApproved(item: TicketItem, event?: Event): void {
+    event?.stopPropagation()
+    if (!item?.id) return
+    const itemId = Number(item.id)
+
+    const sendToClient$ = this.ticketItemService.changeStatus(itemId, TicketItemStatus.SENT_TO_CLIENT)
+    const awaitingClient$ = this.ticketItemService.changeStatus(itemId, TicketItemStatus.AWAITING_CLIENT_RESPONSE)
+    const approve$ = this.ticketItemService.changeStatus(itemId, TicketItemStatus.CLIENT_APPROVED)
+
+    sendToClient$
+      .pipe(switchMap(() => awaitingClient$), switchMap(() => approve$))
+      .subscribe({
+      next: () => {
+        this.showMessage("success", "fas fa-check-circle", "Item marcado como aprobado por cliente.")
+        this.loadTickets()
+      },
+      error: () => {
+        this.showMessage("danger", "fas fa-times-circle", "No pudimos marcar el item como aprobado por cliente.")
+      },
+    })
+  }
+
+  deliverItem(item: TicketItem, event?: Event): void {
+    event?.stopPropagation()
+    if (!item?.id) return
+    this.ticketItemService.changeStatus(Number(item.id), TicketItemStatus.DELIVERED).subscribe({
+      next: () => {
+        this.showMessage("success", "fas fa-check-circle", "Entrega registrada.")
+        this.loadTickets()
+      },
+      error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar la entrega."),
+    })
   }
 
   openCreateTicketModal(): void {
@@ -474,7 +684,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   private applyPartnerContact(partnerId: number | null): void {
     if (!partnerId) {
       this.createTicketForm.patchValue(
-        { contactName: "", contactEmail: "", contactPhone: "", tradeName: "", address: "", city: "", country: "" },
+        { contactName: "", contactEmail: "", contactPhone: "" },
         { emitEvent: false },
       )
       this.setCustomerFieldsEnabled(true)
@@ -491,7 +701,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
 
-    const formValue = this.createTicketForm.value
+    const formValue = this.createTicketForm.getRawValue()
     const itemsPayload = this.ticketItems.controls.map((control) => this.buildTicketItemPayload(control as FormGroup))
     if (!itemsPayload.length) {
       this.showMessage("warning", "fas fa-exclamation-circle", "Agrega al menos un equipo.")
@@ -544,12 +754,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const documentNumber = String(this.createTicketForm.get("documentNumber")?.value ?? "").trim()
     const documentTypeId = Number(this.createTicketForm.get("documentTypeId")?.value)
     const contactName = String(this.createTicketForm.get("contactName")?.value ?? "").trim()
+    const contactPhone = String(this.createTicketForm.get("contactPhone")?.value ?? "").trim()
 
-    if (!documentNumber || !documentTypeId || !contactName) {
+    if (!documentNumber || !documentTypeId || !contactName || !contactPhone) {
       this.showMessage(
         "warning",
         "fas fa-exclamation-circle",
-        "Completa el documento y nombre para registrar al cliente.",
+        "Completa el documento, nombre y teléfono para registrar al cliente.",
       )
       return throwError(() => new Error("Datos de cliente incompletos"))
     }
@@ -566,14 +777,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const payload: BusinessPartnerSaveRequest = {
       companyId: this.companyId,
       name: contactName,
-      tradeName: this.createTicketForm.get("tradeName")?.value || contactName,
+      tradeName: contactName,
       documentTypeId,
       documentNumber,
       email: this.createTicketForm.get("contactEmail")?.value ?? null,
       phone: this.createTicketForm.get("contactPhone")?.value ?? null,
-      address: this.createTicketForm.get("address")?.value ?? null,
-      city: this.createTicketForm.get("city")?.value ?? null,
-      country: this.createTicketForm.get("country")?.value ?? null,
+      address: null,
+      city: null,
+      country: null,
       isClient: true,
       isSupplier: false,
     }
@@ -597,7 +808,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private lookupBusinessPartnerByDocument(documentNumber: string): void {
     const normalizedDoc = documentNumber.trim()
-    const localMatch = this.businessPartners.find((partner) => partner.documentNumber?.trim() === normalizedDoc)
+    const docTypeId = this.createTicketForm.get("documentTypeId")?.value
+
+    const localMatch = this.businessPartners.find(
+      (partner) => partner.documentNumber?.trim() === normalizedDoc && Number(partner.documentTypeId) === Number(docTypeId),
+    )
     if (localMatch) {
       this.applyPartnerData(localMatch)
       return
@@ -605,7 +820,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
     this.isSearchingPartner = true
     this.businessPartnersService
-      .findAll({ page: 1, limit: 1, documentNumber: normalizedDoc, companyId: this.companyId })
+      .findAll({ page: 1, limit: 1, documentNumber: normalizedDoc, documentTypeId: docTypeId, companyId: this.companyId })
       .pipe(finalize(() => (this.isSearchingPartner = false)))
       .subscribe({
         next: ({ data }) => {
@@ -631,34 +846,53 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         contactName: partner.name ?? partner.tradeName ?? partner.documentNumber ?? "",
         contactEmail: partner.email ?? "",
         contactPhone: partner.phone ?? "",
-        tradeName: partner.tradeName ?? "",
-        address: partner.address ?? "",
-        city: partner.city ?? "",
-        country: partner.country ?? "",
       },
       { emitEvent: false },
     )
 
+    this.updateExpectedDocumentDigits(documentTypeId)
     this.documentSearchMessage = "Cliente encontrado. Datos completados automáticamente."
     this.documentSearchError = ""
     this.setCustomerFieldsEnabled(false)
+
+    if (!partner.phone) {
+      const phoneControl = this.createTicketForm.get("contactPhone")
+      phoneControl?.enable({ emitEvent: false })
+    }
+  }
+
+  private updateExpectedDocumentDigits(documentTypeId: number | null): void {
+    const docType = this.documentTypes.find((type) => Number(type.id) === Number(documentTypeId))
+    console.debug("[updateDigits] docTypeId", documentTypeId, "digits", docType?.digits)
+    this.expectedDocumentDigits = docType?.digits ?? null
+
+    const control = this.createTicketForm.get("documentNumber")
+    if (docType?.digits) {
+      const trimmed = (control?.value ?? "").toString().slice(0, docType.digits)
+      control?.setValue(trimmed, { emitEvent: false })
+      control?.setValidators([
+        Validators.required,
+        Validators.minLength(docType.digits),
+        Validators.maxLength(docType.digits),
+        Validators.pattern(`^\\d{${docType.digits}}$`),
+      ])
+    } else {
+      control?.clearValidators()
+      control?.setValidators([Validators.required])
+    }
+    control?.updateValueAndValidity({ emitEvent: false })
   }
 
   private handlePartnerNotFound(): void {
     this.documentSearchMessage = ""
     this.documentSearchError =
-      "No encontramos un cliente con ese documento. Completa los datos para registrarlo al crear el ticket."
+      "No encontramos un cliente con ese documento y tipo. Completa los datos para registrarlo al crear el ticket."
     this.createTicketForm.patchValue(
       {
         businessPartnerId: null,
-        documentTypeId: null,
         contactName: "",
         contactEmail: "",
         contactPhone: "",
-        tradeName: "",
-        address: "",
-        city: "",
-        country: "",
       },
       { emitEvent: false },
     )
@@ -674,7 +908,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       serialNumber: group.get("serialNumber")?.value ?? null,
       initialIssue: group.get("initialIssue")?.value,
       accessories: group.get("accessories")?.value ?? null,
-      slaTargetDays: 5,
     }
   }
 
@@ -692,6 +925,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
     this.selectedTicketItem = targetItem
     this.selectedTicketItemId = Number(targetItem.id)
+    this.loadCurrentDiagnosis(this.selectedTicketItemId)
     this.quoteItems = []
     this.isResubmittingQuote = false
     this.selectedQuoteDetail = null
@@ -708,6 +942,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.quoteTicket = null
     this.isResubmittingQuote = false
     this.selectedQuoteDetail = null
+    this.currentDiagnosis = null
   }
 
   addProductToQuote(): void {
@@ -718,7 +953,54 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.quoteItems.push(this.createServiceComposer())
   }
 
+  onProductSelected(item: QuoteProductComposer, value: any): void {
+    item.productId = this.toNumericId(value)
+    if (item.productId) {
+      this.fetchProductPrice(item)
+    } else {
+      item.unitPrice = 0
+    }
+  }
+
+  onProductQuantityChange(item: QuoteProductComposer, value: any): void {
+    const qty = Number(value) || 1
+    item.quantity = qty
+    if (item.productId) {
+      this.fetchProductPrice(item)
+    }
+  }
+
+  fetchProductPrice(item: QuoteProductComposer): void {
+    if (!item.productId) {
+      return
+    }
+    const qty = Math.max(1, Number(item.quantity) || 1)
+    this.productPriceLoading[item.id] = true
+    this.pricingQuery
+      .getProductPrice(item.productId, qty)
+      .pipe(finalize(() => (this.productPriceLoading[item.id] = false)))
+      .subscribe({
+        next: (res) => {
+          const unitPrice = res.finalUnitPrice ?? res.baseUnitPrice ?? 0
+          item.unitPrice = unitPrice
+        },
+        error: () => {
+          this.showMessage("warning", "fas fa-dollar-sign", "No pudimos obtener el precio del producto.")
+          item.unitPrice = item.unitPrice || 0
+        },
+      })
+  }
+
+  isProductPriceLoading(itemId: number): boolean {
+    return Boolean(this.productPriceLoading[itemId])
+  }
+
   removeQuoteItem(index: number, collection: QuoteComposerItem[] = this.quoteItems): void {
+    const item = collection[index]
+    if (this.isDiagnosticServiceItem(item)) {
+      this.showMessage("warning", "fas fa-exclamation-circle", "El servicio de diagnóstico es obligatorio.")
+      return
+    }
     collection.splice(index, 1)
   }
 
@@ -732,7 +1014,31 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   calculateQuoteTotal(): number {
-    return this.quoteItems.reduce((total, item) => total + this.calculateItemSubtotal(item), 0)
+    const baseTotal = this.quoteItems.reduce((total, item) => total + this.calculateItemSubtotal(item), 0)
+    if (this.shouldIncludeDiagnosticFee() && !this.hasDiagnosticServiceInQuote()) {
+      return baseTotal + this.getDiagnosticServicePrice()
+    }
+    return baseTotal
+  }
+
+  getDiagnosticServicePrice(): number {
+    return Number(this.diagnosticFeeService?.price ?? 0)
+  }
+
+  shouldIncludeDiagnosticFee(): boolean {
+    return this.selectedTicketItem?.serviceType === ServiceType.DIAGNOSIS && !!this.diagnosticFeeService
+  }
+
+  hasDiagnosticServiceInQuote(): boolean {
+    if (!this.diagnosticFeeService?.id) return false
+    return this.quoteItems.some(
+      (item) => item.type === "service" && Number(item.serviceId) === Number(this.diagnosticFeeService?.id),
+    )
+  }
+
+  isDiagnosticServiceItem(item?: QuoteComposerItem | null): boolean {
+    if (!item || item.type !== "service" || !this.diagnosticFeeService?.id) return false
+    return Number(item.serviceId) === Number(this.diagnosticFeeService.id)
   }
 
   submitCreateQuote(): void {
@@ -746,22 +1052,30 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
 
-    const productsPayload = this.quoteItems
-      .filter((entry): entry is QuoteProductComposer => entry.type === "product" && !!entry.productId)
-      .map((entry) => ({
-        productId: Number(entry.productId!),
+    const productsPayload = this.quoteItems.reduce<{ productId: number; quantity: number; unitPrice?: number; requiresPurchase: boolean; notes?: string }[]>((acc, entry) => {
+      if (entry.type !== "product") return acc
+      const productId = this.toNumericId(entry.productId)
+      if (!productId) return acc
+      acc.push({
+        productId,
         quantity: entry.quantity,
         unitPrice: entry.unitPrice || undefined,
         requiresPurchase: entry.requiresPurchase,
         notes: entry.notes || undefined,
-      }))
+      })
+      return acc
+    }, [])
 
-    const servicesPayload = this.quoteItems
-      .filter((entry): entry is QuoteServiceComposer => entry.type === "service" && !!entry.serviceId)
-      .map((entry) => ({
-        serviceId: Number(entry.serviceId!),
+    const servicesPayload = this.quoteItems.reduce<{ serviceId: number; notes?: string }[]>((acc, entry) => {
+      if (entry.type !== "service") return acc
+      const serviceId = this.toNumericId(entry.serviceId)
+      if (!serviceId) return acc
+      acc.push({
+        serviceId,
         notes: entry.notes || undefined,
-      }))
+      })
+      return acc
+    }, [])
 
     if (productsPayload.length === 0 && servicesPayload.length === 0) {
       this.showMessage("warning", "fas fa-info-circle", "Agrega por lo menos un producto o servicio válido.")
@@ -860,9 +1174,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   getTicketItemLabel(item: TicketItem): string {
-    const base = `Item #${item.itemNumber}`
-    const issue = item.initialIssue ? ` · ${item.initialIssue}` : ""
-    return `${base}${issue}`
+    const parts = [
+      `Equipo #${item.itemNumber}`,
+      this.getEquipmentTypeLabel(item.equipmentType),
+      item.brand || null,
+      item.model || null,
+      item.serialNumber ? `SN ${item.serialNumber}` : null,
+    ].filter(Boolean)
+    return parts.join(" · ")
   }
 
   getTicketStatusLabel(status: TicketStatus): string {
@@ -877,8 +1196,93 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return PAYMENT_STATUS_LABELS[status] ?? status
   }
 
+  private loadItemQuoteTotal(item: TicketItem): void {
+    const itemId = Number(item.id)
+    if (!itemId || this.itemQuoteTotals[itemId]) {
+      return
+    }
+
+    this.quoteService
+      .findAll({ page: 1, limit: 5, ticketItemId: itemId })
+      .subscribe({
+        next: ({ data }) => {
+          const list = data ?? []
+          const approved = list.find((q: Quote) => q.status === QuoteStatus.CLIENT_APPROVED)
+          const candidate = approved ?? list[0]
+          if (candidate?.totalAmount !== undefined) {
+            this.itemQuoteTotals[itemId] = Number(candidate.totalAmount) || 0
+          }
+        },
+        error: () => {
+          // silencio: si falla, se seguirá mostrando el fallback
+        },
+      })
+  }
+
+  getTicketItemQuoteTotal(item: TicketItem): number {
+    const cached = this.itemQuoteTotals[item.id]
+    if (cached !== undefined) return cached
+    const amount = (item as any).totalAmount ?? item.finalAmount ?? 0
+    return Number(amount) || 0
+  }
+
+  isQuoteApproved(item: TicketItem): boolean {
+    return [
+      TicketItemStatus.CLIENT_APPROVED,
+      TicketItemStatus.READY_FOR_REPAIR,
+      TicketItemStatus.IN_REPAIR,
+      TicketItemStatus.REPAIRED,
+      TicketItemStatus.DELIVERED,
+    ].includes(item.status)
+  }
+
+  getTicketItemQuoteStatusText(item: TicketItem): string {
+    switch (item.status) {
+      case TicketItemStatus.SUPERVISOR_REJECTED:
+        return "Rechazada por supervisor"
+      case TicketItemStatus.CLIENT_REJECTED:
+        return "Rechazada por cliente"
+      case TicketItemStatus.SUPERVISOR_APPROVED:
+        return "Aprobada por supervisor"
+      case TicketItemStatus.SENT_TO_CLIENT:
+      case TicketItemStatus.AWAITING_CLIENT_RESPONSE:
+        return "Enviada al cliente"
+      case TicketItemStatus.QUOTED:
+        return "Pendiente de aprobación"
+      case TicketItemStatus.DIAGNOSED:
+        return "Pendiente de cotización"
+      case TicketItemStatus.QUOTE_EXPIRED:
+        return "Cotización expirada"
+      default:
+        return "Sin cotización"
+    }
+  }
+
+  getTicketQuotedTotal(ticket: Ticket): number {
+    if (ticket.items?.length) {
+      const sum = ticket.items.reduce((acc, item) => acc + this.getTicketItemQuoteTotal(item), 0)
+      if (sum > 0) return sum
+    }
+    return ticket.totalQuotedAmount ?? 0
+  }
+
   getTicketItemStatusLabel(status: TicketItemStatus): string {
     return TICKET_ITEM_STATUS_LABELS[status] ?? status
+  }
+
+  canQuoteItem(item: TicketItem): boolean {
+    if (!item) return false
+    // Diagnóstico: cotizar al completar diagnóstico
+    if (item.serviceType === ServiceType.DIAGNOSIS) {
+      return item.status === TicketItemStatus.DIAGNOSED
+    }
+    // Servicio estándar: cotizar desde ASSIGNED o QUOTED (para rehacer)
+    if (item.serviceType === ServiceType.STANDARD_SERVICE) {
+      return [TicketItemStatus.ASSIGNED, TicketItemStatus.QUOTED, TicketItemStatus.QUOTE_EXPIRED].includes(
+        item.status,
+      )
+    }
+    return false
   }
 
   getEquipmentTypeLabel(type: EquipmentType): string {
@@ -919,10 +1323,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     ).length
   }
 
-  get pendingPaymentsCount(): number {
-    return this.tickets.filter((ticket) => ticket.paymentStatus !== PaymentStatus.PAID).length
-  }
-
   get highPriorityTicketsCount(): number {
     return this.tickets.filter((ticket) => ticket.priority === TicketPriority.HIGH).length
   }
@@ -935,6 +1335,28 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       ).length
       return total + pending
     }, 0)
+  }
+
+  get sentQuotesCount(): number {
+    return this.ticketItemQuotes.filter((q) => Boolean(q.sentToClientAt)).length
+  }
+
+  get approvedQuotesCount(): number {
+    return this.ticketItemQuotes.filter((q) => Boolean(q.clientApprovedAt)).length
+  }
+
+  private toNumericId(value: unknown): number | null {
+    if (value === null || value === undefined) return null
+    if (typeof value === "number" && Number.isFinite(value)) return value
+    if (typeof value === "string" && value.trim() !== "") {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+    if (typeof value === "object") {
+      const candidate = (value as any).id ?? (value as any).serviceId ?? (value as any).productId
+      return this.toNumericId(candidate)
+    }
+    return null
   }
 
   private showMessage(type: string, icon: string, message: string): void {
@@ -1026,10 +1448,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       "contactName",
       "contactEmail",
       "contactPhone",
-      "tradeName",
-      "address",
-      "city",
-      "country",
     ]
     controls.forEach((controlName) => {
       const control = this.createTicketForm.get(controlName)
@@ -1071,6 +1489,32 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
     const service = this.services.find((s) => Number(s.id) === Number(serviceId))
     return service ? `${service.code} · ${service.name}` : `Servicio #${serviceId}`
+  }
+
+  getServiceCategoryName(categoryId?: number | null): string {
+    if (!categoryId) {
+      return "Sin categoría"
+    }
+    return this.serviceCategoryMap.get(Number(categoryId)) ?? `Categoría #${categoryId}`
+  }
+
+  private loadCurrentDiagnosis(ticketItemId: number | null): void {
+    if (!ticketItemId) {
+      this.currentDiagnosis = null
+      return
+    }
+    this.isLoadingDiagnosis = true
+    this.diagnosticService
+      .findAll({ page: 1, limit: 1, ticketItemId, status: "CURRENT" })
+      .pipe(finalize(() => (this.isLoadingDiagnosis = false)))
+      .subscribe({
+        next: ({ data }) => {
+          this.currentDiagnosis = data?.[0] ?? null
+        },
+        error: () => {
+          this.currentDiagnosis = null
+        },
+      })
   }
 
   getQuoteStatusLabel(status: string): string {
@@ -1139,15 +1583,24 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   resubmitQuote(quote: Quote): void {
     if (!quote?.id) return
-    this.closeQuotesModal()
-    this.openResubmitQuoteModal(quote)
+    const ticket = this.quotesTicket
+    const item = this.quotesTicketItem
+    if (!ticket || !item) {
+      this.showMessage("warning", "fas fa-info-circle", "No se pudo preparar la cotización para reenviar.")
+      return
+    }
+    this.showQuotesModal = false
+    this.openResubmitQuoteModal(quote, ticket, item)
   }
 
-  openResubmitQuoteModal(quote: Quote): void {
-    if (!this.quotesTicket || !this.quotesTicketItem) return
-    this.quoteTicket = this.quotesTicket
-    this.selectedTicketItem = this.quotesTicketItem
-    this.selectedTicketItemId = Number(this.quotesTicketItem.id)
+  openResubmitQuoteModal(quote: Quote, ticket?: Ticket, item?: TicketItem): void {
+    const targetTicket = ticket ?? this.quotesTicket
+    const targetItem = item ?? this.quotesTicketItem
+    if (!targetTicket || !targetItem) return
+    this.quoteTicket = targetTicket
+    this.selectedTicketItem = targetItem
+    this.selectedTicketItemId = Number(targetItem.id)
+    this.loadCurrentDiagnosis(this.selectedTicketItemId)
     this.selectedQuoteDetail = quote
     this.isResubmittingQuote = true
     this.quoteItems = []
@@ -1165,6 +1618,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     })
 
     quote.serviceItems?.forEach((service) => {
+      if (this.diagnosticFeeService?.id && Number(service.serviceId) === Number(this.diagnosticFeeService.id)) {
+        return
+      }
       this.quoteItems.push({
         id: Date.now() + Math.random(),
         type: "service",
@@ -1187,22 +1643,30 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
 
-    const productsPayload = this.quoteItems
-      .filter((entry): entry is QuoteProductComposer => entry.type === "product" && !!entry.productId)
-      .map((entry) => ({
-        productId: Number(entry.productId!),
+    const productsPayload = this.quoteItems.reduce<{ productId: number; quantity: number; unitPrice?: number; requiresPurchase: boolean; notes?: string }[]>((acc, entry) => {
+      if (entry.type !== "product") return acc
+      const productId = this.toNumericId(entry.productId)
+      if (!productId) return acc
+      acc.push({
+        productId,
         quantity: entry.quantity,
         unitPrice: entry.unitPrice || undefined,
         requiresPurchase: entry.requiresPurchase,
         notes: entry.notes || undefined,
-      }))
+      })
+      return acc
+    }, [])
 
-    const servicesPayload = this.quoteItems
-      .filter((entry): entry is QuoteServiceComposer => entry.type === "service" && !!entry.serviceId)
-      .map((entry) => ({
-        serviceId: Number(entry.serviceId!),
+    const servicesPayload = this.quoteItems.reduce<{ serviceId: number; notes?: string }[]>((acc, entry) => {
+      if (entry.type !== "service") return acc
+      const serviceId = this.toNumericId(entry.serviceId)
+      if (!serviceId) return acc
+      acc.push({
+        serviceId,
         notes: entry.notes || undefined,
-      }))
+      })
+      return acc
+    }, [])
 
     const payload = {
       products: productsPayload.length > 0 ? productsPayload : undefined,
@@ -1212,7 +1676,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
     this.isCreatingQuote = true
 
-    const resubmitMethod = this.selectedQuoteDetail.status === "CLIENT_REJECTED"
+    const status = (this.selectedQuoteDetail.status || "").toUpperCase()
+    const resubmitMethod = status === "CLIENT_REJECTED"
       ? this.quoteService.resubmitAfterClientRejection(this.selectedQuoteDetail.id, payload)
       : this.quoteService.resubmitQuote(this.selectedQuoteDetail.id, payload)
 
@@ -1233,6 +1698,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   // ===== EDICIÓN DE TICKET =====
   openEditTicketModal(ticket: Ticket, event?: Event): void {
     event?.stopPropagation()
+    if (this.isFinalTicket(ticket)) {
+      return
+    }
     this.editingTicket = ticket
     this.editTicketForm.patchValue({
       contactName: ticket.contactName,
@@ -1283,7 +1751,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       brand: item.brand,
       model: item.model,
       serialNumber: item.serialNumber,
-      serviceLocation: item.serviceLocation,
       initialIssue: item.initialIssue,
       accessories: item.accessories,
     })
@@ -1322,6 +1789,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   // ===== REASIGNACIÓN DE TÉCNICO =====
   openReassignTechnicianModal(item: TicketItem, event?: Event): void {
     event?.stopPropagation()
+    if (!this.canReassignTechnician(item)) {
+      return
+    }
     this.reassigningItem = item
     this.reassignTechnicianForm.patchValue({
       technicianId: item.assignedToTechnicianId,

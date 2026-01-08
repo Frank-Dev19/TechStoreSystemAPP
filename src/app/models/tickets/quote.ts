@@ -1,6 +1,11 @@
+import type { TicketItem } from "./ticket-item"
+import type { Product } from "../catalog/product"
+import type { Service } from "../service-catalog/service"
+
 export interface Quote {
     id: number;
     ticketItemId: number;
+    ticketItem?: TicketItem | null;
     diagnosisId: number;
     sequenceNumber: number;
     status: QuoteStatus;
@@ -34,6 +39,7 @@ export interface QuoteProduct {
     createdAt: Date;
     updatedAt: Date;
     deletedAt: Date | null;
+    product?: Product | null;
 }
 
 export interface QuoteService {
@@ -46,6 +52,7 @@ export interface QuoteService {
     createdAt: Date;
     updatedAt: Date;
     deletedAt: Date | null;
+    service?: Service | null;
 }
 
 export enum QuoteStatus {

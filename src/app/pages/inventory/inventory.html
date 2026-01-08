@@ -128,7 +128,7 @@
                             <td>{{ item.lot_id ? getLotCode(item.product_id, item.lot_id) : '-' }}</td>
                             <td>
                                 {{ item.lot_id ? (getLotExpiration(item.product_id, item.lot_id) |
-                                date:'dd/MM/yyyy':'UTC') : '-' }}
+                                date:'dd/MM/yyyy') : '-' }}
                             </td>
 
                             <td><strong>{{ item.qty_on_hand }}</strong></td>
@@ -306,7 +306,7 @@
                         <select [(ngModel)]="exitForm.lot_id" class="form-control" [disabled]="isLocked"
                             (change)="maybeAutoPickExitSerials()">
                             <option *ngFor="let lot of availableLotsForExit" [ngValue]="lot.id">
-                                {{ lot.lot_code }} - Vence: {{ lot.expiration_date | date:'dd/MM/yyyy':'UTC' }} ({{
+                                {{ lot.lot_code }} - Vence: {{ lot.expiration_date | date:'dd/MM/yyyy' }} ({{
                                 lot.qty_on_hand }})
                             </option>
 
@@ -405,7 +405,7 @@
                         <select [(ngModel)]="adjustmentForm.lot_id" class="form-control" [disabled]="isLocked">
                             <option [ngValue]="null">Seleccionar lote</option>
                             <option *ngFor="let lot of getLotsForProduct(adjustmentForm.product_id)" [ngValue]="lot.id">
-                                {{ lot.lot_code }} - Vence: {{ lot.expiration_date | date:'dd/MM/yyyy':'UTC' }}
+                                {{ lot.lot_code }} - Vence: {{ lot.expiration_date | date:'dd/MM/yyyy' }}
                             </option>
                         </select>
                     </div>
@@ -549,7 +549,7 @@
                             <td>{{ item.lot_id ? getLotCode(item.product_id, item.lot_id) : '-' }}</td>
                             <td>
                                 {{ item.lot_id ? (getLotExpiration(item.product_id, item.lot_id) |
-                                date:'dd/MM/yyyy':'UTC') : '-' }}
+                                date:'dd/MM/yyyy') : '-' }}
                             </td>
 
                             <td><strong>{{ item.qty_on_hand }}</strong></td>
@@ -1140,7 +1140,7 @@
                             <td>{{ getProductBySku(mov.product_id)?.name }}</td>
                             <td>{{ getCategoryName(getProductBySku(mov.product_id)?.category_id) }}</td>
                             <td>{{ mov.lot_id ? getLotCode(mov.lot_id) : '-' }}</td>
-                            <td>{{ mov.lot_id ? (getLotExpiration(mov.lot_id) | date:'dd/MM':'UTC') : '-' }}</td>
+                            <td>{{ mov.lot_id ? (getLotExpiration(mov.lot_id) | date:'dd/MM') : '-' }}</td>
                             <td>
                                 <span class="qty-badge" [class.positive]="mov.qty > 0" [class.negative]="mov.qty < 0">
                                     {{ mov.qty > 0 ? '+' : '' }}{{ mov.qty }}

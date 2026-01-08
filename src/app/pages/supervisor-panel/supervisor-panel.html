@@ -81,7 +81,7 @@
             <div class="quote-card" (click)="selectQuote(quote)" [class.selected]="selectedQuote?.id === quote.id">
               <div class="card-header">
                 <div class="quote-info">
-                  <h3>Cotización #{{ quote.sequenceNumber }}</h3>
+                  <h3>{{ getQuoteHeaderLabel(quote) }}</h3>
                   <span class="quote-badge" [ngClass]="getQuoteStatusClass(quote.status)">
                     {{ getQuoteStatusLabel(quote.status) }}
                   </span>
@@ -95,6 +95,10 @@
                 <p class="quote-date">
                   <i class="fas fa-calendar-alt"></i>
                   {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+                </p>
+                <p class="quote-date">
+                  <i class="fas fa-tag"></i>
+                  {{ getServiceTypeLabel(quote.ticketItem?.serviceType) }}
                 </p>
                 @if (quote.notes) {
                   <p class="quote-notes">
@@ -119,7 +123,7 @@
             <div class="quote-card" (click)="selectQuote(quote)" [class.selected]="selectedQuote?.id === quote.id">
               <div class="card-header">
                 <div class="quote-info">
-                  <h3>Cotización #{{ quote.sequenceNumber }}</h3>
+                  <h3>{{ getQuoteHeaderLabel(quote) }}</h3>
                   <span class="quote-badge" [ngClass]="getQuoteStatusClass(quote.status)">
                     {{ getQuoteStatusLabel(quote.status) }}
                   </span>
@@ -133,6 +137,10 @@
                 <p class="quote-date">
                   <i class="fas fa-calendar-alt"></i>
                   {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+                </p>
+                <p class="quote-date">
+                  <i class="fas fa-tag"></i>
+                  {{ getServiceTypeLabel(quote.ticketItem?.serviceType) }}
                 </p>
                 @if (quote.approvedBySupervisorAt) {
                   <p class="quote-date">
@@ -157,7 +165,7 @@
             <div class="quote-card" (click)="selectQuote(quote)" [class.selected]="selectedQuote?.id === quote.id">
               <div class="card-header">
                 <div class="quote-info">
-                  <h3>Cotización #{{ quote.sequenceNumber }}</h3>
+                  <h3>{{ getQuoteHeaderLabel(quote) }}</h3>
                   <span class="quote-badge" [ngClass]="getQuoteStatusClass(quote.status)">
                     {{ getQuoteStatusLabel(quote.status) }}
                   </span>
@@ -171,6 +179,10 @@
                 <p class="quote-date">
                   <i class="fas fa-calendar-alt"></i>
                   {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+                </p>
+                <p class="quote-date">
+                  <i class="fas fa-tag"></i>
+                  {{ getServiceTypeLabel(quote.ticketItem?.serviceType) }}
                 </p>
                 @if (quote.rejectedBySupervisorAt) {
                   <p class="quote-date">
@@ -201,7 +213,7 @@
             <div class="quote-card" (click)="selectQuote(quote)" [class.selected]="selectedQuote?.id === quote.id">
               <div class="card-header">
                 <div class="quote-info">
-                  <h3>Cotización #{{ quote.sequenceNumber }}</h3>
+                  <h3>{{ getQuoteHeaderLabel(quote) }}</h3>
                   <span class="quote-badge" [ngClass]="getQuoteStatusClass(quote.status)">
                     {{ getQuoteStatusLabel(quote.status) }}
                   </span>
@@ -215,6 +227,10 @@
                 <p class="quote-date">
                   <i class="fas fa-calendar-alt"></i>
                   {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+                </p>
+                <p class="quote-date">
+                  <i class="fas fa-tag"></i>
+                  {{ getServiceTypeLabel(quote.ticketItem?.serviceType) }}
                 </p>
               </div>
             </div>
@@ -366,7 +382,7 @@
               <div class="info-grid">
                 <div class="info-item">
                   <span class="info-label">Tipo:</span>
-                  <span class="info-value">{{ selectedTicketItem.equipmentType | titlecase }}</span>
+                  <span class="info-value">{{ getEquipmentTypeLabel(selectedTicketItem.equipmentType) }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">Marca:</span>
@@ -377,8 +393,8 @@
                   <span class="info-value">{{ selectedTicketItem.model || 'Sin modelo' }}</span>
                 </div>
                 <div class="info-item">
-                  <span class="info-label">Supervisor asignado:</span>
-                  <span class="info-value">{{ selectedTicketItem.assignedToSupervisorName || 'Sin asignar' }}</span>
+                  <span class="info-label">Técnico asignado:</span>
+                  <span class="info-value">{{ selectedTicketItem.assignedToTechnicianName || 'Sin asignar' }}</span>
                 </div>
               </div>
               @if (selectedTicketItem.initialIssue) {
@@ -387,10 +403,35 @@
                   <p>{{ selectedTicketItem.initialIssue }}</p>
                 </div>
               }
+              @if (selectedTicketItem.serviceType === 'DIAGNOSIS') {
+                <div class="notes-box">
+                  <strong>Diagnóstico del técnico:</strong>
+                  @if (isLoadingDiagnosis) {
+                    <p><i class="fas fa-spinner fa-spin"></i> Cargando diagnóstico...</p>
+                  } @else if (currentDiagnosis) {
+                    <p><strong>{{ currentDiagnosis.summary }}</strong></p>
+                    @if (currentDiagnosis.details) {
+                      <p>{{ currentDiagnosis.details }}</p>
+                    }
+                  } @else {
+                    <p>Sin diagnóstico registrado.</p>
+                  }
+                </div>
+              }
             </section>
           }
 
           <section class="detail-actions">
+            @if (selectedTicketItem) {
+              <button
+                class="btn btn-secondary"
+                (click)="openReassignTechnicianModal()"
+                [disabled]="!canReassignTechnician(selectedTicketItem)"
+              >
+                <i class="fas fa-user-cog"></i>
+                Reasignar técnico
+              </button>
+            }
             @if (canApprove(selectedQuote)) {
               <button class="btn btn-success" (click)="openApprovalModal()">
                 <i class="fas fa-check"></i>
@@ -419,23 +460,12 @@
           </button>
         </div>
 
-        <form [formGroup]="approvalForm" (ngSubmit)="submitApproval()" class="modal-body">
+        <div class="modal-body">
           <p class="modal-info">
             <i class="fas fa-info-circle"></i>
             Al aprobar esta cotización, se enviará al recepcionista para que la envíe al cliente.
           </p>
-
-          <div class="form-group">
-            <label for="approval-notes">Notas adicionales (opcional)</label>
-            <textarea
-              id="approval-notes"
-              class="form-control"
-              formControlName="notes"
-              rows="3"
-              placeholder="Agrega comentarios o recomendaciones..."
-            ></textarea>
-          </div>
-        </form>
+        </div>
 
         <div class="modal-footer">
           <button class="btn btn-secondary" (click)="closeApprovalModal()">Cancelar</button>
@@ -530,6 +560,53 @@
           <button class="btn btn-primary" (click)="submitAssignSupervisor()" [disabled]="assignSupervisorForm.invalid || isProcessingAction">
             <i class="fas fa-save"></i>
             Asignar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showReassignTechnicianModal) {
+    <div class="modal-overlay" (click)="closeReassignTechnicianModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Reasignar Técnico</h2>
+          <button class="btn-close" (click)="closeReassignTechnicianModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <form [formGroup]="reassignTechnicianForm" (ngSubmit)="submitReassignTechnician()" class="modal-body">
+          <div class="form-group">
+            <label for="technicianId">Técnico *</label>
+            <select
+              id="technicianId"
+              class="form-control"
+              formControlName="technicianId"
+              [class.is-invalid]="reassignTechnicianForm.get('technicianId')?.invalid && reassignTechnicianForm.get('technicianId')?.touched"
+            >
+              <option [ngValue]="null">Selecciona un técnico</option>
+              @for (tech of technicians; track tech.id) {
+                <option [ngValue]="tech.id">{{ tech.name }}</option>
+              }
+            </select>
+            @if (reassignTechnicianForm.get('technicianId')?.invalid && reassignTechnicianForm.get('technicianId')?.touched) {
+              <div class="invalid-feedback">
+                Debes seleccionar un técnico
+              </div>
+            }
+          </div>
+          <p class="modal-info">
+            <i class="fas fa-info-circle"></i>
+            Técnico actual: {{ selectedTicketItem?.assignedToTechnicianName || 'Sin asignar' }}
+          </p>
+        </form>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" (click)="closeReassignTechnicianModal()">Cancelar</button>
+          <button class="btn btn-primary" (click)="submitReassignTechnician()" [disabled]="reassignTechnicianForm.invalid || isProcessingAction">
+            <i class="fas fa-save"></i>
+            Guardar
           </button>
         </div>
       </div>

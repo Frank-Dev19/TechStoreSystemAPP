@@ -2,7 +2,7 @@
   <div class="panel-header">
     <div class="title-section">
       <h1 class="page-title">Panel del Técnico</h1>
-      <p class="page-subtitle">Gestiona los equipos asignados, diagnósticos y SLA</p>
+      <p class="page-subtitle">Gestiona los equipos asignados y diagnósticos</p>
     </div>
   </div>
 
@@ -24,9 +24,9 @@
         <i class="fas fa-wrench"></i>
         En reparación ({{ repairItems.length }})
       </button>
-      <button class="tab-btn" [class.active]="activeTab === 'ready'" (click)="activeTab = 'ready'">
-        <i class="fas fa-box-open"></i>
-        Listos ({{ readyItems.length }})
+      <button class="tab-btn" [class.active]="activeTab === 'repaired'" (click)="activeTab = 'repaired'">
+        <i class="fas fa-check-circle"></i>
+        Reparados ({{ repairedItems.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="activeTab = 'all'">
         <i class="fas fa-list"></i>
@@ -49,13 +49,14 @@
                 <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
-                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
-                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
-                <div class="sla-info">
-                  <span [class]="'badge ' + getSLABadgeClass(item)">
-                    {{ getSLAText(item) }}
-                  </span>
-                </div>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
+                @if (item.status === 'ASSIGNED' && item.serviceType === 'STANDARD_SERVICE') {
+                  <p class="info-text pending-quote">
+                    <i class="fas fa-hourglass-half"></i>
+                    Esperando cotización
+                  </p>
+                }
               </div>
               <div class="card-actions">
                 <button
@@ -64,6 +65,13 @@
                   (click)="selectItem(item); startDiagnosis(item); $event.stopPropagation()"
                 >
                   <i class="fas fa-play"></i> Iniciar diagnóstico
+                </button>
+                <button
+                  class="btn btn-sm btn-primary"
+                  *ngIf="canStartStandardService(item)"
+                  (click)="selectItem(item); startStandardService(item); $event.stopPropagation()"
+                >
+                  <i class="fas fa-play"></i> Iniciar servicio
                 </button>
                 <button
                   class="btn btn-sm btn-success"
@@ -93,18 +101,18 @@
                 <span class="badge badge-warning">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
-                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
-                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
-                <div class="sla-info">
-                  <span [class]="'badge ' + getSLABadgeClass(item)">
-                    {{ getSLAText(item) }}
-                  </span>
-                </div>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
-                <button class="btn btn-sm btn-primary" (click)="selectItem(item); openDiagnosisModal(); $event.stopPropagation()">
+                <button
+                  class="btn btn-sm btn-primary"
+                  *ngIf="isDiagnosisService(item)"
+                  (click)="selectItem(item); openDiagnosisModal(); $event.stopPropagation()"
+                >
                   <i class="fas fa-plus"></i> Registrar diagnóstico
                 </button>
+                <span class="muted" *ngIf="!isDiagnosisService(item)">Servicio estándar: sin diagnósticos adicionales</span>
               </div>
             </div>
           }
@@ -125,17 +133,19 @@
                 <span class="badge badge-warning">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
-                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
-                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
-                <div class="sla-info">
-                  <span [class]="'badge ' + getSLABadgeClass(item)">
-                    {{ getSLAText(item) }}
-                  </span>
-                </div>
-                <p class="info-text">
-                  <i class="fas fa-info-circle"></i>
-                  Esperando aprobación de cotización
-                </p>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
+                @if (item.status === 'DIAGNOSED') {
+                  <p class="info-text pending-quote">
+                    <i class="fas fa-hourglass-half"></i>
+                    Esperando cotización
+                  </p>
+                } @else {
+                  <p class="info-text pending-quote">
+                    <i class="fas fa-info-circle"></i>
+                    Esperando aprobación de cotización
+                  </p>
+                }
               </div>
             </div>
           }
@@ -156,50 +166,43 @@
                 <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
-                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
-                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
-                <div class="sla-info">
-                  <span [class]="'badge ' + getSLABadgeClass(item)">
-                    {{ getSLAText(item) }}
-                  </span>
-                </div>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
-                <button class="btn btn-sm btn-success" (click)="selectItem(item); markReadyForDelivery(item); $event.stopPropagation()">
-                  <i class="fas fa-check"></i> Marcar listo
+                <button
+                  class="btn btn-sm btn-warning"
+                  *ngIf="canFinishRepair(item)"
+                  (click)="selectItem(item); markRepaired(item); $event.stopPropagation()"
+                >
+                  <i class="fas fa-flag-checkered"></i> Finalizar reparación
                 </button>
+                <span class="muted" *ngIf="!canFinishRepair(item)">Entrega será realizada por recepción.</span>
               </div>
             </div>
           }
         }
       }
 
-      @if (activeTab === 'ready') {
-        @if (readyItems.length === 0) {
+      @if (activeTab === 'repaired') {
+        @if (repairedItems.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay equipos listos para entrega</p>
+            <p>No hay equipos reparados</p>
           </div>
         } @else {
-          @for (item of readyItems; track item.id) {
+          @for (item of repairedItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
                 <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
                 <span class="badge badge-success">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
-                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
-                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
-                <div class="sla-info">
-                  <span [class]="'badge ' + getSLABadgeClass(item)">
-                    {{ getSLAText(item) }}
-                  </span>
-                </div>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
-                <button class="btn btn-sm btn-info" (click)="selectItem(item); markReadyForDelivery(item); $event.stopPropagation()">
-                  <i class="fas fa-truck"></i> Entregar
-                </button>
+                <span class="muted">Entrega será realizada por recepción.</span>
               </div>
             </div>
           }
@@ -220,17 +223,16 @@
                 <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
-                <p class="client-name">👤 {{ item.ticket?.contactName || 'Cliente sin nombre' }}</p>
-                <p class="equipment-type">💻 {{ item.equipmentType | titlecase }}</p>
-                <div class="sla-info">
-                  <span [class]="'badge ' + getSLABadgeClass(item)">
-                    {{ getSLAText(item) }}
-                  </span>
-                </div>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
-                <button class="btn btn-sm btn-outline-primary" (click)="selectItem(item); openDiagnosisModal(); $event.stopPropagation()">
-                  <i class="fas fa-notes-medical"></i> Nuevo diagnóstico
+                <button
+                  class="btn btn-sm btn-outline-success"
+                  *ngIf="canStartStandardService(item)"
+                  (click)="selectItem(item); startStandardService(item); $event.stopPropagation()"
+                >
+                  <i class="fas fa-play"></i> Iniciar servicio
                 </button>
               </div>
             </div>
@@ -242,7 +244,7 @@
     @if (selectedItem) {
       <div class="detail-view">
         <div class="detail-header">
-          <h2>{{ selectedItem.ticket?.code || 'Ticket' }} - {{ selectedItem.ticket?.contactName || 'Cliente' }}</h2>
+          <h2>{{ selectedItem.ticket?.code || 'Ticket' }}</h2>
           <button class="btn-close" (click)="clearSelectedItem()">
             <i class="fas fa-times"></i>
           </button>
@@ -251,7 +253,8 @@
         <div class="detail-content">
           <section class="detail-section">
             <h3><i class="fas fa-info-circle"></i> Información del equipo</h3>
-            <p><strong>Tipo:</strong> {{ selectedItem.equipmentType | titlecase }}</p>
+            <p><strong>Tipo:</strong> {{ getEquipmentTypeLabel(selectedItem.equipmentType) }}</p>
+            <p><strong>Problema reportado:</strong> {{ selectedItem.initialIssue || 'Sin detalle del problema' }}</p>
             <p><strong>Técnico asignado:</strong> {{ getTechnicianName(selectedItem) }}</p>
             <p><strong>Recibido:</strong> {{ selectedItem.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</p>
           </section>
@@ -261,17 +264,9 @@
             <div [class]="'state-badge state-' + selectedItem.status">
               {{ getItemStatusLabel(selectedItem.status) }}
             </div>
-            <p class="sla-deadline">
-              <strong>Fecha límite SLA:</strong> {{ selectedItem.slaDeadline | date: 'dd/MM/yyyy' }}
-            </p>
-            @if (selectedItem.slaBreached) {
-              <p class="sla-breach-warning">
-                <i class="fas fa-exclamation-triangle"></i> SLA vencido
-              </p>
-            }
           </section>
 
-          @if (selectedItem.status === 'IN_DIAGNOSIS' || selectedItem.status === 'DIAGNOSED') {
+          @if (isDiagnosisService(selectedItem)) {
             <section class="detail-section full-width">
               <h3><i class="fas fa-history"></i> Historial de diagnósticos</h3>
               @if (diagnosticHistory.length === 0) {
@@ -282,7 +277,7 @@
                     <div class="history-header">
                       <span class="history-number">DX #{{ dx.sequenceNumber }}</span>
                       <span [class]="'badge badge-' + (dx.status === 'CURRENT' ? 'primary' : 'secondary')">
-                        {{ dx.status }}
+                        {{ getDiagnosisStatusLabel(dx.status) }}
                       </span>
                     </div>
                     <p class="history-summary"><strong>{{ dx.summary }}</strong></p>
@@ -292,21 +287,68 @@
                 }
               }
 
-              @if (selectedItem.status === 'IN_DIAGNOSIS') {
+              @if (selectedItem.status === 'IN_DIAGNOSIS' && diagnosticHistory.length > 0) {
                 <button class="btn btn-primary" (click)="completeDiagnosis()">
                   <i class="fas fa-check"></i> Completar diagnóstico
                 </button>
               }
-              @if (selectedItem.status === 'DIAGNOSED') {
-                <button class="btn btn-success" (click)="startRepair(selectedItem)">
-                  <i class="fas fa-tools"></i> Iniciar reparación
-                </button>
-              }
-            </section>
+          @if (selectedItem.status === 'IN_DIAGNOSIS' && diagnosticHistory.length === 0) {
+            <p class="empty-text">Registra un diagnóstico antes de completarlo.</p>
           }
-        </div>
-      </div>
-    }
+          @if (selectedItem.status === 'CLIENT_APPROVED' || selectedItem.status === 'READY_FOR_REPAIR') {
+            <button class="btn btn-success" (click)="startRepair(selectedItem)">
+              <i class="fas fa-tools"></i> Iniciar reparación
+            </button>
+          }
+          @if (canFinishRepair(selectedItem)) {
+            <button class="btn btn-warning" (click)="markRepaired(selectedItem)">
+              <i class="fas fa-flag-checkered"></i> Finalizar reparación
+            </button>
+          }
+        </section>
+      }
+
+      @if (canShowQuoteSection(selectedItem)) {
+        @if (quoteSummary) {
+          <section class="detail-section">
+            <h3><i class="fas fa-file-invoice-dollar"></i> Resumen de cotización</h3>
+            @if (quoteSummary.productItems?.length) {
+              <div class="quote-items">
+                <h4>Productos</h4>
+                @for (product of quoteSummary.productItems; track product.id) {
+                  <div class="quote-line">
+                    <span>{{ product.quantity }} x {{ getProductName(product) }}</span>
+                  </div>
+                }
+              </div>
+            }
+            @if (quoteSummary.serviceItems?.length) {
+              <div class="quote-items">
+                <h4>Servicios</h4>
+                @for (service of quoteSummary.serviceItems; track service.id) {
+                  <div class="quote-line">
+                    <span>{{ getServiceName(service) }}</span>
+                  </div>
+                }
+              </div>
+            }
+            @if (!quoteSummary.productItems?.length && !quoteSummary.serviceItems?.length) {
+              <p class="empty-text">Cotización sin líneas detalladas.</p>
+            }
+          </section>
+        } @else if (isLoadingQuote) {
+          <section class="detail-section">
+            <p class="empty-text"><i class="fas fa-spinner fa-spin"></i> Cargando cotización...</p>
+          </section>
+        } @else {
+          <section class="detail-section">
+            <p class="empty-text">Aún no hay una cotización aprobada para este equipo.</p>
+          </section>
+        }
+      }
+    </div>
+  </div>
+}
   </div>
 
   @if (showDiagnosisModal) {

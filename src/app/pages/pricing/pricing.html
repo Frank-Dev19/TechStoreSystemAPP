@@ -93,9 +93,9 @@
                             <td>{{ pl.description }}</td>
                             <td><span class="badge badge-info">{{ pl.type }}</span></td>
                             <td>
-                                {{ pl.activeFrom ? (pl.activeFrom | date:'yyyy-MM-dd':'UTC') : '-' }}
+                                {{ pl.activeFrom ? (pl.activeFrom | date:'yyyy-MM-dd') : '-' }}
                                 hasta
-                                {{ pl.activeTo ? (pl.activeTo | date:'yyyy-MM-dd':'UTC') : '-' }}
+                                {{ pl.activeTo ? (pl.activeTo | date:'yyyy-MM-dd') : '-' }}
                             </td>
                             <td>
                                 <i *ngIf="pl.isDefault" class="fas fa-check text-success"></i>
@@ -230,9 +230,9 @@
                             </td>
                             <td>{{ pp.currencyCode }} {{ pp.unitPrice | number:'1.2-2' }}</td>
                             <td>
-                                {{ pp.validFrom ? (pp.validFrom | date:'yyyy-MM-dd':'UTC') : '-' }}
+                                {{ pp.validFrom ? (pp.validFrom | date:'yyyy-MM-dd') : '-' }}
                                 hasta
-                                {{ pp.validTo ? (pp.validTo | date:'yyyy-MM-dd':'UTC') : '-' }}
+                                {{ pp.validTo ? (pp.validTo | date:'yyyy-MM-dd') : '-' }}
                             </td>
                             <td class="actions">
                                 <button class="btn-icon" (click)="openProductPriceForm(pp)" title="Editar">

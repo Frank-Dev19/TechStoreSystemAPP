@@ -4,7 +4,9 @@ import { finalize } from "rxjs/operators"
 import { Quote, QuoteStatus } from "../../models/tickets/quote"
 import { QuoteService } from "../../services/tickets/quote.service"
 import { TicketItemService } from "../../services/tickets/ticket-item.service"
-import { TicketItem } from "../../models/tickets/ticket-item"
+import { EquipmentType, TicketItem, TicketItemStatus } from "../../models/tickets/ticket-item"
+import { DiagnosticService } from "../../services/tickets/diagnostic.service"
+import { Diagnostic } from "../../models/tickets/diagnostic"
 import { Product } from "../../models/catalog/product"
 import { Service } from "../../models/service-catalog/service"
 import { ProductsService } from "../../services/inventory/products.service"
@@ -13,7 +15,7 @@ import { UsersApiService } from "../../services/rbac/users-api.service"
 import { UserApi } from "../../models/rbac/user.model"
 import { CurrentUserService } from "../../services/current-user.service"
 import { User } from "../../models/user/user"
-import { hasAnyRole, SUPERVISOR_ROLE_NAMES } from "../../utils/role.utils"
+import { hasAnyRole, SUPERVISOR_ROLE_NAMES, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
 
 @Component({
   selector: "app-supervisor-panel",
@@ -31,18 +33,22 @@ export class SupervisorPanel implements OnInit {
 
   selectedQuote: Quote | null = null
   selectedTicketItem: TicketItem | null = null
+  currentDiagnosis: Diagnostic | null = null
+  isLoadingDiagnosis = false
 
   showApprovalModal = false
   showRejectionModal = false
   showAssignSupervisorModal = false
+  showReassignTechnicianModal = false
 
-  approvalForm: FormGroup
   rejectionForm: FormGroup
   assignSupervisorForm: FormGroup
+  reassignTechnicianForm: FormGroup
 
   products: Product[] = []
   services: Service[] = []
   supervisors: UserApi[] = []
+  technicians: UserApi[] = []
   currentUserId: number | null = null
   isSupervisor = false
 
@@ -55,19 +61,36 @@ export class SupervisorPanel implements OnInit {
   isProcessingAction = false
 
   readonly QuoteStatusEnum = QuoteStatus
+  private readonly equipmentTypeLabels: Record<EquipmentType, string> = {
+    [EquipmentType.LAPTOP]: "Laptop",
+    [EquipmentType.DESKTOP_PC]: "PC de escritorio",
+    [EquipmentType.ALL_IN_ONE]: "All in One",
+    [EquipmentType.PRINTER]: "Impresora",
+    [EquipmentType.SCANNER]: "Escáner",
+    [EquipmentType.PROJECTOR]: "Proyector",
+    [EquipmentType.MONITOR]: "Monitor",
+    [EquipmentType.SERVER]: "Servidor",
+    [EquipmentType.NETWORK_DEVICE]: "Equipo de red",
+    [EquipmentType.OTHER]: "Otro",
+  }
+  private readonly serviceTypeLabels = {
+    DIAGNOSIS: "Diagnóstico",
+    STANDARD_SERVICE: "Servicio estándar",
+  } as const
 
   constructor(
     private readonly formBuilder: FormBuilder,
     private readonly quoteService: QuoteService,
     private readonly ticketItemService: TicketItemService,
+    private readonly diagnosticService: DiagnosticService,
     private readonly productsService: ProductsService,
     private readonly serviceService: ServiceService,
     private readonly usersApi: UsersApiService,
     private readonly currentUserService: CurrentUserService,
   ) {
-    this.approvalForm = this.createApprovalForm()
     this.rejectionForm = this.createRejectionForm()
     this.assignSupervisorForm = this.createAssignSupervisorForm()
+    this.reassignTechnicianForm = this.createReassignTechnicianForm()
   }
 
   ngOnInit(): void {
@@ -75,12 +98,6 @@ export class SupervisorPanel implements OnInit {
     this.loadQuotes()
     this.loadCatalogData()
     this.loadSupervisors()
-  }
-
-  private createApprovalForm(): FormGroup {
-    return this.formBuilder.group({
-      notes: ["", Validators.maxLength(500)],
-    })
   }
 
   private createRejectionForm(): FormGroup {
@@ -92,6 +109,12 @@ export class SupervisorPanel implements OnInit {
   private createAssignSupervisorForm(): FormGroup {
     return this.formBuilder.group({
       supervisorId: [null, Validators.required],
+    })
+  }
+
+  private createReassignTechnicianForm(): FormGroup {
+    return this.formBuilder.group({
+      technicianId: [null, Validators.required],
     })
   }
 
@@ -139,6 +162,7 @@ export class SupervisorPanel implements OnInit {
       this.selectedQuote = updated ?? null
       if (this.selectedQuote) {
         this.loadTicketItemDetail(this.selectedQuote.ticketItemId)
+        this.loadCurrentDiagnosis(this.selectedQuote.ticketItemId)
       }
     }
   }
@@ -168,14 +192,29 @@ export class SupervisorPanel implements OnInit {
     })
   }
 
+  private loadTechnicians(): void {
+    this.usersApi.findAll().subscribe({
+      next: (users) => {
+        const userList = users ?? []
+        this.technicians = userList.filter((user: UserApi) => hasAnyRole(user.roles, TECHNICIAN_ROLE_NAMES))
+      },
+      error: () => {
+        this.technicians = []
+        this.showMessage("warning", "fas fa-users", "No pudimos cargar la lista de técnicos.")
+      },
+    })
+  }
+
   selectQuote(quote: Quote): void {
     this.selectedQuote = quote
     this.loadTicketItemDetail(quote.ticketItemId)
+    this.loadCurrentDiagnosis(quote.ticketItemId)
   }
 
   clearSelectedQuote(): void {
     this.selectedQuote = null
     this.selectedTicketItem = null
+    this.currentDiagnosis = null
   }
 
   private loadTicketItemDetail(ticketItemId: number): void {
@@ -186,6 +225,21 @@ export class SupervisorPanel implements OnInit {
         this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el detalle del item.")
       },
     })
+  }
+
+  private loadCurrentDiagnosis(ticketItemId: number): void {
+    this.isLoadingDiagnosis = true
+    this.diagnosticService
+      .findAll({ page: 1, limit: 1, ticketItemId, status: "CURRENT" })
+      .pipe(finalize(() => (this.isLoadingDiagnosis = false)))
+      .subscribe({
+        next: ({ data }) => {
+          this.currentDiagnosis = data?.[0] ?? null
+        },
+        error: () => {
+          this.currentDiagnosis = null
+        },
+      })
   }
 
   private restoreUserFromStorage(): User | null {
@@ -200,25 +254,26 @@ export class SupervisorPanel implements OnInit {
     }
   }
 
+  getEquipmentTypeLabel(type?: EquipmentType | null): string {
+    if (!type) return "Sin tipo"
+    return this.equipmentTypeLabels[type] ?? String(type)
+  }
+
   openApprovalModal(): void {
     if (!this.selectedQuote || !this.currentUserId) return
     this.showApprovalModal = true
-    this.approvalForm.reset()
   }
 
   closeApprovalModal(): void {
     this.showApprovalModal = false
-    this.approvalForm.reset()
   }
 
   submitApproval(): void {
     if (!this.selectedQuote || !this.currentUserId) return
 
-    const notes = this.approvalForm.get("notes")?.value || undefined
-
     this.isProcessingAction = true
     this.quoteService
-      .approveBySupervisor(this.selectedQuote.id, this.currentUserId, notes)
+      .approveBySupervisor(this.selectedQuote.id, this.currentUserId)
       .pipe(finalize(() => (this.isProcessingAction = false)))
       .subscribe({
         next: () => {
@@ -300,6 +355,52 @@ export class SupervisorPanel implements OnInit {
       })
   }
 
+  canReassignTechnician(item?: TicketItem | null): boolean {
+    if (!item) return false
+    return ![
+      TicketItemStatus.REPAIRED,
+      TicketItemStatus.DELIVERED,
+    ].includes(item.status)
+  }
+
+  openReassignTechnicianModal(): void {
+    if (!this.selectedTicketItem || !this.canReassignTechnician(this.selectedTicketItem)) return
+    this.reassignTechnicianForm.patchValue({
+      technicianId: this.selectedTicketItem.assignedToTechnicianId || null,
+    })
+    this.loadTechnicians()
+    this.showReassignTechnicianModal = true
+  }
+
+  closeReassignTechnicianModal(): void {
+    this.showReassignTechnicianModal = false
+    this.reassignTechnicianForm.reset()
+  }
+
+  submitReassignTechnician(): void {
+    if (this.reassignTechnicianForm.invalid || !this.selectedTicketItem) {
+      this.markFormGroupAsTouched(this.reassignTechnicianForm)
+      return
+    }
+
+    const technicianId = Number(this.reassignTechnicianForm.get("technicianId")?.value)
+
+    this.isProcessingAction = true
+    this.ticketItemService
+      .assignTechnician(Number(this.selectedTicketItem.id), technicianId)
+      .pipe(finalize(() => (this.isProcessingAction = false)))
+      .subscribe({
+        next: () => {
+          this.showMessage("success", "fas fa-check-circle", "Técnico reasignado correctamente.")
+          this.closeReassignTechnicianModal()
+          if (this.selectedQuote) {
+            this.loadTicketItemDetail(this.selectedQuote.ticketItemId)
+          }
+        },
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos reasignar el técnico."),
+      })
+  }
+
   getProductLabel(productId: number | null): string {
     if (!productId) return "Producto sin referencia"
     const product = this.products.find((p) => Number(p.id) === Number(productId))
@@ -310,6 +411,30 @@ export class SupervisorPanel implements OnInit {
     if (!serviceId) return "Servicio sin referencia"
     const service = this.services.find((s) => Number(s.id) === Number(serviceId))
     return service ? `${service.code} · ${service.name}` : `Servicio #${serviceId}`
+  }
+
+  getQuoteItemLabel(quote: Quote): string {
+    const ticketCode = quote.ticketItem?.ticket?.code
+    const itemNumber = quote.ticketItem?.itemNumber
+    const baseLabel = itemNumber ? `Item #${itemNumber}` : quote.ticketItemId ? `Item #${quote.ticketItemId}` : "Sin código"
+    if (ticketCode) {
+      return `${ticketCode} · ${baseLabel}`
+    }
+    return baseLabel
+  }
+
+  getQuoteHeaderLabel(quote: Quote): string {
+    const ticketCode = quote.ticketItem?.ticket?.code
+    const equipmentLabel = this.getEquipmentTypeLabel(quote.ticketItem?.equipmentType)
+    if (ticketCode) {
+      return `${ticketCode} · ${equipmentLabel}`
+    }
+    return equipmentLabel
+  }
+
+  getServiceTypeLabel(serviceType?: string | null): string {
+    if (!serviceType) return "Sin tipo"
+    return this.serviceTypeLabels[serviceType as keyof typeof this.serviceTypeLabels] ?? serviceType
   }
 
   getQuoteStatusLabel(status: QuoteStatus): string {

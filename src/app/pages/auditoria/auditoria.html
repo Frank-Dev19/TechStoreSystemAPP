@@ -220,7 +220,7 @@
             </thead>
             <tbody>
                 <tr *ngFor="let log of filteredLogs">
-                    <td>{{ log.createdAt | date: 'dd/MM/yyyy HH:mm:ss':'UTC' }}</td>
+                    <td>{{ log.createdAt | date: 'dd/MM/yyyy HH:mm:ss' }}</td>
                     <td>{{ log.userId || '-' }}</td>
                     <td>{{ log.actorName || '-' }}</td>
                     <td>{{ log.reason || '-' }}</td>
@@ -355,7 +355,7 @@
                         </thead>
                         <tbody>
                             <tr *ngFor="let related of getRelatedLogs()">
-                                <td>{{ related.createdAt | date: 'HH:mm:ss':'UTC' }}</td>
+                                <td>{{ related.createdAt | date: 'HH:mm:ss' }}</td>
                                 <td>{{ getActionLabel(related.action) }}</td>
                                 <td>
                                     <span class="status-badge" [ngClass]="getStatusClass(related.status)">{{

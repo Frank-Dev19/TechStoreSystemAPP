@@ -17,27 +17,11 @@ export interface TicketItem {
   assignedToSupervisorId?: number | null;
   assignedToSupervisorName?: string | null;
   assignedAt: string | null;
-  serviceLocation: ServiceLocation;
-  serviceAddress: string | null;
-  serviceAddressReference: string | null;
-  scheduledServiceDate: string | null;
-  slaTargetDays: number;
-  slaStartDate: string | null;
-  slaDeadline: string | null;
-  slaPaused: boolean;
-  slaPausedAt: string | null;
-  slaPausedReason: ClientSlaPauseReason | null;
-  slaPausedDays: number;
-  slaBreached: boolean;
-  slaBreachedAt: string | null;
   estimatedRepairHours: number | null;
   actualDiagnosisHours: number | null;
   actualRepairHours: number | null;
   diagnosisEfficiencyPercent: number | null;
   repairEfficiencyPercent: number | null;
-  requiresParts: boolean;
-  partsRequestedAt: string | null;
-  partsReceivedAt: string | null;
   receivedAt: string;
   diagnosisStartedAt: string | null;
   diagnosisCompletedAt: string | null;
@@ -48,7 +32,6 @@ export interface TicketItem {
   lastCustomerResponseAt: string | null;
   repairStartedAt: string | null;
   repairCompletedAt: string | null;
-  readyForDeliveryAt: string | null;
   deliveredAt: string | null;
   cancelledAt: string | null;
   finalAmount: number | null;
@@ -79,18 +62,14 @@ export enum TicketItemStatus {
   SENT_TO_CLIENT = 'SENT_TO_CLIENT',
   AWAITING_CLIENT_RESPONSE = 'AWAITING_CLIENT_RESPONSE',
   CLIENT_APPROVED = 'CLIENT_APPROVED',
+  QUOTE_EXPIRED = 'QUOTE_EXPIRED',
+  READY_FOR_REPAIR = 'READY_FOR_REPAIR',
   CLIENT_REJECTED = 'CLIENT_REJECTED',
   AWAITING_PARTS = 'AWAITING_PARTS',
   IN_REPAIR = 'IN_REPAIR',
   REPAIRED = 'REPAIRED',
-  READY_FOR_DELIVERY = 'READY_FOR_DELIVERY',
   DELIVERED = 'DELIVERED',
   CANCELLED = 'CANCELLED',
-}
-
-export enum ServiceLocation {
-  ON_SITE = 'ON_SITE',
-  OFF_SITE = 'OFF_SITE',
 }
 
 export enum EquipmentType {
@@ -104,10 +83,4 @@ export enum EquipmentType {
   SERVER = 'SERVER',
   NETWORK_DEVICE = 'NETWORK_DEVICE',
   OTHER = 'OTHER',
-}
-
-export enum ClientSlaPauseReason {
-  AWAITING_CLIENT_APPROVAL = 'AWAITING_CLIENT_APPROVAL',
-  CLIENT_REQUESTED_HOLD = 'CLIENT_REQUESTED_HOLD',
-  AWAITING_CLIENT_INFO = 'AWAITING_CLIENT_INFO',
 }

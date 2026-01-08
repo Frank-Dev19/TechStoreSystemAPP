@@ -86,7 +86,7 @@ export class BusinessPartners implements OnInit {
         documentTypeId: [null, Validators.required],
         documentNumber: ['', [Validators.required]],
         email: ['', Validators.email],
-        phone: [''],
+        phone: ['', Validators.required],
         address: [''],
         city: [''],
         country: [''],
