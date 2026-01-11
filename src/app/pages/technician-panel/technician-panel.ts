@@ -33,6 +33,8 @@ export class TechnicianPanel implements OnInit {
 
   showDiagnosisModal = false
   diagnosisForm: FormGroup
+  showRediagnosisModal = false
+  rediagnosisForm: FormGroup
   diagnosticHistory: Diagnostic[] = []
   quoteSummary: Quote | null = null
   isLoadingQuote = false
@@ -47,6 +49,7 @@ export class TechnicianPanel implements OnInit {
 
   isLoadingItems = false
   isSavingDiagnosis = false
+  isSubmittingRediagnosis = false
 
   private currentUser: User | null = null
   private isTechnician = false
@@ -75,6 +78,7 @@ export class TechnicianPanel implements OnInit {
     private readonly currentUserService: CurrentUserService,
   ) {
     this.diagnosisForm = this.createDiagnosisForm()
+    this.rediagnosisForm = this.createRediagnosisForm()
   }
 
   ngOnInit(): void {
@@ -87,6 +91,12 @@ export class TechnicianPanel implements OnInit {
     return this.formBuilder.group({
       summary: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(100)]],
       details: ["", [Validators.required, Validators.minLength(10), Validators.maxLength(1000)]],
+    })
+  }
+
+  private createRediagnosisForm(): FormGroup {
+    return this.formBuilder.group({
+      reason: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(255)]],
     })
   }
 
@@ -193,6 +203,17 @@ export class TechnicianPanel implements OnInit {
     this.diagnosisForm.reset()
   }
 
+  openRediagnosisModal(item: TicketItem): void {
+    this.selectItem(item)
+    this.showRediagnosisModal = true
+    this.rediagnosisForm.reset()
+  }
+
+  closeRediagnosisModal(): void {
+    this.showRediagnosisModal = false
+    this.rediagnosisForm.reset()
+  }
+
   submitDiagnosis(): void {
     if (this.diagnosisForm.invalid || !this.selectedItem) {
       this.markFormGroupAsTouched(this.diagnosisForm)
@@ -216,6 +237,29 @@ export class TechnicianPanel implements OnInit {
           this.loadTechnicianItems()
         },
         error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar el diagnóstico."),
+      })
+  }
+
+  submitRediagnosis(): void {
+    if (this.rediagnosisForm.invalid || !this.selectedItem) {
+      this.markFormGroupAsTouched(this.rediagnosisForm)
+      return
+    }
+
+    const reason = this.rediagnosisForm.get("reason")?.value
+    this.isSubmittingRediagnosis = true
+    this.ticketItemService
+      .requestRediagnosis(Number(this.selectedItem.id), reason)
+      .pipe(finalize(() => (this.isSubmittingRediagnosis = false)))
+      .subscribe({
+        next: () => {
+          this.showMessage("success", "fas fa-check-circle", "Se solicitó un nuevo diagnóstico.")
+          this.closeRediagnosisModal()
+          this.loadTechnicianItems()
+        },
+        error: () => {
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos solicitar el nuevo diagnóstico.")
+        },
       })
   }
 
@@ -304,6 +348,11 @@ export class TechnicianPanel implements OnInit {
 
   canStartDiagnosis(item: TicketItem): boolean {
     return item.status === TicketItemStatus.ASSIGNED && item.serviceType === ServiceType.DIAGNOSIS
+  }
+
+  canRequestRediagnosis(item: TicketItem | null): boolean {
+    if (!item) return false
+    return item.status === TicketItemStatus.IN_REPAIR && item.serviceType === ServiceType.DIAGNOSIS
   }
 
   canStartRepairDirectly(item: TicketItem): boolean {

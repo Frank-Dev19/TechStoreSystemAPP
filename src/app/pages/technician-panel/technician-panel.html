@@ -305,6 +305,11 @@
               <i class="fas fa-flag-checkered"></i> Finalizar reparación
             </button>
           }
+          @if (canRequestRediagnosis(selectedItem)) {
+            <button class="btn btn-outline-danger" (click)="openRediagnosisModal(selectedItem)">
+              <i class="fas fa-stethoscope"></i> Solicitar nuevo diagnóstico
+            </button>
+          }
         </section>
       }
 
@@ -401,6 +406,45 @@
           <button class="btn btn-secondary" (click)="closeDiagnosisModal()">Cancelar</button>
           <button class="btn btn-primary" (click)="submitDiagnosis()" [disabled]="diagnosisForm.invalid || isSavingDiagnosis">
             <i class="fas fa-save"></i> Guardar diagnóstico
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showRediagnosisModal) {
+    <div class="modal-overlay" (click)="closeRediagnosisModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Solicitar nuevo diagnóstico</h2>
+          <button class="btn-close" (click)="closeRediagnosisModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <form [formGroup]="rediagnosisForm" (ngSubmit)="submitRediagnosis()" class="modal-body">
+          <div class="form-group">
+            <label for="rediagnosis-reason">Motivo *</label>
+            <textarea
+              id="rediagnosis-reason"
+              class="form-control"
+              formControlName="reason"
+              rows="4"
+              placeholder="Describe por qué se necesita un nuevo diagnóstico"
+              [class.is-invalid]="rediagnosisForm.get('reason')?.invalid && rediagnosisForm.get('reason')?.touched"
+            ></textarea>
+            @if (rediagnosisForm.get('reason')?.invalid && rediagnosisForm.get('reason')?.touched) {
+              <div class="invalid-feedback">
+                El motivo es requerido (5-255 caracteres)
+              </div>
+            }
+          </div>
+        </form>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" (click)="closeRediagnosisModal()">Cancelar</button>
+          <button class="btn btn-danger" (click)="submitRediagnosis()" [disabled]="rediagnosisForm.invalid || isSubmittingRediagnosis">
+            <i class="fas fa-stethoscope"></i> Solicitar diagnóstico
           </button>
         </div>
       </div>

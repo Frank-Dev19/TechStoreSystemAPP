@@ -21,6 +21,9 @@ export interface Ticket {
   notes: string | null;
   itemsCount: number;
   completedItemsCount: number;
+  pendingQuoteItemsCount?: number;
+  rejectedQuoteItemsCount?: number;
+  pendingDeliveryItemsCount?: number;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

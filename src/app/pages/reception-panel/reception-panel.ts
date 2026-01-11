@@ -586,23 +586,37 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   hasPendingQuoteItems(ticket: Ticket): boolean {
-    return (ticket.items ?? []).some((item) => item.status === TicketItemStatus.DIAGNOSED)
+    if (ticket.items?.length) {
+      return ticket.items.some((item) => item.status === TicketItemStatus.DIAGNOSED)
+    }
+    return (ticket.pendingQuoteItemsCount ?? 0) > 0
   }
 
   hasRejectedQuoteItems(ticket: Ticket): boolean {
-    return (ticket.items ?? []).some((item) =>
-      [
-        TicketItemStatus.SUPERVISOR_REJECTED,
-        TicketItemStatus.CLIENT_REJECTED,
-      ].includes(item.status),
-    )
+    if (ticket.items?.length) {
+      return ticket.items.some((item) =>
+        [
+          TicketItemStatus.SUPERVISOR_REJECTED,
+          TicketItemStatus.CLIENT_REJECTED,
+        ].includes(item.status),
+      )
+    }
+    return (ticket.rejectedQuoteItemsCount ?? 0) > 0
   }
 
   hasPendingDeliveryItems(ticket: Ticket): boolean {
-    return (ticket.items ?? []).some((item) => item.status === TicketItemStatus.REPAIRED)
+    if (ticket.items?.length) {
+      return ticket.items.some((item) => item.status === TicketItemStatus.REPAIRED)
+    }
+    return (ticket.pendingDeliveryItemsCount ?? 0) > 0
   }
 
   canMarkClientApproved(item: TicketItem): boolean {
+    if (!item) return false
+    return item.status === TicketItemStatus.SUPERVISOR_APPROVED
+  }
+
+  canMarkClientRejected(item: TicketItem): boolean {
     if (!item) return false
     return item.status === TicketItemStatus.SUPERVISOR_APPROVED
   }
@@ -632,13 +646,35 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       .pipe(switchMap(() => awaitingClient$), switchMap(() => approve$))
       .subscribe({
       next: () => {
-        this.showMessage("success", "fas fa-check-circle", "Item marcado como aprobado por cliente.")
+        this.showMessage("success", "fas fa-check-circle", "Cotización aceptada correctamente.")
         this.loadTickets()
       },
       error: () => {
         this.showMessage("danger", "fas fa-times-circle", "No pudimos marcar el item como aprobado por cliente.")
       },
     })
+  }
+
+  markItemClientRejected(item: TicketItem, event?: Event): void {
+    event?.stopPropagation()
+    if (!item?.id) return
+    const itemId = Number(item.id)
+
+    const sendToClient$ = this.ticketItemService.changeStatus(itemId, TicketItemStatus.SENT_TO_CLIENT)
+    const awaitingClient$ = this.ticketItemService.changeStatus(itemId, TicketItemStatus.AWAITING_CLIENT_RESPONSE)
+    const reject$ = this.ticketItemService.changeStatus(itemId, TicketItemStatus.CLIENT_REJECTED)
+
+    sendToClient$
+      .pipe(switchMap(() => awaitingClient$), switchMap(() => reject$))
+      .subscribe({
+        next: () => {
+          this.showMessage("success", "fas fa-check-circle", "Cotización rechazada correctamente.")
+          this.loadTickets()
+        },
+        error: () => {
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos marcar el item como rechazado por cliente.")
+        },
+      })
   }
 
   deliverItem(item: TicketItem, event?: Event): void {
@@ -1056,10 +1092,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       if (entry.type !== "product") return acc
       const productId = this.toNumericId(entry.productId)
       if (!productId) return acc
+      const quantity = Math.max(1, Number(entry.quantity) || 1)
+      const unitPriceRaw = entry.unitPrice !== undefined && entry.unitPrice !== null ? Number(entry.unitPrice) : undefined
+      const unitPrice = unitPriceRaw !== undefined && Number.isFinite(unitPriceRaw) ? unitPriceRaw : undefined
       acc.push({
         productId,
-        quantity: entry.quantity,
-        unitPrice: entry.unitPrice || undefined,
+        quantity,
+        unitPrice,
         requiresPurchase: entry.requiresPurchase,
         notes: entry.notes || undefined,
       })
@@ -1128,6 +1167,70 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           this.quotesError = "No pudimos cargar las cotizaciones de este item."
         },
       })
+  }
+
+  refreshQuotesForCurrentItem(): void {
+    if (!this.quotesTicketItem) return
+    this.isLoadingQuotes = true
+    this.quoteService
+      .findAll({ page: 1, limit: 20, ticketItemId: Number(this.quotesTicketItem.id) })
+      .pipe(finalize(() => (this.isLoadingQuotes = false)))
+      .subscribe({
+        next: ({ data }) => {
+          this.ticketItemQuotes = data ?? []
+          if (this.selectedQuoteDetail) {
+            const updated = this.ticketItemQuotes.find((q) => q.id === this.selectedQuoteDetail?.id)
+            if (updated) this.selectedQuoteDetail = updated
+          }
+        },
+        error: () => {
+          this.quotesError = "No pudimos actualizar las cotizaciones de este item."
+        },
+      })
+  }
+
+  refreshQuoteDetail(quoteId: number): void {
+    this.isLoadingQuoteDetail = true
+    this.quoteService
+      .findOne(quoteId)
+      .pipe(finalize(() => (this.isLoadingQuoteDetail = false)))
+      .subscribe({
+        next: (updatedQuote) => {
+          const index = this.ticketItemQuotes.findIndex((q) => q.id === updatedQuote.id)
+          if (index >= 0) {
+            this.ticketItemQuotes[index] = updatedQuote
+          }
+          if (this.selectedQuoteDetail?.id === updatedQuote.id) {
+            this.selectedQuoteDetail = updatedQuote
+          }
+        },
+        error: () => {
+          this.quoteDetailError = "No pudimos refrescar el detalle de la cotización."
+        },
+      })
+  }
+
+  applyQuoteStatusFromError(quoteId: number, error: any): boolean {
+    const rawMessage = error?.error?.message ?? error?.message ?? ""
+    const message =
+      Array.isArray(rawMessage)
+        ? rawMessage.join(" ").toLowerCase()
+        : JSON.stringify(error?.error ?? rawMessage ?? "").toLowerCase()
+    let nextStatus: QuoteStatus | null = null
+    if (message.includes("already rejected by client")) {
+      nextStatus = QuoteStatus.CLIENT_REJECTED
+    } else if (message.includes("already approved by client")) {
+      nextStatus = QuoteStatus.CLIENT_APPROVED
+    }
+    if (!nextStatus) return false
+    const index = this.ticketItemQuotes.findIndex((q) => q.id === quoteId)
+    if (index >= 0) {
+      this.ticketItemQuotes[index] = { ...this.ticketItemQuotes[index], status: nextStatus }
+    }
+    if (this.selectedQuoteDetail?.id === quoteId) {
+      this.selectedQuoteDetail = { ...this.selectedQuoteDetail, status: nextStatus }
+    }
+    return true
   }
 
   closeQuotesModal(): void {
@@ -1537,6 +1640,33 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return statusMap[status.toLowerCase()] || status
   }
 
+  isLatestQuote(quote: Quote | null): boolean {
+    if (!quote || !this.ticketItemQuotes.length) return false
+    const maxSequence = Math.max(
+      ...this.ticketItemQuotes.map((item) => Number(item.sequenceNumber ?? 0)),
+    )
+    if (Number(quote.sequenceNumber ?? 0) === maxSequence) return true
+    const latest = this.ticketItemQuotes.reduce((current, item) => {
+      const currentTime = new Date(current.createdAt).getTime()
+      const itemTime = new Date(item.createdAt).getTime()
+      return itemTime > currentTime ? item : current
+    }, this.ticketItemQuotes[0])
+    return quote.id === latest.id
+  }
+
+  isClientResponded(quote: Quote | null): boolean {
+    if (!quote) return false
+    if (quote.clientApprovedAt || quote.clientRejectedAt) return true
+    return quote.status === "CLIENT_APPROVED" || quote.status === "CLIENT_REJECTED"
+  }
+
+  canRespondToQuote(quote: Quote | null): boolean {
+    if (!quote) return false
+    if (!this.isLatestQuote(quote)) return false
+    if (this.isClientResponded(quote)) return false
+    return quote.status === "SUPERVISOR_APPROVED"
+  }
+
   getQuoteStatusClass(status: string): string {
     const statusClassMap: { [key: string]: string } = {
       pending_supervisor_approval: "status-pending-supervisor",
@@ -1557,15 +1687,43 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return statusClassMap[status.toLowerCase()] || "status-default"
   }
 
+  formatEstimatedDuration(value: number | string | null | undefined): string {
+    const numeric = Number(value)
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return "Tiempo estimado: -"
+    }
+    const totalMinutes = Math.round(numeric * 60)
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    if (hours > 0 && minutes > 0) {
+      const hourLabel = hours === 1 ? "hora" : "horas"
+      const minuteLabel = minutes === 1 ? "minuto" : "minutos"
+      return `Tiempo estimado: ${hours} ${hourLabel} ${minutes} ${minuteLabel}`
+    }
+    if (hours > 0) {
+      const hourLabel = hours === 1 ? "hora" : "horas"
+      return `Tiempo estimado: ${hours} ${hourLabel}`
+    }
+    const minuteLabel = minutes === 1 ? "minuto" : "minutos"
+    return `Tiempo estimado: ${minutes} ${minuteLabel}`
+  }
+
   sendQuoteToClient(quote: Quote): void {
     if (!quote?.id) return
+    if (!this.canRespondToQuote(quote)) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta cotización ya tiene respuesta del cliente.")
+      this.refreshQuotesForCurrentItem()
+      this.refreshQuoteDetail(quote.id)
+      return
+    }
     this.isLoadingQuoteDetail = true
     this.quoteService
       .sendToClient(quote.id)
+      .pipe(switchMap(() => this.quoteService.approveByClient(quote.id)))
       .pipe(finalize(() => (this.isLoadingQuoteDetail = false)))
       .subscribe({
         next: (updatedQuote) => {
-          this.showMessage("success", "fas fa-check-circle", "Cotización enviada al cliente correctamente.")
+          this.showMessage("success", "fas fa-check-circle", "Cotización aceptada correctamente.")
           const index = this.ticketItemQuotes.findIndex((q) => q.id === quote.id)
           if (index >= 0) {
             this.ticketItemQuotes[index] = updatedQuote
@@ -1575,8 +1733,49 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           }
           this.loadTickets()
         },
-        error: () => {
-          this.showMessage("danger", "fas fa-times-circle", "No pudimos enviar la cotización al cliente.")
+        error: (error) => {
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos aceptar la cotización.")
+          const applied = this.applyQuoteStatusFromError(quote.id, error)
+          if (!applied) {
+            this.refreshQuotesForCurrentItem()
+            this.refreshQuoteDetail(quote.id)
+          }
+        },
+      })
+  }
+
+  rejectQuoteByClient(quote: Quote): void {
+    if (!quote?.id) return
+    if (!this.canRespondToQuote(quote)) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta cotización ya tiene respuesta del cliente.")
+      this.refreshQuotesForCurrentItem()
+      this.refreshQuoteDetail(quote.id)
+      return
+    }
+    this.isLoadingQuoteDetail = true
+    this.quoteService
+      .sendToClient(quote.id)
+      .pipe(switchMap(() => this.quoteService.rejectByClient(quote.id)))
+      .pipe(finalize(() => (this.isLoadingQuoteDetail = false)))
+      .subscribe({
+        next: (updatedQuote) => {
+          this.showMessage("success", "fas fa-check-circle", "Cotización rechazada correctamente.")
+          const index = this.ticketItemQuotes.findIndex((q) => q.id === quote.id)
+          if (index >= 0) {
+            this.ticketItemQuotes[index] = updatedQuote
+          }
+          if (this.selectedQuoteDetail?.id === quote.id) {
+            this.selectedQuoteDetail = updatedQuote
+          }
+          this.loadTickets()
+        },
+        error: (error) => {
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos rechazar la cotización.")
+          const applied = this.applyQuoteStatusFromError(quote.id, error)
+          if (!applied) {
+            this.refreshQuotesForCurrentItem()
+            this.refreshQuoteDetail(quote.id)
+          }
         },
       })
   }
@@ -1647,10 +1846,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       if (entry.type !== "product") return acc
       const productId = this.toNumericId(entry.productId)
       if (!productId) return acc
+      const quantity = Math.max(1, Number(entry.quantity) || 1)
+      const unitPriceRaw = entry.unitPrice !== undefined && entry.unitPrice !== null ? Number(entry.unitPrice) : undefined
+      const unitPrice = unitPriceRaw !== undefined && Number.isFinite(unitPriceRaw) ? unitPriceRaw : undefined
       acc.push({
         productId,
-        quantity: entry.quantity,
-        unitPrice: entry.unitPrice || undefined,
+        quantity,
+        unitPrice,
         requiresPurchase: entry.requiresPurchase,
         notes: entry.notes || undefined,
       })
@@ -1669,8 +1871,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }, [])
 
     const payload = {
-      products: productsPayload.length > 0 ? productsPayload : undefined,
-      services: servicesPayload.length > 0 ? servicesPayload : undefined,
+      products: productsPayload,
+      services: servicesPayload,
       notes: this.createQuoteForm.get("notes")?.value || undefined,
     }
 

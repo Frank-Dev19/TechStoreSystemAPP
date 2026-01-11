@@ -61,4 +61,8 @@ export class TicketItemService {
     changeStatus(itemId: number, status: TicketItemStatus): Observable<TicketItem> {
         return this.base.patch<TicketItem>(`${config.tickets.ticketItems}/${itemId}/status/${status}`);
     }
+
+    requestRediagnosis(itemId: number, reason: string): Observable<TicketItem> {
+        return this.base.patch<TicketItem>(`${config.tickets.ticketItems}/${itemId}/request-rediagnosis`, { reason });
+    }
 }

@@ -272,15 +272,6 @@
                                 </button>
                                 <button
                                   type="button"
-                                  class="btn btn-sm btn-success"
-                                  [disabled]="!canMarkClientApproved(item)"
-                                  (click)="markItemClientApproved(item, $event)"
-                                >
-                                  <i class="fas fa-paper-plane"></i>
-                                  Enviar al cliente
-                                </button>
-                                <button
-                                  type="button"
                                   class="btn btn-sm btn-info"
                                   [disabled]="isFinalTicket(ticket) || !canReassignTechnician(item)"
                                   (click)="openReassignTechnicianModal(item, $event)"
@@ -947,12 +938,6 @@
                       }
                     </div>
                     <div class="quote-card-actions">
-                      @if (quote.status === 'SUPERVISOR_APPROVED') {
-                        <button class="btn btn-sm btn-info" type="button" (click)="sendQuoteToClient(quote); $event.stopPropagation()">
-                          <i class="fas fa-paper-plane"></i>
-                          Enviar al cliente
-                        </button>
-                      }
                       @if (quote.status === 'SUPERVISOR_REJECTED' || quote.status === 'CLIENT_REJECTED') {
                         <button class="btn btn-sm btn-warning" type="button" (click)="resubmitQuote(quote); $event.stopPropagation()">
                           <i class="fas fa-redo"></i>
@@ -1018,6 +1003,29 @@
                   </div>
                 </div>
 
+                @if (isLatestQuote(selectedQuoteDetail)) {
+                  <div class="detail-section">
+                    <div class="quote-card-actions">
+                      <button
+                        class="btn btn-sm btn-info"
+                        type="button"
+                        (click)="sendQuoteToClient(selectedQuoteDetail)"
+                        [disabled]="!canRespondToQuote(selectedQuoteDetail) || isLoadingQuoteDetail">
+                        <i class="fas fa-check-circle"></i>
+                        Aceptar cotización
+                      </button>
+                      <button
+                        class="btn btn-sm btn-danger"
+                        type="button"
+                        (click)="rejectQuoteByClient(selectedQuoteDetail)"
+                        [disabled]="!canRespondToQuote(selectedQuoteDetail) || isLoadingQuoteDetail">
+                        <i class="fas fa-times-circle"></i>
+                        Rechazar cotización
+                      </button>
+                    </div>
+                  </div>
+                }
+
                 @if (selectedQuoteDetail.notes) {
                   <div class="detail-section">
                     <h5><i class="fas fa-sticky-note"></i> Notas</h5>
@@ -1065,7 +1073,7 @@
                       <div class="detail-row">
                         <div>
                           <p class="detail-title">{{ getServiceLabel(service.serviceId) }}</p>
-                          <span class="muted">Horas estimadas: {{ service.estimatedHours }}</span>
+                          <span class="muted">{{ formatEstimatedDuration(service.estimatedHours) }}</span>
                         </div>
                         <div class="detail-amount">
                           <span class="muted">Importe:</span> {{ service.unitPrice | number: '1.2-2' }} {{ selectedQuoteDetail.currency }}
