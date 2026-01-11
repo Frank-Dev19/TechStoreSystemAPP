@@ -48,12 +48,12 @@ export class Navbar implements OnInit, OnDestroy {
 
   @HostListener('window:resize')
   onResize(): void {
-    if (window.innerWidth >= 768) this.sidebarCloseIfAny(); // saliendo de móvil, ciérralo
+    if (window.innerWidth >= 1001) this.sidebarCloseIfAny(); // saliendo de móvil, ciérralo
   }
 
   /* ===== Sidebar off-canvas: ahora con clase .open en .sidebar-panel ===== */
   sidebarOpen(): void {
-    if (window.innerWidth >= 768) return; // solo móvil
+    if (window.innerWidth >= 1001) return; // solo móvil
     const sidebarPanel = document.querySelector('.sidebar-panel') as HTMLElement | null;
     const mainPanel = document.querySelector('.main-panel') as HTMLElement | null;
     if (!sidebarPanel || !mainPanel) return;

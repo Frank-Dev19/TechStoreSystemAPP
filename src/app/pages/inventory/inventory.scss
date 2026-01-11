@@ -177,43 +177,89 @@
     }
 }
 
+/* ============================================
+   TABS RESPONSIVE CON SCROLL HORIZONTAL
+   (Solución similar a inventory)
+   ============================================ */
+
 .tabs-navigation {
     display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-    border-bottom: 2px solid #e2e8f0;
-    background: white;
-    padding: 0 20px;
-    border-radius: 8px 8px 0 0;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
+    gap: 1rem;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid var(--border);
+    background: var(--surface);
+    border-radius: 12px 12px 0 0;
+    padding: 0 1rem;
+    overflow-x: auto;
+    /* ← ESTA ES LA CLAVE PARA EL SCROLL */
+    -webkit-overflow-scrolling: touch;
+    /* Scroll suave en iOS */
+    scrollbar-width: none;
+    /* Ocultar scrollbar en Firefox */
+    white-space: nowrap;
+    /* Evitar que los botones se rompan en varias líneas */
 
-.tab-button {
-    padding: 15px 25px;
-    background: none;
-    border: none;
-    color: #718096;
-    font-size: 15px;
-    font-weight: 500;
-    cursor: pointer;
-    border-bottom: 3px solid transparent;
-    transition: all 0.3s ease;
-    position: relative;
-    top: 2px;
-
-    i {
-        margin-right: 8px;
+    /* Ocultar scrollbar en Chrome/Safari */
+    &::-webkit-scrollbar {
+        display: none;
     }
 
-    &:hover {
-        color: #3182ce;
-        background-color: #f7fafc;
+    .tab-button {
+        padding: 1rem 1.5rem;
+        background: transparent;
+        border: none;
+        border-bottom: 3px solid transparent;
+        color: var(--text-muted);
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        /* ← Cambiado de flex a inline-flex */
+        align-items: center;
+        gap: 0.5rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+        /* ← Importante: evitar que se reduzcan */
+
+        &:hover {
+            color: var(--text);
+        }
+
+        &.active {
+            border-bottom-color: var(--primary);
+            color: var(--primary);
+        }
+
+        i {
+            font-size: 1rem;
+        }
     }
 
-    &.active {
-        color: #3182ce;
-        border-bottom-color: #3182ce;
-        background-color: #f7fafc;
+    /* Estilos responsivos */
+    @media (max-width: 768px) {
+        padding: 0.5rem 1rem;
+        gap: 0.5rem;
+        border-radius: 8px 8px 0 0;
+
+        .tab-button {
+            padding: 0.75rem 1rem;
+            font-size: 0.9rem;
+
+            i {
+                font-size: 0.9rem;
+            }
+        }
+    }
+
+    @media (max-width: 480px) {
+        .tab-button {
+            padding: 0.6rem 0.8rem;
+            font-size: 0.85rem;
+
+            i {
+                font-size: 0.8rem;
+            }
+        }
     }
 }
 
