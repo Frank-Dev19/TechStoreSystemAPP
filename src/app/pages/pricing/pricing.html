@@ -80,7 +80,7 @@
                             <th>Nombre</th>
                             <th>Descripcion</th>
                             <th>Tipo</th>
-                            <th>Vigencia</th>
+                            <!-- <th>Vigencia</th> -->
                             <th>Predeterminada</th>
                             <th>Estado</th>
                             <th width="120">Acciones</th>
@@ -92,11 +92,11 @@
                             <td>{{ pl.name }}</td>
                             <td>{{ pl.description }}</td>
                             <td><span class="badge badge-info">{{ pl.type }}</span></td>
-                            <td>
+                            <!-- <td>
                                 {{ pl.activeFrom ? formatDateForDisplay(pl.activeFrom, 'yyyy-MM-dd') : '-' }}
                                 hasta
                                 {{ pl.activeTo ? formatDateForDisplay(pl.activeTo, 'yyyy-MM-dd') : '-' }}
-                            </td>
+                            </td> -->
                             <td>
                                 <i *ngIf="pl.isDefault" class="fas fa-check text-success"></i>
                                 <span *ngIf="!pl.isDefault" class="text-muted">-</span>
@@ -216,7 +216,7 @@
                             <th>Cantidad Mín</th>
                             <th>Cantidad Máx</th>
                             <th>Precio Unit</th>
-                            <th>Vigencia</th>
+                            <!-- <th>Vigencia</th> -->
                             <th width="100">Acciones</th>
                         </tr>
                     </thead>
@@ -229,11 +229,11 @@
                                 {{ pp.maxQty != null ? (pp.maxQty | number:'1.0-1') : '-' }}
                             </td>
                             <td>{{ pp.currencyCode }} {{ pp.unitPrice | number:'1.2-2' }}</td>
-                            <td>
+                            <!-- <td>
                                 {{ pp.validFrom ? (pp.validFrom | date:'dd-MM-yyyy':'UTC') : '-' }}
                                 hasta
                                 {{ pp.validTo ? (pp.validTo | date:'dd-MM-yyyy':'UTC') : '-' }}
-                            </td>
+                            </td> -->
                             <td class="actions">
                                 <button class="btn-icon" (click)="openProductPriceForm(pp)" title="Editar">
                                     <i class="fas fa-edit"></i>
@@ -658,98 +658,611 @@
 
 
     <!-- TAB 5: SIMULADOR -->
+    <!-- TAB 5: SIMULADOR -->
     <div *ngIf="activeTab === 'simulatorTab'" class="tab-content">
-        <div class="simulator-card">
-            <h3><i class="fas fa-calculator"></i> Simulador de Precios</h3>
+        <!-- Sub-tabs del simulador -->
+        <div class="simulator-tabs">
+            <button class="simulator-tab-btn" [class.active]="simulatorMode === 'simple'"
+                (click)="setSimulatorMode('simple')">
+                <i class="fas fa-bolt"></i>
+                Modo Simple
+            </button>
+            <button class="simulator-tab-btn" [class.active]="simulatorMode === 'advanced'"
+                (click)="setSimulatorMode('advanced')">
+                <i class="fas fa-cog"></i>
+                Modo Avanzado
+            </button>
+            <!-- <button class="simulator-tab-btn" [class.active]="simulatorMode === 'audit'"
+                (click)="setSimulatorMode('audit')">
+                <i class="fas fa-clipboard-check"></i>
+                Auditoría
+            </button> -->
+        </div>
 
-            <div class="simulator-inputs">
-                <div class="form-group autocomplete-group">
-                    <label>Producto</label>
-                    <input type="text" [(ngModel)]="simulatorProductSearch" class="form-control"
-                        placeholder="Buscar producto por nombre o SKU" (input)="onSimulatorProductSearch()">
+        <!-- ========================================= -->
+        <!-- MODO SIMPLE -->
+        <!-- ========================================= -->
+        <div *ngIf="simulatorMode === 'simple'" class="simulator-mode-content">
+            <div class="simulator-card">
+                <h3><i class="fas fa-calculator"></i> Simulador Rápido</h3>
 
-                    <div class="autocomplete-panel"
-                        *ngIf="simulatorProductSearch && simulatorProductSuggestions.length">
-                        <div class="autocomplete-item" *ngFor="let p of simulatorProductSuggestions"
-                            (click)="onSelectSimulatorProduct(p)">
-                            <div class="item-main">
-                                <span class="item-name">{{ p.name }}</span>
-                                <span class="item-sku">{{ p.sku }}</span>
+                <div class="simulator-inputs">
+                    <div class="form-group autocomplete-group">
+                        <label>Producto</label>
+                        <input type="text" [(ngModel)]="simulatorProductSearch" class="form-control"
+                            placeholder="Buscar producto por nombre o SKU" (input)="onSimulatorProductSearch()">
+
+                        <div class="autocomplete-panel"
+                            *ngIf="simulatorProductSearch && simulatorProductSuggestions.length">
+                            <div class="autocomplete-item" *ngFor="let p of simulatorProductSuggestions"
+                                (click)="onSelectSimulatorProduct(p)">
+                                <div class="item-main">
+                                    <span class="item-name">{{ p.name }}</span>
+                                    <span class="item-sku">{{ p.sku }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
+
+                    <div class="form-group">
+                        <label>Cantidad</label>
+                        <input type="number" [(ngModel)]="simulatorQty" class="form-control" min="1">
+                    </div>
+
+                    <button class="btn-primary" (click)="calculateBestPrice()">
+                        <i class="fas fa-search"></i>
+                        Calcular
+                    </button>
                 </div>
 
-                <div class="form-group">
-                    <label>Cantidad</label>
-                    <input type="number" [(ngModel)]="simulatorQty" class="form-control" min="1">
-                </div>
-
-                <button class="btn-primary" (click)="calculateBestPrice()">
-                    <i class="fas fa-search"></i>
-                    Calcular
-                </button>
-            </div>
-
-            <div *ngIf="simulatorResult" class="simulator-result">
-                <h4>Mejor Opción</h4>
-                <div class="result-summary">
-                    <div class="summary-item">
-                        <label>Producto:</label>
-                        <span>{{ simulatorResult.productName }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <label>Cantidad:</label>
-                        <span>{{ simulatorResult.qty }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <label>Precio Unit (Base):</label>
-                        <span>USD {{ simulatorResult.applied.baseUnitPrice | number:'1.2-2' }}</span>
-                    </div>
-                    <div class="summary-item highlight">
-                        <label>Precio Unit (Final):</label>
-                        <span>USD {{ simulatorResult.applied.finalUnitPrice | number:'1.2-2' }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <label>Total:</label>
-                        <span>USD {{ (simulatorResult.applied.finalUnitPrice * simulatorResult.qty) | number:'1.2-2'
-                            }}</span>
-                    </div>
-                    <div class="summary-item" *ngIf="simulatorResult.applied.autoAppliedDiscounts?.length">
-                        <label>Descuentos aplicados:</label>
-                        <span>
-                            <ng-container
-                                *ngFor="let d of simulatorResult.applied.autoAppliedDiscounts; let last = last">
-                                {{ d.name }}
-                                ({{ d.discountType === 'PERCENT'
-                                ? (d.amount + '%')
-                                : (d.amount | number:'1.2-2') }})
-                                <span *ngIf="!last">, </span>
-                            </ng-container>
-                        </span>
+                <!-- Resultados Modo Simple -->
+                <div *ngIf="simulationResult" class="simulator-result">
+                    <div class="result-header">
+                        <h4>💰 Mejor Opción</h4>
+                        <span class="result-list-badge">{{ simulationResult.selectedOption.priceListCode }}</span>
                     </div>
 
-                </div>
+                    <div class="result-grid">
+                        <div class="result-item">
+                            <span class="result-label">Producto:</span>
+                            <span class="result-value">{{ simulationResult.productName }}</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Cantidad:</span>
+                            <span class="result-value">{{ simulationResult.qty }}</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Precio Unitario Base:</span>
+                            <span class="result-value">{{ simulationResult.selectedOption.currency }} {{
+                                simulationResult.selectedOption.baseUnitPrice | number:'1.2-2' }}</span>
+                        </div>
+                        <div class="result-item highlight">
+                            <span class="result-label">Precio Unitario Final:</span>
+                            <span class="result-value success">{{ simulationResult.selectedOption.currency }} {{
+                                simulationResult.selectedOption.finalUnitPrice | number:'1.2-2' }}</span>
+                        </div>
+                        <div class="result-item highlight">
+                            <span class="result-label">Total:</span>
+                            <span class="result-value total">{{ simulationResult.selectedOption.currency }} {{
+                                simulationResult.selectedOption.totalPrice | number:'1.2-2' }}</span>
+                        </div>
+                    </div>
 
-                <h4>Opciones Disponibles</h4>
-                <div class="options-table">
-                    <div *ngFor="let opt of simulatorResult.options" class="option-row">
-                        <div class="opt-info">
-                            <span class="opt-code">{{ opt.priceListCode }}</span>
-                            <span class="opt-price">USD {{ opt.finalUnitPrice | number:'1.2-2' }}</span>
+                    <!-- Descuentos aplicados -->
+                    <div *ngIf="simulationResult.priceBreakdown.discounts.details.length > 0" class="discounts-applied">
+                        <h5><i class="fas fa-tag"></i> Descuentos Aplicados</h5>
+                        <div class="discount-list">
+                            <div *ngFor="let discount of simulationResult.priceBreakdown.discounts.details"
+                                class="discount-item">
+                                <span class="discount-name">{{ discount.name }}</span>
+                                <span class="discount-amount">
+                                    -{{ simulationResult.selectedOption.currency }} {{ discount.totalDiscount |
+                                    number:'1.2-2' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Combos disponibles -->
+                    <div *ngIf="simulationResult.priceBreakdown.combos.available.length > 0" class="combos-available">
+                        <h5><i class="fas fa-gift"></i> Combos Disponibles</h5>
+                        <div class="combo-suggestions">
+                            <div *ngFor="let combo of simulationResult.priceBreakdown.combos.available"
+                                class="combo-suggestion-card">
+                                <div class="combo-header">
+                                    <span class="combo-icon">🎁</span>
+                                    <div class="combo-info">
+                                        <h6>{{ combo.name }}</h6>
+                                        <p class="combo-code">{{ combo.code }}</p>
+                                    </div>
+                                </div>
+                                <div class="combo-items">
+                                    <p class="combo-items-label">Incluye:</p>
+                                    <ul>
+                                        <li *ngFor="let item of combo.items">
+                                            {{ item.productName }} × {{ item.qty }}
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="combo-pricing">
+                                    <div class="combo-price">
+                                        <span class="price-label">Precio combo:</span>
+                                        <span class="price-value">
+                                            {{ combo.comboPrice ? ('S/ ' + (combo.comboPrice | number:'1.2-2')) :
+                                            (combo.discountPercent + '% descuento') }}
+                                        </span>
+                                    </div>
+                                    <div class="combo-savings"
+                                        *ngIf="combo.potentialSavings && combo.potentialSavings > 0">
+                                        <span class="savings-label">Ahorro potencial:</span>
+                                        <span class="savings-value">S/ {{ combo.potentialSavings | number:'1.2-2'
+                                            }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Alternativas -->
+                    <div *ngIf="simulationResult.alternatives.length > 0" class="alternatives-section">
+                        <h5><i class="fas fa-exchange-alt"></i> Otras Opciones</h5>
+                        <div class="alternatives-list">
+                            <div *ngFor="let alt of simulationResult.alternatives" class="alternative-item">
+                                <span class="alt-list">{{ alt.priceListCode }}</span>
+                                <span class="alt-price">{{ simulationResult.selectedOption.currency }} {{
+                                    alt.finalUnitPrice
+                                    | number:'1.2-2' }}</span>
+                                <span class="alt-diff" [class.better]="alt.savingsVsSelected < 0"
+                                    [class.worse]="alt.savingsVsSelected > 0">
+                                    {{ alt.savingsVsSelected > 0 ? '+' : '' }}{{ alt.savingsVsSelected | number:'1.2-2'
+                                    }}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- ========================================= -->
+        <!-- MODO AVANZADO -->
+        <!-- ========================================= -->
+        <div *ngIf="simulatorMode === 'advanced'" class="simulator-mode-content">
+            <div class="simulator-card advanced">
+                <h3><i class="fas fa-cog"></i> Simulador Avanzado</h3>
+                <p class="simulator-description">Configuración detallada para análisis completo de precios, descuentos y
+                    combos</p>
+
+                <div class="advanced-form">
+                    <div class="form-row">
+                        <div class="form-group autocomplete-group">
+                            <label>Producto o Combo</label>
+                            <input type="text" [(ngModel)]="simulationProductSearch" class="form-control"
+                                placeholder="Buscar... (Productos: nombre o SKU | Combos: [código])"
+                                (input)="onSimulationSearch()">
+
+                            <div class="autocomplete-panel"
+                                *ngIf="simulationProductSearch && simulationSuggestions.length">
+                                <div class="autocomplete-item" *ngFor="let item of simulationSuggestions"
+                                    (click)="onSelectSimulationItem(item)">
+                                    <div class="item-main">
+                                        <span class="item-type-badge" [class.product]="item.type === 'product'"
+                                            [class.combo]="item.type === 'combo'">
+                                            {{ item.type === 'product' ? 'P' : 'C' }}
+                                        </span>
+                                        <span class="item-name">{{ item.name }}</span>
+                                        <span class="item-code">{{ item.code }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Cantidad</label>
+                            <input type="number" [(ngModel)]="simulationQty" class="form-control" min="0.0001"
+                                step="0.0001">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Lista de Precios</label>
+                            <select [(ngModel)]="simulationPriceList" class="form-control">
+                                <option value="">Automático (mejor precio)</option>
+                                <option *ngFor="let pl of priceLists" [value]="pl.code">
+                                    {{ pl.code }} - {{ pl.name }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Fecha de Simulación</label>
+                            <input type="date" [(ngModel)]="simulationDate" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Permisos de Usuario (separados por coma)</label>
+                        <input type="text" [(ngModel)]="simulationPermissions" class="form-control"
+                            placeholder="Ej: apply_special_discount, manager_override">
+                    </div>
+
+                    <div class="form-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" [(ngModel)]="includeCombos">
+                            <span>Incluir combos disponibles</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" [(ngModel)]="includeTechnicalDetails">
+                            <span>Mostrar detalles técnicos</span>
+                        </label>
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn-primary" (click)="runAdvancedSimulation()">
+                            <i class="fas fa-play"></i>
+                            Calcular y Analizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ejemplos rápidos -->
+                <div class="quick-examples">
+                    <h5>Ejemplos Rápidos:</h5>
+                    <div class="example-buttons">
+                        <button class="btn-secondary btn-compact" (click)="loadExample('config')">
+                            <i class="fas fa-wrench"></i> Config. Básica
+                        </button>
+                        <button class="btn-secondary btn-compact" (click)="loadExample('training')">
+                            <i class="fas fa-graduation-cap"></i> Capacitación
+                        </button>
+                        <button class="btn-secondary btn-compact" (click)="loadExample('troubleshoot')">
+                            <i class="fas fa-bug"></i> Troubleshooting
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Resultados Modo Avanzado -->
+                <div *ngIf="simulationResult" class="advanced-result">
+                    <h4><i class="fas fa-chart-line"></i> Análisis Completo</h4>
+
+                    <!-- Información General -->
+                    <div class="result-section">
+                        <h5>📋 Información General</h5>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <span class="info-label">Tipo:</span>
+                                <span class="info-value">{{ simulationResult.type === 'product' ? 'Producto' : 'Combo'
+                                    }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Nombre:</span>
+                                <span class="info-value">{{ simulationResult.productName || simulationResult.comboName
+                                    }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">SKU/Código:</span>
+                                <span class="info-value">{{ simulationResult.productSku || 'N/A' }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Cantidad:</span>
+                                <span class="info-value">{{ simulationResult.qty }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Precio Base -->
+                    <div class="result-section">
+                        <h5>💵 Precio Base</h5>
+                        <div class="price-base-card">
+                            <div class="price-detail">
+                                <span class="detail-label">Lista:</span>
+                                <span class="detail-value">{{ simulationResult.priceBreakdown.base.priceListCode
+                                    }}</span>
+                            </div>
+                            <div class="price-detail">
+                                <span class="detail-label">Rango:</span>
+                                <span class="detail-value">{{ simulationResult.priceBreakdown.base.qtyRange }}</span>
+                            </div>
+                            <div class="price-detail">
+                                <span class="detail-label">Precio unitario:</span>
+                                <span class="detail-value">{{ simulationResult.selectedOption.currency }} {{
+                                    simulationResult.priceBreakdown.base.unitPrice | number:'1.2-2' }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Descuentos -->
+                    <div class="result-section" *ngIf="simulationResult.priceBreakdown.discounts.details.length > 0">
+                        <h5>🏷️ Descuentos Aplicados ({{ simulationResult.priceBreakdown.discounts.details.length }})
+                        </h5>
+                        <div class="discounts-detailed">
+                            <div *ngFor="let discount of simulationResult.priceBreakdown.discounts.details"
+                                class="discount-detailed-item">
+                                <div class="discount-header-detail">
+                                    <span class="discount-name">{{ discount.name }}</span>
+                                    <span class="discount-badge" [class.auto]="discount.applied">
+                                        {{ discount.applied ? 'Auto' : 'Manual' }}
+                                    </span>
+                                </div>
+                                <div class="discount-info">
+                                    <span class="discount-type">
+                                        {{ discount.type === 'PERCENT' ? discount.amount + '%' : ('-' +
+                                        simulationResult.selectedOption.currency + ' ' + (discount.amount |
+                                        number:'1.2-2')) }}
+                                    </span>
+                                    <span class="discount-calc">
+                                        {{ simulationResult.selectedOption.currency }} {{ discount.unitDiscount |
+                                        number:'1.2-2' }} × {{ simulationResult.qty }} = {{
+                                        simulationResult.selectedOption.currency }} {{ discount.totalDiscount |
+                                        number:'1.2-2' }}
+                                    </span>
+                                </div>
+                                <div class="discount-meta">
+                                    <span class="priority">Prioridad: {{ discount.priority }}</span>
+                                </div>
+                            </div>
+                            <div class="discounts-total">
+                                <span>Total Descuentos:</span>
+                                <span class="total-value">-{{ simulationResult.selectedOption.currency }} {{
+                                    simulationResult.priceBreakdown.discounts.totalDiscount | number:'1.2-2' }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Combos -->
+                    <div class="result-section" *ngIf="simulationResult.priceBreakdown.combos.available.length > 0">
+                        <h5>🎁 Combos Disponibles ({{ simulationResult.priceBreakdown.combos.available.length }})</h5>
+                        <div class="combos-detailed">
+                            <div *ngFor="let combo of simulationResult.priceBreakdown.combos.available"
+                                class="combo-detailed-card">
+                                <div class="combo-card-header">
+                                    <h6>{{ combo.name }}</h6>
+                                    <span class="combo-type-badge" [class.fixed]="combo.type === 'FIXED_PRICE'"
+                                        [class.percent]="combo.type === 'PERCENT'">
+                                        {{ combo.type === 'FIXED_PRICE' ? 'Precio Fijo' : 'Descuento %' }}
+                                    </span>
+                                </div>
+                                <div class="combo-card-body">
+                                    <div class="combo-items-list">
+                                        <p class="items-label">Productos incluidos:</p>
+                                        <ul>
+                                            <li *ngFor="let item of combo.items">
+                                                {{ item.productName }} <span class="item-qty">× {{ item.qty }}</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="combo-pricing-detail">
+                                        <div class="pricing-row">
+                                            <span>Precio combo:</span>
+                                            <span class="price-highlight">
+                                                {{ combo.comboPrice ? ('S/ ' + (combo.comboPrice | number:'1.2-2')) :
+                                                (combo.discountPercent + '% off') }}
+                                            </span>
+                                        </div>
+                                        <div class="pricing-row savings" *ngIf="combo.potentialSavings">
+                                            <span>Ahorro potencial:</span>
+                                            <span class="savings-highlight">
+                                                S/ {{ combo.potentialSavings | number:'1.2-2' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Resumen Final -->
+                    <div class="result-section final-summary">
+                        <h5>📊 Resumen Final</h5>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Precio Base:</span>
+                                <span class="summary-value">{{ simulationResult.selectedOption.currency }} {{
+                                    simulationResult.selectedOption.baseUnitPrice | number:'1.2-2' }}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Descuentos:</span>
+                                <span class="summary-value discount">-{{ simulationResult.selectedOption.currency }} {{
+                                    (simulationResult.selectedOption.baseUnitPrice -
+                                    simulationResult.selectedOption.finalUnitPrice) | number:'1.2-2' }}</span>
+                            </div>
+                            <div class="summary-item highlight">
+                                <span class="summary-label">Precio Final Unit:</span>
+                                <span class="summary-value final">{{ simulationResult.selectedOption.currency }} {{
+                                    simulationResult.selectedOption.finalUnitPrice | number:'1.2-2' }}</span>
+                            </div>
+                            <div class="summary-item highlight">
+                                <span class="summary-label">Cantidad:</span>
+                                <span class="summary-value">{{ simulationResult.qty }}</span>
+                            </div>
+                            <div class="summary-item total">
+                                <span class="summary-label">TOTAL:</span>
+                                <span class="summary-value total">{{ simulationResult.selectedOption.currency }} {{
+                                    simulationResult.selectedOption.totalPrice | number:'1.2-2' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Validaciones (si hay) -->
+                    <div class="result-section" *ngIf="simulationResult.validationIssues.length > 0 &&
+                includeTechnicalDetails">
+                        <h5>🔍 Detalles Técnicos</h5>
+                        <div class="validation-issues">
+                            <div *ngFor="let issue of simulationResult.validationIssues" class="validation-item"
+                                [class.error]="issue.type === 'ERROR'" [class.warning]="issue.type === 'WARNING'"
+                                [class.info]="issue.type === 'INFO'">
+                                <i class="fas" [class.fa-times-circle]="issue.type === 'ERROR'"
+                                    [class.fa-exclamation-triangle]="issue.type === 'WARNING'"
+                                    [class.fa-info-circle]="issue.type === 'INFO'"></i>
+                                <span>{{ issue.message }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================= -->
+        <!-- MODO AUDITORÍA -->
+        <!-- ========================================= -->
+        <!-- <div *ngIf="simulatorMode === 'audit'" class="simulator-mode-content">
+            <div class="simulator-card audit">
+                <h3><i class="fas fa-clipboard-check"></i> Auditoría de Reglas</h3>
+                <p class="simulator-description">Ejecuta pruebas automáticas para verificar la consistencia de tu
+                    configuración de precios</p>
+
+                <div class="audit-controls">
+                    <h5>🧪 Configuración de Pruebas</h5>
+                    <p class="audit-info">Las pruebas analizarán los primeros 5 productos con 5 cantidades diferentes en
+                        hasta 3 listas de precios</p>
+
+                    <div class="test-summary">
+                        <div class="summary-stat">
+                            <span class="stat-value">{{ products.slice(0, 5).length }}</span>
+                            <span class="stat-label">Productos</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="stat-value">5</span>
+                            <span class="stat-label">Cantidades</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="stat-value">{{ priceLists.slice(0, 3).length }}</span>
+                            <span class="stat-label">Listas</span>
+                        </div>
+                        <div class="summary-stat highlight">
+                            <span class="stat-value">{{ products.slice(0, 5).length * 5 * priceLists.slice(0, 3).length
+                                }}</span>
+                            <span class="stat-label">Total Tests</span>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary btn-large" (click)="runBatchTests()" [disabled]="runningBatchTests">
+                        <i class="fas" [class.fa-play]="!runningBatchTests" [class.fa-spinner]="runningBatchTests"
+                            [class.fa-spin]="runningBatchTests"></i>
+                        {{ runningBatchTests ? 'Ejecutando Pruebas...' : 'Ejecutar Pruebas en Lote' }}
+                    </button>
+                </div> -->
+
+        <!-- Resultados de Auditoría -->
+        <!-- <div *ngIf="batchResults.length > 0" class="audit-results">
+                    <h5><i class="fas fa-chart-bar"></i> Resultados</h5> -->
+
+        <!-- KPIs -->
+        <!-- <div class="audit-kpis">
+                        <div class="kpi-card success">
+                            <div class="kpi-icon"><i class="fas fa-check-circle"></i></div>
+                            <div class="kpi-content">
+                                <span class="kpi-value">{{ getCorrectRulesCount() }}</span>
+                                <span class="kpi-label">Reglas Correctas</span>
+                            </div>
+                        </div>
+                        <div class="kpi-card warning">
+                            <div class="kpi-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                            <div class="kpi-content">
+                                <span class="kpi-value">{{ getOverlappingCombosCount() }}</span>
+                                <span class="kpi-label">Solapamientos</span>
+                            </div>
+                        </div>
+                        <div class="kpi-card error">
+                            <div class="kpi-icon"><i class="fas fa-times-circle"></i></div>
+                            <div class="kpi-content">
+                                <span class="kpi-value">{{ getProblematicRulesCount() }}</span>
+                                <span class="kpi-label">Errores</span>
+                            </div>
+                        </div>
+                        <div class="kpi-card info">
+                            <div class="kpi-icon"><i class="fas fa-list"></i></div>
+                            <div class="kpi-content">
+                                <span class="kpi-value">{{ batchResults.length }}</span>
+                                <span class="kpi-label">Total Pruebas</span>
+                            </div>
+                        </div>
+                    </div> -->
+
+        <!-- Tabla de Resultados (primeros 10) -->
+        <!-- <div class="audit-table-section">
+                        <div class="audit-table-header">
+                            <h6>Primeros 10 Resultados</h6>
+                            <button class="btn-secondary" (click)="downloadAuditReport('csv')">
+                                <i class="fas fa-download"></i>
+                                Descargar Reporte Completo (CSV)
+                            </button>
+                        </div>
+                        <div class="audit-table-container">
+                            <table class="audit-table">
+                                <thead>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th>Cant.</th>
+                                        <th>Lista</th>
+                                        <th>Precio Base</th>
+                                        <th>Precio Final</th>
+                                        <th>Descuentos</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let result of batchResults.slice(0, 10)">
+                                        <td>{{ result.productName || 'N/A' }}</td>
+                                        <td>{{ result.qty }}</td>
+                                        <td><span class="table-badge">{{ result.selectedOption?.priceListCode ||
+                                                'N/A' }}</span></td>
+                                        <td>{{ result.selectedOption?.baseUnitPrice ? (result.selectedOption.currency +
+                                            ' '
+                                            + (result.selectedOption.baseUnitPrice | number:'1.2-2')) : 'N/A' }}</td>
+                                        <td>{{ result.selectedOption?.finalUnitPrice ? (result.selectedOption.currency +
+                                            '
+                                            ' + (result.selectedOption.finalUnitPrice | number:'1.2-2')) : 'N/A' }}</td>
+                                        <td>{{ getAppliedDiscountsCount(result) }}</td>
+                                        <td>
+                                            <span class="status-indicator"
+                                                [class.success]="!hasValidationErrors(result)"
+                                                [class.error]="hasValidationErrors(result)">
+                                                {{ hasValidationErrors(result) ? 'ERROR' : 'OK' }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div> -->
+
+        <!-- Recomendaciones -->
+        <!-- <div class="audit-recommendations">
+                        <h6><i class="fas fa-lightbulb"></i> Recomendaciones</h6>
+                        <ul class="recommendations-list">
+                            <li *ngIf="getProblematicRulesCount() > 0" class="recommendation-item error">
+                                <i class="fas fa-exclamation-circle"></i>
+                                Se encontraron {{ getProblematicRulesCount() }} errores. Revisa la configuración de
+                                precios
+                                para los productos afectados.
+                            </li>
+                            <li *ngIf="getOverlappingCombosCount() > 0" class="recommendation-item warning">
+                                <i class="fas fa-info-circle"></i>
+                                Hay {{ getOverlappingCombosCount() }} casos con múltiples combos aplicables. Considera
+                                ajustar las condiciones.
+                            </li>
+                            <li *ngIf="getProblematicRulesCount() === 0" class="recommendation-item success">
+                                <i class="fas fa-check-circle"></i>
+                                ¡Excelente! Todas las reglas están funcionando correctamente.
+                            </li>
+                        </ul>
+                    </div> -->
+        <!-- </div> -->
+        <!-- </div>
+        </div> -->
     </div>
+
 
     <!-- MODALS -->
     <!-- Price List Modal -->
     <div class="modal-overlay" *ngIf="showPriceListForm" (click)="closePriceListForm()">
         <div class="modal-content modal-large" (click)="$event.stopPropagation()">
             <div class="modal-header">
-                <h3>{{ editingPriceList ? 'Editar' : 'Nueva' }} Lista de Precios</h3>
+                <h3>
+                    <i class="fas fa-list"></i>
+                    {{ editingPriceList ? 'Editar' : 'Nueva' }} Lista de Precios
+                </h3>
                 <button class="close-button" (click)="closePriceListForm()">
                     <i class="fas fa-times"></i>
                 </button>
@@ -781,14 +1294,14 @@
                         Es predeterminada
                     </label>
                 </div>
-                <div class="form-group">
+                <!-- <div class="form-group">
                     <label>Vigencia Desde</label>
                     <input type="date" [(ngModel)]="newPriceListForm.activeFrom" class="form-control">
                 </div>
                 <div class="form-group">
                     <label>Vigencia Hasta</label>
                     <input type="date" [(ngModel)]="newPriceListForm.activeTo" class="form-control">
-                </div>
+                </div> -->
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" (click)="closePriceListForm()">Cancelar</button>
@@ -804,7 +1317,10 @@
     <div class="modal-overlay" *ngIf="showProductPriceForm" (click)="closeProductPriceForm()">
         <div class="modal-content modal-large" (click)="$event.stopPropagation()">
             <div class="modal-header">
-                <h3>{{ editingProductPrice ? 'Editar' : 'Agregar' }} Precio</h3>
+                <h3>
+                    <i class="fas fa-tag"></i>
+                    {{ editingProductPrice ? 'Editar' : 'Agregar' }} Precio
+                </h3>
                 <button class="close-button" (click)="closeProductPriceForm()">
                     <i class="fas fa-times"></i>
                 </button>
@@ -842,14 +1358,14 @@
                     <label>Cantidad Máxima</label>
                     <input type="number" [(ngModel)]="newProductPriceForm.maxQty" class="form-control" min="0">
                 </div>
-                <div class="form-group">
+                <!-- <div class="form-group">
                     <label>Válido Desde</label>
                     <input type="date" [(ngModel)]="newProductPriceForm.validFrom" class="form-control">
                 </div>
                 <div class="form-group">
                     <label>Válido Hasta</label>
                     <input type="date" [(ngModel)]="newProductPriceForm.validTo" class="form-control">
-                </div>
+                </div> -->
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" (click)="closeProductPriceForm()">Cancelar</button>
@@ -865,7 +1381,10 @@
     <div class="modal-overlay" *ngIf="showDiscountRuleForm" (click)="closeDiscountRuleForm()">
         <div class="modal-content modal-large" (click)="$event.stopPropagation()">
             <div class="modal-header">
-                <h3>{{ editingDiscountRule ? 'Editar' : 'Nueva' }} Regla de Descuento</h3>
+                <h3>
+                    <i class="fas fa-percent"></i>
+                    {{ editingDiscountRule ? 'Editar' : 'Nueva' }} Regla de Descuento
+                </h3>
                 <button class="close-button" (click)="closeDiscountRuleForm()">
                     <i class="fas fa-times"></i>
                 </button>
@@ -963,7 +1482,10 @@
     <div class="modal-overlay" *ngIf="showComboForm" (click)="closeComboForm()">
         <div class="modal-content modal-large" (click)="$event.stopPropagation()">
             <div class="modal-header">
-                <h3>{{ editingCombo ? 'Editar' : 'Nuevo' }} Combo</h3>
+                <h3>
+                    <i class="fas fa-gift"></i>
+                    {{ editingCombo ? 'Editar' : 'Nuevo' }} Combo
+                </h3>
                 <button class="close-button" (click)="closeComboForm()">
                     <i class="fas fa-times"></i>
                 </button>
@@ -1073,4 +1595,3 @@
             <span>{{ toast.message }}</span>
         </div>
     </div>
-</div>

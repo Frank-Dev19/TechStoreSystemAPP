@@ -24,6 +24,9 @@ import {
   BestPriceResponse,
   PriceCoverageStats,
   MissingPriceItem,
+  SimulationResult,
+  SimulationQuery,
+  BatchSimulationQuery
 
 } from '../../models/pricing/pricing.models';
 
@@ -33,6 +36,8 @@ import { DiscountRulesApiService } from '../../services/pricing/discount-rules-a
 import { CombosApiService } from '../../services/pricing/combos-api.service';
 import { PricingQueryApiService } from '../../services/pricing/pricing-query-api.service';
 import { PricingProductsApiService } from '../../services/pricing/pricing-products-api.service';
+import { SimulationApiService } from '../../services/pricing/simulation2-api.service';
+
 
 @Component({
   selector: 'app-pricing',
@@ -149,6 +154,31 @@ export class Pricing implements OnInit {
   simulatorProductSuggestions: ProductLite[] = [];
 
 
+  // Modo del simulador
+  simulatorMode: 'simple' | 'advanced' | 'audit' = 'simple';
+
+  // Simulador avanzado
+  simulationProductSearch = '';
+  simulationSuggestions: any[] = [];
+  simulationQty = 1;
+  simulationPriceList = 'RETAIL';
+  simulationDate = '';
+  simulationPermissions = '';
+  includeCombos = true;
+  includeTechnicalDetails = false;
+
+  // Pruebas en lote
+  batchTestAllQuantities = false;
+  batchTestAllPriceLists = false;
+  batchTestConsistency = false;
+  runningBatchTests = false;
+  batchResults: SimulationResult[] = [];
+
+  // Resultados
+  simulationResult: SimulationResult | null = null;
+
+
+
   applyProductPriceFilters(): void {
     // La tabla ya se filtra reactivo, así que este método puede quedarse vacío.
     // Lo dejamos por UX (el usuario siente que “dispara” la búsqueda).
@@ -198,16 +228,16 @@ export class Pricing implements OnInit {
     description: string;
     type: PriceListType;
     isDefault: boolean;
-    activeFrom: string;
-    activeTo: string;
+    // activeFrom: string;
+    // activeTo: string;
   } = {
       code: '',
       name: '',
       description: '',
       type: 'RETAIL',
       isDefault: false,
-      activeFrom: '',
-      activeTo: '',
+      // activeFrom: '',
+      // activeTo: '',
     };
 
   newProductPriceForm: {
@@ -215,15 +245,15 @@ export class Pricing implements OnInit {
     minQty: number;
     maxQty: number | null;
     unitPrice: number;
-    validFrom: string;
-    validTo: string;
+    // validFrom: string;
+    // validTo: string;
   } = {
       productId: 0,
       minQty: 1,
       maxQty: null,
       unitPrice: 0,
-      validFrom: '',
-      validTo: '',
+      // validFrom: '',
+      // validTo: '',
     };
 
   newDiscountRuleForm: {
@@ -290,6 +320,7 @@ export class Pricing implements OnInit {
     private combosApi: CombosApiService,
     private pricingQueryApi: PricingQueryApiService,
     private productsApi: PricingProductsApiService,
+    private simulationApi: SimulationApiService,
   ) { }
 
   // ============================================
@@ -522,8 +553,8 @@ export class Pricing implements OnInit {
       currencyCode: r.currencyCode,
       minQty: Number(r.minQty),
       maxQty: r.maxQty != null ? Number(r.maxQty) : null,
-      validFrom: r.validFrom ?? null,
-      validTo: r.validTo ?? null,
+      // validFrom: r.validFrom ?? null,
+      // validTo: r.validTo ?? null,
       isActive: r.isActive,
     };
   }
@@ -596,8 +627,8 @@ export class Pricing implements OnInit {
         description: priceList.description ?? '',
         type: priceList.type,
         isDefault: !!priceList.isDefault,
-        activeFrom: this.toDateInputValue(priceList.activeFrom),
-        activeTo: this.toDateInputValue(priceList.activeTo),
+        // activeFrom: this.toDateInputValue(priceList.activeFrom),
+        // activeTo: this.toDateInputValue(priceList.activeTo),
       };
     } else {
       this.editingPriceList = null;
@@ -607,8 +638,8 @@ export class Pricing implements OnInit {
         description: '',
         type: 'RETAIL',
         isDefault: false,
-        activeFrom: '',
-        activeTo: '',
+        // activeFrom: '',
+        // activeTo: '',
       };
     }
     this.showPriceListForm = true;
@@ -626,8 +657,8 @@ export class Pricing implements OnInit {
       description: this.newPriceListForm.description || undefined,
       type: this.newPriceListForm.type,
       is_default: !!this.newPriceListForm.isDefault,
-      active_from: this.newPriceListForm.activeFrom === '' ? undefined : this.newPriceListForm.activeFrom,
-      active_to: this.newPriceListForm.activeTo === '' ? undefined : this.newPriceListForm.activeTo,
+      // active_from: this.newPriceListForm.activeFrom === '' ? undefined : this.newPriceListForm.activeFrom,
+      // active_to: this.newPriceListForm.activeTo === '' ? undefined : this.newPriceListForm.activeTo,
       is_active: true,
     };
 
@@ -742,8 +773,8 @@ export class Pricing implements OnInit {
         minQty: Number(productPrice.minQty),
         maxQty: productPrice.maxQty != null ? Number(productPrice.maxQty) : null,
         unitPrice: Number(productPrice.unitPrice),
-        validFrom: this.toDateInputValue(productPrice.validFrom) ?? '',
-        validTo: this.toDateInputValue(productPrice.validTo) ?? '',
+        // validFrom: this.toDateInputValue(productPrice.validFrom) ?? '',
+        // validTo: this.toDateInputValue(productPrice.validTo) ?? '',
       };
 
       this.selectedProductForPrice =
@@ -759,8 +790,8 @@ export class Pricing implements OnInit {
         minQty: 1,
         maxQty: null,
         unitPrice: 0,
-        validFrom: '',
-        validTo: '',
+        // validFrom: '',
+        // validTo: '',
       };
       // si vienes desde "Agregar Precio" no habrá producto seleccionado
       // lo dejamos en null
@@ -825,8 +856,8 @@ export class Pricing implements OnInit {
       currency_code: 'PEN',
       min_qty: minQty,
       max_qty: maxQty,
-      valid_from: this.newProductPriceForm.validFrom || undefined,
-      valid_to: this.newProductPriceForm.validTo || undefined,
+      // valid_from: this.newProductPriceForm.validFrom || undefined,
+      // valid_to: this.newProductPriceForm.validTo || undefined,
       is_active: true,
     };
 
@@ -1379,29 +1410,29 @@ export class Pricing implements OnInit {
   // PRICE SIMULATOR TAB
   // ============================================
 
-  calculateBestPrice(): void {
-    if (!this.simulatorProduct || this.simulatorQty <= 0) {
-      this.showToast('error', 'Selecciona producto y cantidad');
-      return;
-    }
+  // calculateBestPrice(): void {
+  //   if (!this.simulatorProduct || this.simulatorQty <= 0) {
+  //     this.showToast('error', 'Selecciona producto y cantidad');
+  //     return;
+  //   }
 
-    this.pricingQueryApi
-      .getBestPrice(this.simulatorProduct.id, this.simulatorQty)
-      .subscribe({
-        next: (resp: BestPriceResponse) => {
-          this.simulatorResult = {
-            productId: resp.productId,
-            productSku: this.simulatorProduct!.sku,
-            productName: this.simulatorProduct!.name,
-            qty: resp.qty,
-            applied: resp.applied,
-            options: resp.options,
-          };
-          this.showToast('success', 'Mejor precio calculado');
-        },
-        error: () => this.showToast('error', 'Error al calcular el mejor precio'),
-      });
-  }
+  //   this.pricingQueryApi
+  //     .getBestPrice(this.simulatorProduct.id, this.simulatorQty)
+  //     .subscribe({
+  //       next: (resp: BestPriceResponse) => {
+  //         this.simulatorResult = {
+  //           productId: resp.productId,
+  //           productSku: this.simulatorProduct!.sku,
+  //           productName: this.simulatorProduct!.name,
+  //           qty: resp.qty,
+  //           applied: resp.applied,
+  //           options: resp.options,
+  //         };
+  //         this.showToast('success', 'Mejor precio calculado');
+  //       },
+  //       error: () => this.showToast('error', 'Error al calcular el mejor precio'),
+  //     });
+  // }
 
 
   productPriceProductSearch = '';
@@ -1734,8 +1765,305 @@ export class Pricing implements OnInit {
   }
 
 
+  setSimulatorMode(mode: 'simple' | 'advanced' | 'audit'): void {
+    this.simulatorMode = mode;
+    if (mode === 'simple') {
+      this.includeTechnicalDetails = false;
+    } else if (mode === 'advanced') {
+      this.includeTechnicalDetails = true;
+    }
+  }
+
+  // Simulación simple (mejorar la existente)
+  calculateBestPrice(): void {
+    if (!this.simulatorProduct || this.simulatorQty <= 0) {
+      this.showToast('error', 'Selecciona producto y cantidad');
+      return;
+    }
+
+    const query: SimulationQuery = {
+      product_id: this.simulatorProduct.id,
+      qty: this.simulatorQty,
+      include_combos: true,
+      include_technical_details: false,
+      mode: 'simple',
+    };
+
+    this.simulationApi.simulate(query).subscribe({
+      next: (result) => {
+        this.simulationResult = result;
+        this.showToast('success', 'Simulación completada');
+      },
+      error: (err) => {
+        console.error('Error en simulación:', err);
+        this.showToast('error', 'Error al calcular precio');
+      },
+    });
+  }
+
+  // Simulación avanzada
+  runAdvancedSimulation(): void {
+    if (!this.simulationProductSearch.trim()) {
+      this.showToast('error', 'Selecciona un producto');
+      return;
+    }
+
+    // Determinar si es producto o combo
+    const isCombo = this.simulationProductSearch.includes('[');
+    let productId: number | undefined;
+    let comboId: number | undefined;
+
+    if (isCombo) {
+      const match = this.allCombos.find(c =>
+        this.simulationProductSearch.includes(c.code) ||
+        this.simulationProductSearch.includes(c.name)
+      );
+      if (match) comboId = match.id;
+    } else {
+      const match = this.products.find(p =>
+        this.simulationProductSearch.includes(p.sku) ||
+        this.simulationProductSearch.includes(p.name)
+      );
+      if (match) productId = match.id;
+    }
+
+    if (!productId && !comboId) {
+      this.showToast('error', 'No se encontró el producto/combo');
+      return;
+    }
+
+    const query: SimulationQuery = {
+      product_id: productId,
+      combo_id: comboId,
+      qty: this.simulationQty,
+      price_list_code: this.simulationPriceList || undefined,
+      date: this.simulationDate || undefined,
+      user_permissions: this.simulationPermissions
+        ? this.simulationPermissions.split(',').map(p => p.trim())
+        : undefined,
+      include_combos: this.includeCombos,
+      include_technical_details: this.includeTechnicalDetails,
+      mode: 'advanced',
+    };
+
+    this.simulationApi.simulate(query).subscribe({
+      next: (result) => {
+        this.simulationResult = result;
+        this.showToast('success', 'Simulación avanzada completada');
+      },
+      error: (err) => {
+        console.error('Error en simulación avanzada:', err);
+        this.showToast('error', 'Error al calcular precio');
+      },
+    });
+  }
+
+  // Búsqueda de productos/combos para simulador avanzado
+  onSimulationSearch(): void {
+    if (!this.simulationProductSearch.trim()) {
+      this.simulationSuggestions = [];
+      return;
+    }
+
+    const term = this.simulationProductSearch.toLowerCase().trim();
+
+    // Buscar productos
+    const productMatches = this.products
+      .filter(p =>
+        p.name.toLowerCase().includes(term) ||
+        p.sku.toLowerCase().includes(term)
+      )
+      .map(p => ({
+        type: 'product',
+        id: p.id,
+        name: p.name,
+        code: p.sku,
+        sku: p.sku
+      }));
+
+    // Buscar combos
+    const comboMatches = this.allCombos
+      .filter(c =>
+        c.name.toLowerCase().includes(term) ||
+        c.code.toLowerCase().includes(term)
+      )
+      .map(c => ({
+        type: 'combo',
+        id: c.id,
+        name: c.name,
+        code: c.code,
+        sku: c.code
+      }));
+
+    this.simulationSuggestions = [...productMatches, ...comboMatches].slice(0, 10);
+  }
+
+  onSelectSimulationItem(item: any): void {
+    if (item.type === 'product') {
+      this.simulationProductSearch = `${item.name} (${item.sku})`;
+    } else {
+      this.simulationProductSearch = `${item.name} [${item.code}]`;
+    }
+    this.simulationSuggestions = [];
+  }
+
+  // Auditoría - Pruebas en lote
+  async runBatchTests(): Promise<void> {
+    this.runningBatchTests = true;
+    this.batchResults = [];
+
+    try {
+      // Obtener IDs de productos (limitamos a 5 para pruebas)
+      const productIds = this.products.slice(0, 5).map(p => p.id);
+
+      // Definir cantidades a probar
+      const quantities = [1, 5, 10, 20, 50];
+
+      // Obtener códigos de listas de precios
+      const priceListCodes = this.priceLists.slice(0, 3).map(pl => pl.code);
+
+      const query: BatchSimulationQuery = {
+        product_ids: productIds,
+        quantities: quantities,
+        price_list_codes: priceListCodes,
+      };
+
+      this.simulationApi.batchSimulate(query).subscribe({
+        next: (results) => {
+          this.batchResults = results;
+          this.runningBatchTests = false;
+          this.showToast('success', `Pruebas completadas: ${results.length} simulaciones`);
+        },
+        error: (err) => {
+          console.error('Error en pruebas en lote:', err);
+          this.runningBatchTests = false;
+          this.showToast('error', 'Error en pruebas en lote');
+        },
+      });
+    } catch (error) {
+      this.runningBatchTests = false;
+      this.showToast('error', 'Error al ejecutar pruebas');
+    }
+  }
+
+  // Descargar reporte de auditoría
+  downloadAuditReport(format: 'csv'): void {
+    if (this.batchResults.length === 0) {
+      this.showToast('warning', 'Primero ejecuta las pruebas en lote');
+      return;
+    }
+
+    // Obtener parámetros de las pruebas ejecutadas
+    const productIds = [...new Set(this.batchResults.map(r => r.productId).filter(Boolean))] as number[];
+    const quantities = [...new Set(this.batchResults.map(r => r.qty))];
+    const priceListCodes = [...new Set(this.batchResults.map(r => r.selectedOption?.priceListCode).filter(Boolean))] as string[];
+
+    const query: BatchSimulationQuery = {
+      product_ids: productIds,
+      quantities: quantities,
+      price_list_codes: priceListCodes,
+    };
+
+    this.simulationApi.downloadAuditReport(query).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `auditoria-precios-${new Date().getTime()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        this.showToast('success', 'Reporte descargado exitosamente');
+      },
+      error: (err) => {
+        console.error('Error al descargar reporte:', err);
+        this.showToast('error', 'Error al descargar reporte');
+      },
+    });
+  }
+
+  // Helpers para el template
+  getTotalComboSavings(result: SimulationResult): number {
+    if (!result.priceBreakdown.combos.applied.length) return 0;
+    return result.priceBreakdown.combos.applied.reduce((sum, combo) =>
+      sum + (combo.savings || 0), 0
+    );
+  }
+
+  getCorrectRulesCount(): number {
+    if (!this.batchResults) return 0;
+    return this.batchResults.reduce((count, result) =>
+      count + result.priceBreakdown.discounts.details.filter(d => d.applied).length, 0
+    );
+  }
+
+  getOverlappingCombosCount(): number {
+    if (!this.batchResults) return 0;
+    return this.batchResults.reduce((count, result) =>
+      count + (result.priceBreakdown.combos.applied.length > 1 ? 1 : 0), 0
+    );
+  }
+
+  getProblematicRulesCount(): number {
+    if (!this.batchResults) return 0;
+    return this.batchResults.reduce((count, result) =>
+      count + result.validationIssues.filter(i => i.type === 'ERROR').length, 0
+    );
+  }
+
+  // Ejemplos predefinidos
+  loadExample(type: 'config' | 'training' | 'troubleshoot'): void {
+    switch (type) {
+      case 'config':
+        if (this.products.length > 0) {
+          this.simulationProductSearch = `${this.products[0].name} (${this.products[0].sku})`;
+        }
+        this.simulationQty = 10;
+        this.simulationDate = '2024-12-15';
+        this.includeCombos = true;
+        this.includeTechnicalDetails = true;
+        break;
+      case 'training':
+        if (this.products.length > 1) {
+          this.simulationProductSearch = `${this.products[1].name} (${this.products[1].sku})`;
+        }
+        this.simulationQty = 20;
+        this.simulationPriceList = 'WHOLESALE';
+        this.includeCombos = true;
+        break;
+      case 'troubleshoot':
+        if (this.products.length > 2) {
+          this.simulationProductSearch = `${this.products[2].name} (${this.products[2].sku})`;
+        }
+        this.simulationQty = 5;
+        this.simulationPermissions = 'apply_special_discount';
+        this.includeTechnicalDetails = true;
+        break;
+    }
+    this.showToast('info', 'Ejemplo cargado. Haz clic en "Calcular y Analizar"');
+  }
 
 
+
+  // ============================================
+  // HELPER METHODS PARA TEMPLATES
+  // ============================================
+
+  getAppliedDiscountsCount(result: SimulationResult): number {
+    if (!result?.priceBreakdown?.discounts?.details) return 0;
+    return result.priceBreakdown.discounts.details.filter(d => d.applied).length;
+  }
+
+  hasValidationErrors(result: SimulationResult): boolean {
+    if (!result?.validationIssues) return false;
+    return result.validationIssues.filter(i => i.type === 'ERROR').length > 0;
+  }
+
+  getValidationErrorsCount(result: SimulationResult): number {
+    if (!result?.validationIssues) return 0;
+    return result.validationIssues.filter(i => i.type === 'ERROR').length;
+  }
 
 
   // ============================================
