@@ -39,6 +39,22 @@ export const config = {
     combos: '/pricing/combos',
     // prefijo para /pricing/query/product/:id y /best
     queryProduct: '/pricing/query/product',
+    simulation: '/pricing/simulation'
+  },
+
+  sales: {
+    base: '/sales',
+    simulate: '/sales/simulate',
+    metrics: '/sales/metrics',
+    byProduct: '/sales/by-product',
+  },
+
+  cashFlow: {
+    register: '/cash-flow/register',
+    openRegister: '/cash-flow/register/open',
+    closeRegister: '/cash-flow/register/close',
+    transactions: '/cash-flow/transactions',
+    dailyReport: '/cash-flow/reports/daily',
   },
 
 
