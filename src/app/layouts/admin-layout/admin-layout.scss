@@ -14,6 +14,18 @@
     z-index: 1030;
 }
 
+/* ⭐ SOLUCIÓN REAL: En móvil, el contenedor .sidebar no debe bloquear */
+@media (max-width: 767px) {
+    .sidebar {
+        width: 0;
+        /* ← No ocupa espacio */
+        pointer-events: none;
+        /* ← No bloquea clics */
+    }
+
+    /* El .sidebar-panel interno sí tiene width y pointer-events según su estado */
+}
+
 /* Panel principal: deja espacio al navbar fixed */
 .main-panel {
     flex: 1;
@@ -59,24 +71,14 @@ body.sidebar-open {
 .main-panel .close-layer {
     position: fixed;
     inset: 56px 0 0 0;
-    /* ← Empieza debajo del navbar */
     background: rgba(0, 0, 0, .4);
     opacity: 0;
     pointer-events: none;
     z-index: 1019;
-    /* ← Un z-index menor que el sidebar (1030) pero mayor que el contenido */
     transition: opacity .2s ease;
 }
 
 .main-panel .close-layer.visible {
     opacity: 1;
     pointer-events: auto;
-}
-
-/* Responsivo */
-@media (max-width: 767px) {
-    .main-panel {
-        margin-left: 0;
-        width: 100%;
-    }
 }

@@ -13,8 +13,8 @@ export interface PriceList {
     description?: string | null;
     type: PriceListType;
     isDefault: boolean;
-    activeFrom?: string | null;
-    activeTo?: string | null;
+    // activeFrom?: string | null;
+    // activeTo?: string | null;
     isActive: boolean;
 }
 
@@ -25,8 +25,8 @@ export interface SavePriceListDto {
     description?: string;
     type: PriceListType;
     is_default?: boolean;
-    active_from?: string;
-    active_to?: string;
+    // active_from?: string;
+    // active_to?: string;
     is_active?: boolean;
 }
 
@@ -63,8 +63,8 @@ export interface ProductPriceBackend {
     currencyCode: string;
     minQty: number;
     maxQty?: number | null;
-    validFrom?: string | null;
-    validTo?: string | null;
+    // validFrom?: string | null;
+    // validTo?: string | null;
     isActive: boolean;
 
     // Relaciones opcionales si vienen en la respuesta
@@ -91,8 +91,8 @@ export interface ProductPriceRow {
     currencyCode: string;
     minQty: number;
     maxQty?: number | null;
-    validFrom?: string | null;
-    validTo?: string | null;
+    // validFrom?: string | null;
+    // validTo?: string | null;
     isActive: boolean;
 }
 
@@ -104,8 +104,8 @@ export interface SaveProductPriceDto {
     currency_code?: string;
     min_qty: number;
     max_qty?: number | null;
-    valid_from?: string;
-    valid_to?: string;
+    // valid_from?: string;
+    // valid_to?: string;
     is_active?: boolean;
 }
 
@@ -300,4 +300,96 @@ export interface Toast {
     id: number;
     type: ToastType;
     message: string;
+}
+
+// ============================================
+// SIMULACIÓN - INTERFACES
+// ============================================
+
+export interface SimulationQuery {
+    product_id?: number;
+    combo_id?: number;
+    qty: number;
+    price_list_code?: string;
+    date?: string;
+    user_permissions?: string[];
+    include_combos?: boolean;
+    include_technical_details?: boolean;
+    mode?: 'simple' | 'advanced' | 'audit';
+}
+
+export interface SimulationResult {
+    type: 'product' | 'combo';
+    productId?: number;
+    productName?: string;
+    productSku?: string;
+    comboId?: number;
+    comboName?: string;
+    qty: number;
+    selectedOption: {
+        priceListId: number;
+        priceListCode: string;
+        priceListName: string;
+        baseUnitPrice: number;
+        finalUnitPrice: number;
+        totalPrice: number;
+        currency: string;
+    };
+    priceBreakdown: {
+        base: {
+            priceListCode: string;
+            unitPrice: number;
+            qtyRange: string;
+        };
+        discounts: {
+            totalDiscount: number;
+            details: {
+                id: number;
+                name: string;
+                type: string;
+                amount: number;
+                unitDiscount: number;
+                totalDiscount: number;
+                priority: number;
+                applied: boolean;
+            }[];
+        };
+        combos: {
+            applied: ComboDetail[];
+            available: ComboDetail[];
+        };
+    };
+    alternatives: {
+        priceListCode: string;
+        priceListName: string;
+        finalUnitPrice: number;
+        totalPrice: number;
+        savingsVsSelected: number;
+    }[];
+    validationIssues: {
+        type: 'ERROR' | 'WARNING' | 'INFO';
+        message: string;
+    }[];
+}
+
+export interface ComboDetail {
+    id: number;
+    code: string;
+    name: string;
+    type: string;
+    comboPrice?: number;
+    discountPercent?: number;
+    savings?: number;
+    potentialSavings?: number;
+    items: {
+        productId: number;
+        productName: string;
+        qty: number;
+    }[];
+}
+
+export interface BatchSimulationQuery {
+    product_ids: number[];
+    quantities: number[];
+    price_list_codes: string[];
 }
