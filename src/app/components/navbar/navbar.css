@@ -26,7 +26,7 @@
 }
 
 /* EN PANTALLAS GRANDES: respetar espacio del sidebar */
-@media (min-width: 768px) {
+@media (min-width: 1001px) {
     .app-navbar {
         left: 250px;
         /* ← Mismo ancho que el sidebar */
@@ -36,7 +36,7 @@
 }
 
 /* EN MÓVIL: navbar ocupa todo el ancho */
-@media (max-width: 767px) {
+@media (max-width: 1000px) {
     .app-navbar {
         left: 0;
         width: 100%;
@@ -73,7 +73,7 @@
     color: #fff;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1001px) {
     .only-mobile {
         display: none !important;
     }

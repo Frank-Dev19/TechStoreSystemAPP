@@ -15,7 +15,7 @@
 }
 
 /* ⭐ SOLUCIÓN REAL: En móvil, el contenedor .sidebar no debe bloquear */
-@media (max-width: 767px) {
+@media (max-width: 1000px) {
     .sidebar {
         width: 0;
         /* ← No ocupa espacio */
@@ -40,7 +40,7 @@
 }
 
 /* EN PANTALLAS GRANDES: contenido también se ajusta */
-@media (min-width: 768px) {
+@media (min-width: 1001px) {
     .main-panel {
         margin-left: 250px;
         width: calc(100% - 250px);
@@ -48,7 +48,7 @@
 }
 
 /* EN MÓVIL: contenido ocupa todo el ancho */
-@media (max-width: 767px) {
+@media (max-width: 1000px) {
     .main-panel {
         margin-left: 0;
         width: 100%;
