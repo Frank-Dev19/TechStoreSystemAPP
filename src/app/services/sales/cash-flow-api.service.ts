@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { BaseService } from '../base.service';
 import { config } from '../../../environments/environment';
+ 
 
 import { CashRegister } from '../../models/cash/cash-register.model';
 import { CashFlowTransaction } from '../../models/cash/cash-flow-transaction.model';
@@ -66,12 +67,26 @@ export class CashFlowApiService {
 
     constructor(private base: BaseService) { }
 
-    // GET /cash-flow/register?companyId=...&code=...
-    getRegister(companyId: number, code?: string): Observable<CashRegister | null> {
-        return this.base.get<CashRegister | null>(this.registerUrl, {
-            params: toHttpParams({ companyId, code }),
-        });
-    }
+  // GET /cash-flow/register?companyId=...&code=...
+  getRegister(companyId: number, code?: string): Observable<CashRegister | null> {
+      return this.base.get<CashRegister | null>(this.registerUrl, {
+          params: toHttpParams({ companyId, code }),
+      });
+  }
+
+  // GET /cash-flow/registers
+  listRegisters(companyId: number): Observable<CashRegister[]> {
+      return this.base.get<CashRegister[]>(`/cash-flow/registers`, {
+          params: toHttpParams({ companyId }),
+      });
+  }
+
+  // GET /cash-flow/register/open-current
+  getOpenRegister(companyId: number): Observable<CashRegister | null> {
+      return this.base.get<CashRegister | null>(`/cash-flow/register/open-current`, {
+          params: toHttpParams({ companyId }),
+      });
+  }
 
     // POST /cash-flow/register/open?companyId=...&code=...
     openRegister(companyId: number, code: string, payload: OpenCashRegisterDto): Observable<CashRegister> {

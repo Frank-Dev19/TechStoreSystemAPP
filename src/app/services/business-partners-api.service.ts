@@ -24,6 +24,11 @@ export class BusinessPartnersApiService {
         return this.baseService.get<PaginatedResponse<BusinessPartnerResponse>>(this.resource, { params });
     }
 
+    findByDocument(documentNumber: string, companyId?: number): Observable<BusinessPartnerResponse> {
+        const params = companyId ? { companyId: companyId.toString() } : {};
+        return this.baseService.get<BusinessPartnerResponse>(`${this.resource}/search/${documentNumber}`, { params });
+    }
+
     findOne(id: number): Observable<BusinessPartnerResponse> {
         return this.baseService.get<BusinessPartnerResponse>(`${this.resource}/${id}`);
     }

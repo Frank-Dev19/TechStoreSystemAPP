@@ -186,6 +186,7 @@
     }
 }
 
+
 .btn-primary {
     background: linear-gradient(135deg, var(--primary), var(--primary-600));
     color: white;
@@ -1097,7 +1098,7 @@
     position: fixed;
     top: 18px;
     right: 18px;
-    z-index: 9999;
+    z-index: 99999;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1497,4 +1498,21 @@
     color: var(--primary-600);
     letter-spacing: 0.02em;
     font-variant-numeric: tabular-nums;
+}
+
+.open-box {
+    background-color: #e6f9e6;
+    border-left: 4px solid #28a745;
+}
+
+/* Redefine danger button look if not defined */
+.btn-danger {
+    background: #e74c3c;
+    color: #fff;
+    border: none;
+}
+
+.btn-danger:hover {
+    background: #c0392b;
+    color: #fff;
 }
