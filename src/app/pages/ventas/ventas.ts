@@ -10,6 +10,8 @@ import { PricingProductsApiService } from '../../services/pricing/pricing-produc
 import { StockService } from '../../services/inventory/stock.service';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
+import { PricingQueryApiService } from '../../services/pricing/pricing-query-api.service';
+import { BestPriceResponse } from '../../models/pricing/pricing.models';
 
 // ============================================
 // INTERFACES & TYPES (siguiendo exactamente el prompt)
@@ -86,16 +88,16 @@ export interface Sale {
   lines: SaleLine[]
 }
 
-export interface CreateSaleDto {
-  documentType: DocumentTypeCode
-  customerId: number
-  paymentType: PaymentType
-  lines: {
-    productId: number
-    quantity: number
-    unitPrice: number
-  }[]
-}
+// export interface CreateSaleDto {
+//   documentType: DocumentTypeCode
+//   customerId: number
+//   paymentType: PaymentType
+//   lines: {
+//     productId: number
+//     quantity: number
+//     unitPrice: number
+//   }[]
+// }
 
 export interface CreditNote {
   id: number
@@ -243,20 +245,29 @@ export class Ventas implements OnInit {
     private pricingStockApi: PricingStockApiService,
     private pricingProductsApi: PricingProductsApiService,
     private stockService: StockService,
-    private documentTypesApi: DocumentTypesApiService
+    private documentTypesApi: DocumentTypesApiService,
+    private pricingQueryApi: PricingQueryApiService
   ) { }
 
   @ViewChild('productSearchInput') productSearchInput!: ElementRef<HTMLInputElement>
   @ViewChild('quantityInput') quantityInput!: ElementRef<HTMLInputElement>
 
 
+  private readonly COMPANY_ID = 1;
   // STATE
   sales: Sale[] = []
   selectedSale: Sale | null = null
   isLoading = false
 
-  // Cache para precios y stock de productos
-  productPriceStockMap: { [productId: number]: { price: number; stock: number } } = {}
+  // Cache para precios y stock de productos con información completa
+  productPriceStockMap: {
+    [productId: number]: {
+      stock: number;
+      options: any[]; // Lista de precios disponibles
+      applied: any;    // Precio actualmente aplicado
+      discounts: any[]; // Descuentos activos
+    }
+  } = {}
 
   // Búsqueda de productos (separado de currentSaleItem)
   productSearchText = ''
@@ -398,47 +409,50 @@ export class Ventas implements OnInit {
       // Cargar todo el stock
       const stockData = await lastValueFrom(this.stockService.list());
 
-      // Crear mapa de stock por productId
       const stockMap: { [productId: number]: number } = {};
       stockData.forEach(stock => {
         stockMap[stock.product_id] = stock.qty_on_hand;
       });
 
-      // Para cada producto, obtener su precio y llenar el cache
-      const priceListId = 1;
+      // Para cada producto, obtener su pricing completo (qty=1)
       for (const product of products) {
         try {
-          const priceInfo = await lastValueFrom(
-            this.pricingStockApi.getProductPriceStock(product.id, priceListId)
+          const bestPriceInfo = await lastValueFrom(
+            this.pricingQueryApi.getBestPrice(product.id, 20)
           );
 
-          if (priceInfo) {
+          if (bestPriceInfo) {
             this.productPriceStockMap[product.id] = {
-              price: priceInfo.finalPrice,
-              stock: stockMap[product.id] || 0
+              stock: stockMap[product.id] || 0,
+              options: bestPriceInfo.options, // POR_MENOR, POR_MAYOR con sus precios
+              applied: bestPriceInfo.applied, // Precio seleccionado por defecto
+              discounts: bestPriceInfo.applied.autoAppliedDiscounts || []
             };
           }
         } catch (err) {
-          console.warn(`No se pudo obtener precio para producto ${product.id}:`, err);
-          // Usar valores por defecto
+          console.warn(`No se pudo obtener pricing para producto ${product.id}:`, err);
           this.productPriceStockMap[product.id] = {
-            price: 0,
-            stock: stockMap[product.id] || 0
+            stock: stockMap[product.id] || 0,
+            options: [],
+            applied: null,
+            discounts: []
           };
         }
       }
 
-      console.log('Cache de precios y stock cargado:', this.productPriceStockMap);
+      console.log('Cache completo de pricing cargado:', this.productPriceStockMap);
     } catch (error) {
-      console.error('Error cargando precios y stock:', error);
+      console.error('Error cargando información de productos:', error);
       this.showToast('error', 'Error cargando información de productos');
     }
   }
+
   private loadOpenRegister(): void {
     this.cashFlowApi.getOpenRegister(1).subscribe((r: any) => {
       this.currentOpenRegister = r
     })
   }
+
   private loadRegisters(): void {
     this.cashFlowApi.listRegisters(1).subscribe((list: any) => {
       this.registersList = list as any
@@ -563,58 +577,41 @@ export class Ventas implements OnInit {
     })
   }
 
-  // selectProductOrPrice(p: any): void {
-  //   if (!p) return;
-  //   const priceListId = 1;
-  //   const customerId = this.foundCustomer?.id;
-  //   this.pricingStockApi.getProductPriceStock(p.id, priceListId, customerId).subscribe((info: ProductPriceStockInfo) => {
-  //     if (!info) return;
-  //     this.currentSaleItem = {
-  //       productId: p.id,
-  //       productName: p.name,
-  //       stock: info.stock,
-  //       unitPrice: info.finalPrice,
-  //       priceListId: info.priceListId,
-  //       basePrice: info.basePrice
-  //     } as any;
-  //   }, (err) => {
-  //     this.showToast('error', 'Error obteniendo precio/stock');
-  //   });
-  // }
-
   selectProductOrPrice(p: any): void {
     if (!p) return;
-    const priceListId = 1;
-    const customerId = this.foundCustomer?.id;
-    this.pricingStockApi.getProductPriceStock(p.id, priceListId, customerId).subscribe((info: ProductPriceStockInfo) => {
-      if (!info) return;
-      this.currentSaleItem = {
-        productId: p.id,
-        productName: p.name,
-        productSku: p.sku,
-        stock: info.stock,
-        unitPrice: info.finalPrice,
-        priceListId: info.priceListId,
-        basePrice: info.basePrice,
-        quantity: this.currentSaleItem.quantity || 1
-      } as any;
 
-      // Limpiar filteredProducts para cerrar dropdown
-      this.filteredProducts = [];
+    // Obtener precio según cantidad actual (usar best-price endpoint)
+    const quantity = this.currentSaleItem.quantity || 1;
 
-      // Limpiar el input de búsqueda
-      this.productSearchText = '';
-      if (this.productSearchInput) {
-        this.productSearchInput.nativeElement.value = '';
-      }
+    this.pricingQueryApi.getBestPrice(p.id, quantity)
+      .subscribe((bestPrice: BestPriceResponse) => {
+        if (!bestPrice) return;
 
-      // Enfocar input de cantidad
-      setTimeout(() => {
-        this.quantityInput?.nativeElement?.focus();
-      }, 100);
-    }, (err) => {
-      this.showToast('error', 'Error obteniendo precio/stock');
-    });
+        this.currentSaleItem = {
+          productId: p.id,
+          productName: p.name,
+          productSku: p.sku,
+          quantity: quantity,
+          stock: this.productPriceStockMap[p.id]?.stock || 0,
+          unitPrice: bestPrice.applied.finalUnitPrice,
+          appliedPriceListCode: bestPrice.applied.priceListCode,
+          appliedDiscounts: bestPrice.applied.autoAppliedDiscounts
+        } as any;
+
+        // Limpiar dropdown y enfocar cantidad
+        this.filteredProducts = [];
+        this.productSearchText = '';
+
+        if (this.productSearchInput) {
+          this.productSearchInput.nativeElement.value = '';
+        }
+
+        setTimeout(() => {
+          this.quantityInput?.nativeElement?.focus();
+        }, 100);
+      }, (err) => {
+        this.showToast('error', 'Error obteniendo precio del producto');
+      });
   }
 
   onCancelSaleForm(): void {
@@ -635,14 +632,27 @@ export class Ventas implements OnInit {
     }
 
     const createDto: any = {
+      companyId: this.COMPANY_ID,
+      customerId: Number(this.foundCustomer.id),
+      saleType: 'PRODUCT',
       documentType: this.saleFormData.documentType as any,
-      customerId: this.foundCustomer.id,
-      paymentType: this.saleFormData.paymentType as any,
-      lines: this.saleFormData.lines.map((line) => ({
+      series: this.generateDocumentSeries(),
+      number: this.generateDocumentNumber(),
+      issueDate: this.getToday(),
+      dueDate: this.getToday(),
+      payments: this.selectedPaymentMethods.map(method => ({
+        method: method,
+        amount: this.getTotalForPaymentMethod(method)
+      })),
+      items: this.saleFormData.lines.map((line) => ({
         productId: line.productId,
         quantity: line.quantity,
-        unitPrice: line.unitPrice,
-      }))
+        lotId: null,
+        serialIds: [],
+        comboId: null
+      })),
+      applyAutoDiscounts: true
+      // NO enviar priceListCode - que backend decida automáticamente
     }
 
     this.salesApi.create(createDto).subscribe({
@@ -1099,15 +1109,15 @@ export class Ventas implements OnInit {
   }
 
   closeCashRegister(): void {
-    const code = (this.cashBoxCode || 'CajaPrincipal').trim()
-    const payload: any = { actualCash: this.currentCashRegister?.currentBalance ?? 0, observations: '' }
+    const code = (this.cashBoxCode || 'CajaPrincipal').trim();
+    const payload: any = { actualCash: this.currentCashRegister?.currentBalance ?? 0, observations: '' };
     this.cashFlowApi.closeRegister(1, code, payload).subscribe({
       next: (res) => {
-        this.currentCashRegister = null
-        this.showToast('success', 'Caja cerrada')
+        this.currentCashRegister = null;
+        this.showToast('success', 'Caja cerrada');
       },
       error: () => this.showToast('error', 'Error cerrando caja')
-    })
+    });
   }
 
   //ACTUALIZAR FLUJO DE CAJA
@@ -1167,5 +1177,89 @@ export class Ventas implements OnInit {
     this.updateCashFlowFromSales()
   }
 
+  // Métodos para obtener información del pricing
+  getPriceOption(productId: number, priceListCode: string): any {
+    const productInfo = this.productPriceStockMap[productId];
+    // console.log("aca esta el punto 0")
+    // console.log(productInfo)
+    if (!productInfo?.options) return null;
+    // console.log("aca esta el punto 1")
+    // console.log(productInfo.options.find(opt => opt.priceListCode === priceListCode));
+    return productInfo.options.find(opt => opt.priceListCode === priceListCode);
+  }
 
+  getPriceMinQty(productId: number, priceListCode: string): number {
+    // Esto debería venir del backend, por ahora es una suposición
+    const option = this.getPriceOption(productId, priceListCode);
+    return option?.minQty || 1;
+  }
+
+  hasDiscount(productId: number, priceListCode: string): boolean {
+    const option = this.getPriceOption(productId, priceListCode);
+    return option?.autoAppliedDiscounts?.length > 0;
+  }
+
+  getDiscountPercent(productId: number, priceListCode: string): string {
+    const option = this.getPriceOption(productId, priceListCode);
+    const discount = option?.autoAppliedDiscounts?.[0];
+    return discount?.discountType === 'PERCENT' ? discount.amount : '0';
+  }
+
+  hasAnyDiscount(productId: number): boolean {
+    const productInfo = this.productPriceStockMap[productId];
+    return productInfo?.discounts?.length > 0;
+  }
+
+  getMainDiscountName(productId: number): string {
+    const productInfo = this.productPriceStockMap[productId];
+    return productInfo?.discounts?.[0]?.name || '';
+  }
+
+  onQuantityChange(): void {
+    if (!this.currentSaleItem.productId) return;
+
+    const product = this.products.find(p => p.id === this.currentSaleItem.productId);
+    if (product) {
+      this.selectProductOrPrice(product);
+    }
+  }
+
+  // Helper para calcular total por método de pago
+  getTotalForPaymentMethod(method: string): number {
+    // Por ahora, dividir equitativamente entre todos los métodos
+    // Esto podría mejorarse según los requerimientos
+    const totalMethods = this.selectedPaymentMethods.length;
+    const grandTotal = this.saleFormData?.total || 0;
+
+    if (totalMethods === 0) return 0;
+
+    // Asignar el total completo al primer método o dividir equitativamente
+    if (totalMethods === 1) {
+      return grandTotal;
+    }
+
+    // Dividir equitativamente
+    const perMethod = grandTotal / totalMethods;
+    const isLastMethod = this.selectedPaymentMethods[this.selectedPaymentMethods.length - 1] === method;
+
+    return isLastMethod ? grandTotal - (perMethod * (totalMethods - 1)) : perMethod;
+  }
+
+  // Helper para generar número de documento (simulado)
+  private generateDocumentSeries(): string {
+    // Simulación: podría venir de una configuración
+    const documentType = this.saleFormData?.documentType;
+    switch (documentType) {
+      case 'BOLETA': return 'B001';
+      case 'FACTURA': return 'F001';
+      default: return 'B001';
+    }
+  }
+
+  // Helper para generar número de documento (simulado)
+  private generateDocumentNumber(): string {
+    // Simulación: podría venir de un contador
+    const random = Math.floor(Math.random() * 999999) + 1;
+    return random.toString().padStart(6, '0');
+  }
 }

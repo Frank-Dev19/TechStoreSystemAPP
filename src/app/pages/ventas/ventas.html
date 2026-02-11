@@ -307,12 +307,39 @@
                                 (click)="selectProductOrPrice(p)">
                                 <div class="item-main">
                                     <span class="item-name">{{ p.name }}</span>
-                                    <span class="item-price">S/ {{ (productPriceStockMap[p.id]?.price || 0) |
-                                        number:'1.2-2' }}</span>
                                 </div>
+
+                                <div class="item-pricing">
+                                    <!-- Opción de precio por menor -->
+                                    <div class="price-option" *ngIf="getPriceOption(p.id, 'POR-MENOR')">
+                                        <span class="price-label">Menor:</span>
+                                        <span class="price-value">
+                                            S/ {{ getPriceOption(p.id, 'POR-MENOR')?.finalUnitPrice | number:'1.2-2' }}
+                                        </span>
+                                        <span class="discount-info" *ngIf="hasDiscount(p.id, 'POR-MENOR')">
+                                            (-{{ getDiscountPercent(p.id, 'POR-MENOR') }}%)
+                                        </span>
+                                    </div>
+
+                                    <!-- Opción de precio por mayor -->
+                                    <div class="price-option major" *ngIf="getPriceOption(p.id, 'POR-MAYOR')">
+                                        <span class="price-label">Mayor ({{ getPriceMinQty(p.id, 'POR-MAYOR')
+                                            }}+):</span>
+                                        <span class="price-value">
+                                            S/ {{ getPriceOption(p.id, 'POR-MAYOR')?.finalUnitPrice | number:'1.2-2' }}
+                                        </span>
+                                        <span class="discount-info" *ngIf="hasDiscount(p.id, 'POR-MAYOR')">
+                                            (-{{ getDiscountPercent(p.id, 'POR-MAYOR') }}%)
+                                        </span>
+                                    </div>
+                                </div>
+
                                 <div class="item-meta">
                                     <span class="item-sku">{{ p.sku }}</span>
                                     <span class="item-stock">Stock: {{ productPriceStockMap[p.id]?.stock || 0 }}</span>
+                                    <span class="discount-notice" *ngIf="hasAnyDiscount(p.id)">
+                                        🎯 {{ getMainDiscountName(p.id) }}
+                                    </span>
                                 </div>
                             </li>
                         </ul>
@@ -321,7 +348,8 @@
                         <div class="form-group">
                             <label>Cantidad</label>
                             <input #quantityInput type="number" [(ngModel)]="currentSaleItem.quantity"
-                                class="form-control" min="1" (keydown.enter)="onQuantityEnter()">
+                                class="form-control" min="1" (keydown.enter)="onQuantityEnter()"
+                                (input)="onQuantityChange()">
 
                         </div>
                         <div class="form-group">

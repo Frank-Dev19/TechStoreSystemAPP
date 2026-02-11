@@ -88,4 +88,5 @@ export class SalesApiService {
             params: toHttpParams({ companyId, productId, dateFrom, dateTo }),
         });
     }
+
 }
