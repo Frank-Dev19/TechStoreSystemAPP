@@ -47,6 +47,7 @@ export const config = {
     simulate: '/sales/simulate',
     metrics: '/sales/metrics',
     byProduct: '/sales/by-product',
+    documentSeries: '/document-series',
   },
 
   cashFlow: {

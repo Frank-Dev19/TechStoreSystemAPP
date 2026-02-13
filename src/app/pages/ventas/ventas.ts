@@ -1,5 +1,6 @@
 import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
 import { SalesApiService } from '../../services/sales/sales-api.service';
+import { DocumentSeriesApiService } from '../../services/sales/document-series-api.service';
 import { ProductsApiService } from '../../services/products-api.service';
 import { lastValueFrom } from 'rxjs';
 import { CashFlowApiService } from '../../services/sales/cash-flow-api.service';
@@ -12,7 +13,8 @@ import { DocumentTypesApiService } from '../../services/document-types-api.servi
 import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
 import { PricingQueryApiService } from '../../services/pricing/pricing-query-api.service';
 import { BestPriceResponse } from '../../models/pricing/pricing.models';
-
+import { DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../models/sales/document-series.model';
+import { DocumentType } from '../../models/sales/enums';
 // ============================================
 // INTERFACES & TYPES (siguiendo exactamente el prompt)
 // ============================================
@@ -239,9 +241,10 @@ interface SalesFilters {
 export class Ventas implements OnInit {
   constructor(
     private salesApi: SalesApiService,
+    private documentSeriesApi: DocumentSeriesApiService,
+    private productsApi: ProductsApiService,
     private cashFlowApi: CashFlowApiService,
     private bpApi: BusinessPartnersApiService,
-    private productsApi: ProductsApiService,
     private pricingStockApi: PricingStockApiService,
     private pricingProductsApi: PricingProductsApiService,
     private stockService: StockService,
@@ -278,7 +281,7 @@ export class Ventas implements OnInit {
   toasts: Toast[] = []
 
   // UI STATES
-  activeTab: 'sales' | 'cashflow' | 'create' | 'cashbox' = 'sales'
+  activeTab: 'sales' | 'cashflow' | 'create' | 'cashbox' | 'document-series' = 'sales'
   showCreditNoteModal = false
   showDispatchGuideModal = false
   showCancelConfirmModal = false
@@ -287,6 +290,16 @@ export class Ventas implements OnInit {
   //showDetailDrawer = false
   showNewCustomerModal = false
   newCustomerForm: Partial<BusinessPartner> = {}
+
+  // DOCUMENT SERIES
+  documentSeries: DocumentSeries[] = []
+  filteredDocumentSeries: DocumentSeries[] = []
+  selectedDocumentSeries: DocumentSeries | null = null
+  documentSeriesForm: Partial<CreateDocumentSeriesDto> = {}
+  documentSeriesEditMode = false
+  documentSeriesSearchText = ''
+  documentSeriesFilter: { documentType?: DocumentType; isActive?: boolean } = {}
+  showDocumentSeriesForm = false
 
 
   // FORM DATA
@@ -351,6 +364,7 @@ export class Ventas implements OnInit {
     // Load current open register and all registers for admin view
     this.loadOpenRegister()
     this.loadRegisters()
+    this.loadDocumentSeries()
   }
 
   private productsApiGet(): void {
@@ -1245,21 +1259,237 @@ export class Ventas implements OnInit {
     return isLastMethod ? grandTotal - (perMethod * (totalMethods - 1)) : perMethod;
   }
 
-  // Helper para generar número de documento (simulado)
+  // Helper para generar número de documento usando series activas
   private generateDocumentSeries(): string {
-    // Simulación: podría venir de una configuración
+    // Simular serie activa (en producción vendría del backend)
     const documentType = this.saleFormData?.documentType;
-    switch (documentType) {
-      case 'BOLETA': return 'B001';
-      case 'FACTURA': return 'F001';
-      default: return 'B001';
+    const activeSeries = this.documentSeries.find(s =>
+      s.documentType === documentType && s.isActive
+    );
+    return activeSeries?.code || (documentType === 'BOLETA' ? 'B001' : 'F001');
+  }
+
+  // Helper para generar número de documento usando series activas
+  private generateDocumentNumber(): string {
+    // Simular siguiente número (en producción vendría del backend)
+    const documentType = this.saleFormData?.documentType;
+    const activeSeries = this.documentSeries.find(s =>
+      s.documentType === documentType && s.isActive
+    );
+
+    if (activeSeries) {
+      return activeSeries.currentNumber.toString().padStart(8, '0');
+    }
+
+    // Fallback a número aleatorio
+    const random = Math.floor(Math.random() * 999999) + 1;
+    return random.toString().padStart(6, '0');
+  }
+
+  // =========================
+  // DOCUMENT SERIES METHODS
+  // =========================
+
+  loadDocumentSeries(): void {
+    this.documentSeriesApi.findAll(this.COMPANY_ID).subscribe({
+      next: (series) => {
+        this.documentSeries = series;
+        this.filterDocumentSeries();
+      },
+      error: (err) => {
+        console.error('Error cargando series de documento:', err);
+        this.showToast('error', 'Error cargando series de documento');
+      },
+    });
+  }
+
+  filterDocumentSeries(): void {
+    this.filteredDocumentSeries = this.documentSeries.filter(series => {
+      const matchesSearch = !this.documentSeriesSearchText ||
+        series.code.toLowerCase().includes(this.documentSeriesSearchText.toLowerCase()) ||
+        series.name.toLowerCase().includes(this.documentSeriesSearchText.toLowerCase());
+
+      const matchesDocumentType = !this.documentSeriesFilter.documentType ||
+        series.documentType === this.documentSeriesFilter.documentType;
+
+      const matchesStatus = !this.documentSeriesFilter.isActive ||
+        series.isActive === this.documentSeriesFilter.isActive;
+
+      return matchesSearch && matchesDocumentType && matchesStatus;
+    });
+  }
+
+  onDocumentSeriesSearch(): void {
+    this.filterDocumentSeries();
+  }
+
+  onDocumentSeriesFilterChange(): void {
+    this.filterDocumentSeries();
+  }
+
+  selectDocumentSeries(series: DocumentSeries): void {
+    this.selectedDocumentSeries = series;
+    this.documentSeriesEditMode = true;
+    this.documentSeriesForm = {
+      companyId: series.companyId,
+      documentType: series.documentType,
+      code: series.code,
+      name: series.name,
+      isActive: series.isActive,
+      startingNumber: series.startingNumber,
+    };
+    this.showDocumentSeriesForm = true;
+  }
+
+  createNewDocumentSeries(): void {
+    this.selectedDocumentSeries = null;
+    this.documentSeriesEditMode = false;
+    this.documentSeriesForm = {
+      companyId: this.COMPANY_ID,
+      documentType: DocumentType.BOLETA,
+      code: '',
+      name: '',
+      isActive: true,
+      startingNumber: 1,
+      createdBy: 'system', // En producción, usar usuario actual
+    };
+    this.showDocumentSeriesForm = true;
+  }
+
+  saveDocumentSeries(): void {
+    if (!this.documentSeriesForm.code || !this.documentSeriesForm.name) {
+      this.showToast('warning', 'Complete todos los campos obligatorios');
+      return;
+    }
+
+    if (this.documentSeriesEditMode && this.selectedDocumentSeries) {
+      // Modo edición
+      const updateDto: UpdateDocumentSeriesDto = {
+        name: this.documentSeriesForm.name,
+        isActive: this.documentSeriesForm.isActive,
+        updatedBy: 'system', // En producción, usar usuario actual
+      };
+
+      this.documentSeriesApi.update(this.selectedDocumentSeries.id, updateDto).subscribe({
+        next: () => {
+          this.showToast('success', 'Serie actualizada correctamente');
+          this.loadDocumentSeries();
+          this.closeDocumentSeriesForm();
+        },
+        error: (err) => {
+          console.error('Error actualizando serie:', err);
+          this.showToast('error', 'Error actualizando serie');
+        },
+      });
+    } else {
+      // Modo creación
+      const createDto: CreateDocumentSeriesDto = {
+        companyId: this.COMPANY_ID,
+        documentType: this.documentSeriesForm.documentType!,
+        code: this.documentSeriesForm.code,
+        name: this.documentSeriesForm.name,
+        isActive: this.documentSeriesForm.isActive!,
+        startingNumber: this.documentSeriesForm.startingNumber,
+        createdBy: 'system', // En producción, usar usuario actual
+      };
+      console.log("pruebita: " + createDto);
+      console.log(createDto);
+
+      this.documentSeriesApi.create(createDto).subscribe({
+        next: () => {
+          this.showToast('success', 'Serie creada correctamente');
+          this.loadDocumentSeries();
+          this.closeDocumentSeriesForm();
+        },
+        error: (err) => {
+          console.error('Error creando serie:', err);
+          this.showToast('error', 'Error creando serie');
+        },
+      });
     }
   }
 
-  // Helper para generar número de documento (simulado)
-  private generateDocumentNumber(): string {
-    // Simulación: podría venir de un contador
-    const random = Math.floor(Math.random() * 999999) + 1;
-    return random.toString().padStart(6, '0');
+  deleteDocumentSeries(id: number): void {
+    if (!confirm('¿Está seguro de que desea eliminar esta serie? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    this.documentSeriesApi.remove(id).subscribe({
+      next: () => {
+        this.showToast('success', 'Serie eliminada correctamente');
+        this.loadDocumentSeries();
+      },
+      error: (err) => {
+        console.error('Error eliminando serie:', err);
+        this.showToast('error', 'Error eliminando serie');
+      },
+    });
+  }
+
+  toggleDocumentSeriesStatus(series: DocumentSeries): void {
+    const updateDto: UpdateDocumentSeriesDto = {
+      isActive: !series.isActive,
+      updatedBy: 'system', // En producción, usar usuario actual
+    };
+
+    this.documentSeriesApi.update(series.id, updateDto).subscribe({
+      next: () => {
+        this.showToast('success', `Serie ${series.isActive ? 'desactivada' : 'activada'} correctamente`);
+        this.loadDocumentSeries();
+      },
+      error: (err) => {
+        console.error('Error cambiando estado de serie:', err);
+        this.showToast('error', 'Error cambiando estado de serie');
+      },
+    });
+  }
+
+  getNextNumberForDocumentType(documentType: DocumentType): void {
+    this.documentSeriesApi.getNextNumberFormatted(this.COMPANY_ID, documentType).subscribe({
+      next: (response) => {
+        this.showToast('info', `Próximo número para ${documentType}: ${response.formatted}`);
+      },
+      error: (err) => {
+        console.error('Error obteniendo siguiente número:', err);
+        this.showToast('error', 'Error obteniendo siguiente número');
+      },
+    });
+  }
+
+  closeDocumentSeriesForm(): void {
+    this.showDocumentSeriesForm = false;
+    this.documentSeriesForm = {};
+    this.selectedDocumentSeries = null;
+    this.documentSeriesEditMode = false;
+  }
+
+  resetDocumentSeriesFilters(): void {
+    this.documentSeriesSearchText = '';
+    this.documentSeriesFilter = {};
+    this.filterDocumentSeries();
+  }
+
+  // Helper methods for templates
+  getDocumentTypeLabel(documentType: DocumentType): string {
+    switch (documentType) {
+      case 'BOLETA':
+        return 'Boleta';
+      case 'FACTURA':
+        return 'Factura';
+      case 'NOTA_PEDIDO':
+        return 'Nota de Pedido';
+      default:
+        return documentType;
+    }
+  }
+
+
+  // Métodos en la clase Ventas
+  countActiveSeries(): number {
+    return this.documentSeries.filter(s => s.isActive).length;
+  }
+
+  countSeriesByType(type: string): number {
+    return this.documentSeries.filter(s => s.documentType === type).length;
   }
 }

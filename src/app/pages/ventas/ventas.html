@@ -42,6 +42,11 @@
             <i class="fas fa-wallet"></i>
             Caja
         </button>
+        <button class="tab-button" [class.active]="activeTab === 'document-series'"
+            (click)="activeTab = 'document-series'">
+            <i class="fas fa-hashtag"></i>
+            Series y Números
+        </button>
     </div>
 
 
@@ -615,6 +620,244 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+<!-- DOCUMENT SERIES TAB -->
+    <div *ngIf="activeTab === 'document-series'" class="document-series-tab-content">
+        <!-- FILTERS -->
+        <div class="filters-card">
+            <div class="filters-header">
+                <h3><i class="fas fa-filter"></i> Filtros de Series</h3>
+                <span class="results-indicator">{{ filteredDocumentSeries.length }} series</span>
+            </div>
+
+            <div class="filters-grid">
+                <div class="form-group">
+                    <label><i class="fas fa-search"></i> Buscar</label>
+                    <input type="text" class="form-control" [(ngModel)]="documentSeriesSearchText"
+                        (input)="onDocumentSeriesSearch()" placeholder="Código o nombre...">
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-file-alt"></i> Tipo de Documento</label>
+                    <select class="form-control" [(ngModel)]="documentSeriesFilter.documentType"
+                        (change)="onDocumentSeriesFilterChange()">
+                        <option value="">Todos</option>
+                        <option value="BOLETA">Boleta</option>
+                        <option value="FACTURA">Factura</option>
+                        <option value="NOTA_PEDIDO">Nota de Pedido</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-info-circle"></i> Estado</label>
+                    <select class="form-control" [(ngModel)]="documentSeriesFilter.isActive"
+                        (change)="onDocumentSeriesFilterChange()">
+                        <option value="">Todos</option>
+                        <option [ngValue]="true">Activo</option>
+                        <option [ngValue]="false">Inactivo</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="search-section">
+                <button class="btn-primary" (click)="createNewDocumentSeries()">
+                    <i class="fas fa-plus"></i>
+                    Nueva Serie
+                </button>
+                <button class="btn-secondary" (click)="loadDocumentSeries()" [disabled]="isLoading">
+                    <i class="fas fa-sync-alt" [class.spinning]="isLoading"></i>
+                    Actualizar
+                </button>
+                <button class="btn-secondary" (click)="resetDocumentSeriesFilters()">
+                    <i class="fas fa-eraser"></i>
+                    Limpiar
+                </button>
+            </div>
+        </div>
+
+<!-- CONTENT GRID - Main Layout -->
+        <div class="document-series-content-grid">
+            <!-- Lista de Series - Principal -->
+            <div class="main-content">
+                <div class="series-table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Nombre</th>
+                                <th>Tipo Documento</th>
+                                <th>Número Actual</th>
+                                <th>Número Inicial</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let series of filteredDocumentSeries">
+                                <td><strong>{{ series.code }}</strong></td>
+                                <td>{{ series.name }}</td>
+                                <td>
+                                    <span class="document-type-badge" [class]="'type-' + series.documentType.toLowerCase()">
+                                        {{ getDocumentTypeLabel(series.documentType) }}
+                                    </span>
+                                </td>
+                                <td><strong>{{ series.currentNumber }}</strong></td>
+                                <td>{{ series.startingNumber }}</td>
+                                <td>
+                                    <span class="status-badge" [class.active]="series.isActive"
+                                        [class.inactive]="!series.isActive">
+                                        {{ series.isActive ? 'Activo' : 'Inactivo' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button class="btn-icon" (click)="selectDocumentSeries(series)" title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn-icon" (click)="toggleDocumentSeriesStatus(series)"
+                                            [class]="series.isActive ? 'warning' : 'success'"
+                                            title="{{ series.isActive ? 'Desactivar' : 'Activar' }}">
+                                            <i class="fas" [class]="series.isActive ? 'fa-pause' : 'fa-play'"></i>
+                                        </button>
+                                        <button class="btn-icon info" (click)="getNextNumberForDocumentType(series.documentType)"
+                                            title="Ver siguiente número">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn-icon danger" (click)="deleteDocumentSeries(series.id)"
+                                            [disabled]="series.isActive" title="Eliminar">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <tr *ngIf="filteredDocumentSeries.length === 0">
+                                <td colspan="7" class="empty-message">
+                                    <i class="fas fa-inbox"></i>
+                                    <p>No hay series de documento configuradas</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Estadísticas - Sidebar -->
+            <div class="sidebar-content">
+                <div class="metrics-card">
+                    <h4><i class="fas fa-chart-bar"></i> Estadísticas de Series</h4>
+                    <div class="metrics-grid">
+                        <div class="metric-card total">
+                            <div class="metric-icon"><i class="fas fa-hashtag"></i></div>
+                            <div class="metric-content">
+                                <label>Total Series</label>
+                                <span class="metric-value">{{ documentSeries.length }}</span>
+                            </div>
+                        </div>
+                        <div class="metric-card success">
+                            <div class="metric-icon"><i class="fas fa-check-circle"></i></div>
+                            <div class="metric-content">
+                                <label>Series Activas</label>
+                                <span class="metric-value">{{ countActiveSeries() }}</span>
+                            </div>
+                        </div>
+                        <div class="metric-card info">
+                            <div class="metric-icon"><i class="fas fa-file-invoice"></i></div>
+                            <div class="metric-content">
+                                <label>Series Boleta</label>
+                                <span class="metric-value">{{ countSeriesByType('BOLETA') }}</span>
+                            </div>
+                        </div>
+                        <div class="metric-card warning">
+                            <div class="metric-icon"><i class="fas fa-file-contract"></i></div>
+                            <div class="metric-content">
+                                <label>Series Factura</label>
+                                <span class="metric-value">{{ countSeriesByType('FACTURA') }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="quick-actions-card">
+                    <h4><i class="fas fa-bolt"></i> Acciones Rápidas</h4>
+                    <div class="quick-actions-grid">
+                        <button class="btn-primary" (click)="createNewDocumentSeries()">
+                            <i class="fas fa-plus"></i>
+                            Nueva Serie
+                        </button>
+                        <button class="btn-secondary" (click)="loadDocumentSeries()" [disabled]="isLoading">
+                            <i class="fas fa-sync-alt" [class.spinning]="isLoading"></i>
+                            Actualizar
+                        </button>
+                        <button class="btn-info" (click)="resetDocumentSeriesFilters()">
+                            <i class="fas fa-eraser"></i>
+                            Limpiar Filtros
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Series Form Modal -->
+    <div class="modal-overlay" *ngIf="showDocumentSeriesForm" (click)="closeDocumentSeriesForm()">
+        <div class="modal-content" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-hashtag"></i>
+                    {{ documentSeriesEditMode ? 'Editar Serie' : 'Nueva Serie de Documento' }}
+                </h3>
+                <button class="close-button" (click)="closeDocumentSeriesForm()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tipo de Documento *</label>
+                        <select class="form-control" [(ngModel)]="documentSeriesForm.documentType"
+                            [disabled]="documentSeriesEditMode">
+                            <option value="BOLETA">Boleta</option>
+                            <option value="FACTURA">Factura</option>
+                            <option value="NOTA_PEDIDO">Nota de Pedido</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Código *</label>
+                        <input type="text" class="form-control" [(ngModel)]="documentSeriesForm.code"
+                            [disabled]="documentSeriesEditMode" placeholder="Ej: B001, F001" maxlength="10">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Nombre *</label>
+                    <input type="text" class="form-control" [(ngModel)]="documentSeriesForm.name"
+                        placeholder="Ej: Boletas de Casa Matriz" maxlength="100">
+                </div>
+                <div class="form-row" *ngIf="!documentSeriesEditMode">
+                    <div class="form-group">
+                        <label>Número Inicial</label>
+                        <input type="number" class="form-control" [(ngModel)]="documentSeriesForm.startingNumber"
+                            min="1" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Estado</label>
+                        <select class="form-control" [(ngModel)]="documentSeriesForm.isActive">
+                            <option [ngValue]="true">Activo</option>
+                            <option [ngValue]="false">Inactivo</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeDocumentSeriesForm()">Cancelar</button>
+                <button class="btn-primary" (click)="saveDocumentSeries()">
+                    <i class="fas fa-save"></i>
+                    {{ documentSeriesEditMode ? 'Actualizar' : 'Crear' }}
+                </button>
             </div>
         </div>
     </div>
