@@ -61,7 +61,33 @@ export interface StockLine {
 }
 
 export type DocumentTypeCode = 'NOTA_PEDIDO' | 'BOLETA' | 'FACTURA'
-export type PaymentType = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'
+// PAYMENT TYPES - Frontend values
+export type PaymentType = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO' | 'YAPE' | 'PLIN'
+
+// Payment Method mapping (Frontend -> Backend)
+const paymentMethodMap: { [key: string]: string } = {
+  'EFECTIVO': 'CASH',
+  'TARJETA': 'CARD',
+  'TRANSFERENCIA': 'TRANSFER',
+  'YAPE': 'YAPE',
+  'PLIN': 'PLIN',
+  'CREDITO': 'CREDIT'
+}
+
+// Bank options for card and transfer
+export const bankOptions = [
+  { value: 'BCP', label: 'BCP' },
+  { value: 'BBVA', label: 'BBVA' },
+  { value: 'Interbank', label: 'Interbank' },
+  { value: 'Scotiabank', label: 'Scotiabank' },
+  { value: 'Falabella', label: 'Falabella' }
+]
+
+// Card type options
+export const cardTypeOptions = [
+  { value: 'CREDITO', label: 'Crédito' },
+  { value: 'DEBITO', label: 'Débito' }
+]
 export type SaleStatus = 'PENDIENTE' | 'EMITIDO' | 'ANULADO'
 
 export interface SaleLine {
@@ -302,7 +328,7 @@ export class Ventas implements OnInit {
   showDocumentSeriesForm = false
 
 
-  // FORM DATA
+  //FORM DATA
   saleFormData: Partial<Sale> | null = null
   creditNoteFormData: Partial<CreditNote> | null = null
   dispatchGuideFormData: Partial<ShippingGuide> | null = null
@@ -310,6 +336,15 @@ export class Ventas implements OnInit {
   customerSearchText = ''
   foundCustomer: BusinessPartner | null = null
   selectedPaymentMethods: PaymentType[] = []
+
+  // PAYMENT ADDITIONAL FIELDS
+  paymentReference = ''           // Para Yape, Plin, Transferencia, Tarjeta
+  paymentBankName = ''           // Para Transferencia y Tarjeta
+  paymentCardType = ''           // Para Tarjeta (CRÉDITO o DÉBITO)
+
+  //SELECTS PARA PAGOS
+  cardTypeOptions = cardTypeOptions;
+  bankOptions = bankOptions;
 
   // PAGINATION
   currentPage = 1
@@ -582,7 +617,11 @@ export class Ventas implements OnInit {
           customerName: '',
           customerDocumentNumber: '',
         };
-        this.paymentOperationNumber = ''   // <- limpiar
+        // Limpiar campos de pago
+        this.paymentOperationNumber = ''
+        this.paymentReference = ''
+        this.paymentBankName = ''
+        this.paymentCardType = ''
         this.activeTab = 'create'
       },
       error: () => {
@@ -631,6 +670,9 @@ export class Ventas implements OnInit {
   onCancelSaleForm(): void {
     this.saleFormData = null
     this.paymentOperationNumber = ''   // <- limpiar
+    this.paymentReference = ''
+    this.paymentBankName = ''
+    this.paymentCardType = ''
     this.activeTab = 'sales'
   }
 
@@ -645,19 +687,45 @@ export class Ventas implements OnInit {
       return
     }
 
+    const paymentType = this.saleFormData.paymentType as PaymentType
+    const backendMethod = paymentMethodMap[paymentType] || 'CASH'
+
+    // Construir el pago según el tipo
+    const paymentData: any = {
+      method: backendMethod,
+      amount: this.saleFormData.total || 0,
+      reference: null,
+      bankName: null,
+      cardType: null
+    }
+
+    // Agregar campos específicos según el método de pago
+    if (paymentType === 'TARJETA') {
+      paymentData.reference = this.paymentReference || null
+      paymentData.bankName = this.paymentBankName || null
+      paymentData.cardType = this.paymentCardType || null
+    } else if (paymentType === 'TRANSFERENCIA') {
+      paymentData.reference = this.paymentReference || null
+      paymentData.bankName = this.paymentBankName || null
+    } else if (paymentType === 'YAPE') {
+      paymentData.reference = this.paymentReference || null
+      paymentData.bankName = 'BCP'  // Yape es de BCP
+    } else if (paymentType === 'PLIN') {
+      paymentData.reference = this.paymentReference || null
+      paymentData.bankName = 'BBVA'  // Plin es de BBVA
+    }
+    // CASH: reference, bankName, cardType = null
+
     const createDto: any = {
       companyId: this.COMPANY_ID,
       customerId: Number(this.foundCustomer.id),
       saleType: 'PRODUCT',
       documentType: this.saleFormData.documentType as any,
-      series: this.generateDocumentSeries(),
-      number: this.generateDocumentNumber(),
+      series: null,
+      number: null,
       issueDate: this.getToday(),
       dueDate: this.getToday(),
-      payments: this.selectedPaymentMethods.map(method => ({
-        method: method,
-        amount: this.getTotalForPaymentMethod(method)
-      })),
+      payments: [paymentData],
       items: this.saleFormData.lines.map((line) => ({
         productId: line.productId,
         quantity: line.quantity,
@@ -666,7 +734,6 @@ export class Ventas implements OnInit {
         comboId: null
       })),
       applyAutoDiscounts: true
-      // NO enviar priceListCode - que backend decida automáticamente
     }
 
     this.salesApi.create(createDto).subscribe({

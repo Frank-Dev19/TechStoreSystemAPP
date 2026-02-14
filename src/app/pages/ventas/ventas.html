@@ -472,7 +472,7 @@
                     </div>
                 </div>
 
-                <!-- Forma de Pago -->
+<!-- Forma de Pago -->
                 <div class="form-section">
                     <h3 class="section-title"><i class="fas fa-credit-card"></i> Pago</h3>
 
@@ -482,16 +482,59 @@
                             <option value="EFECTIVO">Efectivo</option>
                             <option value="TARJETA">Tarjeta</option>
                             <option value="TRANSFERENCIA">Transferencia</option>
+                            <option value="YAPE">Yape</option>
+                            <option value="PLIN">Plin</option>
                             <option value="CREDITO">Crédito</option>
                         </select>
                     </div>
 
-                    <!-- Campo dinámico para N° de operación -->
+                    <!-- Campos para TARJETA -->
+                    <div class="form-group" *ngIf="saleFormData?.paymentType === 'TARJETA'">
+                        <label>Tipo de Tarjeta</label>
+                        <select [(ngModel)]="paymentCardType" class="form-control">
+                            <option value="">Seleccionar tipo</option>
+                            <option *ngFor="let opt of cardTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" *ngIf="saleFormData?.paymentType === 'TARJETA'">
+                        <label>Banco</label>
+                        <select [(ngModel)]="paymentBankName" class="form-control">
+                            <option value="">Seleccionar banco</option>
+                            <option *ngFor="let opt of bankOptions" [value]="opt.value">{{ opt.label }}</option>
+                        </select>
+                    </div>
+
+                    <!-- Campos para TRANSFERENCIA -->
+                    <div class="form-group" *ngIf="saleFormData?.paymentType === 'TRANSFERENCIA'">
+                        <label>Banco</label>
+                        <select [(ngModel)]="paymentBankName" class="form-control">
+                            <option value="">Seleccionar banco</option>
+                            <option *ngFor="let opt of bankOptions" [value]="opt.value">{{ opt.label }}</option>
+                        </select>
+                    </div>
+
+                    <!-- Campos para YAPE y PLIN -->
+                    <div class="form-group" *ngIf="saleFormData?.paymentType === 'YAPE'">
+                        <label>N° de Operación Yape</label>
+                        <input type="text" class="form-control" [(ngModel)]="paymentReference"
+                            placeholder="Ingrese el código de operación Yape">
+                        <small style="color: var(--text-muted);">Banco: BCP (automático)</small>
+                    </div>
+
+                    <div class="form-group" *ngIf="saleFormData?.paymentType === 'PLIN'">
+                        <label>N° de Operación Plin</label>
+                        <input type="text" class="form-control" [(ngModel)]="paymentReference"
+                            placeholder="Ingrese el código de operación Plin">
+                        <small style="color: var(--text-muted);">Banco: BBVA (automático)</small>
+                    </div>
+
+                    <!-- Campo de referencia para TARJETA y TRANSFERENCIA -->
                     <div class="form-group"
-                        *ngIf="saleFormData?.paymentType && saleFormData.paymentType !== 'EFECTIVO'">
-                        <label>N° de operación</label>
-                        <input type="text" class="form-control" [(ngModel)]="paymentOperationNumber"
-                            placeholder="Ingrese el N° de operación o código de transacción">
+                        *ngIf="saleFormData?.paymentType && saleFormData.paymentType !== 'EFECTIVO' && saleFormData.paymentType !== 'YAPE' && saleFormData.paymentType !== 'PLIN' && saleFormData.paymentType !== 'CREDITO'">
+                        <label>{{ saleFormData?.paymentType === 'TARJETA' ? 'N° de Voucher' : 'N° de Operación' }}</label>
+                        <input type="text" class="form-control" [(ngModel)]="paymentReference"
+                            [placeholder]="saleFormData?.paymentType === 'TARJETA' ? 'Ingrese el número de voucher' : 'Ingrese el número de operación'">
                     </div>
                 </div>
 
