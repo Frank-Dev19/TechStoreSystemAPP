@@ -70,7 +70,37 @@
             </div>
             <div class="open-close-status" *ngIf="currentCashRegister">
                 <p>Caja actual: {{ currentCashRegister.name }} - Estado: {{ currentCashRegister.status }}</p>
-                <p>Saldo actual: {{ currentCashRegister.currentBalance | number:'1.2-2' }}</p>
+
+                <!-- Resumen de Totales por Método de Pago -->
+                <div class="payment-totals-grid">
+                    <div class="payment-total-item cash">
+                        <span class="label">Efectivo:</span>
+                        <span class="value">{{ currentCashRegister.currentBalance | number:'1.2-2' }}</span>
+                    </div>
+                    <div class="payment-total-item card">
+                        <span class="label">Tarjetas:</span>
+                        <span class="value">{{ currentCashRegister.totalCard || 0 | number:'1.2-2' }}</span>
+                    </div>
+                    <div class="payment-total-item transfer">
+                        <span class="label">Transferencias:</span>
+                        <span class="value">{{ currentCashRegister.totalTransfer || 0 | number:'1.2-2' }}</span>
+                    </div>
+                    <div class="payment-total-item yape">
+                        <span class="label">Yape:</span>
+                        <span class="value">{{ currentCashRegister.totalYape || 0 | number:'1.2-2' }}</span>
+                    </div>
+                    <div class="payment-total-item plin">
+                        <span class="label">Plin:</span>
+                        <span class="value">{{ currentCashRegister.totalPlin || 0 | number:'1.2-2' }}</span>
+                    </div>
+                    <div class="payment-total-item total">
+                        <span class="label">TOTAL:</span>
+                        <span class="value">{{ (currentCashRegister.currentBalance + (currentCashRegister.totalCard ||
+                            0) + (currentCashRegister.totalTransfer || 0) + (currentCashRegister.totalYape || 0) +
+                            (currentCashRegister.totalPlin || 0)) | number:'1.2-2' }}</span>
+                    </div>
+                </div>
+
                 <button class="btn-danger btn-sm" (click)="closeCashRegister()">Cerrar Caja</button>
             </div>
             <div class="registers-section" *ngIf="registersList?.length">
@@ -82,7 +112,11 @@
                             <th>Nombre</th>
                             <th>Estado</th>
                             <th>Apertura</th>
-                            <th>Saldo Actual</th>
+                            <th>Efectivo</th>
+                            <th>Tarjeta</th>
+                            <th>Transfer</th>
+                            <th>Yape</th>
+                            <th>Plin</th>
                             <th>Abierta desde</th>
                             <th>Acciones</th>
                         </tr>
@@ -93,7 +127,11 @@
                             <td>{{ r.name }}</td>
                             <td>{{ r.status }}</td>
                             <td>{{ r.openingBalance | number:'1.2-2' }}</td>
-                            <td>{{ r.currentBalance | number:'1.2-2' }}</td>
+                            <td><strong>{{ r.currentBalance | number:'1.2-2' }}</strong></td>
+                            <td>{{ r.totalCard || 0 | number:'1.2-2' }}</td>
+                            <td>{{ r.totalTransfer || 0 | number:'1.2-2' }}</td>
+                            <td>{{ r.totalYape || 0 | number:'1.2-2' }}</td>
+                            <td>{{ r.totalPlin || 0 | number:'1.2-2' }}</td>
                             <td>{{ r.openedAt ? (r.openedAt | date:'short') : '' }}</td>
                             <td>
                                 <button class="btn-primary btn-sm" (click)="openCajaFromRow(r)"
@@ -472,7 +510,7 @@
                     </div>
                 </div>
 
-<!-- Forma de Pago -->
+                <!-- Forma de Pago -->
                 <div class="form-section">
                     <h3 class="section-title"><i class="fas fa-credit-card"></i> Pago</h3>
 
@@ -484,7 +522,7 @@
                             <option value="TRANSFERENCIA">Transferencia</option>
                             <option value="YAPE">Yape</option>
                             <option value="PLIN">Plin</option>
-                            <option value="CREDITO">Crédito</option>
+                            <!-- <option value="CREDITO">Crédito</option> -->
                         </select>
                     </div>
 
@@ -532,7 +570,8 @@
                     <!-- Campo de referencia para TARJETA y TRANSFERENCIA -->
                     <div class="form-group"
                         *ngIf="saleFormData?.paymentType && saleFormData.paymentType !== 'EFECTIVO' && saleFormData.paymentType !== 'YAPE' && saleFormData.paymentType !== 'PLIN' && saleFormData.paymentType !== 'CREDITO'">
-                        <label>{{ saleFormData?.paymentType === 'TARJETA' ? 'N° de Voucher' : 'N° de Operación' }}</label>
+                        <label>{{ saleFormData?.paymentType === 'TARJETA' ? 'N° de Voucher' : 'N° de Operación'
+                            }}</label>
                         <input type="text" class="form-control" [(ngModel)]="paymentReference"
                             [placeholder]="saleFormData?.paymentType === 'TARJETA' ? 'Ingrese el número de voucher' : 'Ingrese el número de operación'">
                     </div>
@@ -667,7 +706,7 @@
         </div>
     </div>
 
-<!-- DOCUMENT SERIES TAB -->
+    <!-- DOCUMENT SERIES TAB -->
     <div *ngIf="activeTab === 'document-series'" class="document-series-tab-content">
         <!-- FILTERS -->
         <div class="filters-card">
@@ -721,7 +760,7 @@
             </div>
         </div>
 
-<!-- CONTENT GRID - Main Layout -->
+        <!-- CONTENT GRID - Main Layout -->
         <div class="document-series-content-grid">
             <!-- Lista de Series - Principal -->
             <div class="main-content">
@@ -743,7 +782,8 @@
                                 <td><strong>{{ series.code }}</strong></td>
                                 <td>{{ series.name }}</td>
                                 <td>
-                                    <span class="document-type-badge" [class]="'type-' + series.documentType.toLowerCase()">
+                                    <span class="document-type-badge"
+                                        [class]="'type-' + series.documentType.toLowerCase()">
                                         {{ getDocumentTypeLabel(series.documentType) }}
                                     </span>
                                 </td>
@@ -765,7 +805,8 @@
                                             title="{{ series.isActive ? 'Desactivar' : 'Activar' }}">
                                             <i class="fas" [class]="series.isActive ? 'fa-pause' : 'fa-play'"></i>
                                         </button>
-                                        <button class="btn-icon info" (click)="getNextNumberForDocumentType(series.documentType)"
+                                        <button class="btn-icon info"
+                                            (click)="getNextNumberForDocumentType(series.documentType)"
                                             title="Ver siguiente número">
                                             <i class="fas fa-eye"></i>
                                         </button>

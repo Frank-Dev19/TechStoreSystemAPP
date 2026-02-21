@@ -13,6 +13,12 @@ export interface CashRegister {
   currentBalance: number
   expectedBalance: number
 
+  totalCash: number
+  totalCard: number
+  totalTransfer: number
+  totalYape: number
+  totalPlin: number
+
   status: CashRegisterStatus
 
   openedBy?: string | null

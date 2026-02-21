@@ -1979,8 +1979,86 @@
         display: block;
     }
 
-    p {
+p {
         margin: 0;
         font-size: 16px;
+    }
+}
+
+// ============================================
+// PAYMENT TOTALS GRID - Cash Register
+// ============================================
+
+.payment-totals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(52, 152, 219, 0.05), rgba(46, 204, 113, 0.05));
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+.payment-total-item {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    
+    .label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+    }
+    
+    .value {
+        font-size: 18px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+    
+    &.cash {
+        border-left: 4px solid #27ae60;
+        .value { color: #27ae60; }
+    }
+    
+    &.card {
+        border-left: 4px solid #9b59b6;
+        .value { color: #9b59b6; }
+    }
+    
+    &.transfer {
+        border-left: 4px solid #3498db;
+        .value { color: #3498db; }
+    }
+    
+    &.yape {
+        border-left: 4px solid #e67e22;
+        .value { color: #e67e22; }
+    }
+    
+    &.plin {
+        border-left: 4px solid #e74c3c;
+        .value { color: #e74c3c; }
+    }
+    
+    &.total {
+        border-left: 4px solid var(--primary);
+        background: linear-gradient(135deg, rgba(52, 152, 219, 0.1), rgba(46, 204, 113, 0.1));
+        
+        .label {
+            color: var(--primary);
+        }
+        
+        .value {
+            color: var(--primary);
+            font-size: 22px;
+        }
     }
 }
