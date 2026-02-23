@@ -97,6 +97,13 @@ export interface SaleLine {
   quantity: number
   unitPrice: number
   lineTotal: number
+  // Información de lote y seriales
+  hasLot?: boolean
+  hasSerial?: boolean
+  lotId?: number | null
+  lotCode?: string
+  expirationDate?: string
+  serials?: Array<{ serialId: number; serialCode: string }>
 }
 
 export interface Sale {
@@ -295,6 +302,12 @@ export class Ventas implements OnInit {
       options: any[]; // Lista de precios disponibles
       applied: any;    // Precio actualmente aplicado
       discounts: any[]; // Descuentos activos
+      stockByLot?: Array<{  // 👈 AÑADE ESTO
+        lotId: number;
+        lotCode: string;
+        quantity: number;
+        expirationDate?: string;
+      }>;
     }
   } = {}
 
@@ -336,6 +349,9 @@ export class Ventas implements OnInit {
   customerSearchText = ''
   foundCustomer: BusinessPartner | null = null
   selectedPaymentMethods: PaymentType[] = []
+
+  // Control de líneas expandidas para mostrar lote/seriales
+  expandedLines: Set<number> = new Set()
 
   // PAYMENT ADDITIONAL FIELDS
   paymentReference = ''           // Para Yape, Plin, Transferencia, Tarjeta
@@ -809,6 +825,19 @@ export class Ventas implements OnInit {
     // Convertir unitPrice a número (viene como string del backend)
     const unitPrice = Number(this.currentSaleItem.unitPrice) || 0;
     const lineTotal = (this.currentSaleItem.quantity || 0) * unitPrice;
+
+    // Obtener información del producto
+    const product = this.products.find(p => p.id === this.currentSaleItem.productId)
+    if (!product) {
+      this.showToast('error', 'Producto inválido')
+      return
+    }
+
+    // Verificar si el producto tiene lote o seriales
+    const productInfo = this.productPriceStockMap[this.currentSaleItem.productId!];
+    const hasLot = productInfo?.stockByLot && productInfo.stockByLot.length > 0;
+    const hasSerial = product.isSerialized || false;
+
     const newLine: SaleLine = {
       productId: this.currentSaleItem.productId as number,
       productSku: this.currentSaleItem.productSku || '',
@@ -816,12 +845,12 @@ export class Ventas implements OnInit {
       quantity: this.currentSaleItem.quantity as number,
       unitPrice: unitPrice,
       lineTotal: lineTotal,
-    }
-
-    const product = this.products.find(p => p.id === this.currentSaleItem.productId)
-    if (!product) {
-      this.showToast('error', 'Producto inválido')
-      return
+      hasLot: hasLot,
+      hasSerial: hasSerial,
+      lotId: null,
+      lotCode: undefined,
+      expirationDate: undefined,
+      serials: []
     }
 
     // Usar stock del cache para validación actualizada
@@ -854,6 +883,20 @@ export class Ventas implements OnInit {
     this.saleFormData.lines.splice(index, 1)
     this.calculateSaleTotals()
     this.showToast('success', 'Producto eliminado')
+  }
+
+  // Alternar visibilidad de detalles de lote/seriales en línea de venta
+  toggleLineDetails(index: number): void {
+    if (this.expandedLines.has(index)) {
+      this.expandedLines.delete(index);
+    } else {
+      this.expandedLines.add(index);
+    }
+  }
+
+  // Verificar si una línea está expandida
+  isLineExpanded(index: number): boolean {
+    return this.expandedLines.has(index);
   }
 
   private calculateSaleTotals(): void {
@@ -1558,5 +1601,10 @@ export class Ventas implements OnInit {
 
   countSeriesByType(type: string): number {
     return this.documentSeries.filter(s => s.documentType === type).length;
+  }
+
+  // Método para formatear los seriales
+  formatSerials(serials: Array<{ serialCode: string }>): string {
+    return serials?.map(s => s.serialCode).join(', ') || '';
   }
 }

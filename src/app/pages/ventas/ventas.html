@@ -421,21 +421,71 @@
                                     <th>Cantidad</th>
                                     <th>Precio</th>
                                     <th>Total</th>
-                                    <th></th>
+                                    <th width="80">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr *ngFor="let line of saleFormData.lines; let i = index">
-                                    <td>{{ line.productName }}</td>
-                                    <td>{{ line.quantity }}</td>
-                                    <td>S/ {{ (line.unitPrice || 0).toFixed(2) }}</td>
-                                    <td>S/ {{ (line.lineTotal || 0).toFixed(2) }}</td>
-                                    <td>
-                                        <button class="btn-icon danger" (click)="onRemoveSaleItem(i)">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
+                                <ng-container *ngFor="let line of saleFormData.lines; let i = index">
+                                    <tr [class.expanded-row]="isLineExpanded(i)">
+                                        <td>
+                                            <div class="product-cell">
+                                                <span>{{ line.productName }}</span>
+                                                <!-- Iconos de lote/serial -->
+                                                <span class="inventory-badges" *ngIf="line.hasLot || line.hasSerial">
+                                                    <span class="badge lot" *ngIf="line.hasLot"
+                                                        title="Producto con lote">
+                                                        <i class="fas fa-box"></i>
+                                                    </span>
+                                                    <span class="badge serial" *ngIf="line.hasSerial"
+                                                        title="Producto con serial">
+                                                        <i class="fas fa-barcode"></i>
+                                                    </span>
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td>{{ line.quantity }}</td>
+                                        <td>S/ {{ (line.unitPrice || 0).toFixed(2) }}</td>
+                                        <td>S/ {{ (line.lineTotal || 0).toFixed(2) }}</td>
+                                        <td>
+                                            <div class="action-buttons-row">
+                                                <button class="btn-icon" *ngIf="line.hasLot || line.hasSerial"
+                                                    (click)="toggleLineDetails(i)"
+                                                    [title]="isLineExpanded(i) ? 'Ocultar detalles' : 'Ver lote/serial'">
+                                                    <i class="fas" [class.fa-chevron-down]="!isLineExpanded(i)"
+                                                        [class.fa-chevron-up]="isLineExpanded(i)"></i>
+                                                </button>
+                                                <button class="btn-icon danger" (click)="onRemoveSaleItem(i)">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <!-- Fila expandida para mostrar lote/serial -->
+                                    <tr *ngIf="isLineExpanded(i) && (line.hasLot || line.hasSerial)"
+                                        class="details-row">
+                                        <td colspan="5">
+                                            <div class="line-details">
+                                                <div class="detail-info" *ngIf="line.hasLot">
+                                                    <strong><i class="fas fa-box"></i> Lote:</strong>
+                                                    <span>{{ line.lotCode || 'Por asignar' }}</span>
+                                                    <span *ngIf="line.expirationDate" class="expiry-date">
+                                                        (Vence: {{ line.expirationDate }})
+                                                    </span>
+                                                </div>
+                                                <div class="detail-info" *ngIf="line.hasSerial">
+                                                    <strong><i class="fas fa-barcode"></i> Seriales:</strong>
+                                                    <span *ngIf="line.serials && line.serials.length > 0">
+                                                        {{ formatSerials(line.serials) }}
+                                                    </span>
+                                                    <span *ngIf="!line.serials || line.serials.length === 0"
+                                                        class="pending">
+                                                        Por asignar automáticamente en la venta
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </ng-container>
                             </tbody>
                         </table>
                     </div>

@@ -1868,6 +1868,154 @@
 
     .series-table-container {
         overflow-x: auto;
+    }
+
+    .quick-actions-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+}
+
+/* Empty message styling for series table */
+.document-series-tab-content .empty-message {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+
+    i {
+        font-size: 48px;
+        margin-bottom: 16px;
+        display: block;
+        opacity: 0.5;
+    }
+
+    p {
+        margin: 0;
+        font-size: 14px;
+    }
+}
+
+// ============================================
+// INVENTORY BADGES - Lote y Serial
+// ============================================
+
+.product-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.inventory-badges {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: 4px;
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        font-size: 10px;
+
+        &.lot {
+            background: rgba(243, 156, 18, 0.15);
+            color: #f39c12;
+        }
+
+        &.serial {
+            background: rgba(52, 152, 219, 0.15);
+            color: #3498db;
+        }
+    }
+}
+
+.action-buttons-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.expanded-row {
+    background: rgba(52, 152, 219, 0.03) !important;
+}
+
+.details-row {
+    background: rgba(52, 152, 219, 0.05);
+
+    td {
+        padding: 12px 16px !important;
+        border-top: none;
+    }
+}
+
+.line-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .detail-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+
+        strong {
+            color: var(--text);
+            min-width: 100px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+
+            i {
+                color: var(--primary);
+            }
+        }
+
+        .expiry-date {
+            color: #e74c3c;
+            font-size: 12px;
+        }
+
+        .pending {
+            color: var(--text-muted);
+            font-style: italic;
+            font-size: 12px;
+        }
+    }
+}
+
+.sidebar-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.quick-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-info {
+        justify-content: center;
+    }
+}
+
+
+@media (max-width: 768px) {
+    .document-series-tab-content {
+        padding: 12px;
+    }
+
+    .series-table-container {
+        overflow-x: auto;
         border-radius: 12px;
 
         .data-table {
@@ -1979,7 +2127,7 @@
         display: block;
     }
 
-p {
+    p {
         margin: 0;
         font-size: 16px;
     }
@@ -2007,7 +2155,7 @@ p {
     border-radius: 8px;
     background: var(--surface);
     border: 1px solid var(--border);
-    
+
     .label {
         font-size: 12px;
         font-weight: 600;
@@ -2016,46 +2164,61 @@ p {
         letter-spacing: 0.5px;
         margin-bottom: 4px;
     }
-    
+
     .value {
         font-size: 18px;
         font-weight: 700;
         font-variant-numeric: tabular-nums;
     }
-    
+
     &.cash {
         border-left: 4px solid #27ae60;
-        .value { color: #27ae60; }
+
+        .value {
+            color: #27ae60;
+        }
     }
-    
+
     &.card {
         border-left: 4px solid #9b59b6;
-        .value { color: #9b59b6; }
+
+        .value {
+            color: #9b59b6;
+        }
     }
-    
+
     &.transfer {
         border-left: 4px solid #3498db;
-        .value { color: #3498db; }
+
+        .value {
+            color: #3498db;
+        }
     }
-    
+
     &.yape {
         border-left: 4px solid #e67e22;
-        .value { color: #e67e22; }
+
+        .value {
+            color: #e67e22;
+        }
     }
-    
+
     &.plin {
         border-left: 4px solid #e74c3c;
-        .value { color: #e74c3c; }
+
+        .value {
+            color: #e74c3c;
+        }
     }
-    
+
     &.total {
         border-left: 4px solid var(--primary);
         background: linear-gradient(135deg, rgba(52, 152, 219, 0.1), rgba(46, 204, 113, 0.1));
-        
+
         .label {
             color: var(--primary);
         }
-        
+
         .value {
             color: var(--primary);
             font-size: 22px;
