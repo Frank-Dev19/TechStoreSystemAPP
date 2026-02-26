@@ -250,6 +250,28 @@
     background: rgba(231, 76, 60, 0.18);
 }
 
+.btn-icon.secondary {
+    border-color: var(--text-muted);
+    color: var(--text-muted);
+    background: rgba(113, 128, 150, 0.08);
+}
+
+.btn-icon.secondary:hover:not(:disabled) {
+    border-color: var(--text-muted);
+    color: var(--text-muted);
+    background: rgba(113, 128, 150, 0.15);
+}
+
+.btn-icon.success {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(39, 174, 96, 0.08);
+}
+
+.btn-icon.success:hover:not(:disabled) {
+    background: rgba(39, 174, 96, 0.18);
+}
+
 .btn-block {
     width: 100%;
     margin-top: 10px;
@@ -373,6 +395,38 @@
         .btn-primary,
         .btn-secondary {
             flex: 1;
+        }
+    }
+
+    .cash-register-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        background: rgba(39, 174, 96, 0.1);
+        border-radius: 8px;
+        border: 1px solid rgba(39, 174, 96, 0.3);
+
+        .register-status {
+            .status-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 14px;
+                border-radius: 20px;
+                font-size: 13px;
+                font-weight: 600;
+
+                &.success {
+                    background: linear-gradient(135deg, var(--success), #219a52);
+                    color: white;
+                }
+            }
+        }
+
+        .btn-danger {
+            padding: 8px 16px;
+            font-size: 13px;
         }
     }
 }
@@ -658,6 +712,24 @@
             color: var(--info);
         }
     }
+
+    &.primary {
+        border-left-color: #8b5cf6;
+
+        .metric-icon {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.1));
+            color: #8b5cf6;
+        }
+    }
+
+    &.secondary {
+        border-left-color: #ec4899;
+
+        .metric-icon {
+            background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(236, 72, 153, 0.1));
+            color: #ec4899;
+        }
+    }
 }
 
 // ============================================
@@ -670,6 +742,29 @@
     padding: 18px;
     margin-bottom: 18px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+    .section-header-inline {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid var(--border);
+
+        h4 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+
+            i {
+                color: var(--primary);
+            }
+        }
+    }
 
     .table-loading {
         text-align: center;
@@ -1958,35 +2053,200 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-
+    
     .detail-info {
         display: flex;
         align-items: center;
         gap: 8px;
         font-size: 13px;
-
+        
         strong {
             color: var(--text);
             min-width: 100px;
             display: flex;
             align-items: center;
             gap: 6px;
-
+            
             i {
                 color: var(--primary);
             }
         }
-
+        
         .expiry-date {
             color: #e74c3c;
             font-size: 12px;
         }
-
+        
         .pending {
             color: var(--text-muted);
             font-style: italic;
             font-size: 12px;
         }
+    }
+}
+
+// ============================================
+// CASHBOX TAB - Nuevo Diseño
+// ============================================
+
+.cashbox-tab-content {
+    padding: 20px;
+}
+
+.cashbox-content-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+    
+    @media (max-width: 1200px) {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+}
+
+.cashbox-main-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.cashbox-sidebar {
+    min-width: 0;
+}
+
+.form-card {
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    
+    .card-header {
+        background: linear-gradient(135deg, var(--primary), var(--primary-600));
+        color: white;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        
+        h4 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        &.success {
+            background: linear-gradient(135deg, var(--success), #219a52);
+        }
+        
+        i {
+            font-size: 18px;
+        }
+    }
+    
+    .card-body {
+        padding: 20px;
+    }
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+    
+    @media (max-width: 600px) {
+        grid-template-columns: 1fr;
+    }
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    
+    &.danger {
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        justify-content: center;
+    }
+}
+
+.table-card {
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    
+    .card-header {
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 20px;
+        
+        h4 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            
+            i {
+                color: var(--primary);
+            }
+        }
+    }
+    
+    .card-body {
+        padding: 0;
+    }
+}
+
+.table-container {
+    overflow-x: auto;
+    
+    .data-table {
+        min-width: 900px;
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            
+            &.active {
+                background: rgba(39, 174, 96, 0.15);
+                color: var(--success);
+            }
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 4px;
+            justify-content: center;
+        }
+    }
+}
+
+.empty-message {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    
+    i {
+        font-size: 48px;
+        margin-bottom: 12px;
+        display: block;
+        opacity: 0.3;
+    }
+    
+    p {
+        margin: 0;
     }
 }
 

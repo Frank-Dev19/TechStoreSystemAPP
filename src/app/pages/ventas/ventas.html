@@ -52,116 +52,159 @@
 
     <!-- CAJA TAB - gestion de caja integrada en el mismo componente -->
     <div *ngIf="activeTab === 'cashbox'" class="cashbox-tab-content">
-        <div class="box-operations">
-            <h3><i class="fas fa-wallet"></i> Administración de Caja</h3>
-            <div class="grid">
+
+        <!-- FILTERS CARD - Apertura de Caja -->
+        <div class="filters-card">
+            <div class="filters-header">
+                <h3><i class="fas fa-wallet"></i> Administración de Caja</h3>
+            </div>
+
+            <div class="filters-grid" *ngIf="!currentCashRegister">
                 <div class="form-group">
-                    <label>Código de Caja</label>
-                    <input type="text" [(ngModel)]="cashBoxCode" class="form-control" placeholder="Código de caja" />
+                    <label><i class="fas fa-barcode"></i> Código de Caja</label>
+                    <input type="text" [(ngModel)]="cashBoxCode" class="form-control" placeholder="Ej: CAJA-01" />
                 </div>
                 <div class="form-group">
-                    <label>Saldo de Apertura (opcional)</label>
-                    <input type="number" [(ngModel)]="openingBalanceTemp" class="form-control"
-                        placeholder="Saldo de apertura" step="0.01" />
-                </div>
-                <div class="form-group">
-                    <button class="btn-primary" (click)="openCashRegister()">Abrir Caja</button>
+                    <label><i class="fas fa-money-bill-wave"></i> Saldo de Apertura</label>
+                    <input type="number" [(ngModel)]="openingBalanceTemp" class="form-control" placeholder="0.00"
+                        step="0.01" />
                 </div>
             </div>
-            <div class="open-close-status" *ngIf="currentCashRegister">
-                <p>Caja actual: {{ currentCashRegister.name }} - Estado: {{ currentCashRegister.status }}</p>
 
-                <!-- Resumen de Totales por Método de Pago -->
-                <div class="payment-totals-grid">
-                    <div class="payment-total-item cash">
-                        <span class="label">Efectivo:</span>
-                        <span class="value">{{ currentCashRegister.currentBalance | number:'1.2-2' }}</span>
-                    </div>
-                    <div class="payment-total-item card">
-                        <span class="label">Tarjetas:</span>
-                        <span class="value">{{ currentCashRegister.totalCard || 0 | number:'1.2-2' }}</span>
-                    </div>
-                    <div class="payment-total-item transfer">
-                        <span class="label">Transferencias:</span>
-                        <span class="value">{{ currentCashRegister.totalTransfer || 0 | number:'1.2-2' }}</span>
-                    </div>
-                    <div class="payment-total-item yape">
-                        <span class="label">Yape:</span>
-                        <span class="value">{{ currentCashRegister.totalYape || 0 | number:'1.2-2' }}</span>
-                    </div>
-                    <div class="payment-total-item plin">
-                        <span class="label">Plin:</span>
-                        <span class="value">{{ currentCashRegister.totalPlin || 0 | number:'1.2-2' }}</span>
-                    </div>
-                    <div class="payment-total-item total">
-                        <span class="label">TOTAL:</span>
-                        <span class="value">{{ (currentCashRegister.currentBalance + (currentCashRegister.totalCard ||
-                            0) + (currentCashRegister.totalTransfer || 0) + (currentCashRegister.totalYape || 0) +
-                            (currentCashRegister.totalPlin || 0)) | number:'1.2-2' }}</span>
-                    </div>
-                </div>
-
-                <button class="btn-danger btn-sm" (click)="closeCashRegister()">Cerrar Caja</button>
+            <div class="search-section" *ngIf="!currentCashRegister">
+                <button class="btn-primary" (click)="openCashRegister()">
+                    <i class="fas fa-lock-open"></i>
+                    Abrir Caja
+                </button>
             </div>
-            <div class="registers-section" *ngIf="registersList?.length">
-                <h4>Lista de Cajas</h4>
-                <table class="data-table" style="width:100%">
+
+            <!-- Caja Abierta - Mostrar info -->
+            <div *ngIf="currentCashRegister" class="cash-register-info">
+                <div class="register-status">
+                    <span class="status-badge success">
+                        <i class="fas fa-lock-open"></i> Caja Abierta: {{ currentCashRegister.name }}
+                    </span>
+                </div>
+                <button class="btn-danger" (click)="closeCashRegister()">
+                    <i class="fas fa-lock"></i>
+                    Cerrar Caja
+                </button>
+            </div>
+        </div>
+
+        <!-- METRICS GRID - Totales por Método de Pago -->
+        <div class="metrics-grid" *ngIf="currentCashRegister">
+            <div class="metric-card total">
+                <div class="metric-icon"><i class="fas fa-coins"></i></div>
+                <div class="metric-content">
+                    <label>Total General</label>
+                    <span class="metric-value">S/ {{ (currentCashRegister.currentBalance +
+                        (currentCashRegister.totalCard || 0) + (currentCashRegister.totalTransfer || 0) +
+                        (currentCashRegister.totalYape || 0) + (currentCashRegister.totalPlin || 0)) | number:'1.2-2'
+                        }}</span>
+                </div>
+            </div>
+            <div class="metric-card success">
+                <div class="metric-icon"><i class="fas fa-money-bill"></i></div>
+                <div class="metric-content">
+                    <label>Efectivo</label>
+                    <span class="metric-value">S/ {{ currentCashRegister.currentBalance | number:'1.2-2' }}</span>
+                </div>
+            </div>
+            <div class="metric-card info">
+                <div class="metric-icon"><i class="fas fa-credit-card"></i></div>
+                <div class="metric-content">
+                    <label>Tarjetas</label>
+                    <span class="metric-value">S/ {{ currentCashRegister.totalCard || 0 | number:'1.2-2' }}</span>
+                </div>
+            </div>
+            <div class="metric-card warning">
+                <div class="metric-icon"><i class="fas fa-university"></i></div>
+                <div class="metric-content">
+                    <label>Transferencias</label>
+                    <span class="metric-value">S/ {{ currentCashRegister.totalTransfer || 0 | number:'1.2-2' }}</span>
+                </div>
+            </div>
+            <div class="metric-card primary">
+                <div class="metric-icon"><i class="fas fa-mobile-alt"></i></div>
+                <div class="metric-content">
+                    <label>Yape</label>
+                    <span class="metric-value">S/ {{ currentCashRegister.totalYape || 0 | number:'1.2-2' }}</span>
+                </div>
+            </div>
+            <div class="metric-card secondary">
+                <div class="metric-icon"><i class="fas fa-comments"></i></div>
+                <div class="metric-content">
+                    <label>Plin</label>
+                    <span class="metric-value">S/ {{ currentCashRegister.totalPlin || 0 | number:'1.2-2' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE SECTION - Lista de Cajas -->
+        <div class="table-section">
+            <div class="section-header-inline">
+                <h4><i class="fas fa-list"></i> Lista de Cajas</h4>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
                     <thead>
                         <tr>
                             <th>Código</th>
                             <th>Nombre</th>
                             <th>Estado</th>
-                            <th>Apertura</th>
+                            <th>Saldo Apertura</th>
                             <th>Efectivo</th>
-                            <th>Tarjeta</th>
+                            <th>Tarjetas</th>
                             <th>Transfer</th>
                             <th>Yape</th>
                             <th>Plin</th>
-                            <th>Abierta desde</th>
+                            <th>Abierta Desde</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr *ngFor="let r of registersList" [ngClass]="{ 'open-box': r.status === 'OPEN' }">
-                            <td>{{ r.code }}</td>
+                        <tr *ngFor="let r of registersList" [class.open-box]="r.status === 'OPEN'">
+                            <td><strong>{{ r.code }}</strong></td>
                             <td>{{ r.name }}</td>
-                            <td>{{ r.status }}</td>
-                            <td>{{ r.openingBalance | number:'1.2-2' }}</td>
-                            <td><strong>{{ r.currentBalance | number:'1.2-2' }}</strong></td>
-                            <td>{{ r.totalCard || 0 | number:'1.2-2' }}</td>
-                            <td>{{ r.totalTransfer || 0 | number:'1.2-2' }}</td>
-                            <td>{{ r.totalYape || 0 | number:'1.2-2' }}</td>
-                            <td>{{ r.totalPlin || 0 | number:'1.2-2' }}</td>
-                            <td>{{ r.openedAt ? (r.openedAt | date:'short') : '' }}</td>
                             <td>
-                                <button class="btn-primary btn-sm" (click)="openCajaFromRow(r)"
-                                    [disabled]="r.status==='OPEN'">Abrir</button>
-                                <button class="btn-danger btn-sm" (click)="closeCajaFromRow(r)"
-                                    [disabled]="r.status!=='OPEN'">Cerrar</button>
+                                <span class="status-badge" [class.success]="r.status === 'OPEN'"
+                                    [class.secondary]="r.status !== 'OPEN'">
+                                    {{ r.status }}
+                                </span>
+                            </td>
+                            <td>S/ {{ r.openingBalance | number:'1.2-2' }}</td>
+                            <td><strong>S/ {{ r.currentBalance | number:'1.2-2' }}</strong></td>
+                            <td>S/ {{ r.totalCard || 0 | number:'1.2-2' }}</td>
+                            <td>S/ {{ r.totalTransfer || 0 | number:'1.2-2' }}</td>
+                            <td>S/ {{ r.totalYape || 0 | number:'1.2-2' }}</td>
+                            <td>S/ {{ r.totalPlin || 0 | number:'1.2-2' }}</td>
+                            <td>{{ r.openedAt ? (r.openedAt | date:'dd/MM/yyyy HH:mm') : '-' }}</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-icon" [class.success]="r.status === 'OPEN'"
+                                        [class.secondary]="r.status !== 'OPEN'" (click)="openCajaFromRow(r)"
+                                        [disabled]="r.status === 'OPEN'" title="Abrir">
+                                        <i class="fas fa-lock-open"></i>
+                                    </button>
+                                    <button class="btn-icon danger" (click)="closeCajaFromRow(r)"
+                                        [disabled]="r.status !== 'OPEN'" title="Cerrar">
+                                        <i class="fas fa-lock"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr *ngIf="!registersList || registersList.length === 0">
+                            <td colspan="11" class="empty-message">
+                                <i class="fas fa-inbox"></i>
+                                <p>No hay cajas registradas</p>
                             </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
-
         </div>
-    </div>
 
-    <!-- No Open Cash Modal -->
-    <div class="modal-overlay" *ngIf="showNoOpenCashModal" (click)="showNoOpenCashModal=false">
-        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
-            <div class="modal-header">
-                <h3>Caja no abierta</h3>
-                <button class="close-button" (click)="showNoOpenCashModal=false"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="modal-body">
-                <p>Para registrar una venta, primero debe abrir una caja. Por favor, abra la caja en la pestaña Caja.
-                </p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-primary" (click)="showNoOpenCashModal=false">OK</button>
-            </div>
-        </div>
     </div>
 
     <!-- LISTADO DE VENTAS TAB -->
@@ -448,12 +491,12 @@
                                         <td>S/ {{ (line.lineTotal || 0).toFixed(2) }}</td>
                                         <td>
                                             <div class="action-buttons-row">
-                                                <button class="btn-icon" *ngIf="line.hasLot || line.hasSerial"
+                                                <!-- <button class="btn-icon" *ngIf="line.hasLot || line.hasSerial"
                                                     (click)="toggleLineDetails(i)"
                                                     [title]="isLineExpanded(i) ? 'Ocultar detalles' : 'Ver lote/serial'">
                                                     <i class="fas" [class.fa-chevron-down]="!isLineExpanded(i)"
                                                         [class.fa-chevron-up]="isLineExpanded(i)"></i>
-                                                </button>
+                                                </button> -->
                                                 <button class="btn-icon danger" (click)="onRemoveSaleItem(i)">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
@@ -461,7 +504,7 @@
                                         </td>
                                     </tr>
                                     <!-- Fila expandida para mostrar lote/serial -->
-                                    <tr *ngIf="isLineExpanded(i) && (line.hasLot || line.hasSerial)"
+                                    <!-- <tr *ngIf="isLineExpanded(i) && (line.hasLot || line.hasSerial)"
                                         class="details-row">
                                         <td colspan="5">
                                             <div class="line-details">
@@ -484,7 +527,7 @@
                                                 </div>
                                             </div>
                                         </td>
-                                    </tr>
+                                    </tr> -->
                                 </ng-container>
                             </tbody>
                         </table>

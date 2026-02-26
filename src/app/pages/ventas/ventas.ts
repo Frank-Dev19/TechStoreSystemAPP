@@ -471,12 +471,16 @@ export class Ventas implements OnInit {
       // Cargar todos los productos
       const products = await lastValueFrom(this.pricingProductsApi.list());
 
-      // Cargar todo el stock
+// Cargar todo el stock
       const stockData = await lastValueFrom(this.stockService.list());
 
+      // Acumular stock de todos los lotes para cada producto
       const stockMap: { [productId: number]: number } = {};
       stockData.forEach(stock => {
-        stockMap[stock.product_id] = stock.qty_on_hand;
+        if (!stockMap[stock.product_id]) {
+          stockMap[stock.product_id] = 0;
+        }
+        stockMap[stock.product_id] += stock.qty_on_hand;
       });
 
       // Para cada producto, obtener su pricing completo (qty=1)
@@ -515,6 +519,7 @@ export class Ventas implements OnInit {
   private loadOpenRegister(): void {
     this.cashFlowApi.getOpenRegister(1).subscribe((r: any) => {
       this.currentOpenRegister = r
+      this.currentCashRegister = r
     })
   }
 
@@ -1220,12 +1225,12 @@ export class Ventas implements OnInit {
 
   // CAJA: abrir/cerrar usando backend (fase 2)
   openCashRegister(): void {
-    this.loadRegisters()
     const code = (this.cashBoxCode || 'CajaPrincipal').trim()
     const payload: any = { openingBalance: this.openingBalanceTemp ?? 0, observations: '' }
     this.cashFlowApi.openRegister(1, code, payload).subscribe({
       next: (reg) => {
         this.currentCashRegister = reg
+        this.loadRegisters()
         this.showToast('success', 'Caja abierta')
       },
       error: () => this.showToast('error', 'Error abriendo caja')
@@ -1233,11 +1238,12 @@ export class Ventas implements OnInit {
   }
 
   closeCashRegister(): void {
-    const code = (this.cashBoxCode || 'CajaPrincipal').trim();
+    const code = (this.currentCashRegister?.code || this.cashBoxCode || 'CajaPrincipal').trim();
     const payload: any = { actualCash: this.currentCashRegister?.currentBalance ?? 0, observations: '' };
     this.cashFlowApi.closeRegister(1, code, payload).subscribe({
       next: (res) => {
         this.currentCashRegister = null;
+        this.loadRegisters();
         this.showToast('success', 'Caja cerrada');
       },
       error: () => this.showToast('error', 'Error cerrando caja')
