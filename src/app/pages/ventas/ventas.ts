@@ -1555,7 +1555,12 @@ export class Ventas implements OnInit {
       },
       error: (err) => {
         console.error('Error cambiando estado de serie:', err);
-        this.showToast('error', 'Error cambiando estado de serie');
+        const errorMsg = err?.error?.message || err?.message || '';
+        if (errorMsg.includes('activa') || errorMsg.includes('active')) {
+          this.showToast('error', `Error: Ya hay una serie activa de ${this.getDocumentTypeLabel(series.documentType)}`);
+        } else {
+          this.showToast('error', 'Error cambiando estado de serie');
+        }
       },
     });
   }
@@ -1597,6 +1602,11 @@ export class Ventas implements OnInit {
       default:
         return documentType;
     }
+  }
+
+  formatDocumentNumber(num: number | string): string {
+    const numStr = typeof num === 'number' ? num.toString() : num;
+    return numStr.padStart(8, '0');
   }
 
 

@@ -10,10 +10,10 @@
                 </p>
             </div>
             <div class="header-actions">
-                <button class="btn-action" (click)="onNewSale()" title="Registrar nueva venta">
+                <!-- <button class="btn-action" (click)="onNewSale()" title="Registrar nueva venta">
                     <i class="fas fa-plus"></i>
                     Registrar Venta
-                </button>
+                </button> -->
                 <button class="btn-action" (click)="ngOnInit()" [disabled]="isLoading" title="Actualizar">
                     <i class="fas fa-sync-alt" [class.spinning]="isLoading"></i>
                 </button>
@@ -880,8 +880,8 @@
                                         {{ getDocumentTypeLabel(series.documentType) }}
                                     </span>
                                 </td>
-                                <td><strong>{{ series.currentNumber }}</strong></td>
-                                <td>{{ series.startingNumber }}</td>
+                                <td><strong>{{ formatDocumentNumber(series.currentNumber) }}</strong></td>
+                                <td>{{ formatDocumentNumber(series.startingNumber) }}</td>
                                 <td>
                                     <span class="status-badge" [class.active]="series.isActive"
                                         [class.inactive]="!series.isActive">
@@ -934,13 +934,6 @@
                                 <span class="metric-value">{{ documentSeries.length }}</span>
                             </div>
                         </div>
-                        <div class="metric-card success">
-                            <div class="metric-icon"><i class="fas fa-check-circle"></i></div>
-                            <div class="metric-content">
-                                <label>Series Activas</label>
-                                <span class="metric-value">{{ countActiveSeries() }}</span>
-                            </div>
-                        </div>
                         <div class="metric-card info">
                             <div class="metric-icon"><i class="fas fa-file-invoice"></i></div>
                             <div class="metric-content">
@@ -955,34 +948,54 @@
                                 <span class="metric-value">{{ countSeriesByType('FACTURA') }}</span>
                             </div>
                         </div>
-                    </div>
-                </div>
+                        <div class="metric-card success">
+                            <div class="metric-icon"><i class="fas fa-check-circle"></i></div>
+                            <div class="metric-content">
+                                <label>Series Activas</label>
+                                <span class="metric-value">{{ countActiveSeries() }}</span>
+                            </div>
+                        </div>
 
-                <!-- Quick Actions -->
-                <div class="quick-actions-card">
-                    <h4><i class="fas fa-bolt"></i> Acciones Rápidas</h4>
-                    <div class="quick-actions-grid">
-                        <button class="btn-primary" (click)="createNewDocumentSeries()">
-                            <i class="fas fa-plus"></i>
-                            Nueva Serie
-                        </button>
-                        <button class="btn-secondary" (click)="loadDocumentSeries()" [disabled]="isLoading">
-                            <i class="fas fa-sync-alt" [class.spinning]="isLoading"></i>
-                            Actualizar
-                        </button>
-                        <button class="btn-info" (click)="resetDocumentSeriesFilters()">
-                            <i class="fas fa-eraser"></i>
-                            Limpiar Filtros
-                        </button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- No Cash Register Open Modal -->
+    <div class="modal-overlay" *ngIf="showNoOpenCashModal" (click)="showNoOpenCashModal = false">
+        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+            <div class="modal-header warning">
+                <h3>
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Caja Cerrada
+                </h3>
+                <button class="close-button" (click)="showNoOpenCashModal = false">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="text-align: center; padding: 30px 20px;">
+                <i class="fas fa-cash-register"
+                    style="font-size: 48px; color: var(--warning); margin-bottom: 16px; display: block;"></i>
+                <p style="font-size: 15px; color: var(--text); margin: 0 0 8px 0;">
+                    Para realizar ventas necesitas tener una caja abierta.
+                </p>
+                <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
+                    Por favor, abre una caja primero desde la pestaña "Caja".
+                </p>
+            </div>
+            <div class="modal-footer" style="justify-content: center;">
+                <button class="btn-primary" (click)="showNoOpenCashModal = false; activeTab = 'cashbox'">
+                    <i class="fas fa-wallet"></i>
+                    Ir a Caja
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Document Series Form Modal -->
     <div class="modal-overlay" *ngIf="showDocumentSeriesForm" (click)="closeDocumentSeriesForm()">
-        <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-content modal-document-series" (click)="$event.stopPropagation()">
             <div class="modal-header">
                 <h3>
                     <i class="fas fa-hashtag"></i>
