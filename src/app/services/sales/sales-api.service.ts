@@ -77,9 +77,13 @@ export class SalesApiService {
         return this.base.patch<Sale>(`${this.baseUrl}/${id}/cancel`, payload);
     }
 
-    metrics(companyId: number, dateFrom?: string, dateTo?: string): Observable<SalesMetricsResponse> {
+    metrics(companyId: number, dateFrom?: string, dateTo?: string, status?: string, documentType?: string, paymentType?: string): Observable<SalesMetricsResponse> {
+        const params: any = { companyId, dateFrom, dateTo }
+        if (status) params.status = status
+        if (documentType) params.documentType = documentType
+        if (paymentType) params.paymentType = paymentType
         return this.base.get<SalesMetricsResponse>(this.metricsUrl, {
-            params: toHttpParams({ companyId, dateFrom, dateTo }),
+            params: toHttpParams(params),
         });
     }
 

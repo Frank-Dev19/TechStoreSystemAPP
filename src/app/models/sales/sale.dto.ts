@@ -51,6 +51,7 @@ export interface FilterSalesParams {
     status?: SaleStatus
     documentType?: DocumentType
     saleType?: SaleType
+    paymentType?: PaymentMethod
     dateFrom?: string
     dateTo?: string
     search?: string

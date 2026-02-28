@@ -15,6 +15,8 @@ import { PricingQueryApiService } from '../../services/pricing/pricing-query-api
 import { BestPriceResponse } from '../../models/pricing/pricing.models';
 import { DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../models/sales/document-series.model';
 import { DocumentType } from '../../models/sales/enums';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 // ============================================
 // INTERFACES & TYPES (siguiendo exactamente el prompt)
 // ============================================
@@ -108,19 +110,38 @@ export interface SaleLine {
 
 export interface Sale {
   id: number
-  saleDate: string
-  documentType: DocumentTypeCode
-  documentSeries: string
-  documentNumber: string
+  companyId: number
   customerId: number
-  customerName: string
-  customerDocumentNumber: string
-  paymentType: PaymentType
-  status: SaleStatus
+  customer: {
+    id: number
+    name: string
+    documentNumber: string
+  }
+  saleType: string
+  documentType: string
+  series: string
+  number: string
+  issueDate: string
+  dueDate?: string
+  baseSubtotal: number
   subtotal: number
-  igv: number
+  discountTotal: number
+  taxAmount: number
   total: number
-  lines: SaleLine[]
+  taxRate: number
+  status: string
+  observations?: string
+  createdBy?: string
+  confirmedBy?: string
+  cancelledBy?: string
+  cancelledReason?: string
+  cancelledAt?: string
+  createdAt: string
+  updatedAt: string
+  items: any[]
+  payments: any[]
+  lineDiscounts: any[]
+  comboItems: any[]
 }
 
 // export interface CreateSaleDto {
@@ -257,10 +278,18 @@ export interface Toast {
 interface SalesFilters {
   dateFrom: string
   dateTo: string
-  customerName: string
-  documentType: DocumentTypeCode | null
-  status: SaleStatus | null
+  customerId?: number
+  customerName?: string
+  documentType: string | null
+  status: string | null
+  paymentType: string | null
+  search: string
+  page: number
+  limit: number
 }
+
+// Date filter presets
+export type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'manual'
 
 // Phase 4: Mock data service removed. All data flows through backend APIs only.
 
@@ -272,6 +301,9 @@ interface SalesFilters {
   styleUrl: './ventas.scss'
 })
 export class Ventas implements OnInit {
+  // Expose Math to template
+  Math = Math;
+
   constructor(
     private salesApi: SalesApiService,
     private documentSeriesApi: DocumentSeriesApiService,
@@ -342,7 +374,7 @@ export class Ventas implements OnInit {
 
 
   //FORM DATA
-  saleFormData: Partial<Sale> | null = null
+  saleFormData: any = null
   creditNoteFormData: Partial<CreditNote> | null = null
   dispatchGuideFormData: Partial<ShippingGuide> | null = null
   currentSaleItem: Partial<SaleLine> = {}
@@ -375,13 +407,24 @@ export class Ventas implements OnInit {
   paymentOperationNumber = ''
 
   // FILTERS
+  datePreset: DatePreset = 'last30days'
   salesFilters: SalesFilters = {
     dateFrom: this.getDateNDaysAgo(30),
     dateTo: this.getToday(),
+    customerId: undefined,
     customerName: '',
     documentType: null,
     status: null,
+    paymentType: null,
+    search: '',
+    page: 1,
+    limit: 50,
   }
+
+  // Client autocomplete
+  clientSearchText = ''
+  filteredClients: any[] = []
+  showClientDropdown = false
 
   // CASH FLOW
   cashFlowEntries: Sale[] = []
@@ -396,7 +439,15 @@ export class Ventas implements OnInit {
   // ENUMS FOR TEMPLATES
   documentTypes: DocumentTypeCode[] = ['NOTA_PEDIDO', 'BOLETA', 'FACTURA']
   saleStatuses: SaleStatus[] = ['PENDIENTE', 'EMITIDO', 'ANULADO']
-  paymentTypes: PaymentType[] = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'CREDITO']
+  paymentTypes: string[] = ['CASH', 'CARD', 'TRANSFER', 'YAPE', 'PLIN', 'CREDIT']
+  paymentTypeLabels: { [key: string]: string } = {
+    'CASH': 'Efectivo',
+    'CARD': 'Tarjeta',
+    'TRANSFER': 'Transferencia',
+    'YAPE': 'Yape',
+    'PLIN': 'Plin',
+    'CREDIT': 'Crédito'
+  }
 
   // UI helpers for caja (fase 1: mock, más adelante conectaremos a backend)
   cashBoxCode: string = ''
@@ -471,7 +522,7 @@ export class Ventas implements OnInit {
       // Cargar todos los productos
       const products = await lastValueFrom(this.pricingProductsApi.list());
 
-// Cargar todo el stock
+      // Cargar todo el stock
       const stockData = await lastValueFrom(this.stockService.list());
 
       // Acumular stock de todos los lotes para cada producto
@@ -584,11 +635,34 @@ export class Ventas implements OnInit {
 
   loadSales(): void {
     this.isLoading = true
-    this.salesApi.list(this.salesFilters as any).subscribe({
+
+    // Map frontend status to backend status
+    const apiFilters: any = {
+      companyId: 1,
+      dateFrom: this.salesFilters.dateFrom,
+      dateTo: this.salesFilters.dateTo,
+      search: this.salesFilters.search || undefined,
+      documentType: this.salesFilters.documentType || undefined,
+      paymentType: this.salesFilters.paymentType || undefined,
+      customerId: this.salesFilters.customerId || undefined,
+      page: this.currentPage,
+      limit: this.pageSize,
+    }
+
+    // Map frontend status (EMITIDO/ANULADO) to backend status (CONFIRMED/CANCELLED)
+    if (this.salesFilters.status) {
+      if (this.salesFilters.status === 'EMITIDO') {
+        apiFilters.status = 'CONFIRMED'
+      } else if (this.salesFilters.status === 'ANULADO') {
+        apiFilters.status = 'CANCELLED'
+      }
+    }
+
+    this.salesApi.list(apiFilters).subscribe({
       next: (resp: any) => {
         this.sales = resp.data
         this.totalItems = resp.total
-        this.calculateMetrics()
+        this.loadMetrics()
         this.updateCashFlowFromSales()
         this.isLoading = false
         this.showToast('info', `${resp.data.length} ventas cargadas`)
@@ -600,6 +674,38 @@ export class Ventas implements OnInit {
     })
   }
 
+  loadMetrics(): void {
+    const apiFilters: any = {
+      companyId: 1,
+      dateFrom: this.salesFilters.dateFrom,
+      dateTo: this.salesFilters.dateTo,
+      documentType: this.salesFilters.documentType || undefined,
+      paymentType: this.salesFilters.paymentType || undefined,
+    }
+
+    if (this.salesFilters.status) {
+      if (this.salesFilters.status === 'EMITIDO') {
+        apiFilters.status = 'CONFIRMED'
+      } else if (this.salesFilters.status === 'ANULADO') {
+        apiFilters.status = 'CANCELLED'
+      }
+    }
+
+    this.salesApi.metrics(apiFilters.companyId, apiFilters.dateFrom, apiFilters.dateTo, apiFilters.status, apiFilters.documentType, apiFilters.paymentType).subscribe({
+      next: (resp: any) => {
+        this.metrics = {
+          totalSales: resp.totalSales || 0,
+          totalEmitted: resp.confirmedSales || 0,
+          totalCancelled: resp.cancelledSales || 0,
+          totalAmount: resp.totalAmount || 0,
+        }
+      },
+      error: () => {
+        this.metrics = { totalSales: 0, totalEmitted: 0, totalCancelled: 0, totalAmount: 0 }
+      }
+    })
+  }
+
 
   applySalesFilters(): void {
     this.currentPage = 1
@@ -607,15 +713,108 @@ export class Ventas implements OnInit {
   }
 
   resetSalesFilters(): void {
+    this.datePreset = 'last30days'
     this.salesFilters = {
       dateFrom: this.getDateNDaysAgo(30),
       dateTo: this.getToday(),
+      customerId: undefined,
       customerName: '',
       documentType: null,
       status: null,
+      paymentType: null,
+      search: '',
+      page: 1,
+      limit: 50,
     }
+    this.clientSearchText = ''
+    this.filteredClients = []
+    this.showClientDropdown = false
     this.applySalesFilters()
     this.showToast('info', 'Filtros limpiados')
+  }
+
+  // Client autocomplete
+  onClientSearch(): void {
+    if (!this.clientSearchText || this.clientSearchText.length < 2) {
+      this.filteredClients = []
+      this.showClientDropdown = false
+      return
+    }
+
+    this.bpApi.findAll({
+      companyId: 1,
+      search: this.clientSearchText,
+      isClient: 'true',
+      limit: 15,
+    }).subscribe({
+      next: (resp) => {
+        this.filteredClients = resp.data || []
+        this.showClientDropdown = this.filteredClients.length > 0
+      },
+      error: () => {
+        this.filteredClients = []
+        this.showClientDropdown = false
+      }
+    })
+  }
+
+  selectClient(client: any): void {
+    this.salesFilters.customerId = client.id
+    this.clientSearchText = client.name
+    this.showClientDropdown = false
+    this.applySalesFilters()
+  }
+
+  onClientFocus(): void {
+    if (this.filteredClients.length > 0) {
+      this.showClientDropdown = true
+    }
+  }
+
+  onClientBlur(): void {
+    setTimeout(() => {
+      this.showClientDropdown = false
+    }, 200)
+  }
+
+  // Date preset handling
+  onDatePresetChange(preset: DatePreset): void {
+    this.datePreset = preset
+    const today = new Date()
+
+    switch (preset) {
+      case 'today':
+        this.salesFilters.dateFrom = this.formatDate(today)
+        this.salesFilters.dateTo = this.formatDate(today)
+        break
+      case 'yesterday':
+        const yesterday = new Date(today)
+        yesterday.setDate(yesterday.getDate() - 1)
+        this.salesFilters.dateFrom = this.formatDate(yesterday)
+        this.salesFilters.dateTo = this.formatDate(yesterday)
+        break
+      case 'last7days':
+        this.salesFilters.dateFrom = this.getDateNDaysAgo(7)
+        this.salesFilters.dateTo = this.getToday()
+        break
+      case 'last30days':
+        this.salesFilters.dateFrom = this.getDateNDaysAgo(30)
+        this.salesFilters.dateTo = this.getToday()
+        break
+      case 'manual':
+        // Don't change dates, let user select manually
+        break
+    }
+
+    if (preset !== 'manual') {
+      this.applySalesFilters()
+    }
+  }
+
+  // Pagination
+  onPageChange(page: number): void {
+    this.currentPage = page
+    this.loadSales()
   }
 
   // ============================================
@@ -923,12 +1122,12 @@ export class Ventas implements OnInit {
     }
     this.creditNoteFormData = {
       saleId: sale.id,
-      saleSeries: sale.documentSeries,
-      saleNumber: sale.documentNumber,
+      saleSeries: sale.series,
+      saleNumber: sale.number,
       series: 'NC01',
       currency: 'PEN',
       totalTaxableAmount: sale.subtotal,
-      totalIgv: sale.igv,
+      totalIgv: sale.taxAmount,
       grandTotal: sale.total,
     }
     this.showCreditNoteModal = true
@@ -951,12 +1150,12 @@ export class Ventas implements OnInit {
       senderName: 'Tu Empresa',
       senderAddress: 'Dirección de tu empresa',
       arrivalAddress: '',
-      items: sale.lines.map((line) => ({
+      items: (sale.items || []).map((line: any) => ({
         id: 0,
         shippingGuideId: 0,
         productId: line.productId,
-        itemCode: line.productSku,
-        description: line.productName,
+        itemCode: line.product?.sku || '',
+        description: line.product?.name || 'Producto',
         unitOfMeasure: 'UND',
         quantity: line.quantity,
         weightKg: 0,
@@ -1003,20 +1202,309 @@ export class Ventas implements OnInit {
   // ============================================
 
   onViewSale(sale: Sale): void {
-    // Si la lista ya trae las líneas completas (como en tu mock actual):
-    this.selectedSale = sale;
+    // Reset any open item details
+    if (this.selectedSale && this.selectedSale.items) {
+      this.selectedSale.items.forEach((item: any) => {
+        item.showDetails = false;
+      });
+    }
 
-    // Si en producción el backend solo devuelve un resumen y necesitas pedir el detalle,
-    // puedes usar esto más adelante (y comentar la línea de arriba):
-    //
-    // this.selectedSale = null;
-    // this.mockService.getSaleById(sale.id).then((detail) => {
-    //   this.selectedSale = detail;
-    // });
+    // Fetch full sale details from API to get lots and serials
+    this.salesApi.get(sale.id).subscribe({
+      next: (detail) => {
+        // Initialize showDetails for each item
+        if (detail.items) {
+          detail.items.forEach((item: any) => {
+            item.showDetails = false;
+          });
+        }
+        this.selectedSale = detail;
+      },
+      error: () => {
+        // Fallback to list data if API fails
+        this.selectedSale = sale;
+        this.showToast('error', 'Error cargando detalles de venta');
+      }
+    });
+  }
+
+  toggleItemDetails(line: any): void {
+    line.showDetails = !line.showDetails;
   }
 
   onDownloadSalePdf(sale: Sale): void {
-    this.showToast('success', `Descargando ${sale.documentSeries}-${sale.documentNumber}.pdf`)
+    // Fetch full sale details for PDF
+    this.salesApi.get(sale.id).subscribe({
+      next: (saleData) => {
+        this.generateSalePdf(saleData);
+      },
+      error: () => {
+        this.showToast('error', 'Error al generar PDF');
+      }
+    });
+  }
+
+  private generateSalePdf(sale: any): void {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const companyName = 'MACROCHIPS S.A.C';
+    const companyAddress = 'Calle Alfonso Gárden #493, Trujillo, La Libertad';
+    const companyPhone = '924215320';
+    const companyEmail = 'soporte@grupoSTS.com.pe';
+    const companyRuc = '10123456789';
+
+    const isFactura = sale.documentType === 'FACTURA';
+    const docTitle = isFactura ? 'FACTURA ELECTRÓNICA' : 'BOLETA ELECTRÓNICA';
+    const docSerie = sale.series;
+    const docNumber = sale.number;
+
+    let y = 13;
+
+    // ============================================
+    // ENCABEZADO - DATOS DE LA EMPRESA (Izquierda)
+    // ============================================
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(companyName, 15, y);
+
+    doc.setFontSize(9);
+
+    y += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.text("Direccion:", 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(companyAddress, 31, y);
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.text("Telefono:", 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(companyPhone, 31, y);
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.text("Correo:", 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(companyEmail, 29, y);
+
+    // ============================================
+    // ENCABEZADO - DATOS DEL DOCUMENTO (Derecha)
+    // ============================================
+    const rightBoxX = 130;
+    const rightBoxY = 10;
+    const rightBoxW = 65;
+    const rightBoxH = 28;
+
+    doc.setDrawColor(0, 0, 0);
+    doc.setFillColor(255, 255, 255);
+    doc.rect(rightBoxX, rightBoxY, rightBoxW, rightBoxH, 'FD');
+
+    let boxY = rightBoxY + 7;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RUC:', rightBoxX + 18, boxY);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(companyRuc, rightBoxX + 28, boxY);
+
+    boxY += 7;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(docTitle, rightBoxX + 13, boxY);
+
+    boxY += 6;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${docSerie}-${docNumber}`, rightBoxX + 20, boxY);
+
+    // ============================================
+    // DATOS DEL CLIENTE (Tabla estructurada)
+    // ============================================
+    y = 50;
+
+    const clientDoc = sale.customer?.documentNumber || '-';
+    const clientName = sale.customer?.name || 'Cliente General';
+    const clientAddress = sale.customer?.address || '-';
+    const paymentMethod = sale.payments && sale.payments.length > 0 ? this.getPaymentLabel(sale.payments[0].method) : '-';
+    const issueDate = sale.issueDate ? new Date(sale.issueDate).toLocaleDateString('es-PE') : '-';
+
+    autoTable(doc, {
+      startY: y,
+      head: [[
+        {
+          content: 'Información General',
+          colSpan: 6,
+          styles: {
+            fillColor: [88, 88, 88] as [number, number, number],
+            fontStyle: 'bold' as 'bold',
+            textColor: [255, 255, 255] as [number, number, number],
+            halign: 'left'
+          }
+        }
+      ]],
+      body: [
+
+        [
+          { content: 'Cliente:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
+          { content: clientName, styles: { fillColor: [255, 255, 255] } },
+          { content: 'Dirección:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
+          { content: clientAddress, colSpan: 3, styles: { fillColor: [255, 255, 255] } }
+        ],
+        [
+          { content: 'Documento:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
+          { content: clientDoc, styles: { fillColor: [255, 255, 255] } },
+          { content: 'Fecha de Emisión:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
+          { content: issueDate, colSpan: 3, styles: { fillColor: [255, 255, 255] } }
+        ],
+        [
+          { content: 'Tipo de Pago:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
+          { content: paymentMethod, styles: { fillColor: [255, 255, 255] } },
+          { content: 'Moneda:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
+          { content: 'SOLES', colSpan: 3, styles: { fillColor: [255, 255, 255] } }
+        ]
+      ],
+      theme: 'grid',
+      styles: {
+        fontSize: 9,
+        cellPadding: 2,
+        lineColor: [0, 0, 0],
+        lineWidth: 0.1,
+        valign: 'middle',
+        textColor: [0, 0, 0]
+      },
+      headStyles: {
+        fillColor: [60, 60, 60],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 10,
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { cellWidth: 25, fontStyle: 'bold' },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 30, fontStyle: 'bold' },
+        3: { cellWidth: 'auto' }
+      },
+      margin: { left: 15, right: 15 }
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // ============================================
+    // TABLA DE PRODUCTOS
+    // ============================================
+    // y already set by autoTable above
+
+    // Table header
+    doc.setFillColor(88, 88, 88);
+    doc.rect(15, y, 180, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+
+    doc.text('#', 17, y + 5.5);
+    doc.text('Descripción', 25, y + 5.5);
+    doc.text('Und', 115, y + 5.5);
+    doc.text('Cant', 135, y + 5.5);
+    doc.text('P.Unit', 152, y + 5.5);
+    doc.text('Importe', 175, y + 5.5);
+
+    doc.setTextColor(0, 0, 0);
+    y += 8;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+
+    const items = sale.items || [];
+    let itemNum = 1;
+
+    for (const item of items) {
+      if (y > 260) {
+        doc.addPage();
+        y = 15;
+      }
+
+      const productName = item.product?.name || 'Producto';
+      const unit = item.product?.baseUnit?.abbreviation || 'UND';
+      const quantity = parseFloat(item.quantity) || 0;
+      const unitPrice = parseFloat(item.finalUnitPrice) || 0;
+      const lineTotal = parseFloat(item.lineTotal) || 0;
+
+      // Alternate row background
+      if (itemNum % 2 === 0) {
+        doc.setFillColor(250, 250, 250);
+        doc.rect(15, y, 180, 6, 'F');
+      }
+
+      doc.text(itemNum.toString(), 17, y + 4);
+
+      const truncatedName = productName.length > 45 ? productName.substring(0, 42) + '...' : productName;
+      doc.text(truncatedName, 25, y + 4);
+      doc.text(unit, 115, y + 4);
+      doc.text(quantity.toString(), 135, y + 4);
+      doc.text(unitPrice.toFixed(2), 152, y + 4);
+      doc.text(lineTotal.toFixed(2), 175, y + 4);
+
+      y += 6;
+      itemNum++;
+    }
+
+    // ============================================
+    // RESUMEN DE TOTALES
+    // ============================================
+    y += 3;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(120, y, 195, y);
+    y += 5;
+
+    const subtotal = parseFloat(sale.subtotal) || 0;
+    const discount = parseFloat(sale.discountTotal) || 0;
+    const tax = parseFloat(sale.taxAmount) || 0;
+    const total = parseFloat(sale.total) || 0;
+
+    doc.setFontSize(9);
+    doc.text('Subtotal:', 145, y);
+    doc.text(`S/ ${subtotal.toFixed(2)}`, 180, y, { align: 'right' });
+    y += 4;
+
+    if (discount > 0) {
+      doc.text('Descuento:', 145, y);
+      doc.text(`S/ ${discount.toFixed(2)}`, 180, y, { align: 'right' });
+      y += 4;
+    }
+
+    if (tax > 0) {
+      doc.text('IGV (18%):', 145, y);
+      doc.text(`S/ ${tax.toFixed(2)}`, 180, y, { align: 'right' });
+      y += 4;
+    }
+
+    y += 1;
+    doc.setDrawColor(0, 0, 0);
+    doc.line(145, y, 195, y);
+    y += 4;
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL:', 145, y);
+    doc.text(`S/ ${total.toFixed(2)}`, 180, y, { align: 'right' });
+
+    // ============================================
+    // FOOTER
+    // ============================================
+    y = 275;
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Este documento es una representación impresa de un comprobante de pago electrónico', 105, y, { align: 'center' });
+    doc.text('Generado por Macrochips - Sistema de Gestión', 105, y + 4, { align: 'center' });
+
+    // Save
+    const fileName = `${sale.series}-${sale.number}.pdf`;
+    doc.save(fileName);
+    this.showToast('success', `PDF descargado: ${fileName}`);
   }
 
   closeDetailDrawer(): void {
@@ -1038,14 +1526,36 @@ export class Ventas implements OnInit {
     return new Date().toISOString().split('T')[0]
   }
 
-  getStatusLabel(status: SaleStatus): string {
-    const labels = { PENDIENTE: 'Pendiente', EMITIDO: 'Emitido', ANULADO: 'Anulado' }
+  formatDate(date: Date): string {
+    return date.toISOString().split('T')[0]
+  }
+
+  getStatusLabel(status: string): string {
+    const labels: { [key: string]: string } = {
+      'PENDIENTE': 'Pendiente',
+      'EMITIDO': 'Emitido',
+      'ANULADO': 'Anulado',
+      'CONFIRMED': 'Emitido',
+      'CANCELLED': 'Anulado',
+      'DRAFT': 'Borrador'
+    }
     return labels[status] || status
   }
 
-  getPaymentLabel(payment: PaymentType): string {
-    const labels = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', CREDITO: 'Crédito' }
-    return labels[payment] || payment
+  getPaymentLabel(payment: string): string {
+    const labels: { [key: string]: string } = {
+      'CASH': 'Efectivo',
+      'CARD': 'Tarjeta',
+      'TRANSFER': 'Transferencia',
+      'YAPE': 'Yape',
+      'PLIN': 'Plin',
+      'CREDIT': 'Crédito',
+      'EFECTIVO': 'Efectivo',
+      'TARJETA': 'Tarjeta',
+      'TRANSFERENCIA': 'Transferencia',
+      'CREDITO': 'Crédito'
+    }
+    return labels[payment || ''] || payment || '-'
   }
 
   getStatusClass(status: SaleStatus): string {
@@ -1061,7 +1571,7 @@ export class Ventas implements OnInit {
     }
     let csv = 'Fecha,Tipo,Número,Cliente,Total,Estado\n'
     this.sales.forEach((sale) => {
-      csv += `"${sale.saleDate}","${sale.documentType}","${sale.documentSeries}-${sale.documentNumber}","${sale.customerName}",${sale.total},"${this.getStatusLabel(sale.status)}"\n`
+      csv += `"${sale.issueDate}","${sale.documentType}","${sale.series}-${sale.number}","${sale.customer?.name || ''}",${sale.total},"${this.getStatusLabel(sale.status)}"\n`
     })
     this.downloadFile(csv, `ventas-${this.getToday()}.csv`, 'text/csv')
     this.showToast('success', 'CSV exportado')
@@ -1267,13 +1777,13 @@ export class Ventas implements OnInit {
 
     const entries = this.sales.filter(s => {
       // Solo ventas emitidas
-      if (s.status !== 'EMITIDO') return false
+      if (s.status !== 'CONFIRMED') return false
 
-      const d = new Date(s.saleDate)
+      const d = new Date(s.issueDate)
 
       if (fromDate && d < fromDate) return false
       if (toDate && d > toDate) return false
-      if (paymentType && s.paymentType !== paymentType) return false
+      if (paymentType && s.payments?.[0]?.method !== paymentType) return false
 
       return true
     })
@@ -1284,10 +1794,11 @@ export class Ventas implements OnInit {
 
     for (const e of entries) {
       metrics.total += e.total
-      if (e.paymentType === 'EFECTIVO') metrics.cash += e.total
-      if (e.paymentType === 'TARJETA') metrics.card += e.total
-      if (e.paymentType === 'TRANSFERENCIA') metrics.transfer += e.total
-      if (e.paymentType === 'CREDITO') metrics.credit += e.total
+      const paymentMethod = e.payments?.[0]?.method
+      if (paymentMethod === 'CASH') metrics.cash += e.total
+      if (paymentMethod === 'CARD') metrics.card += e.total
+      if (paymentMethod === 'TRANSFER') metrics.transfer += e.total
+      if (paymentMethod === 'CREDIT') metrics.credit += e.total
     }
 
     this.cashFlowMetrics = metrics
@@ -1622,5 +2133,26 @@ export class Ventas implements OnInit {
   // Método para formatear los seriales
   formatSerials(serials: Array<{ serialCode: string }>): string {
     return serials?.map(s => s.serialCode).join(', ') || '';
+  }
+
+  // Agrupar seriales por lote para mostrar en el detalle
+  groupSerialsByLot(serials: Array<{ serialCode: string; lotCode?: string; expirationDate?: string }>): { lotCode: string; expirationDate?: string; serials: string[] }[] {
+    if (!serials || serials.length === 0) return [];
+    
+    const grouped = new Map<string, { lotCode: string; expirationDate?: string; serials: string[] }>();
+    
+    for (const serial of serials) {
+      const lotCode = serial.lotCode || 'Sin lote';
+      if (!grouped.has(lotCode)) {
+        grouped.set(lotCode, {
+          lotCode: lotCode,
+          expirationDate: serial.expirationDate,
+          serials: []
+        });
+      }
+      grouped.get(lotCode)!.serials.push(serial.serialCode);
+    }
+    
+    return Array.from(grouped.values());
   }
 }
