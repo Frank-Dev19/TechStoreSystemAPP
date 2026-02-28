@@ -771,6 +771,24 @@
         }
     }
 
+    &.purple {
+        border-left-color: #9333ea;
+
+        .metric-icon {
+            background: linear-gradient(135deg, rgba(147, 51, 234, 0.2), rgba(147, 51, 234, 0.1));
+            color: #9333ea;
+        }
+    }
+
+    &.orange {
+        border-left-color: #f97316;
+
+        .metric-icon {
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(249, 115, 22, 0.1));
+            color: #f97316;
+        }
+    }
+
     &.secondary {
         border-left-color: --success;
 

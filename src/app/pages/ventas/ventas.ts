@@ -427,9 +427,14 @@ export class Ventas implements OnInit {
   showClientDropdown = false
 
   // CASH FLOW
-  cashFlowEntries: Sale[] = []
-  cashFlowFilters = { dateFrom: this.getDateNDaysAgo(30), dateTo: this.getToday(), paymentType: null as PaymentType | null }
-  cashFlowMetrics = { total: 0, cash: 0, card: 0, transfer: 0, credit: 0 }
+  cashFlowEntries: any[] = []
+  cashFlowFilters = { dateFrom: this.getDateNDaysAgo(30), dateTo: this.getToday(), paymentType: null as string | null }
+  cashFlowMetrics = { total: 0, cash: 0, card: 0, transfer: 0, yape: 0, plin: 0 }
+  cashFlowDatePreset: string = 'last30days'
+  cashFlowPage = 1
+  cashFlowLimit = 20
+  cashFlowTotal = 0
+  cashFlowTotalPages = 0
 
 
 
@@ -463,10 +468,10 @@ export class Ventas implements OnInit {
     this.productsApiGet()
     this.loadProductsPriceAndStock()
     this.loadDocumentTypes()
-    // Load current open register and all registers for admin view
     this.loadOpenRegister()
     this.loadRegisters()
     this.loadDocumentSeries()
+    this.loadCashFlowData()
   }
 
   private productsApiGet(): void {
@@ -663,7 +668,7 @@ export class Ventas implements OnInit {
         this.sales = resp.data
         this.totalItems = resp.total
         this.loadMetrics()
-        this.updateCashFlowFromSales()
+        this.loadCashFlowData()
         this.isLoading = false
         this.showToast('info', `${resp.data.length} ventas cargadas`)
       },
@@ -1760,63 +1765,119 @@ export class Ventas implements OnInit {
     });
   }
 
-  //ACTUALIZAR FLUJO DE CAJA
-  private updateCashFlowFromSales(): void {
-    if (!this.sales || this.sales.length === 0) {
-      this.cashFlowEntries = []
-      this.cashFlowMetrics = { total: 0, cash: 0, card: 0, transfer: 0, credit: 0 }
-      return
+  // ============================================
+  // CASH FLOW - API REAL
+  // ============================================
+  
+  loadCashFlowData(): void {
+    this.isLoading = true
+    
+    const params = {
+      companyId: 1,
+      dateFrom: this.cashFlowFilters.dateFrom,
+      dateTo: this.cashFlowFilters.dateTo,
+      subtype: this.cashFlowFilters.paymentType || undefined,
+      page: this.cashFlowPage,
+      limit: this.cashFlowLimit
     }
 
-    const from = this.cashFlowFilters.dateFrom
-    const to = this.cashFlowFilters.dateTo
-    const paymentType = this.cashFlowFilters.paymentType
-
-    const fromDate = from ? new Date(from) : null
-    const toDate = to ? new Date(to) : null
-
-    const entries = this.sales.filter(s => {
-      // Solo ventas emitidas
-      if (s.status !== 'CONFIRMED') return false
-
-      const d = new Date(s.issueDate)
-
-      if (fromDate && d < fromDate) return false
-      if (toDate && d > toDate) return false
-      if (paymentType && s.payments?.[0]?.method !== paymentType) return false
-
-      return true
+    this.cashFlowApi.listTransactions(params).subscribe({
+      next: (response) => {
+        this.cashFlowEntries = response.data || []
+        this.cashFlowTotal = response.total || 0
+        this.cashFlowTotalPages = response.totalPages || 0
+        this.isLoading = false
+        
+        this.loadCashFlowMetrics()
+      },
+      error: (err) => {
+        console.error('Error loading cash flow:', err)
+        this.isLoading = false
+        this.cashFlowEntries = []
+        this.cashFlowMetrics = { total: 0, cash: 0, card: 0, transfer: 0, yape: 0, plin: 0 }
+      }
     })
-
-    this.cashFlowEntries = entries
-
-    const metrics = { total: 0, cash: 0, card: 0, transfer: 0, credit: 0 }
-
-    for (const e of entries) {
-      metrics.total += e.total
-      const paymentMethod = e.payments?.[0]?.method
-      if (paymentMethod === 'CASH') metrics.cash += e.total
-      if (paymentMethod === 'CARD') metrics.card += e.total
-      if (paymentMethod === 'TRANSFER') metrics.transfer += e.total
-      if (paymentMethod === 'CREDIT') metrics.credit += e.total
-    }
-
-    this.cashFlowMetrics = metrics
   }
 
-  //FILTROS PARA EL FLUJO DE CAJA
+  loadCashFlowMetrics(): void {
+    const params = {
+      companyId: 1,
+      dateFrom: this.cashFlowFilters.dateFrom,
+      dateTo: this.cashFlowFilters.dateTo
+    }
+
+    this.cashFlowApi.getCashFlowMetrics(params).subscribe({
+      next: (metrics: any) => {
+        this.cashFlowMetrics = {
+          total: metrics.total || 0,
+          cash: metrics.cash || 0,
+          card: metrics.card || 0,
+          transfer: metrics.transfer || 0,
+          yape: metrics.yape || 0,
+          plin: metrics.plin || 0
+        }
+      },
+      error: (err) => {
+        console.error('Error loading cash flow metrics:', err)
+      }
+    })
+  }
+
   applyCashFlowFilters(): void {
-    this.updateCashFlowFromSales()
+    this.cashFlowPage = 1
+    this.loadCashFlowData()
   }
 
   resetCashFlowFilters(): void {
+    this.cashFlowDatePreset = 'last30days'
+    this.onCashFlowDatePresetChange('last30days')
     this.cashFlowFilters = {
       dateFrom: this.getDateNDaysAgo(30),
       dateTo: this.getToday(),
       paymentType: null
     }
-    this.updateCashFlowFromSales()
+    this.cashFlowPage = 1
+    this.loadCashFlowData()
   }
+
+  onCashFlowDatePresetChange(preset: string): void {
+    const today = new Date()
+    
+    switch (preset) {
+      case 'today':
+        this.cashFlowFilters.dateFrom = today.toISOString().split('T')[0]
+        this.cashFlowFilters.dateTo = today.toISOString().split('T')[0]
+        break
+      case 'yesterday':
+        const yesterday = new Date(today)
+        yesterday.setDate(yesterday.getDate() - 1)
+        this.cashFlowFilters.dateFrom = yesterday.toISOString().split('T')[0]
+        this.cashFlowFilters.dateTo = yesterday.toISOString().split('T')[0]
+        break
+      case 'last7days':
+        const last7 = new Date(today)
+        last7.setDate(last7.getDate() - 7)
+        this.cashFlowFilters.dateFrom = last7.toISOString().split('T')[0]
+        this.cashFlowFilters.dateTo = today.toISOString().split('T')[0]
+        break
+      case 'last30days':
+        const last30 = new Date(today)
+        last30.setDate(last30.getDate() - 30)
+        this.cashFlowFilters.dateFrom = last30.toISOString().split('T')[0]
+        this.cashFlowFilters.dateTo = today.toISOString().split('T')[0]
+        break
+      case 'manual':
+        break
+    }
+  }
+
+  goToCashFlowPage(page: number): void {
+    if (page >= 1 && page <= this.cashFlowTotalPages) {
+      this.cashFlowPage = page
+      this.loadCashFlowData()
+    }
+  }
+
 
   // Métodos para obtener información del pricing
   getPriceOption(productId: number, priceListCode: string): any {

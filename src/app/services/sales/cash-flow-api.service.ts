@@ -123,4 +123,11 @@ export class CashFlowApiService {
             params: toHttpParams(params as any),
         });
     }
+
+    // GET /cash-flow/metrics?companyId=...&dateFrom=...&dateTo=...
+    getCashFlowMetrics(params: { companyId: number; dateFrom?: string; dateTo?: string; cashRegisterId?: number }): Observable<{ total: number; cash: number; card: number; transfer: number; yape: number; plin: number }> {
+        return this.base.get<{ total: number; cash: number; card: number; transfer: number; yape: number; plin: number }>('/cash-flow/metrics', {
+            params: toHttpParams(params as any),
+        });
+    }
 }

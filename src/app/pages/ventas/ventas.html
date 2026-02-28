@@ -285,9 +285,9 @@
                 </div>
 
                 <div class="form-group">
-                    <label><i class="fas fa-hashtag"></i> N° Documento</label>
+                    <label><i class="fas fa-hashtag"></i> N° Boleta o Factura</label>
                     <input type="text" [(ngModel)]="salesFilters.search" (keyup.enter)="applySalesFilters()"
-                        class="form-control" placeholder="B001-00000001">
+                        class="form-control" placeholder="00000001">
                 </div>
             </div>
 
@@ -358,7 +358,7 @@
                     </thead>
                     <tbody>
                         <tr *ngFor="let sale of sales" class="sale-row">
-                            <td>{{ sale.issueDate | date:'dd/MM/yyyy' }}</td>
+                            <td>{{ sale.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
                             <td>
                                 <span class="doc-type-badge">
                                     {{ sale.documentType === 'NOTA_PEDIDO' ? 'Nota Pedido' : (sale.documentType ===
@@ -755,16 +755,28 @@
         <div class="filters-card">
             <div class="filters-header">
                 <h3><i class="fas fa-filter"></i> Filtros Flujo de Caja</h3>
-                <span class="results-indicator">{{ cashFlowEntries.length }} movimientos</span>
+                <span class="results-indicator">{{ cashFlowTotal }} movimientos</span>
             </div>
 
             <div class="filters-grid">
                 <div class="form-group">
+                    <label><i class="fas fa-calendar-check"></i> Rango de Fechas</label>
+                    <select [(ngModel)]="cashFlowDatePreset" (change)="onCashFlowDatePresetChange(cashFlowDatePreset)"
+                        class="form-control">
+                        <option value="today">Hoy</option>
+                        <option value="yesterday">Ayer</option>
+                        <option value="last7days">Últimos 7 días</option>
+                        <option value="last30days">Últimos 30 días</option>
+                        <option value="manual">Personalizado</option>
+                    </select>
+                </div>
+
+                <div class="form-group" *ngIf="cashFlowDatePreset === 'manual'">
                     <label><i class="fas fa-calendar-alt"></i> Desde</label>
                     <input type="date" [(ngModel)]="cashFlowFilters.dateFrom" class="form-control">
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" *ngIf="cashFlowDatePreset === 'manual'">
                     <label><i class="fas fa-calendar-alt"></i> Hasta</label>
                     <input type="date" [(ngModel)]="cashFlowFilters.dateTo" class="form-control">
                 </div>
@@ -773,24 +785,25 @@
                     <label><i class="fas fa-wallet"></i> Tipo de Pago</label>
                     <select [(ngModel)]="cashFlowFilters.paymentType" class="form-control">
                         <option [ngValue]="null">Todos</option>
-                        <option value="EFECTIVO">Efectivo</option>
-                        <option value="TARJETA">Tarjeta</option>
-                        <option value="TRANSFERENCIA">Transferencia</option>
-                        <option value="CREDITO">Crédito</option>
+                        <option value="CASH">Efectivo</option>
+                        <option value="CARD">Tarjeta</option>
+                        <option value="TRANSFER">Transferencia</option>
+                        <option value="YAPE">Yape</option>
+                        <option value="PLIN">Plin</option>
                     </select>
                 </div>
             </div>
 
             <div class="search-section">
-                <button class="btn-primary" (click)="applySalesFilters()">
+                <button class="btn-primary" (click)="applyCashFlowFilters()">
                     <i class="fas fa-search"></i>
                     Buscar
                 </button>
-                <button class="btn-secondary" [disabled]="isLoading">
+                <button class="btn-secondary" (click)="loadCashFlowData()" [disabled]="isLoading">
                     <i class="fas fa-sync-alt" [class.spinning]="isLoading"></i>
                     Actualizar
                 </button>
-                <button class="btn-secondary" (click)="resetSalesFilters()">
+                <button class="btn-secondary" (click)="resetCashFlowFilters()">
                     <i class="fas fa-eraser"></i>
                     Limpiar
                 </button>
@@ -827,29 +840,42 @@
                     <span class="metric-value">S/ {{ cashFlowMetrics.card.toFixed(2) }}</span>
                 </div>
             </div>
+            <div class="metric-card purple">
+                <div class="metric-icon"><i class="fas fa-mobile-alt"></i></div>
+                <div class="metric-content">
+                    <label>Yape</label>
+                    <span class="metric-value">S/ {{ cashFlowMetrics.yape.toFixed(2) }}</span>
+                </div>
+            </div>
+            <div class="metric-card orange">
+                <div class="metric-icon"><i class="fas fa-mobile-alt"></i></div>
+                <div class="metric-content">
+                    <label>Plin</label>
+                    <span class="metric-value">S/ {{ cashFlowMetrics.plin.toFixed(2) }}</span>
+                </div>
+            </div>
         </div>
 
         <!-- CASH FLOW TABLE -->
         <div class="table-section">
-            <div class="table-container">
+            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
                 <table class="data-table">
                     <thead>
                         <tr>
                             <th>Fecha</th>
-                            <th>N° Documento</th>
-                            <th>Cliente</th>
+                            <th>Descripción</th>
                             <th>Tipo de Pago</th>
                             <th>Monto</th>
+                            <th>Usuario</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr *ngFor="let entry of cashFlowEntries">
-                            <td>{{ entry.issueDate | date:'dd/MM/yyyy' }}</td>
-                            <td><strong>{{ entry.series }}-{{ entry.number }}</strong></td>
-                            <td>{{ entry.customer?.name || 'Sin cliente' }}</td>
-                            <td><span class="payment-badge">{{ getPaymentLabel(entry.payments?.[0]?.method) }}</span>
-                            </td>
-                            <td><strong>S/ {{ entry.total | number:'1.2-2' }}</strong></td>
+                            <td>{{ entry.recordedAt | date:'dd/MM/yyyy HH:mm' }}</td>
+                            <td>{{ entry.description }}</td>
+                            <td><span class="payment-badge">{{ getPaymentLabel(entry.subtype) }}</span></td>
+                            <td><strong>S/ {{ entry.amount | number:'1.2-2' }}</strong></td>
+                            <td>{{ entry.recordedBy }}</td>
                         </tr>
 
                         <tr *ngIf="cashFlowEntries.length === 0">
@@ -861,7 +887,38 @@
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination -->
+            <div class="pagination" *ngIf="cashFlowTotal > cashFlowLimit">
+                <div class="pagination-info">
+                    Mostrando {{ (cashFlowPage - 1) * cashFlowLimit + 1 }} - {{ Math.min(cashFlowPage * cashFlowLimit,
+                    cashFlowTotal) }} de {{ cashFlowTotal }}
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn-icon" (click)="goToCashFlowPage(1)" [disabled]="cashFlowPage === 1"
+                        title="Primera">
+                        <i class="fas fa-angle-double-left"></i>
+                    </button>
+                    <button class="btn-icon" (click)="goToCashFlowPage(cashFlowPage - 1)"
+                        [disabled]="cashFlowPage === 1" title="Anterior">
+                        <i class="fas fa-angle-left"></i>
+                    </button>
+
+                    <span class="page-indicator">Página {{ cashFlowPage }} de {{ cashFlowTotalPages }}</span>
+
+                    <button class="btn-icon" (click)="goToCashFlowPage(cashFlowPage + 1)"
+                        [disabled]="cashFlowPage >= cashFlowTotalPages" title="Siguiente">
+                        <i class="fas fa-angle-right"></i>
+                    </button>
+                    <button class="btn-icon" (click)="goToCashFlowPage(cashFlowTotalPages)"
+                        [disabled]="cashFlowPage >= cashFlowTotalPages" title="Última">
+                        <i class="fas fa-angle-double-right"></i>
+                    </button>
+                </div>
+            </div>
         </div>
+
+
     </div>
 
     <!-- DOCUMENT SERIES TAB -->
