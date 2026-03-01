@@ -75,9 +75,9 @@ export class CashFlowApiService {
   }
 
   // GET /cash-flow/registers
-  listRegisters(companyId: number): Observable<CashRegister[]> {
-      return this.base.get<CashRegister[]>(`/cash-flow/registers`, {
-          params: toHttpParams({ companyId }),
+  listRegisters(params: { companyId: number; page?: number; limit?: number }): Observable<{ data: CashRegister[]; total: number; page: number; limit: number; totalPages: number }> {
+      return this.base.get<{ data: CashRegister[]; total: number; page: number; limit: number; totalPages: number }>(`/cash-flow/registers`, {
+          params: toHttpParams(params as any),
       });
   }
 

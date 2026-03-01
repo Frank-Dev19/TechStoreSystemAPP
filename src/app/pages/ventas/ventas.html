@@ -146,7 +146,12 @@
             <div class="section-header-inline">
                 <h4><i class="fas fa-list"></i> Lista de Cajas</h4>
             </div>
-            <div class="table-container">
+            <div class="table-loading" *ngIf="isLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Cargando cajas...</span>
+            </div>
+
+            <div class="table-container" *ngIf="!isLoading">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -184,7 +189,7 @@
                                 <div class="action-buttons">
                                     <button class="btn-icon" [class.success]="r.status === 'OPEN'"
                                         [class.secondary]="r.status !== 'OPEN'" (click)="openCajaFromRow(r)"
-                                        [disabled]="r.status === 'OPEN'" title="Abrir">
+                                        [disabled]="r.status === 'OPEN' || r.status === 'CLOSED'" title="Abrir">
                                         <i class="fas fa-lock-open"></i>
                                     </button>
                                     <button class="btn-icon danger" (click)="closeCajaFromRow(r)"
@@ -202,6 +207,30 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="pagination" *ngIf="boxesTotal > boxesLimit">
+                <div class="pagination-info">
+                    Mostrando {{ (boxesPage - 1) * boxesLimit + 1 }} - {{ Math.min(boxesPage * boxesLimit, boxesTotal) }} de {{ boxesTotal }}
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn-icon" (click)="goToBoxPage(1)" [disabled]="boxesPage === 1" title="Primera">
+                        <i class="fas fa-angle-double-left"></i>
+                    </button>
+                    <button class="btn-icon" (click)="goToBoxPage(boxesPage - 1)" [disabled]="boxesPage === 1" title="Anterior">
+                        <i class="fas fa-angle-left"></i>
+                    </button>
+
+                    <span class="page-indicator">Página {{ boxesPage }} de {{ boxesTotalPages }}</span>
+
+                    <button class="btn-icon" (click)="goToBoxPage(boxesPage + 1)" [disabled]="boxesPage >= boxesTotalPages" title="Siguiente">
+                        <i class="fas fa-angle-right"></i>
+                    </button>
+                    <button class="btn-icon" (click)="goToBoxPage(boxesTotalPages)" [disabled]="boxesPage >= boxesTotalPages" title="Última">
+                        <i class="fas fa-angle-double-right"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -783,7 +812,8 @@
 
                 <div class="form-group">
                     <label><i class="fas fa-wallet"></i> Tipo de Pago</label>
-                    <select [(ngModel)]="cashFlowFilters.paymentType" class="form-control">
+                    <select [(ngModel)]="cashFlowFilters.paymentType" (change)="applyCashFlowFilters()"
+                        class="form-control">
                         <option [ngValue]="null">Todos</option>
                         <option value="CASH">Efectivo</option>
                         <option value="CARD">Tarjeta</option>
@@ -791,6 +821,24 @@
                         <option value="YAPE">Yape</option>
                         <option value="PLIN">Plin</option>
                     </select>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-cash-register"></i> Caja</label>
+                    <div class="client-autocomplete">
+                        <input type="text" [(ngModel)]="cashFlowBoxSearchText" (change)="applyCashFlowFilters()"
+                            (input)="onBoxSearch()" (blur)="onBoxBlur()" (focus)="onBoxFocus()" class="form-control"
+                            placeholder="Buscar caja...">
+                        <ul class="autocomplete-dropdown" *ngIf="showBoxDropdown && filteredBoxes.length > 0">
+                            <li *ngFor="let box of filteredBoxes" (mousedown)="selectBox(box)"
+                                class="autocomplete-item">
+                                <span class="item-name">{{ box.code || box.name }}</span>
+                                <span class="item-meta" [class.status-open]="box.status === 'OPEN'">
+                                    {{ box.status === 'OPEN' ? 'Abierta' : 'Cerrada' }}
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 
@@ -826,14 +874,14 @@
                     <span class="metric-value">S/ {{ cashFlowMetrics.cash.toFixed(2) }}</span>
                 </div>
             </div>
-            <div class="metric-card info">
+            <div class="metric-card warning">
                 <div class="metric-icon"><i class="fas fa-bank"></i></div>
                 <div class="metric-content">
                     <label>Transferencias</label>
                     <span class="metric-value">S/ {{ cashFlowMetrics.transfer.toFixed(2) }}</span>
                 </div>
             </div>
-            <div class="metric-card warning">
+            <div class="metric-card info">
                 <div class="metric-icon"><i class="fas fa-credit-card"></i></div>
                 <div class="metric-content">
                     <label>Tarjeta</label>
@@ -847,7 +895,7 @@
                     <span class="metric-value">S/ {{ cashFlowMetrics.yape.toFixed(2) }}</span>
                 </div>
             </div>
-            <div class="metric-card orange">
+            <div class="metric-card success">
                 <div class="metric-icon"><i class="fas fa-mobile-alt"></i></div>
                 <div class="metric-content">
                     <label>Plin</label>
@@ -858,7 +906,12 @@
 
         <!-- CASH FLOW TABLE -->
         <div class="table-section">
-            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+            <div class="table-loading" *ngIf="isLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Cargando flujo de caja...</span>
+            </div>
+
+            <div class="table-container" style="max-height: 400px; overflow-y: auto;" *ngIf="!isLoading">
                 <table class="data-table">
                     <thead>
                         <tr>

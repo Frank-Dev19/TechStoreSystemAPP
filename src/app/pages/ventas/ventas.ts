@@ -12,6 +12,7 @@ import { StockService } from '../../services/inventory/stock.service';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
 import { PricingQueryApiService } from '../../services/pricing/pricing-query-api.service';
+import { CurrentUserService } from '../../services/current-user.service';
 import { BestPriceResponse } from '../../models/pricing/pricing.models';
 import { DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../models/sales/document-series.model';
 import { DocumentType } from '../../models/sales/enums';
@@ -314,7 +315,8 @@ export class Ventas implements OnInit {
     private pricingProductsApi: PricingProductsApiService,
     private stockService: StockService,
     private documentTypesApi: DocumentTypesApiService,
-    private pricingQueryApi: PricingQueryApiService
+    private pricingQueryApi: PricingQueryApiService,
+    private currentUser: CurrentUserService
   ) { }
 
   @ViewChild('productSearchInput') productSearchInput!: ElementRef<HTMLInputElement>
@@ -436,6 +438,12 @@ export class Ventas implements OnInit {
   cashFlowTotal = 0
   cashFlowTotalPages = 0
 
+  // Cash Flow Box Filter
+  cashFlowSelectedBox: any = null
+  cashFlowBoxSearchText: string = ''
+  filteredBoxes: any[] = []
+  showBoxDropdown: boolean = false
+
 
 
   // METRICS
@@ -463,6 +471,12 @@ export class Ventas implements OnInit {
   currentOpenRegister: any = null
   registersList: any[] = []
 
+  // Box Pagination
+  boxesPage = 1
+  boxesLimit = 5
+  boxesTotal = 0
+  boxesTotalPages = 0
+
   ngOnInit(): void {
     this.loadSales()
     this.productsApiGet()
@@ -472,6 +486,9 @@ export class Ventas implements OnInit {
     this.loadRegisters()
     this.loadDocumentSeries()
     this.loadCashFlowData()
+  }
+  private get currentUserName(): string {
+    return this.currentUser.value?.name || 'Usuario Front';
   }
 
   private productsApiGet(): void {
@@ -580,9 +597,22 @@ export class Ventas implements OnInit {
   }
 
   private loadRegisters(): void {
-    this.cashFlowApi.listRegisters(1).subscribe((list: any) => {
-      this.registersList = list as any
+    this.cashFlowApi.listRegisters({
+      companyId: 1,
+      page: this.boxesPage,
+      limit: this.boxesLimit
+    }).subscribe((resp: any) => {
+      this.registersList = resp.data || []
+      this.boxesTotal = resp.total || 0
+      this.boxesTotalPages = resp.totalPages || 0
     })
+  }
+
+  goToBoxPage(page: number): void {
+    if (page >= 1 && page <= this.boxesTotalPages) {
+      this.boxesPage = page
+      this.loadRegisters()
+    }
   }
 
   openCajaFromRow(box: any): void {
@@ -780,6 +810,47 @@ export class Ventas implements OnInit {
     setTimeout(() => {
       this.showClientDropdown = false
     }, 200)
+  }
+
+  // Cash Flow Box Filter Methods
+  onBoxSearch(): void {
+    const search = this.cashFlowBoxSearchText.toLowerCase()
+    if (!search) {
+      this.filteredBoxes = this.registersList || []
+      this.showBoxDropdown = this.filteredBoxes.length > 0
+      return
+    }
+
+    this.filteredBoxes = (this.registersList || []).filter((box: any) =>
+      box.code?.toLowerCase().includes(search) ||
+      box.name?.toLowerCase().includes(search)
+    )
+    this.showBoxDropdown = this.filteredBoxes.length > 0
+  }
+
+  selectBox(box: any): void {
+    this.cashFlowSelectedBox = box
+    this.cashFlowBoxSearchText = box.code || box.name || ''
+    this.showBoxDropdown = false
+    this.cashFlowPage = 1
+    this.loadCashFlowData()
+  }
+
+  onBoxFocus(): void {
+    this.onBoxSearch()
+  }
+
+  onBoxBlur(): void {
+    setTimeout(() => {
+      this.showBoxDropdown = false
+    }, 200)
+  }
+
+  clearBoxFilter(): void {
+    this.cashFlowSelectedBox = null
+    this.cashFlowBoxSearchText = ''
+    this.cashFlowPage = 1
+    this.loadCashFlowData()
   }
 
   // Date preset handling
@@ -1768,11 +1839,17 @@ export class Ventas implements OnInit {
   // ============================================
   // CASH FLOW - API REAL
   // ============================================
-  
+
   loadCashFlowData(): void {
     this.isLoading = true
-    
-    const params = {
+
+    // Initialize with open register if no box is selected
+    if (!this.cashFlowSelectedBox && this.currentOpenRegister) {
+      this.cashFlowSelectedBox = this.currentOpenRegister
+      this.cashFlowBoxSearchText = this.currentOpenRegister.code || this.currentOpenRegister.name || ''
+    }
+
+    const params: any = {
       companyId: 1,
       dateFrom: this.cashFlowFilters.dateFrom,
       dateTo: this.cashFlowFilters.dateTo,
@@ -1781,13 +1858,17 @@ export class Ventas implements OnInit {
       limit: this.cashFlowLimit
     }
 
+    if (this.cashFlowSelectedBox) {
+      params.cashRegisterId = this.cashFlowSelectedBox.id
+    }
+
     this.cashFlowApi.listTransactions(params).subscribe({
       next: (response) => {
         this.cashFlowEntries = response.data || []
         this.cashFlowTotal = response.total || 0
         this.cashFlowTotalPages = response.totalPages || 0
         this.isLoading = false
-        
+
         this.loadCashFlowMetrics()
       },
       error: (err) => {
@@ -1800,10 +1881,14 @@ export class Ventas implements OnInit {
   }
 
   loadCashFlowMetrics(): void {
-    const params = {
+    const params: any = {
       companyId: 1,
       dateFrom: this.cashFlowFilters.dateFrom,
       dateTo: this.cashFlowFilters.dateTo
+    }
+
+    if (this.cashFlowSelectedBox) {
+      params.cashRegisterId = this.cashFlowSelectedBox.id
     }
 
     this.cashFlowApi.getCashFlowMetrics(params).subscribe({
@@ -1842,7 +1927,7 @@ export class Ventas implements OnInit {
 
   onCashFlowDatePresetChange(preset: string): void {
     const today = new Date()
-    
+
     switch (preset) {
       case 'today':
         this.cashFlowFilters.dateFrom = today.toISOString().split('T')[0]
@@ -2199,9 +2284,9 @@ export class Ventas implements OnInit {
   // Agrupar seriales por lote para mostrar en el detalle
   groupSerialsByLot(serials: Array<{ serialCode: string; lotCode?: string; expirationDate?: string }>): { lotCode: string; expirationDate?: string; serials: string[] }[] {
     if (!serials || serials.length === 0) return [];
-    
+
     const grouped = new Map<string, { lotCode: string; expirationDate?: string; serials: string[] }>();
-    
+
     for (const serial of serials) {
       const lotCode = serial.lotCode || 'Sin lote';
       if (!grouped.has(lotCode)) {
@@ -2213,7 +2298,7 @@ export class Ventas implements OnInit {
       }
       grouped.get(lotCode)!.serials.push(serial.serialCode);
     }
-    
+
     return Array.from(grouped.values());
   }
 }
