@@ -1,25 +1,26 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { config } from '../../../environments/environment';
-import { BusinessPartnersApiService, PaginatedResponse } from '../../services/business-partners-api.service';
-import { BusinessPartnerResponse } from '../../models/business-partners/business-partners-response';
+import { ClientsApiService, PaginatedResponse } from '../../services/clients-api.service';
+import { ClientResponse } from '../../models/clients-response';
 import {
-  BusinessPartnerSaveRequest,
-  BusinessPartnerUpdateRequest,
-} from '../../models/business-partners/business-partners-request';
+  ClientSaveRequest,
+  ClientUpdateRequest,
+} from '../../models/clients-request';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
 
 @Component({
-  selector: 'app-business-partners',
+  selector: 'app-clients',
   standalone: false,
-  templateUrl: './business-partners.html',
-  styleUrl: './business-partners.scss',
+  templateUrl: './clients.html',
+  styleUrl: './clients.scss',
 })
-export class BusinessPartners implements OnInit {
+export class Clients implements OnInit {
+  private readonly documentNumberPattern = /^[A-Za-z0-9-]+$/;
 
-  partners: BusinessPartnerResponse[] = [];
-  visiblePartners: BusinessPartnerResponse[] = [];
+  partners: ClientResponse[] = [];
+  visiblePartners: ClientResponse[] = [];
   selectedPartnerIds: number[] = [];
 
   searchTerm = '';
@@ -37,7 +38,7 @@ export class BusinessPartners implements OnInit {
   showConfirmModal = false;
   isEditMode = false;
   partnerForm: FormGroup;
-  currentPartner: BusinessPartnerResponse | null = null;
+  currentPartner: ClientResponse | null = null;
 
   showAlert = false;
   AlertType = '';
@@ -48,17 +49,22 @@ export class BusinessPartners implements OnInit {
   confirmAction: (() => void) | null = null;
   confirmModalMode: 'delete' | 'restore' = 'delete';
   showRestoreSuggestion = false;
-  restoreSuggestionData: BusinessPartnerResponse | null = null;
+  restoreSuggestionData: ClientResponse | null = null;
 
   documentDigitsHint: number | null = null;
 
   Math = Math;
+  readonly pageTitle = 'Clientes';
+  readonly pageSubtitle = 'Administra clientes desde un solo lugar';
+  readonly entityLabel = 'cliente';
+  readonly entityLabelPlural = 'clientes';
+  readonly entityDisplayLabel = 'Cliente';
 
   private readonly companyId = Number(config.defaultCompanyId ?? 1) || 1;
 
   constructor(
     private readonly formBuilder: FormBuilder,
-    private readonly businessPartnersApi: BusinessPartnersApiService,
+    private readonly clientsApi: ClientsApiService,
     private readonly documentTypesApi: DocumentTypesApiService,
   ) {
     this.partnerForm = this.createForm();
@@ -84,21 +90,12 @@ export class BusinessPartners implements OnInit {
         name: ['', [Validators.required, Validators.minLength(2)]],
         tradeName: [''],
         documentTypeId: [null, Validators.required],
-        documentNumber: ['', [Validators.required]],
+        documentNumber: ['', [Validators.required, Validators.pattern(this.documentNumberPattern)]],
         email: ['', Validators.email],
         phone: ['', Validators.required],
         address: [''],
         city: [''],
         country: [''],
-        isClient: [true],
-        isSupplier: [false],
-      },
-      {
-        validators: (group) => {
-          const isClient = group.get('isClient')?.value;
-          const isSupplier = group.get('isSupplier')?.value;
-          return isClient || isSupplier ? null : { roleRequired: true };
-        },
       }
     );
   }
@@ -109,7 +106,29 @@ export class BusinessPartners implements OnInit {
       const docType = this.documentTypes.find((item) => Number(item.id) === docTypeId);
       this.documentDigitsHint = docType?.digits ?? null;
       this.updateDocumentNumberValidators(this.documentDigitsHint);
+      this.enforceDocumentNumberLength();
     });
+  }
+
+  onDocumentNumberInput(): void {
+    this.enforceDocumentNumberLength();
+  }
+
+  private enforceDocumentNumberLength(): void {
+    const control = this.partnerForm.get('documentNumber');
+    const rawValue = String(control?.value ?? '');
+    if (!control) {
+      return;
+    }
+
+    const safeValue = rawValue.replace(/[^A-Za-z0-9-]/g, '');
+    const trimmedValue = this.documentDigitsHint
+      ? safeValue.slice(0, this.documentDigitsHint)
+      : safeValue;
+
+    if (trimmedValue !== rawValue) {
+      control.setValue(trimmedValue, { emitEvent: false });
+    }
   }
 
   private updateDocumentNumberValidators(digits: number | null): void {
@@ -118,7 +137,7 @@ export class BusinessPartners implements OnInit {
       return;
     }
 
-    const validators = [Validators.required];
+    const validators = [Validators.required, Validators.pattern(this.documentNumberPattern)];
     if (digits && digits > 0) {
       validators.push(Validators.minLength(digits));
       validators.push(Validators.maxLength(digits));
@@ -165,8 +184,8 @@ export class BusinessPartners implements OnInit {
       params['search'] = this.searchTerm.trim();
     }
 
-    this.businessPartnersApi.findAll(params).subscribe({
-      next: (response: PaginatedResponse<BusinessPartnerResponse>) => {
+    this.clientsApi.findAll(params).subscribe({
+      next: (response: PaginatedResponse<ClientResponse>) => {
         this.partners = (response.data ?? []).map((partner) => ({
           ...partner,
           id: Number(partner.id),
@@ -183,7 +202,7 @@ export class BusinessPartners implements OnInit {
         this.selectedPartnerIds = [];
       },
       error: (err) => {
-        console.error('Error fetching business partners', err);
+        console.error('Error fetching clients', err);
         this.partners = [];
         this.visiblePartners = [];
         this.totalItems = 0;
@@ -277,14 +296,12 @@ export class BusinessPartners implements OnInit {
       address: '',
       city: '',
       country: '',
-      isClient: true,
-      isSupplier: false,
     });
     this.documentDigitsHint = null;
     this.showModal = true;
   }
 
-  openEditModal(partner: BusinessPartnerResponse): void {
+  openEditModal(partner: ClientResponse): void {
     this.isEditMode = true;
     this.currentPartner = partner;
     this.partnerForm.patchValue({
@@ -297,8 +314,6 @@ export class BusinessPartners implements OnInit {
       address: partner.address ?? '',
       city: partner.city ?? '',
       country: partner.country ?? '',
-      isClient: partner.isClient,
-      isSupplier: partner.isSupplier,
     });
     const docType = this.documentTypes.find((item) => Number(item.id) === Number(partner.documentTypeId));
     this.documentDigitsHint = docType?.digits ?? null;
@@ -308,12 +323,12 @@ export class BusinessPartners implements OnInit {
 
   closeModal(): void {
     this.showModal = false;
-    this.partnerForm.reset({ isClient: true, isSupplier: false });
+    this.partnerForm.reset();
     this.currentPartner = null;
     this.documentDigitsHint = null;
   }
 
-  private buildSavePayload(): BusinessPartnerSaveRequest {
+  private buildSavePayload(): ClientSaveRequest {
     const formValue = this.partnerForm.value;
     return {
       companyId: this.companyId ?? undefined,
@@ -322,16 +337,14 @@ export class BusinessPartners implements OnInit {
       documentTypeId: Number(formValue.documentTypeId),
       documentNumber: String(formValue.documentNumber).trim(),
       email: formValue.email ? String(formValue.email).trim() : undefined,
-      phone: formValue.phone ? String(formValue.phone).trim() : undefined,
+      phone: String(formValue.phone).trim(),
       address: formValue.address ? String(formValue.address).trim() : undefined,
       city: formValue.city ? String(formValue.city).trim() : undefined,
       country: formValue.country ? String(formValue.country).trim() : undefined,
-      isClient: !!formValue.isClient,
-      isSupplier: !!formValue.isSupplier,
     };
   }
 
-  private buildUpdatePayload(): BusinessPartnerUpdateRequest {
+  private buildUpdatePayload(): ClientUpdateRequest {
     const payload = this.buildSavePayload();
     if (this.currentPartner) {
       delete payload.companyId;
@@ -352,21 +365,21 @@ export class BusinessPartners implements OnInit {
     }
 
     const request$ = this.isEditMode && this.currentPartner
-      ? this.businessPartnersApi.update(Number(this.currentPartner.id), this.buildUpdatePayload())
-      : this.businessPartnersApi.create(this.buildSavePayload());
+      ? this.clientsApi.update(Number(this.currentPartner.id), this.buildUpdatePayload())
+      : this.clientsApi.create(this.buildSavePayload());
 
     request$.subscribe({
       next: () => {
         this.isEditMode
-          ? this.showMessage('success', 'fas fa-check-circle', 'Socio comercial actualizado correctamente!')
-          : this.showMessage('success', 'fas fa-check-circle', 'Socio comercial creado correctamente!');
+          ? this.showMessage('success', 'fas fa-check-circle', 'Cliente actualizado correctamente!')
+          : this.showMessage('success', 'fas fa-check-circle', 'Cliente creado correctamente!');
         this.closeModal();
         this.fetchPartners();
       },
       error: (err) => {
         if (!this.isEditMode && err?.status === 409) {
           const deleted = !!err?.error?.deleted;
-          const candidate = err?.error?.data as BusinessPartnerResponse | undefined;
+          const candidate = err?.error?.data as ClientResponse | undefined;
           if (deleted && candidate) {
             this.openRestoreSuggestion(candidate);
             return;
@@ -377,19 +390,19 @@ export class BusinessPartners implements OnInit {
           this.showMessage(
             'error',
             'fas fa-exclamation-circle',
-            `No se pudo crear el socio porque el documento ${docTypeName} - ${docNumber} ya existe!`,
+            `No se pudo crear el cliente porque el documento ${docTypeName} - ${docNumber} ya existe!`,
           );
           return;
         }
         this.isEditMode
-          ? this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo actualizar el socio comercial!')
-          : this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo crear el socio comercial!');
+          ? this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo actualizar el cliente!')
+          : this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo crear el cliente!');
       },
     });
   }
 
-  confirmDelete(partner: BusinessPartnerResponse): void {
-    this.confirmMessage = `¿Estás seguro de que deseas eliminar al socio comercial "${partner.name}"?`;
+  confirmDelete(partner: ClientResponse): void {
+    this.confirmMessage = `¿Estás seguro de que deseas eliminar al cliente "${partner.name}"?`;
     this.confirmAction = () => this.deletePartner(partner.id);
     this.confirmModalMode = 'delete';
     this.showConfirmModal = true;
@@ -400,14 +413,14 @@ export class BusinessPartners implements OnInit {
     if (!count) {
       return;
     }
-    this.confirmMessage = `¿Estás seguro de que deseas eliminar ${count} socio${count > 1 ? 's' : ''} comercial${count > 1 ? 'es' : ''}?`;
+    this.confirmMessage = `¿Estás seguro de que deseas eliminar ${count} cliente${count > 1 ? 's' : ''}?`;
     this.confirmAction = () => this.deleteBulkPartners();
     this.confirmModalMode = 'delete';
     this.showConfirmModal = true;
   }
 
-  confirmRestore(partner: BusinessPartnerResponse): void {
-    this.confirmMessage = `¿Estás seguro de que deseas restaurar al socio comercial "${partner.name}"?`;
+  confirmRestore(partner: ClientResponse): void {
+    this.confirmMessage = `¿Estás seguro de que deseas restaurar al cliente "${partner.name}"?`;
     this.confirmAction = () => this.restorePartner(partner.id);
     this.confirmModalMode = 'restore';
     this.showConfirmModal = true;
@@ -418,7 +431,7 @@ export class BusinessPartners implements OnInit {
     if (!count) {
       return;
     }
-    this.confirmMessage = `¿Estás seguro de que deseas restaurar ${count} socio${count > 1 ? 's' : ''} comercial${count > 1 ? 'es' : ''}?`;
+    this.confirmMessage = `¿Estás seguro de que deseas restaurar ${count} cliente${count > 1 ? 's' : ''}?`;
     this.confirmAction = () => this.restoreBulkPartners();
     this.confirmModalMode = 'restore';
     this.showConfirmModal = true;
@@ -426,14 +439,14 @@ export class BusinessPartners implements OnInit {
 
   private deletePartner(partnerId: number | string): void {
     const id = Number(partnerId);
-    this.businessPartnersApi.remove(id).subscribe({
+    this.clientsApi.remove(id).subscribe({
       next: () => {
-        this.showMessage('success', 'fas fa-check-circle', 'Socio comercial eliminado correctamente!');
+        this.showMessage('success', 'fas fa-check-circle', 'Cliente eliminado correctamente!');
         this.fetchPartners();
       },
       error: (err) => {
-        console.error('Error deleting business partner', err);
-        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo eliminar el socio comercial!');
+        console.error('Error deleting client', err);
+        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo eliminar el cliente!');
       },
       complete: () => {
         this.closeConfirmModal();
@@ -448,14 +461,14 @@ export class BusinessPartners implements OnInit {
 
     const ids = this.selectedPartnerIds.map((value) => Number(value));
 
-    this.businessPartnersApi.bulkSoftDelete(ids).subscribe({
+    this.clientsApi.bulkSoftDelete(ids).subscribe({
       next: () => {
-        this.showMessage('success', 'fas fa-check-circle', 'Socios comerciales eliminados correctamente!');
+        this.showMessage('success', 'fas fa-check-circle', 'Clientes eliminados correctamente!');
         this.fetchPartners();
       },
       error: (err) => {
-        console.error('Error deleting business partners', err);
-        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron eliminar los socios comerciales!');
+        console.error('Error deleting clients', err);
+        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron eliminar los clientes!');
       },
       complete: () => {
         this.closeConfirmModal();
@@ -472,15 +485,15 @@ export class BusinessPartners implements OnInit {
     const closeConfirm = options?.closeConfirm ?? true;
     const onSuccess = options?.onSuccess;
 
-    this.businessPartnersApi.restore(id).subscribe({
+    this.clientsApi.restore(id).subscribe({
       next: () => {
-        this.showMessage('success', 'fas fa-check-circle', 'Socio comercial restaurado correctamente!');
+        this.showMessage('success', 'fas fa-check-circle', 'Cliente restaurado correctamente!');
         this.fetchPartners();
         onSuccess?.();
       },
       error: (err) => {
-        console.error('Error restoring business partner', err);
-        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo restaurar el socio comercial!');
+        console.error('Error restoring client', err);
+        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo restaurar el cliente!');
       },
       complete: () => {
         if (closeConfirm) {
@@ -497,14 +510,14 @@ export class BusinessPartners implements OnInit {
 
     const ids = this.selectedPartnerIds.map((value) => Number(value));
 
-    this.businessPartnersApi.bulkRestore(ids).subscribe({
+    this.clientsApi.bulkRestore(ids).subscribe({
       next: () => {
-        this.showMessage('success', 'fas fa-check-circle', 'Socios comerciales restaurados correctamente!');
+        this.showMessage('success', 'fas fa-check-circle', 'Clientes restaurados correctamente!');
         this.fetchPartners();
       },
       error: (err) => {
-        console.error('Error restoring business partners', err);
-        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron restaurar los socios comerciales!');
+        console.error('Error restoring clients', err);
+        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron restaurar los clientes!');
       },
       complete: () => {
         this.closeConfirmModal();
@@ -541,20 +554,11 @@ export class BusinessPartners implements OnInit {
     return docType?.name ?? documentTypeId.toString();
   }
 
-  getRoleLabels(partner: BusinessPartnerResponse): string {
-    if (partner.isClient && partner.isSupplier) {
-      return 'Cliente y Proveedor';
-    }
-    if (partner.isClient) {
-      return 'Cliente';
-    }
-    if (partner.isSupplier) {
-      return 'Proveedor';
-    }
-    return 'Sin asignar';
+  getRoleLabels(_partner?: ClientResponse): string {
+    return 'Cliente';
   }
 
-  openRestoreSuggestion(data: BusinessPartnerResponse): void {
+  openRestoreSuggestion(data: ClientResponse): void {
     const docTypeId = Number(data.documentTypeId ?? data.documentType?.id ?? 0);
     this.restoreSuggestionData = {
       ...data,

@@ -2,7 +2,7 @@ import { PaymentStatus, TicketPriority } from './ticket';
 import { TicketItemSaveRequest } from './ticket-item-request';
 
 export interface TicketSaveRequest {
-  businessPartnerId: number;
+  clientId: number;
   priority?: TicketPriority;
   contactName?: string | null;
   contactPhone?: string | null;
@@ -15,7 +15,7 @@ export interface TicketSaveRequest {
 }
 
 export interface TicketUpdateRequest {
-  businessPartnerId?: number;
+  clientId?: number;
   priority?: TicketPriority;
   contactName?: string | null;
   contactPhone?: string | null;

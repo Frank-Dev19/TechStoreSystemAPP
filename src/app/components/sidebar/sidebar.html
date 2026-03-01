@@ -83,7 +83,7 @@
                                 </svg>
                             </div>
                             <div class="nav-content">
-                                <span class="nav-title">Socios Comerciales</span>
+                                <span class="nav-title">Socios</span>
                                 <span class="nav-subtitle">Clientes y proveedores</span>
                             </div>
                             <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo2')" width="16" height="16"
@@ -92,8 +92,11 @@
                             </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo2')">
-                            <li><a class="nav-link submenu-link" routerLink="/socios-comerciales">
-                                    <i class="submenu-dot"></i>Listado de Socios
+                            <li><a class="nav-link submenu-link" routerLink="/clientes">
+                                    <i class="submenu-dot"></i>Clientes
+                                </a></li>
+                            <li><a class="nav-link submenu-link" routerLink="/proveedores">
+                                    <i class="submenu-dot"></i>Proveedores
                                 </a></li>
                         </ul>
                     </li>

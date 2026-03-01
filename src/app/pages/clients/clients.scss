@@ -4,7 +4,7 @@ $accent: #3182ce;
 $text-muted: #6b7280;
 $border: #e2e8f0;
 
-.business-partners-container {
+.contacts-page-container {
     background: #f5f7fa;
     min-height: 100vh;
     padding: 2rem;
@@ -777,7 +777,7 @@ $border: #e2e8f0;
 
 // Responsive Design
 @media (max-width: 768px) {
-    .business-partners-container {
+    .contacts-page-container {
         padding: 1rem;
 
         .filters-card {
@@ -830,7 +830,7 @@ $border: #e2e8f0;
 }
 
 @media (max-width: 480px) {
-    .business-partners-container {
+    .contacts-page-container {
         .table-container {
             .table-wrapper {
                 .partners-table {

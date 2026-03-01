@@ -1,8 +1,8 @@
-<div class="business-partners-container">
+<div class="contacts-page-container">
     <div class="header-section">
         <div class="title-section">
-            <h1 class="page-title">Gestión de Socios Comerciales</h1>
-            <p class="page-subtitle">Administra clientes y proveedores desde un solo lugar</p>
+            <h1 class="page-title">Gestión de Clientes</h1>
+            <p class="page-subtitle">{{ pageSubtitle }}</p>
         </div>
     </div>
 
@@ -26,7 +26,7 @@
             <div class="actions-wrapper">
                 <button class="btn btn-primary" (click)="openCreateModal()">
                     <i class="fas fa-plus"></i>
-                    Nuevo socio
+                    Nuevo cliente
                 </button>
                 <button class="btn btn-secondary" (click)="refreshData()">
                     <i class="fas fa-sync-alt"></i>
@@ -39,7 +39,7 @@
     <div class="panel-card table-card">
         <div class="bulk-actions" *ngIf="selectedPartnerIds.length > 0">
             <div class="selected-info">
-                <span>{{selectedPartnerIds.length}} socio(s) seleccionado(s)</span>
+                <span>{{selectedPartnerIds.length}} Cliente(s) seleccionado(s)</span>
             </div>
             <div class="bulk-buttons">
                 <button class="btn" [ngClass]="isDeletedView ? 'btn-success' : 'btn-danger'"
@@ -63,7 +63,6 @@
                             <th>Nombre Comercial</th>
                             <th>Tipo Doc.</th>
                             <th>N° Documento</th>
-                            <th>Rol</th>
                             <th>Correo</th>
                             <th>Teléfono</th>
                             <th>Ciudad</th>
@@ -88,15 +87,6 @@
                                 </span>
                             </td>
                             <td class="document-cell">{{partner.documentNumber}}</td>
-                            <td>
-                                <span class="role-badge" [ngClass]="{
-                                    'client': partner.isClient,
-                                    'supplier': partner.isSupplier,
-                                    'both': partner.isClient && partner.isSupplier
-                                }">
-                                    {{getRoleLabels(partner)}}
-                                </span>
-                            </td>
                             <td class="contact-cell">{{partner.email || '—'}}</td>
                             <td class="contact-cell">{{partner.phone || '—'}}
                             </td>
@@ -131,8 +121,8 @@
                 <div class="empty-icon">
                     <i class="fas fa-users"></i>
                 </div>
-                <h3>No se encontraron socios comerciales</h3>
-                <p>Intenta ajustar tu búsqueda o registrar un nuevo socio.</p>
+                <h3>No se encontraron clientes</h3>
+                <p>Intenta ajustar tu búsqueda o registrar un nuevo cliente.</p>
             </div>
         }
 
@@ -143,7 +133,7 @@
             Mostrando
             {{ (currentPage - 1) * itemsPerPage + 1 }} -
             {{ Math.min(currentPage * itemsPerPage, totalItems) }}
-            de {{ totalItems }} socios
+            de {{ totalItems }} clientes
         </div>
         <div class="pagination-controls">
             <button class="btn-pagination" [disabled]="currentPage === 1" (click)="previousPage()">
@@ -161,7 +151,7 @@
 <div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
     <div class="modal-container" (click)="$event.stopPropagation()">
         <div class="modal-header">
-            <h2>{{isEditMode ? 'Editar socio comercial' : 'Nuevo socio comercial'}}</h2>
+            <h2>{{isEditMode ? 'Editar cliente' : 'Nuevo cliente'}}</h2>
             <button class="btn-close" (click)="closeModal()">
                 <i class="fas fa-times"></i>
             </button>
@@ -202,10 +192,14 @@
                     <div class="form-group">
                         <label for="numeroDocumento">Número de Documento *</label>
                         <input type="text" id="numeroDocumento" formControlName="documentNumber" class="form-input"
+                            [attr.maxlength]="documentDigitsHint || null"
+                            (input)="onDocumentNumberInput()"
                             [class.error]="partnerForm.get('documentNumber')?.invalid && partnerForm.get('documentNumber')?.touched">
                         <div class="error-message"
                             *ngIf="partnerForm.get('documentNumber')?.invalid && partnerForm.get('documentNumber')?.touched">
-                            {{documentDigitsHint ? 'Debe tener ' + documentDigitsHint + ' dígitos' : 'El número de documento es requerido'}}
+                            {{partnerForm.get('documentNumber')?.errors?.['pattern']
+                              ? 'Solo se permiten letras, números y guion'
+                              : (documentDigitsHint ? 'Debe tener ' + documentDigitsHint + ' caracteres como máximo' : 'El número de documento es requerido')}}
                         </div>
                     </div>
 
@@ -220,8 +214,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="phone">Teléfono</label>
-                        <input type="tel" id="phone" formControlName="phone" class="form-input">
+                        <label for="phone">Teléfono *</label>
+                        <input type="tel" id="phone" formControlName="phone" class="form-input"
+                            [class.error]="partnerForm.get('phone')?.invalid && partnerForm.get('phone')?.touched">
+                        <div class="error-message"
+                            *ngIf="partnerForm.get('phone')?.invalid && partnerForm.get('phone')?.touched">
+                            El teléfono es requerido
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -239,25 +238,6 @@
                         <input type="text" id="country" formControlName="country" class="form-input">
                     </div>
 
-                    <div class="form-group role-group">
-                        <label>Rol *</label>
-                        <div class="checkboxes">
-                            <label class="checkbox-label">
-                                <input type="checkbox" formControlName="isClient" class="checkbox-input">
-                                <span class="checkbox-custom"></span>
-                                Cliente
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" formControlName="isSupplier" class="checkbox-input">
-                                <span class="checkbox-custom"></span>
-                                Proveedor
-                            </label>
-                        </div>
-                        <div class="error-message"
-                            *ngIf="partnerForm.errors?.['roleRequired'] && (partnerForm.dirty || partnerForm.touched)">
-                            Selecciona al menos un rol
-                        </div>
-                    </div>
                 </div>
             </form>
         </div>
@@ -266,7 +246,7 @@
                 Cancelar
             </button>
             <button type="submit" class="btn btn-primary" (click)="savePartner()" [disabled]="partnerForm.invalid">
-                {{isEditMode ? 'Actualizar' : 'Crear'}} socio
+                {{isEditMode ? 'Actualizar' : 'Crear'}} cliente
             </button>
         </div>
     </div>
@@ -300,14 +280,14 @@
 <div class="modal-overlay" *ngIf="showRestoreSuggestion" (click)="closeRestoreSuggestion()">
     <div class="modal-container restore-suggestion-modal" (click)="$event.stopPropagation()">
         <div class="modal-header">
-            <h2>Restaurar socio comercial</h2>
+            <h2>Restaurar cliente</h2>
             <button class="btn-close" (click)="closeRestoreSuggestion()">
                 <i class="fas fa-times"></i>
             </button>
         </div>
         <div class="modal-body">
             <p class="restore-message">
-                El socio comercial '{{restoreSuggestionData?.name}}' ya existe pero se encuentra eliminado, ¿deseas restaurarlo?
+                El cliente '{{restoreSuggestionData?.name}}' ya existe pero se encuentra eliminado, ¿deseas restaurarlo?
             </p>
             <div class="restore-details">
                 <div class="detail-row">
