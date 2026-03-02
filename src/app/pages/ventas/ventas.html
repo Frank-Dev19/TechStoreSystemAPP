@@ -85,6 +85,10 @@
                         <i class="fas fa-lock-open"></i> Caja Abierta: {{ currentCashRegister.name }}
                     </span>
                 </div>
+                <button class="btn-secondary" (click)="openIncomeModal()">
+                    <i class="fas fa-plus-circle"></i>
+                    Ingreso
+                </button>
                 <button class="btn-danger" (click)="closeCashRegister()">
                     <i class="fas fa-lock"></i>
                     Cerrar Caja
@@ -137,6 +141,13 @@
                 <div class="metric-content">
                     <label>Plin</label>
                     <span class="metric-value">S/ {{ currentCashRegister.totalPlin || 0 | number:'1.2-2' }}</span>
+                </div>
+            </div>
+            <div class="metric-card danger">
+                <div class="metric-icon"><i class="fas fa-undo-alt"></i></div>
+                <div class="metric-content">
+                    <label>Anulaciones</label>
+                    <span class="metric-value">S/ {{ currentCashRegister.totalReturns || 0 | number:'1.2-2' }}</span>
                 </div>
             </div>
         </div>
@@ -208,26 +219,30 @@
                     </tbody>
                 </table>
             </div>
-            
+
             <!-- Pagination -->
             <div class="pagination" *ngIf="boxesTotal > boxesLimit">
                 <div class="pagination-info">
-                    Mostrando {{ (boxesPage - 1) * boxesLimit + 1 }} - {{ Math.min(boxesPage * boxesLimit, boxesTotal) }} de {{ boxesTotal }}
+                    Mostrando {{ (boxesPage - 1) * boxesLimit + 1 }} - {{ Math.min(boxesPage * boxesLimit, boxesTotal)
+                    }} de {{ boxesTotal }}
                 </div>
                 <div class="pagination-controls">
                     <button class="btn-icon" (click)="goToBoxPage(1)" [disabled]="boxesPage === 1" title="Primera">
                         <i class="fas fa-angle-double-left"></i>
                     </button>
-                    <button class="btn-icon" (click)="goToBoxPage(boxesPage - 1)" [disabled]="boxesPage === 1" title="Anterior">
+                    <button class="btn-icon" (click)="goToBoxPage(boxesPage - 1)" [disabled]="boxesPage === 1"
+                        title="Anterior">
                         <i class="fas fa-angle-left"></i>
                     </button>
 
                     <span class="page-indicator">Página {{ boxesPage }} de {{ boxesTotalPages }}</span>
 
-                    <button class="btn-icon" (click)="goToBoxPage(boxesPage + 1)" [disabled]="boxesPage >= boxesTotalPages" title="Siguiente">
+                    <button class="btn-icon" (click)="goToBoxPage(boxesPage + 1)"
+                        [disabled]="boxesPage >= boxesTotalPages" title="Siguiente">
                         <i class="fas fa-angle-right"></i>
                     </button>
-                    <button class="btn-icon" (click)="goToBoxPage(boxesTotalPages)" [disabled]="boxesPage >= boxesTotalPages" title="Última">
+                    <button class="btn-icon" (click)="goToBoxPage(boxesTotalPages)"
+                        [disabled]="boxesPage >= boxesTotalPages" title="Última">
                         <i class="fas fa-angle-double-right"></i>
                     </button>
                 </div>
@@ -902,6 +917,13 @@
                     <span class="metric-value">S/ {{ cashFlowMetrics.plin.toFixed(2) }}</span>
                 </div>
             </div>
+            <div class="metric-card danger">
+                <div class="metric-icon"><i class="fas fa-undo-alt"></i></div>
+                <div class="metric-content">
+                    <label>Anulaciones</label>
+                    <span class="metric-value">S/ {{ cashFlowMetrics.returns.toFixed(2) }}</span>
+                </div>
+            </div>
         </div>
 
         <!-- CASH FLOW TABLE -->
@@ -916,6 +938,7 @@
                     <thead>
                         <tr>
                             <th>Fecha</th>
+                            <th>Tipo</th>
                             <th>Descripción</th>
                             <th>Tipo de Pago</th>
                             <th>Monto</th>
@@ -925,7 +948,8 @@
                     <tbody>
                         <tr *ngFor="let entry of cashFlowEntries">
                             <td>{{ entry.recordedAt | date:'dd/MM/yyyy HH:mm' }}</td>
-                            <td>{{ entry.description }}</td>
+                            <td>{{ getTransactionTypeLabel(entry.type) }}</td>
+                            <td>{{entry.description}}</td>
                             <td><span class="payment-badge">{{ getPaymentLabel(entry.subtype) }}</span></td>
                             <td><strong>S/ {{ entry.amount | number:'1.2-2' }}</strong></td>
                             <td>{{ entry.recordedBy }}</td>
@@ -1239,6 +1263,17 @@
             <div class="modal-body">
                 <p>¿Está seguro de anular la venta <strong>{{ saleToCancel?.series }}-{{
                         saleToCancel?.number }}</strong>?</p>
+                <div class="form-group">
+                    <label>Motivo de anulación</label>
+                    <select [(ngModel)]="cancelReason" class="form-control">
+                        <option value="ERROR">Error de venta</option>
+                        <option value="RETURN">Devolución</option>
+                    </select>
+                </div>
+                <div *ngIf="cancelReason === 'RETURN'" class="return-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Se registrará una devolución por S/ {{ saleToCancel?.total | number:'1.2-2' }} y se descontará de la caja actual.</span>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" (click)="closeCancelModal()">Cancelar</button>
@@ -1461,6 +1496,38 @@
                     <span class="detail-value">{{ getPaymentLabel(payment.method) }} - S/ {{ payment.amount |
                         number:'1.2-2' }}</span>
                 </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- INCOME MODAL -->
+    <div class="modal-overlay" *ngIf="showIncomeModal" (click)="showIncomeModal = false">
+        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3><i class="fas fa-plus-circle"></i> Ingreso de Dinero</h3>
+                <button class="close-button" (click)="showIncomeModal = false"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Monto (S/)</label>
+                    <input type="number" class="form-control" [(ngModel)]="incomeForm.amount" min="0" step="0.01" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Descripción</label>
+                    <input type="text" class="form-control" [(ngModel)]="incomeForm.description" placeholder="Ej: Recarga de efectivo">
+                </div>
+                <div class="form-group">
+                    <label>Referencia (opcional)</label>
+                    <input type="text" class="form-control" [(ngModel)]="incomeForm.reference" placeholder="Nro de operación">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="showIncomeModal = false">Cancelar</button>
+                <button class="btn-primary" (click)="confirmIncome()" [disabled]="!incomeForm.amount || incomeForm.amount <= 0">
+                    <i class="fas fa-check"></i> Confirmar Ingreso
+                </button>
             </div>
         </div>
     </div>

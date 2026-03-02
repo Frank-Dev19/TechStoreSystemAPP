@@ -1374,6 +1374,23 @@
     }
 }
 
+.return-warning {
+    background: rgba(241, 156, 18, 0.1);
+    border: 1px solid var(--warning);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #b8860b;
+    font-size: 13px;
+
+    i {
+        color: var(--warning);
+    }
+}
+
 // ============================================
 // TOAST NOTIFICATIONS
 // ============================================

@@ -360,6 +360,7 @@ export class Ventas implements OnInit {
   showCancelConfirmModal = false
   showLotSerialModal = false
   saleToCancel: Sale | null = null
+  cancelReason: 'ERROR' | 'RETURN' = 'ERROR'
   //showDetailDrawer = false
   showNewCustomerModal = false
   newCustomerForm: Partial<BusinessPartner> = {}
@@ -431,7 +432,7 @@ export class Ventas implements OnInit {
   // CASH FLOW
   cashFlowEntries: any[] = []
   cashFlowFilters = { dateFrom: this.getDateNDaysAgo(30), dateTo: this.getToday(), paymentType: null as string | null }
-  cashFlowMetrics = { total: 0, cash: 0, card: 0, transfer: 0, yape: 0, plin: 0 }
+  cashFlowMetrics = { total: 0, cash: 0, card: 0, transfer: 0, yape: 0, plin: 0, returns: 0 }
   cashFlowDatePreset: string = 'last30days'
   cashFlowPage = 1
   cashFlowLimit = 20
@@ -467,6 +468,11 @@ export class Ventas implements OnInit {
   openingBalanceTemp: number = 0
   currentCashRegister: any = null
   showNoOpenCashModal: boolean = false
+
+  // Income Modal
+  showIncomeModal: boolean = false
+  incomeForm = { amount: 0, description: '', reference: '' }
+
   // Phase 5: estado real de cajas desde backend
   currentOpenRegister: any = null
   registersList: any[] = []
@@ -1037,6 +1043,7 @@ export class Ventas implements OnInit {
         this.showToast('success', 'Venta registrada exitosamente')
         this.onCancelSaleForm()
         this.loadSales()
+        this.loadOpenRegister()
       },
       error: () => this.showToast('error', 'Error registrando venta')
     })
@@ -1257,20 +1264,57 @@ export class Ventas implements OnInit {
 
   confirmCancelSale(): void {
     if (!this.saleToCancel) return
-    this.salesApi.cancel(this.saleToCancel.id, { reason: 'ANULADA', observations: '' } as any).subscribe({
+
+    const totalVenta = Number(this.saleToCancel.total)
+
+    // Primero intentamos crear la transacción de caja (RETURN)
+    const returnTransaction: any = {
+      type: 'RETURN',
+      subtype: 'CASH',
+      amount: totalVenta,
+      description: `${this.cancelReason === 'RETURN' ? 'Devolución' : 'Anulación por error'} venta ${this.saleToCancel.series}-${this.saleToCancel.number}`,
+      reference: ''
+    }
+
+    this.cashFlowApi.createTransaction(1, returnTransaction).subscribe({
       next: () => {
-        this.saleToCancel!.status = 'ANULADO'
-        this.calculateMetrics()
-        this.showToast('success', 'Venta anulada')
-        this.closeCancelModal()
+        // Solo si la transacción de caja fue exitosa, cancelamos la venta
+        this.salesApi.cancel(this.saleToCancel!.id, { reason: 'ANULADA', observations: '' } as any).subscribe({
+          next: () => {
+            // Actualizar la venta en el array de sales
+            const saleIndex = this.sales.findIndex(s => s.id === this.saleToCancel!.id)
+            if (saleIndex >= 0) {
+              this.sales[saleIndex].status = 'ANULADO'
+            }
+
+            // Actualizar datos
+            this.loadRegisters()
+            this.loadOpenRegister()
+            this.loadCashFlowData()
+            this.calculateMetrics()
+
+
+            // Mostrar toast ANTES de cerrar modal
+            this.showToast('success', 'Venta anulada correctamente')
+            this.closeCancelModal()
+          },
+          error: () => {
+            this.showToast('error', 'Error al anular la venta')
+          }
+        })
       },
-      error: () => this.showToast('error', 'Error anulando venta')
+      error: (err) => {
+        // Si falla la transacción de caja (ej: no hay efectivo), NO cancelamos la venta
+        const msg = err?.error?.message || 'No se pudo completar la anulación'
+        this.showToast('error', msg)
+      }
     })
   }
 
   closeCancelModal(): void {
     this.showCancelConfirmModal = false
     this.saleToCancel = null
+    this.cancelReason = 'ERROR'
   }
 
   // ============================================
@@ -1634,6 +1678,17 @@ export class Ventas implements OnInit {
     return labels[payment || ''] || payment || '-'
   }
 
+  getTransactionTypeLabel(type: string): string {
+    const labels: { [key: string]: string } = {
+      'OPENING': 'APERTURA',
+      'SALE': 'VENTA',
+      'RETURN': 'ANULACION',
+      'INCOME': 'INGRESO',
+      'CLOSING': 'CIERRE'
+    }
+    return labels[type || ''] || type || '-'
+  }
+
   getStatusClass(status: SaleStatus): string {
     if (status === 'EMITIDO') return 'success'
     if (status === 'ANULADO') return 'danger'
@@ -1836,6 +1891,38 @@ export class Ventas implements OnInit {
     });
   }
 
+  openIncomeModal(): void {
+    this.incomeForm = { amount: 0, description: '', reference: '' }
+    this.showIncomeModal = true
+  }
+
+  confirmIncome(): void {
+    if (!this.incomeForm.amount || this.incomeForm.amount <= 0) {
+      this.showToast('error', 'Ingrese un monto válido')
+      return
+    }
+
+    const transaction: any = {
+      type: 'INCOME',
+      amount: this.incomeForm.amount,
+      description: this.incomeForm.description || 'Ingreso de efectivo',
+      reference: this.incomeForm.reference || ''
+    }
+
+    this.cashFlowApi.createTransaction(1, transaction).subscribe({
+      next: () => {
+        this.showIncomeModal = false
+        this.loadRegisters()
+        this.loadOpenRegister()
+        this.showToast('success', 'Ingreso registrado correctamente')
+      },
+      error: (err) => {
+        const msg = err?.error?.message || 'Error al registrar ingreso'
+        this.showToast('error', msg)
+      }
+    })
+  }
+
   // ============================================
   // CASH FLOW - API REAL
   // ============================================
@@ -1875,7 +1962,7 @@ export class Ventas implements OnInit {
         console.error('Error loading cash flow:', err)
         this.isLoading = false
         this.cashFlowEntries = []
-        this.cashFlowMetrics = { total: 0, cash: 0, card: 0, transfer: 0, yape: 0, plin: 0 }
+        this.cashFlowMetrics = { total: 0, cash: 0, card: 0, transfer: 0, yape: 0, plin: 0, returns: 0 }
       }
     })
   }
@@ -1899,7 +1986,8 @@ export class Ventas implements OnInit {
           card: metrics.card || 0,
           transfer: metrics.transfer || 0,
           yape: metrics.yape || 0,
-          plin: metrics.plin || 0
+          plin: metrics.plin || 0,
+          returns: metrics.returns || 0
         }
       },
       error: (err) => {
