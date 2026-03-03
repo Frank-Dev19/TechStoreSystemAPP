@@ -4,7 +4,7 @@ import { DocumentSeriesApiService } from '../../services/sales/document-series-a
 import { ProductsApiService } from '../../services/products-api.service';
 import { lastValueFrom } from 'rxjs';
 import { CashFlowApiService } from '../../services/sales/cash-flow-api.service';
-import { BusinessPartnersApiService } from '../../services/business-partners-api.service';
+import { ClientsApiService } from '../../services/clients-api.service';
 import { PricingStockApiService } from '../../services/pricing-stock-api.service';
 import { ProductPriceStockInfo } from '../../models/pricing/product-price-stock-info.model';
 import { PricingProductsApiService } from '../../services/pricing/pricing-products-api.service';
@@ -16,27 +16,13 @@ import { CurrentUserService } from '../../services/current-user.service';
 import { BestPriceResponse } from '../../models/pricing/pricing.models';
 import { DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../models/sales/document-series.model';
 import { DocumentType } from '../../models/sales/enums';
+import { ClientSaveRequest } from '../../models/clients-request';
+import { ClientResponse } from '../../models/clients-response';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 // ============================================
 // INTERFACES & TYPES (siguiendo exactamente el prompt)
 // ============================================
-
-export interface BusinessPartner {
-  id: number
-  companyId: number
-  name: string
-  tradeName?: string
-  documentTypeId: number
-  documentNumber: string
-  email?: string
-  phone?: string
-  address?: string
-  city?: string
-  country?: string
-  isClient: boolean
-  isSupplier: boolean
-}
 
 export interface Product {
   id: number
@@ -61,6 +47,10 @@ export interface StockLine {
   qtyOnHand: number
   avgUnitCost: number
   totalCost: number
+}
+
+type NewCustomerForm = Partial<ClientSaveRequest> & {
+  documentTypeId?: number | null
 }
 
 export type DocumentTypeCode = 'NOTA_PEDIDO' | 'BOLETA' | 'FACTURA'
@@ -310,7 +300,7 @@ export class Ventas implements OnInit {
     private documentSeriesApi: DocumentSeriesApiService,
     private productsApi: ProductsApiService,
     private cashFlowApi: CashFlowApiService,
-    private bpApi: BusinessPartnersApiService,
+    private clientsApi: ClientsApiService,
     private pricingStockApi: PricingStockApiService,
     private pricingProductsApi: PricingProductsApiService,
     private stockService: StockService,
@@ -362,7 +352,7 @@ export class Ventas implements OnInit {
   saleToCancel: Sale | null = null
   //showDetailDrawer = false
   showNewCustomerModal = false
-  newCustomerForm: Partial<BusinessPartner> = {}
+  newCustomerForm: NewCustomerForm = {}
 
   // DOCUMENT SERIES
   documentSeries: DocumentSeries[] = []
@@ -381,7 +371,7 @@ export class Ventas implements OnInit {
   dispatchGuideFormData: Partial<ShippingGuide> | null = null
   currentSaleItem: Partial<SaleLine> = {}
   customerSearchText = ''
-  foundCustomer: BusinessPartner | null = null
+  foundCustomer: ClientResponse | null = null
   selectedPaymentMethods: PaymentType[] = []
 
   // Control de líneas expandidas para mostrar lote/seriales
@@ -776,10 +766,9 @@ export class Ventas implements OnInit {
       return
     }
 
-    this.bpApi.findAll({
+    this.clientsApi.findAll({
       companyId: 1,
       search: this.clientSearchText,
-      isClient: 'true',
       limit: 15,
     }).subscribe({
       next: (resp) => {
@@ -1058,34 +1047,31 @@ export class Ventas implements OnInit {
 
     // 2. Buscar cliente por DNI/RUC usando el nuevo endpoint
     const companyId = 1
-    this.bpApi.findByDocument(document, companyId)
+    this.clientsApi.findAll({ companyId, documentNumber: document, limit: 1 })
       .subscribe({
-        next: (customer: any) => {
+        next: (response) => {
+          const customer = response.data?.[0] ?? null
           if (customer) {
             this.foundCustomer = customer
             this.showToast('success', 'Cliente encontrado')
+            return
           }
+
+          this.foundCustomer = null
+          this.showToast('warning', 'Cliente no encontrado')
+          this.newCustomerForm = {
+            name: '',
+            documentNumber: document,
+            documentTypeId: null,
+            address: '',
+            email: '',
+            phone: '',
+          }
+          this.showNewCustomerModal = true
         },
         error: (error) => {
           console.log('Error buscando cliente:', error);
-          if (error.status === 404) {
-            // Cliente no encontrado - mostrar formulario de nuevo cliente
-            this.foundCustomer = null
-            this.showToast('warning', 'Cliente no encontrado')
-            this.newCustomerForm = {
-              name: '',
-              documentNumber: document,
-              documentTypeId: null, // Usuario debe seleccionar del dropdown
-              address: '',
-              email: '',
-              phone: '',
-              isClient: true,
-              isSupplier: false,
-            } as any
-            this.showNewCustomerModal = true
-          } else {
-            this.showToast('error', 'Error buscando cliente')
-          }
+          this.showToast('error', 'Error buscando cliente')
         }
       })
   }
@@ -1714,13 +1700,11 @@ export class Ventas implements OnInit {
       return;
     }
 
-    const payload: any = {
+    const payload: ClientSaveRequest = {
       companyId: 1,
-      name: this.newCustomerForm.name,
-      documentNumber: this.newCustomerForm.documentNumber,
-      documentTypeId: this.newCustomerForm.documentTypeId,
-      isClient: true,
-      isSupplier: false,
+      name: this.newCustomerForm.name!,
+      documentNumber: this.newCustomerForm.documentNumber!,
+      documentTypeId: Number(this.newCustomerForm.documentTypeId),
       address: this.newCustomerForm.address || '',
       email: this.newCustomerForm.email || '',
       phone: this.newCustomerForm.phone || '',
@@ -1728,10 +1712,10 @@ export class Ventas implements OnInit {
       country: this.newCustomerForm.country || '',
     }
 
-    this.bpApi.create(payload).subscribe({
+    this.clientsApi.create(payload).subscribe({
       next: (created) => {
-        this.foundCustomer = created as any
-        this.customerSearchText = (created as any).documentNumber
+        this.foundCustomer = created
+        this.customerSearchText = created.documentNumber
         this.showToast('success', 'Cliente registrado')
         this.showNewCustomerModal = false
       },
@@ -1802,8 +1786,6 @@ export class Ventas implements OnInit {
       address: '',
       email: '',
       phone: '',
-      isClient: true,
-      isSupplier: false,
     }
 
     this.showNewCustomerModal = true
