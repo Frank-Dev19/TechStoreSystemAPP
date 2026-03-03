@@ -1284,19 +1284,22 @@ export class Ventas implements OnInit {
             // Actualizar la venta en el array de sales
             const saleIndex = this.sales.findIndex(s => s.id === this.saleToCancel!.id)
             if (saleIndex >= 0) {
-              this.sales[saleIndex].status = 'ANULADO'
+              this.sales[saleIndex].status = 'CANCELLED'
+              // Forzar detección de cambios
+              this.sales = [...this.sales]
             }
 
             // Actualizar datos
             this.loadRegisters()
             this.loadOpenRegister()
             this.loadCashFlowData()
-            this.calculateMetrics()
+            // this.calculateMetrics()
 
-
-            // Mostrar toast ANTES de cerrar modal
-            this.showToast('success', 'Venta anulada correctamente')
+            // Mostrar toast y cerrar modal con delay para que se muestre correctamente
             this.closeCancelModal()
+            setTimeout(() => {
+              this.showToast('success', 'Venta anulada correctamente')
+            }, 100)
           },
           error: () => {
             this.showToast('error', 'Error al anular la venta')
@@ -1722,7 +1725,7 @@ export class Ventas implements OnInit {
     this.metrics = {
       totalSales: this.sales.length,
       totalEmitted: this.sales.filter((s) => s.status === 'EMITIDO').length,
-      totalCancelled: this.sales.filter((s) => s.status === 'ANULADO').length,
+      totalCancelled: this.sales.filter((s) => s.status === 'CANCELLED').length,
       totalAmount: this.sales.reduce((sum, s) => sum + s.total, 0),
     }
   }
