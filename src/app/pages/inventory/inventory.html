@@ -1190,18 +1190,65 @@
                             <i class="fas fa-box"></i>
                             Productos
                         </h3>
-                        <span class="item-count">{{ products.length }} productos</span>
+                        <span class="item-count">{{ productTotal }} productos</span>
                     </div>
                     <button class="btn-primary btn-sm" (click)="openProductModal()">
                         <i class="fas fa-plus"></i>
                         Nuevo Producto
                     </button>
                 </div>
-                <div class="search-box-catalog">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Buscar por SKU o nombre..." [(ngModel)]="searchProduct">
+
+                <!-- Filtros estilo ventas -->
+                <div class="filters-card">
+                    <div class="filters-header">
+                        <h3><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                        <span class="results-indicator">{{ productTotal }} resultados</span>
+                    </div>
+                    <div class="filters-grid">
+                        <div class="form-group">
+                            <label><i class="fas fa-search"></i> Buscar</label>
+                            <input type="text" [(ngModel)]="productFilter.search" (keyup.enter)="applyProductFilters()"
+                                class="form-control" placeholder="SKU o nombre...">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-tags"></i> Categoría</label>
+                            <div class="category-autocomplete">
+                                <input type="text" [(ngModel)]="categorySearchText" (input)="onCategorySearch()"
+                                    (focus)="onCategoryFocus()" (blur)="onCategoryBlur()" class="form-control"
+                                    placeholder="Buscar categoría...">
+                                <ul class="autocomplete-dropdown"
+                                    *ngIf="showCategoryDropdown && filteredCategories.length > 0">
+                                    <li *ngFor="let cat of filteredCategories" (mousedown)="selectCategory(cat)"
+                                        class="autocomplete-item">
+                                        {{ cat.name }}
+                                    </li>
+                                </ul>
+                                <button *ngIf="productFilter.categoryId" class="clear-btn"
+                                    (click)="clearCategorySelection()" title="Limpiar">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="search-section">
+                        <button class="btn-primary" (click)="applyProductFilters()">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                        <button class="btn-secondary" (click)="clearProductFilters()">
+                            <i class="fas fa-eraser"></i> Limpiar
+                        </button>
+                        <button class="btn-secondary" (click)="refreshProducts()" [disabled]="productLoading">
+                            <i class="fas fa-sync-alt" [class.spinning]="productLoading"></i> Actualizar
+                        </button>
+                    </div>
                 </div>
-                <div class="table-container">
+
+                <div class="table-container" [class.loading-overlay]="productLoading"
+                    style="max-height: 600px; overflow-y: auto;">
+                    <div class="spinner-overlay" *ngIf="productLoading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Cargando Productos...</span>
+                    </div>
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -1240,6 +1287,24 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+                <div class="pagination" *ngIf="productTotalPages > 1">
+                    <button class="btn-pagination" (click)="goToProductPage(1)" [disabled]="productFilter.page === 1">
+                        <i class="fas fa-angle-double-left"></i>
+                    </button>
+                    <button class="btn-pagination" (click)="goToProductPage(productFilter.page - 1)"
+                        [disabled]="productFilter.page === 1">
+                        <i class="fas fa-angle-left"></i>
+                    </button>
+                    <span class="page-info">Página {{ productFilter.page }} de {{ productTotalPages }}</span>
+                    <button class="btn-pagination" (click)="goToProductPage(productFilter.page + 1)"
+                        [disabled]="productFilter.page === productTotalPages">
+                        <i class="fas fa-angle-right"></i>
+                    </button>
+                    <button class="btn-pagination" (click)="goToProductPage(productTotalPages)"
+                        [disabled]="productFilter.page === productTotalPages">
+                        <i class="fas fa-angle-double-right"></i>
+                    </button>
                 </div>
             </div>
         </div>

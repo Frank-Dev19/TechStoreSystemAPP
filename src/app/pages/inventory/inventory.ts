@@ -54,6 +54,21 @@ export class Inventory implements OnInit {
   searchCategory = '';
   searchUnit = '';
 
+  // Filtros Productos
+  productFilter = {
+    search: '',
+    categoryId: null as number | null,
+    page: 1,
+    limit: 20
+  };
+  productTotal = 0;
+  productLoading = false;
+
+  // Autocomplete Categoría
+  categorySearchText = '';
+  filteredCategories: { id: number; name: string }[] = [];
+  showCategoryDropdown = false;
+
   //Buscadores para Stock
   stockFilterText: string = '';
   stockFilterDateFrom: string = '';
@@ -260,12 +275,89 @@ export class Inventory implements OnInit {
   // =========================================================
   private async loadProducts() {
     try {
-      this.products = await this.productsSvc.list().toPromise();
+      this.productLoading = true;
+      const filter = {
+        search: this.productFilter.search || undefined,
+        categoryId: this.productFilter.categoryId || undefined,
+        page: this.productFilter.page,
+        limit: this.productFilter.limit
+      };
+      const res = await this.productsSvc.listWithFilter(filter).toPromise();
+      this.products = res?.data ?? [];
+      this.productTotal = res?.total ?? 0;
       this.productMap.clear();
       this.products.forEach((p) => this.productMap.set(p.id, p));
     } catch {
       this.showToast('error', 'No se pudieron cargar productos');
+    } finally {
+      this.productLoading = false;
     }
+  }
+
+  async applyProductFilters() {
+    this.productFilter.page = 1;
+    await this.loadProducts();
+  }
+
+  async clearProductFilters() {
+    this.productFilter = { search: '', categoryId: null, page: 1, limit: 20 };
+    this.categorySearchText = '';
+    this.filteredCategories = [];
+    this.showCategoryDropdown = false;
+    await this.loadProducts();
+  }
+
+  // Autocomplete Categoría
+  onCategorySearch(): void {
+    const search = (this.categorySearchText || '').trim().toLowerCase();
+    if (!search) {
+      this.filteredCategories = [];
+      this.showCategoryDropdown = false;
+      return;
+    }
+    this.filteredCategories = this.categories
+      .filter(c => c.name.toLowerCase().includes(search))
+      .slice(0, 15);
+    this.showCategoryDropdown = this.filteredCategories.length > 0;
+  }
+
+  selectCategory(category: { id: number; name: string }): void {
+    this.productFilter.categoryId = category.id;
+    this.categorySearchText = category.name;
+    this.showCategoryDropdown = false;
+    this.applyProductFilters();
+  }
+
+  onCategoryFocus(): void {
+    if (this.filteredCategories.length > 0) {
+      this.showCategoryDropdown = true;
+    }
+  }
+
+  onCategoryBlur(): void {
+    setTimeout(() => {
+      this.showCategoryDropdown = false;
+    }, 200);
+  }
+
+  clearCategorySelection(): void {
+    this.productFilter.categoryId = null;
+    this.categorySearchText = '';
+    this.filteredCategories = [];
+    this.showCategoryDropdown = false;
+  }
+
+  async goToProductPage(page: number) {
+    this.productFilter.page = page;
+    await this.loadProducts();
+  }
+
+  async refreshProducts() {
+    await this.loadProducts();
+  }
+
+  get productTotalPages(): number {
+    return Math.ceil(this.productTotal / this.productFilter.limit);
   }
 
   private async loadCategories() {
@@ -1230,6 +1322,7 @@ export class Inventory implements OnInit {
         this.showToast('success', 'Producto creado');
       }
       this.closeProductModal();
+      await this.loadProducts();
     } catch {
       this.showToast('error', 'No se pudo guardar el producto');
     }
@@ -1242,6 +1335,7 @@ export class Inventory implements OnInit {
       this.products = this.products.filter((p) => p.id !== id);
       this.productMap.delete(id);
       this.showToast('success', 'Producto eliminado');
+      await this.loadProducts();
     } catch {
       this.showToast('error', 'No se pudo eliminar el producto');
     }

@@ -6,6 +6,20 @@ import { Observable, map } from 'rxjs';
 import { config } from '../../../environments/environment';
 import { ProductApi, mapProductFromApi, mapProductToApi } from '../../utils/mappers';
 
+export interface ProductFilter {
+  search?: string;
+  categoryId?: number;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ProductsService {
   private base = config.catalogs.products;
@@ -15,6 +29,22 @@ export class ProductsService {
   list(): Observable<Product[]> {
     return this.baseSvc.get<ProductApi[]>(this.base).pipe(
       map(arr => (arr ?? []).map(mapProductFromApi))
+    );
+  }
+
+  listWithFilter(filter: ProductFilter): Observable<PaginatedResponse<Product>> {
+    const params: string[] = [];
+    if (filter.search) params.push(`search=${encodeURIComponent(filter.search)}`);
+    if (filter.categoryId) params.push(`categoryId=${filter.categoryId}`);
+    if (filter.page) params.push(`page=${filter.page}`);
+    if (filter.limit) params.push(`limit=${filter.limit}`);
+    const query = params.length ? '?' + params.join('&') : '';
+    
+    return this.baseSvc.get<PaginatedResponse<ProductApi>>(`${this.base}${query}`).pipe(
+      map(res => ({
+        ...res,
+        data: (res.data ?? []).map(mapProductFromApi)
+      }))
     );
   }
 
