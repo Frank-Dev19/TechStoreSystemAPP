@@ -1051,20 +1051,28 @@
             </div>
         </div>
 
-        <div class="kardex-filters-card">
+        <div class="filters-card">
             <div class="filters-header">
-                <h3>
-                    <i class="fas fa-filter"></i>
-                    Filtros de Búsqueda
-                </h3>
-                <span class="results-count">{{ filteredKardex.length }} movimientos encontrados</span>
+                <h3><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                <span class="results-indicator">{{ kardexTotal }} resultados</span>
             </div>
             <div class="filters-grid">
                 <div class="form-group">
+                    <label><i class="fas fa-calendar"></i> Rango de Fechas</label>
+                    <select class="form-control" [(ngModel)]="datePresetKardex"
+                        (ngModelChange)="onDatePresetKardexChange($event)">
+                        <option value="today">Hoy</option>
+                        <option value="yesterday">Ayer</option>
+                        <option value="last7days">Últimos 7 días</option>
+                        <option value="last30days">Últimos 30 días</option>
+                        <option value="custom">Personalizado</option>
+                    </select>
+                </div>
+                <div class="form-group" *ngIf="datePresetKardex === 'custom'">
                     <label><i class="fas fa-calendar-alt"></i> Fecha Desde</label>
                     <input type="date" [(ngModel)]="kardexFilters.dateFrom" class="form-control">
                 </div>
-                <div class="form-group">
+                <div class="form-group" *ngIf="datePresetKardex === 'custom'">
                     <label><i class="fas fa-calendar-alt"></i> Fecha Hasta</label>
                     <input type="date" [(ngModel)]="kardexFilters.dateTo" class="form-control">
                 </div>
@@ -1090,20 +1098,26 @@
                     </select>
                 </div>
             </div>
-            <div class="filters-actions">
+            <div class="search-section">
                 <button class="btn-primary" (click)="applyKardexFilters()">
-                    <i class="fas fa-search"></i>
-                    Aplicar Filtros
+                    <i class="fas fa-search"></i> Buscar
                 </button>
                 <button class="btn-secondary" (click)="clearKardexFilters()">
-                    <i class="fas fa-eraser"></i>
-                    Limpiar Filtros
+                    <i class="fas fa-eraser"></i> Limpiar
+                </button>
+                <button class="btn-secondary" (click)="refreshKardex()" [disabled]="kardexLoading">
+                    <i class="fas fa-sync-alt" [class.spinning]="kardexLoading"></i> Actualizar
                 </button>
             </div>
         </div>
 
         <div class="kardex-table-section">
-            <div class="table-container">
+            <div class="table-container" [class.loading-overlay]="kardexLoading"
+                style="max-height: 600px; overflow-y: auto;">
+                <div class="spinner-overlay" *ngIf="kardexLoading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Cargando Movimientos...</span>
+                </div>
                 <table class="data-table kardex-table">
                     <thead>
                         <tr>
@@ -1160,13 +1174,32 @@
                             </td>
                         </tr>
                         <tr *ngIf="filteredKardex.length === 0">
-                            <td colspan="16" class="empty-message">
+                            <td colspan="17" class="empty-message">
                                 <i class="fas fa-inbox"></i>
                                 <p>No se encontraron movimientos con los filtros aplicados</p>
                             </td>
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <div class="pagination" *ngIf="kardexTotalPages > 1">
+                <button class="btn-pagination" (click)="goToKardexPage(1)" [disabled]="kardexFilters.page === 1">
+                    <i class="fas fa-angle-double-left"></i>
+                </button>
+                <button class="btn-pagination" (click)="goToKardexPage(kardexFilters.page! - 1)"
+                    [disabled]="kardexFilters.page === 1">
+                    <i class="fas fa-angle-left"></i>
+                </button>
+                <span class="page-info">Página {{ kardexFilters.page }} de {{ kardexTotalPages }}</span>
+                <button class="btn-pagination" (click)="goToKardexPage(kardexFilters.page! + 1)"
+                    [disabled]="kardexFilters.page === kardexTotalPages">
+                    <i class="fas fa-angle-right"></i>
+                </button>
+                <button class="btn-pagination" (click)="goToKardexPage(kardexTotalPages)"
+                    [disabled]="kardexFilters.page === kardexTotalPages">
+                    <i class="fas fa-angle-double-right"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -1398,11 +1431,37 @@
                         Nueva Categoría
                     </button>
                 </div>
-                <div class="search-box-catalog">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Buscar categoría..." [(ngModel)]="searchCategory">
+                <div class="filters-card">
+                    <div class="filters-header">
+                        <h3><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                        <span class="results-indicator">{{ categoryTotal }} resultados</span>
+                    </div>
+                    <div class="filters-grid">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label><i class="fas fa-search"></i> Buscar</label>
+                            <input type="text" [(ngModel)]="categoryFilter.search"
+                                (keyup.enter)="applyCategoryFilters()" class="form-control" placeholder="Nombre...">
+                        </div>
+                    </div>
+                    <div class="search-section">
+                        <button class="btn-primary" (click)="applyCategoryFilters()">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                        <button class="btn-secondary" (click)="clearCategoryFilters()">
+                            <i class="fas fa-eraser"></i> Limpiar
+                        </button>
+                        <button class="btn-secondary" (click)="refreshCategories()" [disabled]="categoryLoading">
+                            <i class="fas fa-sync-alt" [class.spinning]="categoryLoading"></i> Actualizar
+                        </button>
+                    </div>
                 </div>
-                <div class="table-container">
+
+                <div class="table-container" [class.loading-overlay]="categoryLoading"
+                    style="max-height: 400px; overflow-y: auto;">
+                    <div class="spinner-overlay" *ngIf="categoryLoading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Cargando Categorías...</span>
+                    </div>
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -1412,7 +1471,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr *ngFor="let category of categories">
+                            <tr *ngFor="let category of pagedCategories">
                                 <td><strong>{{ category.name }}</strong></td>
                                 <td>{{ category.description || '-' }}</td>
                                 <td>
@@ -1431,6 +1490,25 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- Paginación de Categorías -->
+                <div class="pagination" *ngIf="categoryTotalPages > 1">
+                    <button class="btn-pagination" (click)="goToCategoryPage(1)" [disabled]="categoryFilter.page === 1">
+                        <i class="fas fa-angle-double-left"></i>
+                    </button>
+                    <button class="btn-pagination" (click)="goToCategoryPage(categoryFilter.page - 1)"
+                        [disabled]="categoryFilter.page === 1">
+                        <i class="fas fa-angle-left"></i>
+                    </button>
+                    <span class="page-info">Página {{ categoryFilter.page }} de {{ categoryTotalPages }}</span>
+                    <button class="btn-pagination" (click)="goToCategoryPage(categoryFilter.page + 1)"
+                        [disabled]="categoryFilter.page === categoryTotalPages">
+                        <i class="fas fa-angle-right"></i>
+                    </button>
+                    <button class="btn-pagination" (click)="goToCategoryPage(categoryTotalPages)"
+                        [disabled]="categoryFilter.page === categoryTotalPages">
+                        <i class="fas fa-angle-double-right"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- Units  -->
@@ -1448,11 +1526,37 @@
                         Nueva Unidad
                     </button>
                 </div>
-                <div class="search-box-catalog">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Buscar unidad..." [(ngModel)]="searchUnit">
+                <div class="filters-card">
+                    <div class="filters-header">
+                        <h3><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                        <span class="results-indicator">{{ unitTotal }} resultados</span>
+                    </div>
+                    <div class="filters-grid">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label><i class="fas fa-search"></i> Buscar</label>
+                            <input type="text" [(ngModel)]="unitFilter.search" (keyup.enter)="applyUnitFilters()"
+                                class="form-control" placeholder="Nombre...">
+                        </div>
+                    </div>
+                    <div class="search-section">
+                        <button class="btn-primary" (click)="applyUnitFilters()">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                        <button class="btn-secondary" (click)="clearUnitFilters()">
+                            <i class="fas fa-eraser"></i> Limpiar
+                        </button>
+                        <button class="btn-secondary" (click)="refreshUnits()" [disabled]="unitLoading">
+                            <i class="fas fa-sync-alt" [class.spinning]="unitLoading"></i> Actualizar
+                        </button>
+                    </div>
                 </div>
-                <div class="table-container">
+
+                <div class="table-container" [class.loading-overlay]="unitLoading"
+                    style="max-height: 400px; overflow-y: auto;">
+                    <div class="spinner-overlay" *ngIf="unitLoading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Cargando Unidades...</span>
+                    </div>
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -1462,7 +1566,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr *ngFor="let unit of units">
+                            <tr *ngFor="let unit of pagedUnits">
                                 <td><code>{{ unit.code }}</code></td>
                                 <td><strong>{{ unit.name }}</strong></td>
                                 <td>
@@ -1479,6 +1583,25 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+                <!-- Paginación de Unidades -->
+                <div class="pagination" *ngIf="unitTotalPages > 1">
+                    <button class="btn-pagination" (click)="goToUnitPage(1)" [disabled]="unitFilter.page === 1">
+                        <i class="fas fa-angle-double-left"></i>
+                    </button>
+                    <button class="btn-pagination" (click)="goToUnitPage(unitFilter.page - 1)"
+                        [disabled]="unitFilter.page === 1">
+                        <i class="fas fa-angle-left"></i>
+                    </button>
+                    <span class="page-info">Página {{ unitFilter.page }} de {{ unitTotalPages }}</span>
+                    <button class="btn-pagination" (click)="goToUnitPage(unitFilter.page + 1)"
+                        [disabled]="unitFilter.page === unitTotalPages">
+                        <i class="fas fa-angle-right"></i>
+                    </button>
+                    <button class="btn-pagination" (click)="goToUnitPage(unitTotalPages)"
+                        [disabled]="unitFilter.page === unitTotalPages">
+                        <i class="fas fa-angle-double-right"></i>
+                    </button>
                 </div>
             </div>
 

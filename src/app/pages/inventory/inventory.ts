@@ -64,6 +64,18 @@ export class Inventory implements OnInit {
   productTotal = 0;
   productLoading = false;
 
+  // Filtros Categorías (Tabla)
+  pagedCategories: Category[] = [];
+  categoryFilter = { search: '', page: 1, limit: 20 };
+  categoryTotal = 0;
+  categoryLoading = false;
+
+  // Filtros Unidades (Tabla)
+  pagedUnits: Unit[] = [];
+  unitFilter = { search: '', page: 1, limit: 20 };
+  unitTotal = 0;
+  unitLoading = false;
+
   // Autocomplete Categoría
   categorySearchText = '';
   filteredCategories: { id: number; name: string }[] = [];
@@ -81,7 +93,13 @@ export class Inventory implements OnInit {
     dateTo: '',
     product_id: null,
     reason_code: null,
+    page: 1,
+    limit: 20
   };
+  pagedKardex: Movement[] = [];
+  kardexTotal = 0;
+  kardexLoading = false;
+  datePresetKardex = 'last30days';
 
   // -----------------------------
   // FORM STATE
@@ -259,6 +277,8 @@ export class Inventory implements OnInit {
       this.loadProducts(),
       this.loadCategories(),
       this.loadUnits(),
+      this.loadPagedCategories(),
+      this.loadPagedUnits(),
       this.loadStock(),
       this.loadKardex(),
       this.loadCounts(),
@@ -362,20 +382,94 @@ export class Inventory implements OnInit {
 
   private async loadCategories() {
     try {
-      this.categories = await this.catalogsSvc.listCategories().toPromise();
+      this.categories = await this.catalogsSvc.listCategories().toPromise() || [];
       this.categoryMap.clear();
       this.categories.forEach((c) => this.categoryMap.set(c.id, c));
     } catch {
-      this.showToast('error', 'No se pudieron cargar categorías');
+      this.showToast('error', 'No se pudieron cargar categorías (referencia)');
     }
+  }
+
+  // ---- Paginación de Categorías ----
+  private async loadPagedCategories() {
+    try {
+      this.categoryLoading = true;
+      const res = await this.catalogsSvc.listCategoriesWithFilter(this.categoryFilter).toPromise();
+      this.pagedCategories = res?.data ?? [];
+      this.categoryTotal = res?.total ?? 0;
+    } catch {
+      this.showToast('error', 'No se pudieron cargar categorías paginadas');
+    } finally {
+      this.categoryLoading = false;
+    }
+  }
+
+  async applyCategoryFilters() {
+    this.categoryFilter.page = 1;
+    await this.loadPagedCategories();
+  }
+
+  async clearCategoryFilters() {
+    this.categoryFilter = { search: '', page: 1, limit: 20 };
+    await this.loadPagedCategories();
+  }
+
+  async goToCategoryPage(page: number) {
+    this.categoryFilter.page = page;
+    await this.loadPagedCategories();
+  }
+
+  async refreshCategories() {
+    await this.loadPagedCategories();
+  }
+
+  get categoryTotalPages(): number {
+    return Math.ceil(this.categoryTotal / this.categoryFilter.limit);
   }
 
   private async loadUnits() {
     try {
-      this.units = await this.catalogsSvc.listUnits().toPromise();
+      this.units = await this.catalogsSvc.listUnits().toPromise() || [];
     } catch {
-      this.showToast('error', 'No se pudieron cargar unidades');
+      this.showToast('error', 'No se pudieron cargar unidades (referencia)');
     }
+  }
+
+  // ---- Paginación de Unidades ----
+  private async loadPagedUnits() {
+    try {
+      this.unitLoading = true;
+      const res = await this.catalogsSvc.listUnitsWithFilter(this.unitFilter).toPromise();
+      this.pagedUnits = res?.data ?? [];
+      this.unitTotal = res?.total ?? 0;
+    } catch {
+      this.showToast('error', 'No se pudieron cargar unidades paginadas');
+    } finally {
+      this.unitLoading = false;
+    }
+  }
+
+  async applyUnitFilters() {
+    this.unitFilter.page = 1;
+    await this.loadPagedUnits();
+  }
+
+  async clearUnitFilters() {
+    this.unitFilter = { search: '', page: 1, limit: 20 };
+    await this.loadPagedUnits();
+  }
+
+  async goToUnitPage(page: number) {
+    this.unitFilter.page = page;
+    await this.loadPagedUnits();
+  }
+
+  async refreshUnits() {
+    await this.loadPagedUnits();
+  }
+
+  get unitTotalPages(): number {
+    return Math.ceil(this.unitTotal / this.unitFilter.limit);
   }
 
   private async loadStock() {
@@ -399,11 +493,16 @@ export class Inventory implements OnInit {
   }
 
 
-  async loadKardex(params: KardexFilters = this.kardexFilters) {
+  async loadKardex() {
     try {
-      this.kardex = await this.kardexSvc.list(params).toPromise();
+      this.kardexLoading = true;
+      const res = await this.kardexSvc.list(this.kardexFilters).toPromise();
+      this.pagedKardex = res?.data ?? [];
+      this.kardexTotal = res?.total ?? 0;
     } catch {
       this.showToast('error', 'No se pudo cargar el kardex');
+    } finally {
+      this.kardexLoading = false;
     }
   }
 
@@ -1214,24 +1313,67 @@ export class Inventory implements OnInit {
   // KARDEX
   // =========================================================
   get filteredKardex(): Movement[] {
-    // Si quieres filtrar del lado del servidor, usa applyKardexFilters() que ya llama al servicio
-    return this.kardex;
+    return this.pagedKardex;
   }
 
   async applyKardexFilters(): Promise<void> {
-    await this.loadKardex(this.kardexFilters);
+    this.kardexFilters.page = 1;
+    await this.loadKardex();
     this.showToast('info', 'Filtros aplicados');
   }
 
   async clearKardexFilters(): Promise<void> {
-    this.kardexFilters = { dateFrom: '', dateTo: '', product_id: null, reason_code: null };
-    await this.loadKardex(this.kardexFilters);
+    this.kardexFilters = { dateFrom: '', dateTo: '', product_id: null, reason_code: null, page: 1, limit: 20 };
+    this.datePresetKardex = 'last30days';
+    this.onDatePresetKardexChange(this.datePresetKardex); // This will reload
     this.showToast('info', 'Filtros limpiados');
+  }
+
+  async goToKardexPage(page: number) {
+    this.kardexFilters.page = page;
+    await this.loadKardex();
+  }
+
+  async refreshKardex() {
+    await this.loadKardex();
+  }
+
+  get kardexTotalPages(): number {
+    return Math.ceil(this.kardexTotal / (this.kardexFilters.limit || 20));
+  }
+
+  onDatePresetKardexChange(preset: string) {
+    const today = new Date();
+    const formatDt = (d: Date) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
+    if (preset === 'today') {
+      this.kardexFilters.dateFrom = formatDt(today);
+      this.kardexFilters.dateTo = formatDt(today);
+      this.applyKardexFilters();
+    } else if (preset === 'yesterday') {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      this.kardexFilters.dateFrom = formatDt(yesterday);
+      this.kardexFilters.dateTo = formatDt(yesterday);
+      this.applyKardexFilters();
+    } else if (preset === 'last7days') {
+      const last7 = new Date(today);
+      last7.setDate(today.getDate() - 7);
+      this.kardexFilters.dateFrom = formatDt(last7);
+      this.kardexFilters.dateTo = formatDt(today);
+      this.applyKardexFilters();
+    } else if (preset === 'last30days') {
+      const last30 = new Date(today);
+      last30.setDate(today.getDate() - 30);
+      this.kardexFilters.dateFrom = formatDt(last30);
+      this.kardexFilters.dateTo = formatDt(today);
+      this.applyKardexFilters();
+    }
   }
 
   exportKardexCsv(): void {
     let csv = 'Fecha,Tipo,Motivo,Producto,Cantidad,Costo Unit.,Costo Total,Saldo Cant.,Saldo Costo,CPP\n';
-    for (const m of this.kardex) {
+    for (const m of this.pagedKardex) {
       const p = this.getProductBySku(m.product_id);
       csv += `"${new Date(m.occurred_at).toLocaleString()}","${this.getMovementTypeLabel(m.type)}","${m.reason_code}","${p?.name ?? ''}",${m.qty},${Number(m.unit_cost).toFixed(2)},${Number(m.total_cost).toFixed(2)},${m.balance_qty_post},${Number(m.balance_total_cost_post).toFixed(2)},${Number(m.balance_avg_cost_post).toFixed(2)}\n`;
     }
