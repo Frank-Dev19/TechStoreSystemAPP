@@ -68,85 +68,227 @@
         </div> -->
 
         <!-- Current Stock Table  -->
-        <div class="stock-section">
-            <div class="section-header">
-                <div class="header-left">
-                    <h3>
-                        <i class="fas fa-boxes"></i>
-                        Stock Actual
-                    </h3>
-                    <span class="stock-count">{{ filteredStock.length }} productos en stock</span>
-                </div>
-                <div class="filters-bar">
-
-                    <div class="search-box">
-                        <i class="fas fa-search"></i>
-                        <input type="text" placeholder="Buscar producto, SKU o categoría..."
-                            [(ngModel)]="stockFilterText">
-                    </div>
-
-                    <div class="date-filters">
-                        <label>Desde</label>
-                        <input type="date" [(ngModel)]="stockFilterDateFrom">
-                        <label>Hasta</label>
-                        <input type="date" [(ngModel)]="stockFilterDateTo">
-                    </div>
-
+        <!-- Metrics (Estilo Flujo de Caja) -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-icon"><i class="fas fa-money-bill-wave"></i></div>
+                <div class="metric-info">
+                    <span class="label">Valorizado Total</span>
+                    <span class="value">S/ {{ stockMetrics.totalValue | number:'1.2-2' }}</span>
                 </div>
             </div>
-            <div class="table-container">
-                <table class="data-table">
+            <div class="metric-card">
+                <div class="metric-icon" style="background-color: var(--success);"><i class="fas fa-boxes"></i></div>
+                <div class="metric-info">
+                    <span class="label">Productos en Stock</span>
+                    <span class="value">{{ stockMetrics.productsInStock }}</span>
+                </div>
+            </div>
+            <div class="metric-card metric-clickable" [class.metric-active]="activeMetricFilter === 'lowStock'"
+                (click)="onMetricClick('lowStock')">
+                <div class="metric-icon" style="background-color: var(--warning);"><i
+                        class="fas fa-exclamation-triangle"></i></div>
+                <div class="metric-info">
+                    <span class="label">Alertas Bajo Stock</span>
+                    <span class="value">{{ stockMetrics.lowStockCount }}</span>
+                </div>
+                <i class="fas fa-filter metric-filter-icon"></i>
+            </div>
+            <div class="metric-card metric-clickable" [class.metric-active]="activeMetricFilter === 'expiring'"
+                (click)="onMetricClick('expiring')">
+                <div class="metric-icon" style="background-color: var(--danger);"><i class="fas fa-clock"></i></div>
+                <div class="metric-info">
+                    <span class="label">Vencidos / Próximos</span>
+                    <span class="value">{{ stockMetrics.expiringLotsCount }}</span>
+                </div>
+                <i class="fas fa-filter metric-filter-icon"></i>
+            </div>
+        </div>
+
+        <div class="filters-card">
+            <div class="filters-header">
+                <h3><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                <span class="results-indicator">{{ stockTotal }} productos agrupados</span>
+            </div>
+            <div class="filters-grid">
+                <div class="form-group">
+                    <label><i class="fas fa-search"></i> Buscar</label>
+                    <input type="text" placeholder="Producto o SKU..." class="form-control"
+                        [(ngModel)]="stockFilters.search" (keyup.enter)="applyStockFilters()">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-folder"></i> Categoría</label>
+                    <div class="category-autocomplete">
+                        <input type="text" [(ngModel)]="stockCategorySearchText" (input)="onStockCategorySearch()"
+                            (focus)="onStockCategoryFocus()" (blur)="onStockCategoryBlur()" class="form-control"
+                            placeholder="Buscar categoría...">
+                        <ul class="autocomplete-dropdown"
+                            *ngIf="showStockCategoryDropdown && filteredStockCategories.length > 0">
+                            <li *ngFor="let cat of filteredStockCategories" (mousedown)="selectStockCategory(cat)"
+                                class="autocomplete-item">
+                                {{ cat.name }}
+                            </li>
+                        </ul>
+                        <button *ngIf="stockFilters.category_id !== null && stockFilters.category_id !== undefined"
+                            class="clear-btn" (click)="clearStockCategorySelection()" title="Limpiar">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-calendar-check"></i> Rango Actualización</label>
+                    <select class="form-control" [(ngModel)]="datePresetStock"
+                        (ngModelChange)="onDatePresetStockChange($event)">
+                        <option value="all">Todas las fechas</option>
+                        <option value="today">Hoy</option>
+                        <option value="yesterday">Ayer</option>
+                        <option value="last7days">Últimos 7 días</option>
+                        <option value="last30days">Últimos 30 días</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-hourglass-half"></i> Vencimiento</label>
+                    <select class="form-control" [(ngModel)]="stockFilters.expiration_status"
+                        (ngModelChange)="applyStockFilters()">
+                        <option value="ALL">Todos</option>
+                        <option value="EXPIRED">Vencidos</option>
+                        <option value="NEXT_7">Próximos 7 días</option>
+                        <option value="NEXT_15">Próximos 15 días</option>
+                        <option value="NEXT_30">Próximos 30 días</option>
+                    </select>
+                </div>
+            </div>
+            <div class="search-section">
+                <button class="btn-primary" (click)="applyStockFilters()">
+                    <i class="fas fa-search"></i> Buscar
+                </button>
+                <button class="btn-secondary" (click)="clearStockFilters()">
+                    <i class="fas fa-eraser"></i> Limpiar
+                </button>
+                <button class="btn-secondary" (click)="refreshStock()" [disabled]="stockLoading">
+                    <i class="fas fa-sync-alt" [class.spinning]="stockLoading"></i> Actualizar
+                </button>
+            </div>
+        </div>
+
+        <div class="stock-table-section">
+            <div class="table-container" [class.loading-overlay]="stockLoading"
+                style="max-height: 600px; overflow-y: auto;">
+                <div class="spinner-overlay" *ngIf="stockLoading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Cargando Stock...</span>
+                </div>
+                <table class="data-table master-detail-table">
                     <thead>
                         <tr>
+                            <th width="40"></th>
                             <th>SKU</th>
                             <th>Nombre</th>
                             <th>Categoría</th>
-                            <th>Lote</th>
-                            <th>Vencimiento</th>
-                            <th>Cantidad</th>
-                            <th>Costo Prom.</th>
+                            <th>Cantidad Total</th>
+                            <th>Costo Prom. global</th>
                             <th>Costo Total</th>
                             <th>Actualizado</th>
-                            <th>Seriales</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr *ngFor="let item of filteredStock">
-                            <td><code>{{ getProductBySku(item.product_id)?.sku }}</code></td>
-                            <td>
-                                <strong>{{ getProductBySku(item.product_id)?.name }}</strong>
-                                <div class="stock-alerts">
-                                    <span class="alert-badge low-stock" *ngIf="isLowStock(item)">
-                                        <i class="fas fa-exclamation-triangle"></i> Bajo stock
-                                    </span>
-                                    <span class="alert-badge expiring-soon" *ngIf="isExpiringSoon(item)">
-                                        <i class="fas fa-clock"></i> Vence pronto
-                                    </span>
-                                </div>
+                        <ng-container *ngFor="let item of filteredStock">
+                            <!-- Fila Maestra -->
+                            <tr class="master-row" [class.expanded]="expandedStockProducts.has(item.product_id)">
+                                <td>
+                                    <button class="btn-icon btn-expand" (click)="toggleStockRow(item.product_id)">
+                                        <i class="fas"
+                                            [class.fa-chevron-right]="!expandedStockProducts.has(item.product_id)"
+                                            [class.fa-chevron-down]="expandedStockProducts.has(item.product_id)"></i>
+                                    </button>
+                                </td>
+                                <td><code>{{ item.product?.sku }}</code></td>
+                                <td>
+                                    <strong>{{ item.product?.name }}</strong>
+                                    <div class="stock-alerts">
+                                        <span class="alert-badge low-stock" *ngIf="isLowStock(item)">
+                                            <i class="fas fa-exclamation-triangle"></i> Bajo stock
+                                        </span>
+                                        <span class="alert-badge expiring-soon" *ngIf="isExpiringSoon(item)">
+                                            <i class="fas fa-clock"></i> Vence pronto
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>{{ getCategoryName(item.product?.category_id) }}</td>
+                                <td><strong>{{ item.total_qty }}</strong></td>
+                                <td>S/ {{ item.avg_cost | number:'1.2-2' }}</td>
+                                <td>S/ {{ item.total_cost | number:'1.2-2' }}</td>
+                                <td>{{ item.updated_at | date:'dd/MM/yyyy HH:mm' }}</td>
+                            </tr>
+                            <!-- Fila Detalle (Lotes) -->
+                            <tr class="detail-row" *ngIf="expandedStockProducts.has(item.product_id)">
+                                <td colspan="8" class="detail-cell">
+                                    <div class="detail-content">
+                                        <h4 class="detail-title"><i class="fas fa-layer-group"></i> Lotes en Stock</h4>
+                                        <table class="data-table inner-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Código Lote</th>
+                                                    <th>Vencimiento</th>
+                                                    <th>Cantidad Lote</th>
+                                                    <th>Costo Prom. Lote</th>
+                                                    <th>Costo Total Lote</th>
+                                                    <th>Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr *ngFor="let l of item.lots">
+                                                    <td>{{ l.lot?.lotCode || '-' }}</td>
+                                                    <td>{{ l.lot?.expirationDate ? (l.lot.expirationDate |
+                                                        date:'dd/MM/yyyy') : '-' }}</td>
+                                                    <td><strong>{{ l.qty_on_hand }}</strong></td>
+                                                    <td>S/ {{ l.avg_unit_cost | number:'1.2-2' }}</td>
+                                                    <td>S/ {{ l.total_cost | number:'1.2-2' }}</td>
+                                                    <td>
+                                                        <button class="btn-icon btn-edit"
+                                                            *ngIf="item.product?.isSerialized"
+                                                            (click)="openStockSerials({ product_id: item.product_id, lot_id: l.lot_id })"
+                                                            title="Ver seriales del lote">
+                                                            <i class="fas fa-barcode"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                <tr *ngIf="!item.lots || item.lots.length === 0">
+                                                    <td colspan="6" class="empty-message">No hay lotes detallados.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
+                        </ng-container>
+                        <tr *ngIf="filteredStock.length === 0">
+                            <td colspan="8" class="empty-message">
+                                <i class="fas fa-inbox"></i>
+                                <p>No se encontraron productos en stock con los filtros aplicados</p>
                             </td>
-                            <td>{{ getCategoryName(getProductBySku(item.product_id)?.category_id) }}</td>
-                            <td>{{ item.lot_id ? getLotCode(item.product_id, item.lot_id) : '-' }}</td>
-                            <td>
-                                {{ item.lot_id ? (getLotExpiration(item.product_id, item.lot_id) |
-                                date:'dd/MM/yyyy') : '-' }}
-                            </td>
-
-                            <td><strong>{{ item.qty_on_hand }}</strong></td>
-                            <td>S/ {{ item.avg_unit_cost?.toFixed(2) }}</td>
-                            <td>S/ {{ item.total_cost?.toFixed(2) }}</td>
-                            <td>{{ formatLocalDate(item.updated_at) }}</td>
-                            <td>
-                                <button class="btn-icon btn-edit"
-                                    *ngIf="getProductBySku(item.product_id)?.is_serialized; else noSerials"
-                                    (click)="openStockSerials(item)" title="Ver seriales en stock">
-                                    <i class="fas fa-barcode"></i>
-                                </button>
-                                <ng-template #noSerials>-</ng-template>
-                            </td>
-
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <div class="pagination" *ngIf="stockTotalPages > 1">
+                <button class="btn-pagination" (click)="goToStockPage(1)" [disabled]="stockFilters.page === 1">
+                    <i class="fas fa-angle-double-left"></i>
+                </button>
+                <button class="btn-pagination" (click)="goToStockPage(stockFilters.page! - 1)"
+                    [disabled]="stockFilters.page === 1">
+                    <i class="fas fa-angle-left"></i>
+                </button>
+                <span class="page-info">Página {{ stockFilters.page }} de {{ stockTotalPages }}</span>
+                <button class="btn-pagination" (click)="goToStockPage(stockFilters.page! + 1)"
+                    [disabled]="stockFilters.page === stockTotalPages">
+                    <i class="fas fa-angle-right"></i>
+                </button>
+                <button class="btn-pagination" (click)="goToStockPage(stockTotalPages)"
+                    [disabled]="stockFilters.page === stockTotalPages">
+                    <i class="fas fa-angle-double-right"></i>
+                </button>
             </div>
         </div>
 

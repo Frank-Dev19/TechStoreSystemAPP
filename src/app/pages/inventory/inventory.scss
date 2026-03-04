@@ -3070,3 +3070,223 @@
         }
     }
 }
+
+/* ============================================
+   STOCK METRICS & MASTER-DETAIL TABLE
+   ============================================ */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+
+    .metric-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        border: 1px solid #e2e8f0;
+
+        .metric-icon {
+            width: 54px;
+            height: 54px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);
+        }
+
+        .metric-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+
+            .label {
+                font-size: 0.85rem;
+                color: #718096;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .value {
+                font-size: 1.4rem;
+                font-weight: 700;
+                color: #2d3748;
+                line-height: 1.2;
+            }
+        }
+
+        &.metric-clickable {
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+
+            &:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+                border-color: #3498db;
+            }
+
+            .metric-filter-icon {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                font-size: 0.75rem;
+                color: #a0aec0;
+                transition: color 0.2s ease;
+            }
+
+            &:hover .metric-filter-icon {
+                color: #3498db;
+            }
+        }
+
+        &.metric-active {
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15), 0 4px 12px rgba(52, 152, 219, 0.2);
+            background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%);
+
+            .metric-filter-icon {
+                color: #3498db !important;
+            }
+        }
+    }
+}
+
+/* Stock Alert Badges */
+.stock-alerts {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+    flex-wrap: wrap;
+
+    .alert-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 12px;
+        line-height: 1.4;
+
+        i {
+            font-size: 0.65rem;
+        }
+
+        &.low-stock {
+            background-color: #fff5f5;
+            color: #e53e3e;
+            border: 1px solid #fed7d7;
+        }
+
+        &.expiring-soon {
+            background-color: #fffaf0;
+            color: #dd6b20;
+            border: 1px solid #feebc8;
+        }
+    }
+}
+
+.master-detail-table {
+    .master-row {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+
+        &:hover {
+            background-color: #f7fafc;
+        }
+
+        &.expanded {
+            background-color: #ebf8ff;
+            border-bottom: none;
+
+            td {
+                border-bottom: none;
+            }
+        }
+
+        .btn-expand {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #edf2f7;
+            color: #4a5568;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+
+            &:hover {
+                background: #e2e8f0;
+                color: #2d3748;
+            }
+        }
+    }
+
+    .detail-row {
+        background-color: #f8fafc;
+        border-top: none;
+
+        .detail-cell {
+            padding: 0;
+        }
+
+        .detail-content {
+            padding: 1.5rem 2rem 1.5rem 4rem;
+            border-left: 4px solid #3182ce;
+            background: #fff;
+            margin: 0.5rem 1rem 1rem 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+            @media (max-width: 768px) {
+                padding: 1rem;
+                margin: 0.5rem;
+            }
+
+            .detail-title {
+                margin: 0 0 1rem 0;
+                color: #2c5282;
+                font-size: 1.1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+
+            .inner-table {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                overflow: hidden;
+
+                thead {
+                    background: #edf2f7;
+
+                    th {
+                        padding: 0.75rem 1rem;
+                        font-size: 0.8rem;
+                        color: #4a5568;
+                        border-bottom: none;
+                    }
+                }
+
+                tbody td {
+                    padding: 0.75rem 1rem;
+                    font-size: 0.85rem;
+                }
+            }
+        }
+    }
+}

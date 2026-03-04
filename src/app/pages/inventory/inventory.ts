@@ -14,7 +14,7 @@ import { CountEntry } from '../../models/inventory/count-entry';
 import { CurrentUserService } from '../../services/current-user.service';
 import { ProductsService } from '../../services/inventory/products.service';
 import { CatalogsService } from '../../services/inventory/catalogs.service';
-import { StockService } from '../../services/inventory/stock.service';
+import { StockService, StockFilters } from '../../services/inventory/stock.service';
 import { KardexService, KardexFilters } from '../../services/inventory/kardex.service';
 import { CountsHttpService } from '../../services/inventory/counts.service';
 import { MovementsService } from '../../services/inventory/movements.service';
@@ -81,12 +81,28 @@ export class Inventory implements OnInit {
   filteredCategories: { id: number; name: string }[] = [];
   showCategoryDropdown = false;
 
-  //Buscadores para Stock
-  stockFilterText: string = '';
-  stockFilterDateFrom: string = '';
-  stockFilterDateTo: string = '';
+  // Buscadores para Stock
+  stockFilters: StockFilters = {
+    search: '',
+    category_id: null,
+    updated_from: '',
+    updated_to: '',
+    expiration_status: 'ALL',
+    page: 1,
+    limit: 20
+  };
+  pagedStock: any[] = [];
+  stockTotal = 0;
+  stockLoading = false;
+  datePresetStock = 'all';
+  stockMetrics: any = {
+    totalValue: 0,
+    productsInStock: 0,
+    lowStockCount: 0,
+    expiringLotsCount: 0
+  };
 
-
+  expandedStockProducts: Set<number> = new Set();
   // Filtros Kardex
   kardexFilters: KardexFilters = {
     dateFrom: '',
@@ -474,22 +490,171 @@ export class Inventory implements OnInit {
 
   private async loadStock() {
     try {
-      this.stock = await this.stockSvc.list().toPromise();
+      this.stockLoading = true;
+      const res = await this.stockSvc.listPaged(this.stockFilters).toPromise();
+      this.pagedStock = res?.data ?? [];
+      this.stockTotal = res?.total ?? 0;
 
-      // PRE-CARGA: para cada renglón con lot_id, trae los lotes del producto 1 sola vez
-      const productIdsNeedingLots = Array.from(
-        new Set(
-          this.stock
-            .filter(s => s.lot_id != null)
-            .map(s => s.product_id)
-        )
-      );
-
-      // Cargar en paralelo lotes por producto y llenar los mapas
-      await Promise.all(productIdsNeedingLots.map(pid => this.ensureLotsForProduct(pid)));
+      // La pre-carga de lotes no es necesaria porque ya están adjuntos al backend en la respuesta
     } catch {
       this.showToast('error', 'No se pudo cargar el stock');
+    } finally {
+      this.stockLoading = false;
     }
+  }
+
+  async loadStockMetrics() {
+    try {
+      // Load metrics WITHOUT low_stock filter so counts always reflect all data
+      const metricsFilters = { ...this.stockFilters };
+      delete metricsFilters.low_stock;
+      delete metricsFilters.page;
+      delete metricsFilters.limit;
+      this.stockMetrics = await this.stockSvc.getMetrics(metricsFilters).toPromise();
+    } catch {
+      console.error('Error cargando métricas de stock');
+    }
+  }
+
+  // --- Métricas clickables ---
+  activeMetricFilter: string | null = null;
+
+  onMetricClick(metric: string) {
+    if (this.activeMetricFilter === metric) {
+      // Toggle off: quitar filtro
+      this.activeMetricFilter = null;
+      this.stockFilters.low_stock = undefined;
+      this.stockFilters.expiration_status = 'ALL';
+    } else {
+      this.activeMetricFilter = metric;
+      if (metric === 'lowStock') {
+        this.stockFilters.low_stock = 'true';
+        this.stockFilters.expiration_status = 'ALL';
+      } else if (metric === 'expiring') {
+        this.stockFilters.low_stock = undefined;
+        this.stockFilters.expiration_status = 'NEXT_30';
+      }
+    }
+    this.stockFilters.page = 1;
+    this.loadStock();
+  }
+
+  // --- Autocomplete Categorías Stock ---
+  stockCategorySearchText: string = '';
+  showStockCategoryDropdown: boolean = false;
+  filteredStockCategories: any[] = [];
+
+  onStockCategorySearch() {
+    this.showStockCategoryDropdown = true;
+    const search = this.stockCategorySearchText.toLowerCase();
+    this.filteredStockCategories = this.categories.filter(c => c.name.toLowerCase().includes(search));
+  }
+
+  onStockCategoryFocus() {
+    this.showStockCategoryDropdown = true;
+    if (!this.stockCategorySearchText) {
+      this.filteredStockCategories = [...this.categories];
+    }
+  }
+
+  onStockCategoryBlur() {
+    setTimeout(() => {
+      this.showStockCategoryDropdown = false;
+    }, 200);
+  }
+
+  selectStockCategory(cat: any) {
+    this.stockCategorySearchText = cat.name;
+    this.stockFilters.category_id = cat.id;
+    this.showStockCategoryDropdown = false;
+    this.applyStockFilters();
+  }
+
+  clearStockCategorySelection() {
+    this.stockCategorySearchText = '';
+    this.stockFilters.category_id = null;
+    this.filteredStockCategories = [...this.categories];
+    this.applyStockFilters();
+  }
+
+  toggleStockRow(productId: number) {
+    if (this.expandedStockProducts.has(productId)) {
+      this.expandedStockProducts.delete(productId);
+    } else {
+      this.expandedStockProducts.add(productId);
+    }
+  }
+
+  onDatePresetStockChange(preset: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    if (preset === 'today') {
+      this.stockFilters.updated_from = today.toISOString().split('T')[0];
+      this.stockFilters.updated_to = end.toISOString().split('T')[0];
+    } else if (preset === 'yesterday') {
+      const y = new Date(today);
+      y.setDate(y.getDate() - 1);
+      this.stockFilters.updated_from = y.toISOString().split('T')[0];
+      this.stockFilters.updated_to = y.toISOString().split('T')[0];
+    } else if (preset === 'last7days') {
+      const s = new Date(today);
+      s.setDate(s.getDate() - 7);
+      this.stockFilters.updated_from = s.toISOString().split('T')[0];
+      this.stockFilters.updated_to = end.toISOString().split('T')[0];
+    } else if (preset === 'last30days') {
+      const s = new Date(today);
+      s.setDate(s.getDate() - 30);
+      this.stockFilters.updated_from = s.toISOString().split('T')[0];
+      this.stockFilters.updated_to = end.toISOString().split('T')[0];
+    } else if (preset === 'all') {
+      this.stockFilters.updated_from = '';
+      this.stockFilters.updated_to = '';
+    }
+
+    if (preset !== 'custom') {
+      this.applyStockFilters();
+    }
+  }
+
+  async applyStockFilters() {
+    this.stockFilters.page = 1;
+    await this.loadStock();
+    await this.loadStockMetrics();
+  }
+
+  async clearStockFilters() {
+    this.datePresetStock = 'all';
+    this.stockCategorySearchText = '';
+    this.activeMetricFilter = null;
+    this.stockFilters = {
+      search: '',
+      category_id: null,
+      updated_from: '',
+      updated_to: '',
+      expiration_status: 'ALL',
+      low_stock: undefined,
+      page: 1,
+      limit: 20
+    };
+    await this.loadStock();
+    await this.loadStockMetrics();
+  }
+
+  async goToStockPage(page: number) {
+    this.stockFilters.page = page;
+    await this.loadStock();
+  }
+
+  async refreshStock() {
+    await this.loadStock();
+    await this.loadStockMetrics();
+  }
+
+  get stockTotalPages(): number {
+    return Math.ceil(this.stockTotal / (this.stockFilters.limit || 20));
   }
 
 
@@ -851,42 +1016,27 @@ export class Inventory implements OnInit {
   // =========================================================
   // STOCK (tabla)
   // =========================================================
-  get filteredStock(): Stock[] {
-    const term = (this.stockFilterText || '').toLowerCase();
-    const from = this.stockFilterDateFrom ? new Date(this.stockFilterDateFrom + 'T00:00:00') : null;
-    const to = this.stockFilterDateTo ? new Date(this.stockFilterDateTo + 'T23:59:59') : null;
+  get filteredStock(): any[] {
+    return this.pagedStock;
+  }
 
-    return this.stock.filter((s) => {
-      const p = this.productMap.get(s.product_id);
-      const matchesText =
-        !term ||
-        (p?.name?.toLowerCase().includes(term)) ||
-        (p?.sku?.toLowerCase().includes(term)) ||
-        (this.getCategoryName(p?.category_id)?.toLowerCase().includes(term));
+  isLowStock(item: any): boolean {
+    const min = item.product?.reorder_point || 0;
+    return item.total_qty <= min;
+  }
 
-      let matchesDate = true;
-      if ((from || to) && s.updated_at) {
-        const upd = new Date(s.updated_at);
-        if (from && upd < from) matchesDate = false;
-        if (to && upd > to) matchesDate = false;
-      }
+  isExpiringSoon(item: any): boolean {
+    if (!item.lots || item.lots.length === 0) return false;
+    const now = new Date();
+    const next30 = new Date();
+    next30.setDate(now.getDate() + 30);
 
-      return matchesText && matchesDate;
+    return item.lots.some((l: any) => {
+      if (!l.lot || !l.lot.expirationDate) return false;
+      if (l.qty_on_hand <= 0) return false;
+      const exp = new Date(l.lot.expirationDate);
+      return exp <= next30;
     });
-  }
-
-
-  isLowStock(item: Stock): boolean {
-    const p = this.productMap.get(item.product_id);
-    if (!p) return false;
-    const min = (p.min_stock ?? 0) as number;
-    return item.qty_on_hand <= min;
-    // Si tu backend trae min_stock en otra propiedad, ajústalo aquí.
-  }
-
-  isExpiringSoon(item: Stock): boolean {
-    // Hasta que haya catálogo de lotes, devolvemos false para evitar falsos positivos
-    return false;
   }
 
   // =========================================================
@@ -2047,7 +2197,7 @@ export class Inventory implements OnInit {
   currentStockSerials: Array<{ id: number; serial_code: string; lot_id: number | null }> = [];
   modalStockCtx: { productId: number; productName: string; lotId: number | null; lotCode: string | null } | null = null;
 
-  async openStockSerials(item: Stock): Promise<void> {
+  async openStockSerials(item: { product_id: number; lot_id?: number | null }): Promise<void> {
     try {
       const p = this.productMap.get(item.product_id);
       const productName = p?.name ?? '';
