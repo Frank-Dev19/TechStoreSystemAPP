@@ -43,7 +43,16 @@ export class Inventory implements OnInit {
   // -----------------------------
   // UI STATE
   // -----------------------------
-  activeTab: 'operations' | 'counts' | 'kardex' | 'products' | 'catalogs' | 'stock' = 'operations';
+  activeTab: string = 'operations';
+  activeOperation: string = 'entry';
+  
+  // Helper properties for template type checking
+  get isOperationsTab(): boolean { return this.activeTab === 'operations'; }
+  get isStockTab(): boolean { return this.activeTab === 'stock'; }
+  get isCountsTab(): boolean { return this.activeTab === 'counts'; }
+  get isKardexTab(): boolean { return this.activeTab === 'kardex'; }
+  get isProductsTab(): boolean { return this.activeTab === 'products'; }
+  get isCatalogsTab(): boolean { return this.activeTab === 'catalogs'; }
   isLocked = false;
   lockReason = '';
   selectedProductAdjustment: Product | null = null;
@@ -80,6 +89,9 @@ export class Inventory implements OnInit {
   categorySearchText = '';
   filteredCategories: { id: number; name: string }[] = [];
   showCategoryDropdown = false;
+
+  // Todos los productos (sin paginación) para autocompletes de operaciones
+  allProducts: Product[] = [];
 
   // Buscadores para Stock
   stockFilters: StockFilters = {
@@ -291,6 +303,7 @@ export class Inventory implements OnInit {
   async ngOnInit(): Promise<void> {
     await Promise.all([
       this.loadProducts(),
+      this.loadAllProducts(),
       this.loadCategories(),
       this.loadUnits(),
       this.loadPagedCategories(),
@@ -327,6 +340,15 @@ export class Inventory implements OnInit {
       this.showToast('error', 'No se pudieron cargar productos');
     } finally {
       this.productLoading = false;
+    }
+  }
+
+  // Cargar todos los productos sin paginación (para autocompletes de operaciones)
+  private async loadAllProducts() {
+    try {
+      this.allProducts = await this.productsSvc.listAll().toPromise() ?? [];
+    } catch {
+      this.allProducts = [];
     }
   }
 
@@ -677,6 +699,134 @@ export class Inventory implements OnInit {
     } catch {
       this.showToast('error', 'No se pudieron cargar los conteos');
     }
+  }
+
+  // =========================================================
+  // OPERACIONES - SELECTOR Y AUTOCOMPLETE
+  // =========================================================
+
+  // --- Autocomplete Producto para Entrada ---
+  entryProductSearchText: string = '';
+  showEntryProductDropdown: boolean = false;
+  filteredEntryProducts: any[] = [];
+
+  onEntryProductSearch() {
+    this.showEntryProductDropdown = true;
+    const search = this.entryProductSearchText.toLowerCase();
+    this.filteredEntryProducts = this.allProducts.filter(p =>
+      p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search)
+    );
+  }
+  onEntryProductFocus() {
+    this.showEntryProductDropdown = true;
+    if (!this.entryProductSearchText) {
+      this.filteredEntryProducts = [...this.allProducts];
+    }
+  }
+  onEntryProductBlur() {
+    setTimeout(() => { this.showEntryProductDropdown = false; }, 200);
+  }
+  selectEntryProduct(product: any) {
+    this.entryProductSearchText = product.sku + ' - ' + product.name;
+    this.entryForm.product_id = product.id;
+    this.showEntryProductDropdown = false;
+    this.onProductChangeEntry();
+  }
+  clearEntryProductSelection() {
+    this.entryProductSearchText = '';
+    this.entryForm.product_id = null;
+    this.selectedProductEntry = null;
+    this.filteredEntryProducts = [...this.allProducts];
+  }
+
+  // --- Autocomplete Producto para Salida ---
+  exitProductSearchText: string = '';
+  showExitProductDropdown: boolean = false;
+  filteredExitProducts: any[] = [];
+
+  onExitProductSearch() {
+    this.showExitProductDropdown = true;
+    const search = this.exitProductSearchText.toLowerCase();
+    this.filteredExitProducts = this.allProducts.filter(p =>
+      p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search)
+    );
+  }
+  onExitProductFocus() {
+    this.showExitProductDropdown = true;
+    if (!this.exitProductSearchText) {
+      this.filteredExitProducts = [...this.allProducts];
+    }
+  }
+  onExitProductBlur() {
+    setTimeout(() => { this.showExitProductDropdown = false; }, 200);
+  }
+  selectExitProduct(product: any) {
+    this.exitProductSearchText = product.sku + ' - ' + product.name;
+    this.exitForm.product_id = product.id;
+    this.showExitProductDropdown = false;
+    this.onProductChangeExit();
+  }
+  clearExitProductSelection() {
+    this.exitProductSearchText = '';
+    this.exitForm.product_id = null;
+    this.selectedProductExit = null;
+    this.availableLotsForExit = [];
+    this.availableSerialsForExit = [];
+    this.filteredExitProducts = [...this.allProducts];
+  }
+
+  // --- Autocomplete Producto para Ajuste ---
+  adjProductSearchText: string = '';
+  showAdjProductDropdown: boolean = false;
+  filteredAdjProducts: any[] = [];
+
+  onAdjProductSearch() {
+    this.showAdjProductDropdown = true;
+    const search = this.adjProductSearchText.toLowerCase();
+    this.filteredAdjProducts = this.allProducts.filter(p =>
+      p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search)
+    );
+  }
+  onAdjProductFocus(): void {
+    this.showAdjProductDropdown = true;
+    if (!this.adjProductSearchText) {
+      this.filteredAdjProducts = [...this.allProducts];
+    }
+  }
+  onAdjProductBlur(): void {
+    setTimeout(() => { this.showAdjProductDropdown = false; }, 200);
+  }
+  selectAdjProduct(product: any) {
+    this.adjProductSearchText = product.sku + ' - ' + product.name;
+    this.adjustmentForm.product_id = product.id;
+    this.showAdjProductDropdown = false;
+    this.onProductChangeAdjustment();
+  }
+  clearAdjProductSelection() {
+    this.adjProductSearchText = '';
+    this.adjustmentForm.product_id = null;
+    this.selectedProductAdjustment = null;
+    this.filteredAdjProducts = [...this.allProducts];
+  }
+
+  // --- Contexto del producto seleccionado ---
+  getProductContextInfo(productId: number | null): any {
+    if (!productId) return null;
+    const product = this.productMap.get(productId);
+    if (!product) return null;
+    // Find stock info from pagedStock
+    const stockItem = this.pagedStock.find(s => s.product_id === productId);
+    return {
+      name: product.name,
+      sku: product.sku,
+      category: this.getCategoryName(product.category_id),
+      isSerialized: product.is_serialized,
+      managesExpiration: product.manages_expiration,
+      stockQty: stockItem?.total_qty ?? 0,
+      avgCost: stockItem?.avg_cost ?? 0,
+      totalCost: stockItem?.total_cost ?? 0,
+      lotsCount: stockItem?.lots?.length ?? 0
+    };
   }
 
   // =========================================================
@@ -2104,6 +2254,11 @@ export class Inventory implements OnInit {
     const required = Math.abs(Number(this.adjustmentForm.qty || 0));
     const picked = this.adjustmentForm.qty >= 0 ? this.adjSerialCodes.length : this.adjSelectedSerialIds.length;
     return Math.max(0, required - picked);
+  }
+
+  remainingAdjSerials(): number {
+    const required = Number(this.adjustmentForm.qty || 0);
+    return Math.max(0, required - this.adjSerialCodes.length);
   }
 
 

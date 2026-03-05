@@ -31,34 +31,34 @@
 
     <!-- Tabs Navigation  -->
     <div class="tabs-navigation">
-        <button class="tab-button" [class.active]="activeTab === 'operations'" (click)="activeTab = 'operations'">
+        <button class="tab-button" [class.active]="activeTab == 'operations'" (click)="activeTab = 'operations'">
             <i class="fas fa-exchange-alt"></i>
             Operaciones
         </button>
-        <button class="tab-button" [class.active]="activeTab === 'stock'" (click)="activeTab = 'stock'">
+        <button class="tab-button" [class.active]="activeTab == 'stock'" (click)="activeTab = 'stock'">
             <i class="fas fa-chart-bar"></i>
             Stock
         </button>
-        <button class="tab-button" [class.active]="activeTab === 'counts'" (click)="activeTab = 'counts'">
+        <button class="tab-button" [class.active]="activeTab == 'counts'" (click)="activeTab = 'counts'">
             <i class="fas fa-clipboard-check"></i>
             Conteos
         </button>
-        <button class="tab-button" [class.active]="activeTab === 'kardex'" (click)="activeTab = 'kardex'">
+        <button class="tab-button" [class.active]="activeTab == 'kardex'" (click)="activeTab = 'kardex'">
             <i class="fas fa-book"></i>
             Kardex
         </button>
-        <button class="tab-button" [class.active]="activeTab === 'catalogs'" (click)="activeTab = 'catalogs'">
+        <button class="tab-button" [class.active]="activeTab == 'catalogs'" (click)="activeTab = 'catalogs'">
             <i class="fas fa-database"></i>
             Catálogos
         </button>
-        <button class="tab-button" [class.active]="activeTab === 'products'" (click)="activeTab = 'products'">
+        <button class="tab-button" [class.active]="activeTab == 'products'" (click)="activeTab = 'products'">
             <i class="fas fa-database"></i>
             Productos
         </button>
     </div>
 
     <!-- STOCK TAB  -->
-    <div class="tab-content" *ngIf="activeTab === 'stock'">
+    <div class="tab-content" *ngIf="isStockTab">
         <!-- <div class="operations-header">
             <h2 class="operations-title">
                 <i class="fas fa-chart-bar"></i>
@@ -295,7 +295,7 @@
     </div>
 
     <!-- OPERATIONS TAB  -->
-    <div class="tab-content" *ngIf="activeTab === 'operations'">
+    <div class="tab-content" *ngIf="isOperationsTab">
         <!-- <div class="operations-header">
             <h2 class="operations-title">
                 <i class="fas fa-exchange-alt"></i>
@@ -304,418 +304,502 @@
             <p class="operations-subtitle">Registra entradas, salidas y ajustes de inventario</p>
         </div> -->
 
-        <div class="operations-grid">
-            <!-- Entry Card -->
-            <div class="operation-card entry-card" [class.disabled]="isLocked">
-                <div class="card-header">
-                    <div class="header-icon entry">
-                        <i class="fas fa-arrow-down"></i>
-                    </div>
-                    <div class="header-text">
-                        <h3>Entrada de Inventario</h3>
-                        <p>Registra productos que ingresan al almacén</p>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="form-group">
-                        <label>Producto *</label>
-                        <select [(ngModel)]="entryForm.product_id" class="form-control" [disabled]="isLocked"
-                            (change)="onProductChangeEntry()">
-                            <option [ngValue]="null">Seleccionar producto</option>
-                            <option *ngFor="let product of products" [ngValue]="product.id">
-                                {{ product.sku }} - {{ product.name }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Cantidad *</label>
-                            <input type="number" [(ngModel)]="entryForm.qty" class="form-control" min="1"
-                                [disabled]="isLocked">
-                        </div>
-                        <div class="form-group">
-                            <label>Costo Unitario *</label>
-                            <input type="number" [(ngModel)]="entryForm.unit_cost" class="form-control" min="0"
-                                step="0.01" [disabled]="isLocked">
-                        </div>
-                    </div>
-                    <div class="form-group" *ngIf="selectedProductEntry?.manages_expiration">
-                        <label>Lote *</label>
-                        <input type="text" [(ngModel)]="entryForm.lot_code" class="form-control" [disabled]="isLocked">
-                    </div>
-                    <div class="form-group" *ngIf="selectedProductEntry?.manages_expiration">
-                        <label>Fecha de Vencimiento *</label>
-                        <input type="date" [(ngModel)]="entryForm.expiration_date" class="form-control"
-                            [disabled]="isLocked">
-                    </div>
-                    <div class="form-group" *ngIf="selectedProductEntry?.is_serialized">
-                        <label>Seriales *</label>
+        <!-- Operation Type Selector -->
+        <div class="operation-selector">
+            <button class="op-tab entry" [class.active]="activeOperation === 'entry'"
+                (click)="activeOperation = 'entry'">
+                <i class="fas fa-arrow-down"></i> Entrada de Inventario
+            </button>
+            <button class="op-tab exit" [class.active]="activeOperation === 'exit'" (click)="activeOperation = 'exit'">
+                <i class="fas fa-arrow-up"></i> Salida de Inventario
+            </button>
+            <button class="op-tab adjustment" [class.active]="activeOperation === 'adjustment'"
+                (click)="activeOperation = 'adjustment'">
+                <i class="fas fa-sliders-h"></i> Ajuste de Inventario
+            </button>
+        </div>
 
-                        <div class="serial-builder">
-                            <div class="serial-input-row">
-                                <input #entrySerialField id="entry-serial" class="form-control"
-                                    [(ngModel)]="entrySerialInput" (keydown.enter)="onEntrySerialKeydown()"
-                                    placeholder="Escanea o escribe el serial" autocomplete="off" inputmode="text" />
-                                <button type="button" class="btn-secondary btn-sm" (click)="addEntrySerial()">
-                                    <i class="fas fa-plus"></i> Agregar serial
-                                </button>
-                                <span class="serial-counter" [class.ok]="remainingEntrySerials()===0">
-                                    {{ entrySerialCodes.length }}/{{ entryForm.qty || 0 }}
-                                </span>
+        <!-- ==================== ENTRADA ==================== -->
+        <div class="operation-panel" *ngIf="activeOperation === 'entry'">
+            <div class="operation-layout" [class.has-serials]="selectedProductEntry?.is_serialized">
+                <!-- Columna Izquierda: Formulario -->
+                <div class="operation-form-col">
+                    <div class="operation-form-card">
+                        <div class="form-card-header entry">
+                            <i class="fas fa-arrow-down"></i>
+                            <div>
+                                <h3>Entrada de Inventario</h3>
+                                <p>Registra productos que ingresan al almacén</p>
                             </div>
-
-
-                            <div class="serial-list scrollable-y" *ngIf="entrySerialCodes.length">
-                                <table class="data-table sticky-header">
-                                    <thead>
-                                        <tr>
-                                            <th>Serial</th>
-                                            <th width="80">Acciones</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr *ngFor="let s of entrySerialCodes">
-                                            <td><code>{{ s }}</code></td>
-                                            <td>
-                                                <button class="btn-icon btn-delete" (click)="removeEntrySerial(s)">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <small class="hint" *ngIf="remainingEntrySerials() > 0">
-                                Faltan {{ remainingEntrySerials() }} serial(es).
-                            </small>
                         </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Notas</label>
-                        <textarea [(ngModel)]="entryForm.notes" class="form-control" rows="2"
-                            [disabled]="isLocked"></textarea>
-                    </div>
-                    <button class="btn-primary" (click)="registerEntry()" [disabled]="isLocked">
-                        <i class="fas fa-check"></i>
-                        Registrar Entrada
-                    </button>
-                </div>
-            </div>
-
-            <!-- Exit Card  -->
-            <div class="operation-card exit-card" [class.disabled]="isLocked">
-                <div class="card-header">
-                    <div class="header-icon exit">
-                        <i class="fas fa-arrow-up"></i>
-                    </div>
-                    <div class="header-text">
-                        <h3>Salida de Inventario</h3>
-                        <p>Registra productos que salen del almacén</p>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="form-group">
-                        <label>Producto *</label>
-                        <select [(ngModel)]="exitForm.product_id" class="form-control" [disabled]="isLocked"
-                            (change)="onProductChangeExit()">
-                            <option [ngValue]="null">Seleccionar producto</option>
-                            <option *ngFor="let product of products" [ngValue]="product.id">
-                                {{ product.sku }} - {{ product.name }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Cantidad *</label>
-                            <input type="number" [(ngModel)]="exitForm.qty" (ngModelChange)="onExitQtyChange($event)"
-                                class="form-control" min="1" [disabled]="isLocked">
-                        </div>
-                        <div class="form-group">
-                            <label>Motivo *</label>
-                            <select [(ngModel)]="exitForm.reason_code" class="form-control" [disabled]="isLocked">
-                                <option value="VENTA">Venta</option>
-                                <option value="CONSUMO_INT">Consumo Interno</option>
-                                <option value="DAÑO">Daño</option>
-                                <option value="PERDIDA">Pérdida</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group"
-                        *ngIf="selectedProductExit?.manages_expiration && availableLotsForExit.length > 0">
-                        <label>Lote * (FEFO sugerido)</label>
-                        <select [(ngModel)]="exitForm.lot_id" class="form-control" [disabled]="isLocked"
-                            (change)="maybeAutoPickExitSerials()">
-                            <option *ngFor="let lot of availableLotsForExit" [ngValue]="lot.id">
-                                {{ lot.lot_code }} - Vence: {{ lot.expiration_date | date:'dd/MM/yyyy' }} ({{
-                                lot.qty_on_hand }})
-                            </option>
-
-                        </select>
-                    </div>
-                    <div class="form-group" *ngIf="selectedProductExit?.is_serialized">
-                        <label>Seriales * (seleccione {{ exitForm.qty || 0 }})</label>
-
-                        <div class="serial-selector">
-                            <div class="serial-toolbar">
-                                <span class="serial-counter" [class.ok]="remainingExitSerials()===0">
-                                    {{ exitSelectedSerialIds.length }}/{{ exitForm.qty || 0 }}
-                                </span>
-                                <small class="hint" *ngIf="remainingExitSerials() > 0">
-                                    Faltan {{ remainingExitSerials() }} serial(es) por seleccionar
-                                </small>
-
-                                <!-- Controles de autoselección -->
-                                <div class="serial-actions">
-                                    <label class="switch-inline">
-                                        <input type="checkbox" [(ngModel)]="exitAutoSelect"
-                                            (change)="maybeAutoPickExitSerials()">
-                                        Autoseleccionar
-                                    </label>
-
-                                    <button type="button" class="btn-secondary btn-sm" (click)="autoPickExitSerials()">
-                                        Autoseleccionar {{ exitForm.qty || 0 }}
-                                    </button>
-                                    <button type="button" class="btn-secondary btn-sm" (click)="clearExitSelection()">
-                                        Limpiar selección
+                        <div class="form-card-body">
+                            <div class="form-group">
+                                <label><i class="fas fa-box"></i> Producto *</label>
+                                <div class="product-autocomplete">
+                                    <input type="text" [(ngModel)]="entryProductSearchText"
+                                        (input)="onEntryProductSearch()" (focus)="onEntryProductFocus()"
+                                        (blur)="onEntryProductBlur()" class="form-control"
+                                        placeholder="Buscar por SKU o nombre..." [disabled]="isLocked">
+                                    <ul class="autocomplete-dropdown"
+                                        *ngIf="showEntryProductDropdown && filteredEntryProducts.length > 0">
+                                        <li *ngFor="let p of filteredEntryProducts" (mousedown)="selectEntryProduct(p)"
+                                            class="autocomplete-item">
+                                            <code>{{ p.sku }}</code> - {{ p.name }}
+                                        </li>
+                                    </ul>
+                                    <button *ngIf="entryForm.product_id" class="clear-btn"
+                                        (click)="clearEntryProductSelection()" title="Limpiar">
+                                        <i class="fas fa-times"></i>
                                     </button>
                                 </div>
                             </div>
-
-                            <div class="table-container scrollable-y">
-                                <table class="data-table sticky-header">
-                                    <thead>
-                                        <tr>
-                                            <th width="40"></th>
-                                            <th>Serial</th>
-                                            <th>Lote</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr *ngFor="let s of availableSerialsForExit">
-                                            <td>
-                                                <input type="checkbox" [checked]="exitSelectedSerialIds.includes(s.id)"
-                                                    (change)="toggleExitSerial(s.id)">
-                                            </td>
-                                            <td><code>{{ s.serial_code }}</code></td>
-                                            <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Cantidad *</label>
+                                    <input type="number" [(ngModel)]="entryForm.qty" class="form-control" min="1"
+                                        [disabled]="isLocked">
+                                </div>
+                                <div class="form-group">
+                                    <label>Costo Unitario *</label>
+                                    <input type="number" [(ngModel)]="entryForm.unit_cost" class="form-control" min="0"
+                                        step="0.01" [disabled]="isLocked">
+                                </div>
                             </div>
+                            <div class="form-group" *ngIf="selectedProductEntry?.manages_expiration">
+                                <label>Lote *</label>
+                                <input type="text" [(ngModel)]="entryForm.lot_code" class="form-control"
+                                    [disabled]="isLocked">
+                            </div>
+                            <div class="form-group" *ngIf="selectedProductEntry?.manages_expiration">
+                                <label>Fecha de Vencimiento *</label>
+                                <input type="date" [(ngModel)]="entryForm.expiration_date" class="form-control"
+                                    [disabled]="isLocked">
+                            </div>
+                            <div class="form-group">
+                                <label>Notas</label>
+                                <textarea [(ngModel)]="entryForm.notes" class="form-control" rows="2"
+                                    [disabled]="isLocked"></textarea>
+                            </div>
+                            <button class="btn-primary btn-block" (click)="registerEntry()" [disabled]="isLocked">
+                                <i class="fas fa-check"></i> Registrar Entrada
+                            </button>
                         </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Notas</label>
-                        <textarea [(ngModel)]="exitForm.notes" class="form-control" rows="2"
-                            [disabled]="isLocked"></textarea>
-                    </div>
-                    <button class="btn-primary" (click)="registerExit()" [disabled]="isLocked">
-                        <i class="fas fa-check"></i>
-                        Registrar Salida
-                    </button>
-                </div>
-            </div>
-
-            <!-- Adjustment Card  -->
-            <div class="operation-card adjustment-card" [class.disabled]="isLocked">
-                <div class="card-header">
-                    <div class="header-icon adjustment">
-                        <i class="fas fa-sliders-h"></i>
-                    </div>
-                    <div class="header-text">
-                        <h3>Ajuste de Inventario</h3>
-                        <p>Corrige diferencias en el inventario</p>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="form-group">
-                        <label>Producto *</label>
-                        <select [(ngModel)]="adjustmentForm.product_id" class="form-control" [disabled]="isLocked"
-                            (change)="onProductChangeAdjustment()">
-                            <option [ngValue]="null">Seleccionar producto</option>
-                            <option *ngFor="let product of products" [ngValue]="product.id">
-                                {{ product.sku }} - {{ product.name }}
-                            </option>
-                        </select>
-                    </div>
-                    <!-- Lote (solo si maneja vencimiento) -->
-                    <div class="form-group" *ngIf="selectedProductAdjustment?.manages_expiration">
-                        <label>Lote *</label>
-                        <select [(ngModel)]="adjustmentForm.lot_id" class="form-control" [disabled]="isLocked">
-                            <option [ngValue]="null">Seleccionar lote</option>
-                            <option *ngFor="let lot of getLotsForProduct(adjustmentForm.product_id)" [ngValue]="lot.id">
-                                {{ lot.lot_code }} - Vence: {{ lot.expiration_date | date:'dd/MM/yyyy' }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Cantidad (+ para aumentar, - para disminuir) *</label>
-                        <input type="number" [(ngModel)]="adjustmentForm.qty" class="form-control"
-                            [disabled]="isLocked">
-                    </div>
-                    <!-- Ajuste positivo: agregar seriales -->
-                    <div class="form-group" *ngIf="selectedProductAdjustment?.is_serialized && adjustmentForm.qty > 0">
-                        <label>Seriales * ({{ adjustmentForm.qty }})</label>
-                        <div class="serial-builder">
-                            <div class="serial-input-row"
-                                *ngIf="adjustmentForm.qty > 0 && selectedProductAdjustment?.is_serialized">
-                                <input #adjSerialField id="adj-serial" class="form-control" [(ngModel)]="adjSerialInput"
-                                    (keydown.enter)="onAdjSerialKeydown()" placeholder="Escanea o escribe el serial"
-                                    autocomplete="off" />
-                                <button type="button" class="btn-secondary btn-sm" (click)="addAdjSerial()">
-                                    <i class="fas fa-plus"></i> Agregar serial
-                                </button>
-                                <span class="serial-counter">
-                                    {{ adjSerialCodes.length }}/{{ Math.max(0, adjustmentForm.qty || 0) }}
-                                </span>
-                            </div>
 
-                            <div class="serial-list" *ngIf="adjSerialCodes.length">
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Serial</th>
-                                            <th width="80">Acciones</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr *ngFor="let s of adjSerialCodes">
-                                            <td><code>{{ s }}</code></td>
-                                            <td>
-                                                <button class="btn-icon btn-delete" (click)="removeAdjSerial(s)">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                <!-- Columna Derecha: Contexto + Seriales -->
+                <div class="operation-context-col">
+                    <!-- Info Contextual del Producto -->
+                    <div class="context-card" *ngIf="getProductContextInfo(entryForm.product_id) as ctx">
+                        <h4><i class="fas fa-info-circle"></i> Información del Producto</h4>
+                        <div class="context-grid">
+                            <div class="context-item">
+                                <span class="ctx-label">Producto</span>
+                                <span class="ctx-value"><code>{{ ctx.sku }}</code> {{ ctx.name }}</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Categoría</span>
+                                <span class="ctx-value">{{ ctx.category || '-' }}</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Stock Actual</span>
+                                <span class="ctx-value">{{ ctx.stockQty }} unidades</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Costo Promedio</span>
+                                <span class="ctx-value">S/ {{ ctx.avgCost | number:'1.2-2' }}</span>
+                            </div>
+                            <div class="context-item" *ngIf="ctx.managesExpiration">
+                                <span class="ctx-label">Lotes</span>
+                                <span class="ctx-value">{{ ctx.lotsCount }} lotes en stock</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Serializado</span>
+                                <span class="ctx-value">{{ ctx.isSerialized ? 'Sí' : 'No' }}</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Ajuste negativo: seleccionar seriales -->
-                    <div class="form-group" *ngIf="selectedProductAdjustment?.is_serialized && adjustmentForm.qty < 0">
-                        <label>Seriales * (seleccione {{ (-1 * adjustmentForm.qty) || 0 }})</label>
-                        <div class="serial-selector">
-                            <div class="serial-toolbar">
-                                <span class="serial-counter" [class.ok]="remainingAdjSerialsAbs()===0">
-                                    {{ adjSelectedSerialIds.length }}/{{ Math.abs(adjustmentForm.qty || 0) }}
-                                </span>
-                            </div>
-                            <div class="table-container scrollable-y">
-                                <table class="data-table sticky-header">
-                                    <thead>
-                                        <tr>
-                                            <th width="40"></th>
-                                            <th>Serial</th>
-                                            <th>Lote</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr *ngFor="let s of availableSerialsForExit">
-                                            <td>
-                                                <input type="checkbox" [checked]="adjSelectedSerialIds.includes(s.id)"
-                                                    (change)="toggleAdjSerial(s.id)">
-                                            </td>
-                                            <td><code>{{ s.serial_code }}</code></td>
-                                            <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                    <!-- Panel de Seriales (solo si es serializado) -->
+                    <div class="serials-panel" *ngIf="selectedProductEntry?.is_serialized">
+                        <h4><i class="fas fa-barcode"></i> Escaneo de Seriales</h4>
+                        <div class="serial-input-row">
+                            <input #entrySerialField id="entry-serial" class="form-control"
+                                [(ngModel)]="entrySerialInput" (keydown.enter)="onEntrySerialKeydown()"
+                                placeholder="Escanea o escribe el serial" autocomplete="off" inputmode="text" />
+                            <button type="button" class="btn-secondary btn-sm" (click)="addEntrySerial()">
+                                <i class="fas fa-plus"></i> Agregar
+                            </button>
+                            <span class="serial-counter" [class.ok]="remainingEntrySerials()===0">
+                                {{ entrySerialCodes.length }}/{{ entryForm.qty || 0 }}
+                            </span>
+                        </div>
+                        <small class="hint" *ngIf="remainingEntrySerials() > 0">
+                            Faltan {{ remainingEntrySerials() }} serial(es).
+                        </small>
+                        <div class="serial-table-container" *ngIf="entrySerialCodes.length">
+                            <table class="data-table sticky-header">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Serial</th>
+                                        <th width="60">Quitar</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let s of entrySerialCodes; let i = index">
+                                        <td>{{ i + 1 }}</td>
+                                        <td><code>{{ s }}</code></td>
+                                        <td>
+                                            <button class="btn-icon btn-delete" (click)="removeEntrySerial(s)">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>Nota *</label>
-                        <textarea [(ngModel)]="adjustmentForm.notes" class="form-control" rows="3" [disabled]="isLocked"
-                            placeholder="Explique el motivo del ajuste..."></textarea>
+                    <!-- Placeholder si no hay producto -->
+                    <div class="context-placeholder" *ngIf="!entryForm.product_id">
+                        <i class="fas fa-box-open"></i>
+                        <p>Selecciona un producto para ver su información</p>
                     </div>
-                    <button class="btn-primary" (click)="registerAdjustment()" [disabled]="isLocked">
-                        <i class="fas fa-check"></i>
-                        Registrar Ajuste
-                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- Current Stock Table  -->
-        <!-- <div class="stock-section">
-            <div class="section-header">
-                <div class="header-left">
-                    <h3>
-                        <i class="fas fa-boxes"></i>
-                        Stock Actual
-                    </h3>
-                    <span class="stock-count">{{ filteredStock.length }} productos en stock</span>
-                </div>
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Buscar producto, SKU o categoría..." [(ngModel)]="searchStock">
-                </div>
-            </div>
-            <div class="table-container">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>SKU</th>
-                            <th>Nombre</th>
-                            <th>Categoría</th>
-                            <th>Lote</th>
-                            <th>Vencimiento</th>
-                            <th>Cantidad</th>
-                            <th>Costo Prom.</th>
-                            <th>Costo Total</th>
-                            <th>Actualizado</th>
-                            <th>Seriales</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr *ngFor="let item of filteredStock">
-                            <td><code>{{ getProductBySku(item.product_id)?.sku }}</code></td>
-                            <td>
-                                <strong>{{ getProductBySku(item.product_id)?.name }}</strong>
-                                <div class="stock-alerts">
-                                    <span class="alert-badge low-stock" *ngIf="isLowStock(item)">
-                                        <i class="fas fa-exclamation-triangle"></i> Bajo stock
-                                    </span>
-                                    <span class="alert-badge expiring-soon" *ngIf="isExpiringSoon(item)">
-                                        <i class="fas fa-clock"></i> Vence pronto
-                                    </span>
+        <!-- ==================== SALIDA ==================== -->
+        <div class="operation-panel" *ngIf="activeOperation === 'exit'">
+            <div class="operation-layout" [class.has-serials]="selectedProductExit?.is_serialized">
+                <div class="operation-form-col">
+                    <div class="operation-form-card">
+                        <div class="form-card-header exit">
+                            <i class="fas fa-arrow-up"></i>
+                            <div>
+                                <h3>Salida de Inventario</h3>
+                                <p>Registra productos que salen del almacén</p>
+                            </div>
+                        </div>
+                        <div class="form-card-body">
+                            <div class="form-group">
+                                <label><i class="fas fa-box"></i> Producto *</label>
+                                <div class="product-autocomplete">
+                                    <input type="text" [(ngModel)]="exitProductSearchText"
+                                        (input)="onExitProductSearch()" (focus)="onExitProductFocus()"
+                                        (blur)="onExitProductBlur()" class="form-control"
+                                        placeholder="Buscar por SKU o nombre..." [disabled]="isLocked">
+                                    <ul class="autocomplete-dropdown"
+                                        *ngIf="showExitProductDropdown && filteredExitProducts.length > 0">
+                                        <li *ngFor="let p of filteredExitProducts" (mousedown)="selectExitProduct(p)"
+                                            class="autocomplete-item">
+                                            <code>{{ p.sku }}</code> - {{ p.name }}
+                                        </li>
+                                    </ul>
+                                    <button *ngIf="exitForm.product_id" class="clear-btn"
+                                        (click)="clearExitProductSelection()" title="Limpiar">
+                                        <i class="fas fa-times"></i>
+                                    </button>
                                 </div>
-                            </td>
-                            <td>{{ getCategoryName(getProductBySku(item.product_id)?.category_id) }}</td>
-                            <td>{{ item.lot_id ? getLotCode(item.product_id, item.lot_id) : '-' }}</td>
-                            <td>
-                                {{ item.lot_id ? (getLotExpiration(item.product_id, item.lot_id) |
-                                date:'dd/MM/yyyy') : '-' }}
-                            </td>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Cantidad *</label>
+                                    <input type="number" [(ngModel)]="exitForm.qty"
+                                        (ngModelChange)="onExitQtyChange($event)" class="form-control" min="1"
+                                        [disabled]="isLocked">
+                                </div>
+                                <div class="form-group">
+                                    <label>Motivo *</label>
+                                    <select [(ngModel)]="exitForm.reason_code" class="form-control"
+                                        [disabled]="isLocked">
+                                        <option value="VENTA">Venta</option>
+                                        <option value="CONSUMO_INT">Consumo Interno</option>
+                                        <option value="DAÑO">Daño</option>
+                                        <option value="PERDIDA">Pérdida</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group"
+                                *ngIf="selectedProductExit?.manages_expiration && availableLotsForExit.length > 0">
+                                <label>Lote * (FEFO sugerido)</label>
+                                <select [(ngModel)]="exitForm.lot_id" class="form-control" [disabled]="isLocked"
+                                    (change)="maybeAutoPickExitSerials()">
+                                    <option *ngFor="let lot of availableLotsForExit" [ngValue]="lot.id">
+                                        {{ lot.lot_code }} - Vence: {{ lot.expiration_date | date:'dd/MM/yyyy' }} ({{
+                                        lot.qty_on_hand }})
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Notas</label>
+                                <textarea [(ngModel)]="exitForm.notes" class="form-control" rows="2"
+                                    [disabled]="isLocked"></textarea>
+                            </div>
+                            <button class="btn-primary btn-block" (click)="registerExit()" [disabled]="isLocked"
+                                style="background: var(--success);">
+                                <i class="fas fa-check"></i> Registrar Salida
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
-                            <td><strong>{{ item.qty_on_hand }}</strong></td>
-                            <td>S/ {{ item.avg_unit_cost?.toFixed(2) }}</td>
-                            <td>S/ {{ item.total_cost?.toFixed(2) }}</td>
-                            <td>{{ item.updated_at | date:'dd/MM/yyyy HH:mm' }}</td>
-                            <td>
-                                <button class="btn-icon btn-edit"
-                                    *ngIf="getProductBySku(item.product_id)?.is_serialized; else noSerials"
-                                    (click)="openStockSerials(item)" title="Ver seriales en stock">
-                                    <i class="fas fa-barcode"></i>
+                <div class="operation-context-col">
+                    <div class="context-card" *ngIf="getProductContextInfo(exitForm.product_id) as ctx">
+                        <h4><i class="fas fa-info-circle"></i> Información del Producto</h4>
+                        <div class="context-grid">
+                            <div class="context-item">
+                                <span class="ctx-label">Producto</span>
+                                <span class="ctx-value"><code>{{ ctx.sku }}</code> {{ ctx.name }}</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Categoría</span>
+                                <span class="ctx-value">{{ ctx.category || '-' }}</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Stock Actual</span>
+                                <span class="ctx-value"><strong>{{ ctx.stockQty }}</strong> unidades</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Costo Promedio</span>
+                                <span class="ctx-value">S/ {{ ctx.avgCost | number:'1.2-2' }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel de Seriales para Salida -->
+                    <div class="serials-panel" *ngIf="selectedProductExit?.is_serialized">
+                        <h4><i class="fas fa-barcode"></i> Selección de Seriales</h4>
+                        <div class="serial-toolbar">
+                            <span class="serial-counter" [class.ok]="remainingExitSerials()===0">
+                                {{ exitSelectedSerialIds.length }}/{{ exitForm.qty || 0 }}
+                            </span>
+                            <small class="hint" *ngIf="remainingExitSerials() > 0">
+                                Faltan {{ remainingExitSerials() }} serial(es) por seleccionar
+                            </small>
+                            <div class="serial-actions">
+                                <label class="switch-inline">
+                                    <input type="checkbox" [(ngModel)]="exitAutoSelect"
+                                        (change)="maybeAutoPickExitSerials()">
+                                    Autoseleccionar
+                                </label>
+                                <button type="button" class="btn-secondary btn-sm" (click)="autoPickExitSerials()">
+                                    Auto {{ exitForm.qty || 0 }}
                                 </button>
-                                <ng-template #noSerials>-</ng-template>
-                            </td>
-
-                        </tr>
-                    </tbody>
-                </table>
+                                <button type="button" class="btn-secondary btn-sm" (click)="clearExitSelection()">
+                                    Limpiar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="serial-table-container">
+                            <table class="data-table sticky-header">
+                                <thead>
+                                    <tr>
+                                        <th width="40"></th>
+                                        <th>Serial</th>
+                                        <th>Lote</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let s of availableSerialsForExit">
+                                        <td>
+                                            <input type="checkbox" [checked]="exitSelectedSerialIds.includes(s.id)"
+                                                (change)="toggleExitSerial(s.id)">
+                                        </td>
+                                        <td><code>{{ s.serial_code }}</code></td>
+                                        <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div> -->
+        </div>
+
+        <!-- ==================== AJUSTE ==================== -->
+        <div class="operation-panel" *ngIf="activeOperation === 'adjustment'">
+            <div class="operation-layout" [class.has-serials]="selectedProductAdjustment?.is_serialized">
+                <!-- Columna Izquierda: Formulario -->
+                <div class="operation-form-col">
+                    <div class="operation-form-card">
+                        <div class="form-card-header adjustment">
+                            <i class="fas fa-sliders-h"></i>
+                            <div>
+                                <h3>Ajuste de Inventario</h3>
+                                <p>Corrige diferencias en el inventario</p>
+                            </div>
+                        </div>
+                        <div class="form-card-body">
+                            <div class="form-group">
+                                <label><i class="fas fa-box"></i> Producto *</label>
+                                <div class="product-autocomplete">
+                                    <input type="text" [(ngModel)]="adjProductSearchText"
+                                        (input)="onAdjProductSearch()" (focus)="onAdjProductFocus()"
+                                        (blur)="onAdjProductBlur()" class="form-control"
+                                        placeholder="Buscar por SKU o nombre..." [disabled]="isLocked">
+                                    <ul class="autocomplete-dropdown"
+                                        *ngIf="showAdjProductDropdown && filteredAdjProducts.length > 0">
+                                        <li *ngFor="let p of filteredAdjProducts" (mousedown)="selectAdjProduct(p)"
+                                            class="autocomplete-item">
+                                            <code>{{ p.sku }}</code> - {{ p.name }}
+                                        </li>
+                                    </ul>
+                                    <button *ngIf="adjustmentForm.product_id" class="clear-btn"
+                                        (click)="clearAdjProductSelection()" title="Limpiar">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Cantidad *</label>
+                                    <input type="number" [(ngModel)]="adjustmentForm.qty" class="form-control"
+                                        [disabled]="isLocked">
+                                    <small class="hint" style="color: #718096;">
+                                        Positivo = Entrada, Negativo = Salida
+                                    </small>
+                                </div>
+                                <div class="form-group" *ngIf="selectedProductAdjustment?.manages_expiration">
+                                    <label>Lote</label>
+                                    <select [(ngModel)]="adjustmentForm.lot_id" class="form-control" [disabled]="isLocked">
+                                        <option [ngValue]="null">Seleccionar lote</option>
+                                        <option *ngFor="let lot of getLotsForProduct(adjustmentForm.product_id)" [ngValue]="lot.id">
+                                            {{ lot.lot_code }} - Vence: {{ lot.expiration_date | date:'dd/MM/yyyy' }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Notas *</label>
+                                <textarea [(ngModel)]="adjustmentForm.notes" class="form-control" rows="2"
+                                    [disabled]="isLocked" placeholder="Motivo del ajuste..."></textarea>
+                            </div>
+                            <button class="btn-primary btn-block" (click)="registerAdjustment()" [disabled]="isLocked">
+                                <i class="fas fa-check"></i> Registrar Ajuste
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna Derecha: Contexto + Seriales -->
+                <div class="operation-context-col">
+                    <!-- Info Contextual del Producto -->
+                    <div class="context-card" *ngIf="getProductContextInfo(adjustmentForm.product_id) as ctx">
+                        <h4><i class="fas fa-info-circle"></i> Información del Producto</h4>
+                        <div class="context-grid">
+                            <div class="context-item">
+                                <span class="ctx-label">Producto</span>
+                                <span class="ctx-value"><code>{{ ctx.sku }}</code> {{ ctx.name }}</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Categoría</span>
+                                <span class="ctx-value">{{ ctx.category || '-' }}</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Stock Actual</span>
+                                <span class="ctx-value"><strong>{{ ctx.stockQty }}</strong> unidades</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Costo Promedio</span>
+                                <span class="ctx-value">S/ {{ ctx.avgCost | number:'1.2-2' }}</span>
+                            </div>
+                            <div class="context-item" *ngIf="ctx.managesExpiration">
+                                <span class="ctx-label">Lotes</span>
+                                <span class="ctx-value">{{ ctx.lotsCount }} lotes en stock</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="ctx-label">Serializado</span>
+                                <span class="ctx-value">{{ ctx.isSerialized ? 'Sí' : 'No' }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel de Seriales para Ajuste Positivo (entrada) -->
+                    <div class="serials-panel" *ngIf="selectedProductAdjustment?.is_serialized && adjustmentForm.qty > 0">
+                        <h4><i class="fas fa-barcode"></i> Escaneo de Seriales</h4>
+                        <div class="serial-input-row">
+                            <input #adjSerialField id="adj-serial" class="form-control"
+                                [(ngModel)]="adjSerialInput" (keydown.enter)="onAdjSerialKeydown()"
+                                placeholder="Escanea o escribe el serial" autocomplete="off" inputmode="text" />
+                            <button type="button" class="btn-secondary btn-sm" (click)="addAdjSerial()">
+                                <i class="fas fa-plus"></i> Agregar
+                            </button>
+                            <span class="serial-counter" [class.ok]="remainingAdjSerials()===0">
+                                {{ adjSerialCodes.length }}/{{ adjustmentForm.qty || 0 }}
+                            </span>
+                        </div>
+                        <small class="hint" *ngIf="remainingAdjSerials() > 0">
+                            Faltan {{ remainingAdjSerials() }} serial(es).
+                        </small>
+                        <div class="serial-table-container" *ngIf="adjSerialCodes.length">
+                            <table class="data-table sticky-header">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Serial</th>
+                                        <th width="60">Quitar</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let s of adjSerialCodes; let i = index">
+                                        <td>{{ i + 1 }}</td>
+                                        <td><code>{{ s }}</code></td>
+                                        <td>
+                                            <button class="btn-icon btn-delete" (click)="removeAdjSerial(s)">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Panel de Seriales para Ajuste Negativo (salida) -->
+                    <div class="serials-panel" *ngIf="selectedProductAdjustment?.is_serialized && adjustmentForm.qty < 0">
+                        <h4><i class="fas fa-barcode"></i> Seleccionar Seriales ({{ Math.abs(adjustmentForm.qty) || 0 }})</h4>
+                        <div class="serial-toolbar">
+                            <span class="serial-counter" [class.ok]="remainingAdjSerialsAbs()===0">
+                                {{ adjSelectedSerialIds.length }}/{{ Math.abs(adjustmentForm.qty || 0) }}
+                            </span>
+                        </div>
+                        <div class="serial-table-container">
+                            <table class="data-table sticky-header">
+                                <thead>
+                                    <tr>
+                                        <th width="40"></th>
+                                        <th>Serial</th>
+                                        <th>Lote</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let s of availableSerialsForExit">
+                                        <td>
+                                            <input type="checkbox" [checked]="adjSelectedSerialIds.includes(s.id)"
+                                                (change)="toggleAdjSerial(s.id)">
+                                        </td>
+                                        <td><code>{{ s.serial_code }}</code></td>
+                                        <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Placeholder si no hay producto -->
+                    <div class="context-placeholder" *ngIf="!adjustmentForm.product_id">
+                        <i class="fas fa-box-open"></i>
+                        <p>Selecciona un producto para ver su información</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- COUNTS TAB  -->
-    <div class="tab-content" *ngIf="activeTab === 'counts'">
+    <div class="tab-content" *ngIf="isCountsTab">
         <!-- Counts Header -->
         <div class="counts-header">
             <div class="header-left">
@@ -917,7 +1001,8 @@
                                         <td><code>{{ getProductBySku(snap.product_id)?.sku }}</code></td>
                                         <td>{{ getProductBySku(snap.product_id)?.name }}</td>
                                         <td>{{ snap.lot_id ? getLotCode(snap.lot_id) : '-' }}</td>
-                                        <td>{{ snap.lot_id ? (getLotExpiration(snap.lot_id) | date:'dd/MM/yyyy') : '-'
+                                        <td>{{ snap.lot_id ? (getLotExpiration(snap.lot_id) | date:'dd/MM/yyyy')
+                                            : '-'
                                             }}</td>
                                         <td><strong>{{ snap.qty_system }}</strong></td>
                                         <td>S/ {{ snap.avg_cost_at_freeze?.toFixed(2) }}</td>
@@ -983,30 +1068,9 @@
                                             <i class="fas fa-plus"></i> Agregar serial
                                         </button>
                                         <span class="serial-counter">
-                                            {{ countEntrySerialCodes.length }}/{{ countEntryForm.qty_counted || 0 }}
+                                            {{ countEntrySerialCodes.length }}/{{ countEntryForm.qty_counted ||
+                                            0 }}
                                         </span>
-                                    </div>
-
-                                    <div class="serial-list scrollable-y" *ngIf="countEntrySerialCodes.length">
-                                        <table class="data-table sticky-header">
-                                            <thead>
-                                                <tr>
-                                                    <th>Serial</th>
-                                                    <th width="80">Acciones</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr *ngFor="let s of countEntrySerialCodes">
-                                                    <td><code>{{ s }}</code></td>
-                                                    <td>
-                                                        <button class="btn-icon btn-delete"
-                                                            (click)="removeCountEntrySerial(s)">
-                                                            <i class="fas fa-trash"></i>
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
                                     </div>
 
                                     <small class="hint" *ngIf="remainingCountEntrySerials() > 0">
@@ -1085,7 +1149,8 @@
                                     </div>
                                     <div class="card-content">
                                         <label>Sobrantes</label>
-                                        <span class="value">S/ {{ differenceSummary.surplus?.toFixed(2) }}</span>
+                                        <span class="value">S/ {{ differenceSummary.surplus?.toFixed(2)
+                                            }}</span>
                                     </div>
                                 </div>
                                 <div class="summary-card shortage">
@@ -1094,7 +1159,8 @@
                                     </div>
                                     <div class="card-content">
                                         <label>Faltantes</label>
-                                        <span class="value">S/ {{ differenceSummary.shortage?.toFixed(2) }}</span>
+                                        <span class="value">S/ {{ differenceSummary.shortage?.toFixed(2)
+                                            }}</span>
                                     </div>
                                 </div>
                                 <div class="summary-card net" [class.positive]="differenceSummary.net >= 0"
@@ -1172,7 +1238,7 @@
     </div>
 
     <!-- KARDEX TAB  -->
-    <div class="tab-content" *ngIf="activeTab === 'kardex'">
+    <div class="tab-content" *ngIf="isKardexTab">
         <div class="kardex-header">
             <div class="header-left">
                 <h2 class="section-title">
@@ -1347,7 +1413,7 @@
     </div>
 
     <!-- PRODUCTS TAB  -->
-    <div class="tab-content" *ngIf="activeTab === 'products'">
+    <div class="tab-content" *ngIf="isProductsTab">
         <!-- <div class="catalogs-header">
             <h2 class="section-title">
                 <i class="fas fa-database"></i>
@@ -1487,7 +1553,7 @@
     </div>
 
     <!-- CATALOGS TAB  -->
-    <div class="tab-content" *ngIf="activeTab === 'catalogs'">
+    <div class="tab-content" *ngIf="isCatalogsTab">
         <!-- <div class="catalogs-header">
             <h2 class="section-title">
                 <i class="fas fa-database"></i>
@@ -1751,391 +1817,393 @@
     </div>
 
 
-</div>
 
-<!-- SECCION PARA LOS MODALES   -->
 
-<!-- Product Modal -->
-<div class="modal-overlay" *ngIf="showProductModal" (click)="closeProductModal()">
-    <div class="modal-content modal-large" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-            <h3>{{ editingProduct ? 'Editar Producto' : 'Nuevo Producto' }}</h3>
-            <button class="close-button" (click)="closeProductModal()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="modal-body">
-            <div class="form-row">
+    <!-- SECCION PARA LOS MODALES   -->
+
+    <!-- Product Modal -->
+    <div class="modal-overlay" *ngIf="showProductModal" (click)="closeProductModal()">
+        <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>{{ editingProduct ? 'Editar Producto' : 'Nuevo Producto' }}</h3>
+                <button class="close-button" (click)="closeProductModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>SKU *</label>
+                        <input type="text" [(ngModel)]="productForm.sku" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Nombre *</label>
+                        <input type="text" [(ngModel)]="productForm.name" class="form-control">
+                    </div>
+                </div>
                 <div class="form-group">
-                    <label>SKU *</label>
-                    <input type="text" [(ngModel)]="productForm.sku" class="form-control">
+                    <label>Descripción</label>
+                    <textarea [(ngModel)]="productForm.description" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Categoría *</label>
+                        <select [(ngModel)]="productForm.category_id" class="form-control">
+                            <option [ngValue]="null">Seleccionar</option>
+                            <option *ngFor="let cat of categories" [ngValue]="cat.id">{{ cat.name }}</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Unidad *</label>
+                        <select [(ngModel)]="productForm.unit_id" class="form-control">
+                            <option [ngValue]="null">Seleccionar</option>
+                            <option *ngFor="let unit of units" [ngValue]="unit.id">{{ unit.name }}</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Stock Mínimo</label>
+                        <input type="number" [(ngModel)]="productForm.min_stock" class="form-control" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Stock Máximo</label>
+                        <input type="number" [(ngModel)]="productForm.max_stock" class="form-control" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Punto de Reorden</label>
+                        <input type="number" [(ngModel)]="productForm.reorder_point" class="form-control" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" [(ngModel)]="productForm.is_serialized">
+                            Maneja Seriales
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" [(ngModel)]="productForm.manages_expiration">
+                            Maneja Vencimiento
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeProductModal()">Cancelar</button>
+                <button class="btn-primary" (click)="saveProduct()">
+                    <i class="fas fa-save"></i>
+                    Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Modal -->
+    <div class="modal-overlay" *ngIf="showCategoryModal" (click)="closeCategoryModal()">
+        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>{{ editingCategory ? 'Editar Categoría' : 'Nueva Categoría' }}</h3>
+                <button class="close-button" (click)="closeCategoryModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Código *</label>
+                    <input type="text" [(ngModel)]="categoryForm.code" class="form-control">
                 </div>
                 <div class="form-group">
                     <label>Nombre *</label>
-                    <input type="text" [(ngModel)]="productForm.name" class="form-control">
+                    <input type="text" [(ngModel)]="categoryForm.name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Descripción</label>
+                    <textarea [(ngModel)]="categoryForm.description" class="form-control" rows="3"></textarea>
                 </div>
             </div>
-            <div class="form-group">
-                <label>Descripción</label>
-                <textarea [(ngModel)]="productForm.description" class="form-control" rows="2"></textarea>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeCategoryModal()">Cancelar</button>
+                <button class="btn-primary" (click)="saveCategory()">
+                    <i class="fas fa-save"></i>
+                    Guardar
+                </button>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Categoría *</label>
-                    <select [(ngModel)]="productForm.category_id" class="form-control">
-                        <option [ngValue]="null">Seleccionar</option>
-                        <option *ngFor="let cat of categories" [ngValue]="cat.id">{{ cat.name }}</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Unidad *</label>
-                    <select [(ngModel)]="productForm.unit_id" class="form-control">
-                        <option [ngValue]="null">Seleccionar</option>
-                        <option *ngFor="let unit of units" [ngValue]="unit.id">{{ unit.name }}</option>
-                    </select>
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Stock Mínimo</label>
-                    <input type="number" [(ngModel)]="productForm.min_stock" class="form-control" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Stock Máximo</label>
-                    <input type="number" [(ngModel)]="productForm.max_stock" class="form-control" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Punto de Reorden</label>
-                    <input type="number" [(ngModel)]="productForm.reorder_point" class="form-control" min="0">
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" [(ngModel)]="productForm.is_serialized">
-                        Maneja Seriales
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" [(ngModel)]="productForm.manages_expiration">
-                        Maneja Vencimiento
-                    </label>
-                </div>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button class="btn-secondary" (click)="closeProductModal()">Cancelar</button>
-            <button class="btn-primary" (click)="saveProduct()">
-                <i class="fas fa-save"></i>
-                Guardar
-            </button>
         </div>
     </div>
-</div>
 
-<!-- Category Modal -->
-<div class="modal-overlay" *ngIf="showCategoryModal" (click)="closeCategoryModal()">
-    <div class="modal-content modal-small" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-            <h3>{{ editingCategory ? 'Editar Categoría' : 'Nueva Categoría' }}</h3>
-            <button class="close-button" (click)="closeCategoryModal()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="modal-body">
-            <div class="form-group">
-                <label>Código *</label>
-                <input type="text" [(ngModel)]="categoryForm.code" class="form-control">
+    <!-- Unit Modal -->
+    <div class="modal-overlay" *ngIf="showUnitModal" (click)="closeUnitModal()">
+        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>{{ editingUnit ? 'Editar Unidad' : 'Nueva Unidad' }}</h3>
+                <button class="close-button" (click)="closeUnitModal()">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            <div class="form-group">
-                <label>Nombre *</label>
-                <input type="text" [(ngModel)]="categoryForm.name" class="form-control">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Código *</label>
+                    <input type="text" [(ngModel)]="unitForm.code" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Nombre *</label>
+                    <input type="text" [(ngModel)]="unitForm.name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Abreviación *</label>
+                    <input type="text" [(ngModel)]="unitForm.abbreviation" class="form-control">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Descripción</label>
-                <textarea [(ngModel)]="categoryForm.description" class="form-control" rows="3"></textarea>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeUnitModal()">Cancelar</button>
+                <button class="btn-primary" (click)="saveUnit()">
+                    <i class="fas fa-save"></i>
+                    Guardar
+                </button>
             </div>
-        </div>
-        <div class="modal-footer">
-            <button class="btn-secondary" (click)="closeCategoryModal()">Cancelar</button>
-            <button class="btn-primary" (click)="saveCategory()">
-                <i class="fas fa-save"></i>
-                Guardar
-            </button>
         </div>
     </div>
-</div>
 
-<!-- Unit Modal -->
-<div class="modal-overlay" *ngIf="showUnitModal" (click)="closeUnitModal()">
-    <div class="modal-content modal-small" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-            <h3>{{ editingUnit ? 'Editar Unidad' : 'Nueva Unidad' }}</h3>
-            <button class="close-button" (click)="closeUnitModal()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="modal-body">
-            <div class="form-group">
-                <label>Código *</label>
-                <input type="text" [(ngModel)]="unitForm.code" class="form-control">
+
+    <!-- Modal para KArdex-serial -->
+
+    <div class="modal-overlay" *ngIf="showMovementSerialsModal" (click)="closeMovementSerials()">
+        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Seriales del Movimiento</h3>
+                <button class="close-button" (click)="closeMovementSerials()"><i class="fas fa-times"></i></button>
             </div>
-            <div class="form-group">
-                <label>Nombre *</label>
-                <input type="text" [(ngModel)]="unitForm.name" class="form-control">
+            <div class="modal-body">
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Serial</th>
+                                <th>Lote</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let s of currentMovementSerials">
+                                <td><code>{{ s.serial_code }}</code></td>
+                                <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
+                            </tr>
+                            <tr *ngIf="currentMovementSerials.length === 0">
+                                <td colspan="2" class="empty-message">
+                                    <i class="fas fa-inbox"></i>
+                                    <p>No hay seriales vinculados</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
-            <div class="form-group">
-                <label>Abreviación *</label>
-                <input type="text" [(ngModel)]="unitForm.abbreviation" class="form-control">
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeMovementSerials()">Cerrar</button>
             </div>
-        </div>
-        <div class="modal-footer">
-            <button class="btn-secondary" (click)="closeUnitModal()">Cancelar</button>
-            <button class="btn-primary" (click)="saveUnit()">
-                <i class="fas fa-save"></i>
-                Guardar
-            </button>
         </div>
     </div>
-</div>
 
-
-<!-- Modal para KArdex-serial -->
-
-<div class="modal-overlay" *ngIf="showMovementSerialsModal" (click)="closeMovementSerials()">
-    <div class="modal-content modal-small" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-            <h3>Seriales del Movimiento</h3>
-            <button class="close-button" (click)="closeMovementSerials()"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="modal-body">
-            <div class="table-container">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Serial</th>
-                            <th>Lote</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr *ngFor="let s of currentMovementSerials">
-                            <td><code>{{ s.serial_code }}</code></td>
-                            <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
-                        </tr>
-                        <tr *ngIf="currentMovementSerials.length === 0">
-                            <td colspan="2" class="empty-message">
-                                <i class="fas fa-inbox"></i>
-                                <p>No hay seriales vinculados</p>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+    <!-- Modal Seriales en Stock -->
+    <div class="modal-overlay" *ngIf="showStockSerialsModal" (click)="closeStockSerials()">
+        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>
+                    Seriales en Stock
+                    <small *ngIf="modalStockCtx?.productName">— {{ modalStockCtx.productName }}</small>
+                    <small *ngIf="modalStockCtx?.lotCode"> (Lote: {{ modalStockCtx.lotCode }})</small>
+                </h3>
+                <button class="close-button" (click)="closeStockSerials()"><i class="fas fa-times"></i></button>
             </div>
-        </div>
-        <div class="modal-footer">
-            <button class="btn-secondary" (click)="closeMovementSerials()">Cerrar</button>
+            <div class="modal-body">
+                <div class="table-container">
+                    <table class="data-table sticky-header">
+                        <thead>
+                            <tr>
+                                <th>Serial</th>
+                                <th>Lote</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let s of currentStockSerials">
+                                <td><code>{{ s.serial_code }}</code></td>
+                                <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
+                            </tr>
+                            <tr *ngIf="currentStockSerials.length === 0">
+                                <td colspan="2" class="empty-message">
+                                    <i class="fas fa-inbox"></i>
+                                    <p>No hay seriales en stock para este ítem</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeStockSerials()">Cerrar</button>
+            </div>
         </div>
     </div>
-</div>
 
-<!-- Modal Seriales en Stock -->
-<div class="modal-overlay" *ngIf="showStockSerialsModal" (click)="closeStockSerials()">
-    <div class="modal-content modal-small" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-            <h3>
-                Seriales en Stock
-                <small *ngIf="modalStockCtx?.productName">— {{ modalStockCtx.productName }}</small>
-                <small *ngIf="modalStockCtx?.lotCode"> (Lote: {{ modalStockCtx.lotCode }})</small>
-            </h3>
-            <button class="close-button" (click)="closeStockSerials()"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="modal-body">
-            <div class="table-container">
-                <table class="data-table sticky-header">
-                    <thead>
-                        <tr>
-                            <th>Serial</th>
-                            <th>Lote</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr *ngFor="let s of currentStockSerials">
-                            <td><code>{{ s.serial_code }}</code></td>
-                            <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
-                        </tr>
-                        <tr *ngIf="currentStockSerials.length === 0">
-                            <td colspan="2" class="empty-message">
-                                <i class="fas fa-inbox"></i>
-                                <p>No hay seriales en stock para este ítem</p>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+
+
+    <!-- Modal Serial Diffs -->
+    <div class="modal-overlay" *ngIf="showSerialDiffsModal" (click)="closeSerialDiffsModal()">
+        <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Seriales del Conteo ({{ getProductBySku(modalSerials.product_id)?.name }})</h3>
+                <button class="close-button" (click)="closeSerialDiffsModal()">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-        </div>
-        <div class="modal-footer">
-            <button class="btn-secondary" (click)="closeStockSerials()">Cerrar</button>
-        </div>
-    </div>
-</div>
+            <div class="modal-body">
+                <div class="serials-legend">
+                    <span class="legend-item shortage"><i class="fas fa-arrow-down"></i> Faltantes</span>
+                    <span class="legend-item surplus"><i class="fas fa-arrow-up"></i> Sobrantes</span>
+                    <span class="legend-item neutral"><i class="fas fa-check"></i> Coincidentes</span>
+                </div>
 
-
-
-<!-- Modal Serial Diffs -->
-<div class="modal-overlay" *ngIf="showSerialDiffsModal" (click)="closeSerialDiffsModal()">
-    <div class="modal-content modal-large" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-            <h3>Seriales del Conteo ({{ getProductBySku(modalSerials.product_id)?.name }})</h3>
-            <button class="close-button" (click)="closeSerialDiffsModal()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="modal-body">
-            <div class="serials-legend">
-                <span class="legend-item shortage"><i class="fas fa-arrow-down"></i> Faltantes</span>
-                <span class="legend-item surplus"><i class="fas fa-arrow-up"></i> Sobrantes</span>
-                <span class="legend-item neutral"><i class="fas fa-check"></i> Coincidentes</span>
-            </div>
-
-            <div class="serial-diffs-grid">
-                <!-- Faltantes -->
-                <div class="diff-card shortage">
-                    <div class="diff-header">
-                        <div class="title">
-                            <i class="fas fa-arrow-down"></i>
-                            <span>Faltantes</span>
+                <div class="serial-diffs-grid">
+                    <!-- Faltantes -->
+                    <div class="diff-card shortage">
+                        <div class="diff-header">
+                            <div class="title">
+                                <i class="fas fa-arrow-down"></i>
+                                <span>Faltantes</span>
+                            </div>
+                            <span class="badge">{{ modalSerials.faltantes.length }}</span>
                         </div>
-                        <span class="badge">{{ modalSerials.faltantes.length }}</span>
-                    </div>
 
-                    <div class="diff-list">
-                        <ng-container *ngIf="modalSerials.faltantes.length; else emptyShortage">
-                            <span class="serial-chip"
-                                *ngFor="let s of modalSerials.faltantes"><code>{{ s }}</code></span>
-                        </ng-container>
-                        <ng-template #emptyShortage>
-                            <div class="empty-message"><i class="fas fa-inbox"></i> Sin faltantes</div>
-                        </ng-template>
-                    </div>
-                </div>
-
-                <!-- Sobrantes -->
-                <div class="diff-card surplus">
-                    <div class="diff-header">
-                        <div class="title">
-                            <i class="fas fa-arrow-up"></i>
-                            <span>Sobrantes</span>
+                        <div class="diff-list">
+                            <ng-container *ngIf="modalSerials.faltantes.length; else emptyShortage">
+                                <span class="serial-chip"
+                                    *ngFor="let s of modalSerials.faltantes"><code>{{ s }}</code></span>
+                            </ng-container>
+                            <ng-template #emptyShortage>
+                                <div class="empty-message"><i class="fas fa-inbox"></i> Sin faltantes</div>
+                            </ng-template>
                         </div>
-                        <span class="badge">{{ modalSerials.sobrantes.length }}</span>
                     </div>
 
-                    <div class="diff-list">
-                        <ng-container *ngIf="modalSerials.sobrantes.length; else emptySurplus">
-                            <span class="serial-chip"
-                                *ngFor="let s of modalSerials.sobrantes"><code>{{ s }}</code></span>
-                        </ng-container>
-                        <ng-template #emptySurplus>
-                            <div class="empty-message"><i class="fas fa-inbox"></i> Sin sobrantes</div>
-                        </ng-template>
-                    </div>
-                </div>
-
-                <!-- Coincidentes -->
-                <div class="diff-card neutral">
-                    <div class="diff-header">
-                        <div class="title">
-                            <i class="fas fa-check"></i>
-                            <span>Coincidentes</span>
+                    <!-- Sobrantes -->
+                    <div class="diff-card surplus">
+                        <div class="diff-header">
+                            <div class="title">
+                                <i class="fas fa-arrow-up"></i>
+                                <span>Sobrantes</span>
+                            </div>
+                            <span class="badge">{{ modalSerials.sobrantes.length }}</span>
                         </div>
-                        <span class="badge">{{ modalSerials.coincidentes.length }}</span>
+
+                        <div class="diff-list">
+                            <ng-container *ngIf="modalSerials.sobrantes.length; else emptySurplus">
+                                <span class="serial-chip"
+                                    *ngFor="let s of modalSerials.sobrantes"><code>{{ s }}</code></span>
+                            </ng-container>
+                            <ng-template #emptySurplus>
+                                <div class="empty-message"><i class="fas fa-inbox"></i> Sin sobrantes</div>
+                            </ng-template>
+                        </div>
                     </div>
 
-                    <div class="diff-list">
-                        <ng-container *ngIf="modalSerials.coincidentes.length; else emptyMatch">
-                            <span class="serial-chip"
-                                *ngFor="let s of modalSerials.coincidentes"><code>{{ s }}</code></span>
-                        </ng-container>
-                        <ng-template #emptyMatch>
-                            <div class="empty-message"><i class="fas fa-inbox"></i> Ninguno</div>
-                        </ng-template>
+                    <!-- Coincidentes -->
+                    <div class="diff-card neutral">
+                        <div class="diff-header">
+                            <div class="title">
+                                <i class="fas fa-check"></i>
+                                <span>Coincidentes</span>
+                            </div>
+                            <span class="badge">{{ modalSerials.coincidentes.length }}</span>
+                        </div>
+
+                        <div class="diff-list">
+                            <ng-container *ngIf="modalSerials.coincidentes.length; else emptyMatch">
+                                <span class="serial-chip"
+                                    *ngFor="let s of modalSerials.coincidentes"><code>{{ s }}</code></span>
+                            </ng-container>
+                            <ng-template #emptyMatch>
+                                <div class="empty-message"><i class="fas fa-inbox"></i> Ninguno</div>
+                            </ng-template>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="modal-footer">
-            <button class="btn-secondary" (click)="closeSerialDiffsModal()">Cerrar</button>
-        </div>
-    </div>
-</div>
-
-
-<!-- Modal: Seriales Sobrantes -->
-<div class="modal-overlay" *ngIf="showUnresolvedModal && requireLotsForUnresolved"
-    (click)="showUnresolvedModal = false">
-    <div class="modal-content modal-large" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-            <h3>
-                <i class="fas fa-exclamation-triangle"></i>
-                Seriales sobrantes sin lote
-            </h3>
-            <button class="close-button" (click)="showUnresolvedModal = false">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-
-        <div class="modal-body">
-            <p class="hint">
-                Se detectaron seriales que no existen en el sistema. Asigne un lote para poder publicar el conteo.
-            </p>
-
-            <div class="table-container">
-                <table class="data-table sticky-header">
-                    <thead>
-                        <tr>
-                            <th>Serial</th>
-                            <th>Producto</th>
-                            <th>Lote asignado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr *ngFor="let s of unresolvedSerials">
-                            <td><code>{{ s.serial_code }}</code></td>
-                            <td>{{ getProductBySku(s.product_id)?.name || '-' }}</td>
-                            <td>
-                                <select [(ngModel)]="s.lot_id" class="form-control">
-                                    <option [ngValue]="null">-- Seleccionar lote --</option>
-                                    <option *ngFor="let l of getLotsForProduct(s.product_id)" [ngValue]="l.id">
-                                        {{ l.lot_code }}
-                                    </option>
-                                </select>
-                            </td>
-                        </tr>
-                        <tr *ngIf="unresolvedSerials.length === 0">
-                            <td colspan="3" class="empty-message">
-                                <i class="fas fa-inbox"></i> No hay seriales sobrantes pendientes
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeSerialDiffsModal()">Cerrar</button>
             </div>
         </div>
+    </div>
 
-        <div class="modal-footer">
-            <button class="btn-secondary" (click)="showUnresolvedModal = false">Cancelar</button>
-            <button class="btn-primary" (click)="saveUnresolvedSerials()">
-                <i class="fas fa-save"></i> Guardar asignaciones
-            </button>
+
+    <!-- Modal: Seriales Sobrantes -->
+    <div class="modal-overlay" *ngIf="showUnresolvedModal && requireLotsForUnresolved"
+        (click)="showUnresolvedModal = false">
+        <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Seriales sobrantes sin lote
+                </h3>
+                <button class="close-button" (click)="showUnresolvedModal = false">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <p class="hint">
+                    Se detectaron seriales que no existen en el sistema. Asigne un lote para poder publicar el
+                    conteo.
+                </p>
+
+                <div class="table-container">
+                    <table class="data-table sticky-header">
+                        <thead>
+                            <tr>
+                                <th>Serial</th>
+                                <th>Producto</th>
+                                <th>Lote asignado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let s of unresolvedSerials">
+                                <td><code>{{ s.serial_code }}</code></td>
+                                <td>{{ getProductBySku(s.product_id)?.name || '-' }}</td>
+                                <td>
+                                    <select [(ngModel)]="s.lot_id" class="form-control">
+                                        <option [ngValue]="null">-- Seleccionar lote --</option>
+                                        <option *ngFor="let l of getLotsForProduct(s.product_id)" [ngValue]="l.id">
+                                            {{ l.lot_code }}
+                                        </option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr *ngIf="unresolvedSerials.length === 0">
+                                <td colspan="3" class="empty-message">
+                                    <i class="fas fa-inbox"></i> No hay seriales sobrantes pendientes
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="showUnresolvedModal = false">Cancelar</button>
+                <button class="btn-primary" (click)="saveUnresolvedSerials()">
+                    <i class="fas fa-save"></i> Guardar asignaciones
+                </button>
+            </div>
         </div>
     </div>
-</div>
 
 
-<!-- Toast Notifications  -->
-<div class="toast-container">
-    <div class="toast" *ngFor="let toast of toasts" [class]="toast.type">
-        <i [class]="getToastIcon(toast.type)"></i>
-        <span>{{ toast.message }}</span>
+    <!-- Toast Notifications  -->
+    <div class="toast-container">
+        <div class="toast" *ngFor="let toast of toasts" [class]="toast.type">
+            <i [class]="getToastIcon(toast.type)"></i>
+            <span>{{ toast.message }}</span>
+        </div>
     </div>
 </div>
