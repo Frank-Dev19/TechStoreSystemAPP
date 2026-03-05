@@ -5,7 +5,7 @@ export interface Ticket {
   code: string;
   status: TicketStatus;
   priority: TicketPriority;
-  businessPartnerId: number;
+  clientId: number;
   createdBy: number;
   closedBy: number | null;
   contactName: string | null;

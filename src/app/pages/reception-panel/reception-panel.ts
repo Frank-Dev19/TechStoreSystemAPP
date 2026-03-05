@@ -3,9 +3,9 @@ import { FormArray, FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { Subscription } from "rxjs"
 import { finalize, map, switchMap, tap } from "rxjs/operators"
 import { of, throwError } from "rxjs"
-import { BusinessPartnersApiService } from "../../services/business-partners-api.service"
-import { BusinessPartnerResponse } from "../../models/business-partners/business-partners-response"
-import { BusinessPartnerSaveRequest } from "../../models/business-partners/business-partners-request"
+import { ClientsApiService } from "../../services/clients-api.service"
+import { ClientResponse } from "../../models/clients-response"
+import { ClientSaveRequest } from "../../models/clients-request"
 import { TicketService } from "../../services/tickets/ticket.service"
 import { TicketItemService } from "../../services/tickets/ticket-item.service"
 import { Ticket, TicketPriority, TicketStatus, PaymentStatus } from "../../models/tickets/ticket"
@@ -142,7 +142,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   createTicketForm: FormGroup
   createQuoteForm: FormGroup
 
-  businessPartners: BusinessPartnerResponse[] = []
+  clients: ClientResponse[] = []
   documentTypes: DocumentTypeResponse[] = []
   products: Product[] = []
   services: Service[] = []
@@ -199,7 +199,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     private readonly formBuilder: FormBuilder,
     private readonly ticketService: TicketService,
     private readonly ticketItemService: TicketItemService,
-    private readonly businessPartnersService: BusinessPartnersApiService,
+    private readonly clientsService: ClientsApiService,
     private readonly productsService: ProductsService,
     private readonly serviceCatalog: ServiceService,
     private readonly serviceCategoryService: ServiceCategoryService,
@@ -215,8 +215,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.editItemForm = this.createEditItemFormGroup()
     this.reassignTechnicianForm = this.createReassignTechnicianFormGroup()
     const partnerChanges = this.createTicketForm
-      .get("businessPartnerId")
-      ?.valueChanges.subscribe((value) => this.applyPartnerContact(value))
+      .get("clientId")
+      ?.valueChanges.subscribe((value) => this.applyClientContact(value))
     if (partnerChanges) {
       this.subscriptions.add(partnerChanges)
     }
@@ -224,7 +224,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadTickets()
-    this.loadBusinessPartners()
+    this.loadClients()
     this.loadCatalogData()
     this.loadDocumentTypes()
   }
@@ -235,7 +235,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private createTicketFormGroup(): FormGroup {
     return this.formBuilder.group({
-      businessPartnerId: [null],
+      clientId: [null],
       documentNumber: ["", [Validators.required, Validators.pattern(/^[0-9]*$/)]],
       documentTypeId: [null, Validators.required],
       contactName: ["", Validators.required],
@@ -345,12 +345,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       })
   }
 
-  private loadBusinessPartners(): void {
-    this.businessPartnersService
+  private loadClients(): void {
+    this.clientsService
       .findAll({ page: 1, limit: 100, companyId: this.companyId })
       .subscribe({
         next: ({ data }) => {
-          this.businessPartners = data ?? []
+          this.clients = data ?? []
         },
         error: () => {
           this.showMessage("warning", "fas fa-exclamation-triangle", "No pudimos cargar los clientes.")
@@ -407,7 +407,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.documentSearchError = ""
     const documentNumber = (this.createTicketForm.get("documentNumber")?.value ?? "").trim()
     console.debug("[docNumberInput] value", documentNumber, "expected", this.expectedDocumentDigits)
-    this.createTicketForm.patchValue({ businessPartnerId: null }, { emitEvent: false })
+    this.createTicketForm.patchValue({ clientId: null }, { emitEvent: false })
 
     const docTypeControl = this.createTicketForm.get("documentTypeId")
     if (documentNumber) {
@@ -437,7 +437,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     if (docType.digits && documentNumber.length === docType.digits) {
-      this.lookupBusinessPartnerByDocument(documentNumber)
+      this.lookupClientByDocument(documentNumber)
     }
 
     console.debug("[docNumberInput] docType after input", this.createTicketForm.get("documentTypeId")?.value)
@@ -451,11 +451,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         return docType.name
       }
     }
-    const partnerId = this.createTicketForm.get("businessPartnerId")?.value
-    if (partnerId) {
-      const partner = this.businessPartners.find((bp) => bp.id === Number(partnerId))
-      if (partner?.documentType?.name) {
-        return partner.documentType.name
+    const clientId = this.createTicketForm.get("clientId")?.value
+    if (clientId) {
+      const client = this.clients.find((item) => item.id === Number(clientId))
+      if (client?.documentType?.name) {
+        return client.documentType.name
       }
     }
     return "Sin asignar"
@@ -692,7 +692,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   openCreateTicketModal(): void {
     this.showCreateTicketModal = true
     this.createTicketForm.reset({
-      businessPartnerId: null,
+      clientId: null,
       documentNumber: "",
       documentTypeId: null,
       priority: TicketPriority.MEDIUM,
@@ -717,7 +717,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.setCustomerFieldsEnabled(true)
   }
 
-  private applyPartnerContact(partnerId: number | null): void {
+  private applyClientContact(partnerId: number | null): void {
     if (!partnerId) {
       this.createTicketForm.patchValue(
         { contactName: "", contactEmail: "", contactPhone: "" },
@@ -726,7 +726,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       this.setCustomerFieldsEnabled(true)
       return
     }
-    const partner = this.businessPartners.find((bp) => bp.id === Number(partnerId))
+    const partner = this.clients.find((bp) => bp.id === Number(partnerId))
     if (!partner) return
     this.applyPartnerData(partner)
   }
@@ -751,11 +751,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     this.isCreatingTicket = true
-    this.resolveBusinessPartnerId(formValue)
+    this.resolveClientId(formValue)
       .pipe(
-        switchMap((businessPartnerId) => {
+        switchMap((clientId) => {
           const payload: TicketSaveRequest = {
-            businessPartnerId,
+            clientId,
             priority: formValue.priority,
             contactName: formValue.contactName || null,
             contactPhone: formValue.contactPhone || null,
@@ -781,8 +781,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       })
   }
 
-  private resolveBusinessPartnerId(formValue: Record<string, any>) {
-    const existingPartnerId = Number(this.createTicketForm.get("businessPartnerId")?.value)
+  private resolveClientId(formValue: Record<string, any>) {
+    const existingPartnerId = Number(this.createTicketForm.get("clientId")?.value)
     if (existingPartnerId) {
       return of(existingPartnerId)
     }
@@ -810,7 +810,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return throwError(() => new Error("Longitud inválida"))
     }
 
-    const payload: BusinessPartnerSaveRequest = {
+    const payload: ClientSaveRequest = {
       companyId: this.companyId,
       name: contactName,
       tradeName: contactName,
@@ -825,7 +825,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       isSupplier: false,
     }
 
-    return this.businessPartnersService.create(payload).pipe(
+    return this.clientsService.create(payload).pipe(
       map((partner) => ({
         ...partner,
         id: Number(partner.id),
@@ -833,8 +833,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         documentTypeId: Number(partner.documentTypeId),
       })),
       tap((partner) => {
-        this.businessPartners = [partner, ...this.businessPartners]
-        this.createTicketForm.patchValue({ businessPartnerId: Number(partner.id) })
+        this.clients = [partner, ...this.clients]
+        this.createTicketForm.patchValue({ clientId: Number(partner.id) })
         this.documentSearchMessage = "Cliente creado correctamente."
         this.documentSearchError = ""
       }),
@@ -842,11 +842,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     )
   }
 
-  private lookupBusinessPartnerByDocument(documentNumber: string): void {
+  private lookupClientByDocument(documentNumber: string): void {
     const normalizedDoc = documentNumber.trim()
     const docTypeId = this.createTicketForm.get("documentTypeId")?.value
 
-    const localMatch = this.businessPartners.find(
+    const localMatch = this.clients.find(
       (partner) => partner.documentNumber?.trim() === normalizedDoc && Number(partner.documentTypeId) === Number(docTypeId),
     )
     if (localMatch) {
@@ -855,7 +855,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     this.isSearchingPartner = true
-    this.businessPartnersService
+    this.clientsService
       .findAll({ page: 1, limit: 1, documentNumber: normalizedDoc, documentTypeId: docTypeId, companyId: this.companyId })
       .pipe(finalize(() => (this.isSearchingPartner = false)))
       .subscribe({
@@ -871,12 +871,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       })
   }
 
-  private applyPartnerData(partner: BusinessPartnerResponse): void {
+  private applyPartnerData(partner: ClientResponse): void {
     const documentTypeId = partner.documentTypeId ?? partner.documentType?.id ?? null
 
     this.createTicketForm.patchValue(
       {
-        businessPartnerId: Number(partner.id),
+        clientId: Number(partner.id),
         documentNumber: partner.documentNumber ?? "",
         documentTypeId: documentTypeId,
         contactName: partner.name ?? partner.tradeName ?? partner.documentNumber ?? "",
@@ -925,7 +925,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       "No encontramos un cliente con ese documento y tipo. Completa los datos para registrarlo al crear el ticket."
     this.createTicketForm.patchValue(
       {
-        businessPartnerId: null,
+      clientId: null,
         contactName: "",
         contactEmail: "",
         contactPhone: "",
@@ -1542,7 +1542,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   get isExistingPartner(): boolean {
-    return Boolean(this.createTicketForm.get("businessPartnerId")?.value)
+    return Boolean(this.createTicketForm.get("clientId")?.value)
   }
 
   private setCustomerFieldsEnabled(enabled: boolean): void {

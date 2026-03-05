@@ -10,7 +10,8 @@ import { NgSelectModule } from '@ng-select/ng-select';
 import { AdminLayoutRoutes } from "./admin-layout.routing";
 import { Dashboard } from "../../components/dashboard/dashboard";
 import { Home } from "../../pages/home/home";
-import { BusinessPartners } from "../../pages/business-partners/business-partners";
+import { Clients } from "../../pages/clients/clients";
+import { Suppliers } from "../../pages/suppliers/suppliers";
 // import { ForgotPassword } from "../../pages/forgot-password/forgot-password";
 // import { ResetPassword } from "../../pages/reset-password/reset-password";
 import { Tests } from "../../pages/tests/tests";
@@ -41,7 +42,8 @@ import { SupervisorPanel } from "../../pages/supervisor-panel/supervisor-panel";
     declarations: [
         Home,
         Dashboard,
-        BusinessPartners,
+        Clients,
+        Suppliers,
         DocumentTypes,
         Tests,
         Perfil,

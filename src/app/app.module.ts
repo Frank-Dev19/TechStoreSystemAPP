@@ -26,10 +26,6 @@ import { ResetPassword } from './pages/reset-password/reset-password';
 //import { Inventory } from './pages/inventory/inventory';
 //import { Perfil } from './pages/perfil/perfil';
 
-//import { BusinessPartners } from './pages/business-partners/business-partners';
-
-
-
 registerLocaleData(localePE, 'es-PE');
 
 @NgModule({

@@ -2,7 +2,8 @@ import { Routes } from '@angular/router';
 
 import { Dashboard } from '../../components/dashboard/dashboard';
 import { Home } from '../../pages/home/home';
-import { BusinessPartners } from '../../pages/business-partners/business-partners';
+import { Clients } from '../../pages/clients/clients';
+import { Suppliers } from '../../pages/suppliers/suppliers';
 import { Tests } from '../../pages/tests/tests';
 import { Perfil } from '../../pages/perfil/perfil';
 import { DocumentTypes } from '../../pages/document-types/document-types';
@@ -19,7 +20,8 @@ import { SupervisorPanel } from '../../pages/supervisor-panel/supervisor-panel';
 export const AdminLayoutRoutes: Routes = [
     { path: 'home', component: Home },
     { path: 'dashboard', component: Dashboard },
-    { path: 'socios-comerciales', component: BusinessPartners },
+    { path: 'clientes', component: Clients },
+    { path: 'proveedores', component: Suppliers },
     { path: 'tests', component: Tests },
     { path: 'perfil', component: Perfil },
     { path: 'tipos-documento', component: DocumentTypes },
