@@ -3,4 +3,5 @@ export interface Lot {
   product_id: number;
   lot_code: string;
   expiration_date: string | null; // ISO
+  supplier_id?: number | null;
 }

@@ -7,6 +7,7 @@ export interface Serial {
     lot_id: number | null;
     status: SerialStatus;
     created_at: string; // ISO
+    supplier_id?: number | null;
 }
 
 export interface MovementSerialLink {

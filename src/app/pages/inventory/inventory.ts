@@ -9,6 +9,10 @@ import { Movement } from '../../models/inventory/movement';
 import { Count } from '../../models/inventory/count';
 import { CountSnapshot } from '../../models/inventory/count-snapshot';
 import { CountEntry } from '../../models/inventory/count-entry';
+import { SuppliersApiService } from '../../services/suppliers-api.service';
+import { DocumentTypesApiService } from '../../services/document-types-api.service';
+import { SupplierResponse } from '../../models/suppliers-response';
+import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
 
 // ===== Servicios (los que ya construimos) =====
 import { CurrentUserService } from '../../services/current-user.service';
@@ -45,7 +49,7 @@ export class Inventory implements OnInit {
   // -----------------------------
   activeTab: string = 'operations';
   activeOperation: string = 'entry';
-  
+
   // Helper properties for template type checking
   get isOperationsTab(): boolean { return this.activeTab === 'operations'; }
   get isStockTab(): boolean { return this.activeTab === 'stock'; }
@@ -140,6 +144,7 @@ export class Inventory implements OnInit {
     expiration_date: '',
     serials: '',
     notes: '',
+    supplier_id: null as number | null,
   };
 
   // --- ENTRADA (seriales) ---
@@ -207,15 +212,27 @@ export class Inventory implements OnInit {
   };
 
   categoryForm = {
-    code: '',
     name: '',
     description: '',
   };
 
   unitForm = {
-    code: '',
     name: '',
     abbreviation: '',
+  };
+
+  showSupplierModal = false;
+  supplierForm = {
+    company_id: 1, // o el que aplique
+    document_type_id: null as number | null,
+    document_number: '',
+    name: '',
+    commercial_name: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    country: '',
   };
 
   // -----------------------------
@@ -227,6 +244,8 @@ export class Inventory implements OnInit {
   stock: Stock[] = [];
   kardex: Movement[] = [];
   counts: Count[] = [];
+  suppliers: SupplierResponse[] = [];
+  documentTypes: DocumentTypeResponse[] = [];
 
   // Mapas rápidos
   private productMap = new Map<number, Product>();
@@ -295,6 +314,8 @@ export class Inventory implements OnInit {
     private lotsSvc: LotsService,
     private serialsSvc: SerialsService,
     private currentUser: CurrentUserService,
+    private suppliersApi: SuppliersApiService,
+    private docTypesApi: DocumentTypesApiService,
   ) { }
 
   // =========================================================
@@ -311,6 +332,8 @@ export class Inventory implements OnInit {
       this.loadStock(),
       this.loadKardex(),
       this.loadCounts(),
+      this.loadSuppliers(),
+      this.loadDocumentTypes(),
     ]);
   }
 
@@ -322,6 +345,22 @@ export class Inventory implements OnInit {
   // =========================================================
   // LOADERS
   // =========================================================
+  private async loadSuppliers() {
+    try {
+      const user = this.currentUser.value as any;
+      const companyId = user?.companyId || user?.company_id || 1;
+      const res = await this.suppliersApi.findAll({ limit: 1000, companyId }).toPromise();
+      this.suppliers = res?.data ?? [];
+    } catch { this.suppliers = []; }
+  }
+
+  private async loadDocumentTypes() {
+    try {
+      const res = await this.docTypesApi.findAll({ limit: 100 }).toPromise();
+      this.documentTypes = res?.data ?? [];
+    } catch { this.documentTypes = []; }
+  }
+
   private async loadProducts() {
     try {
       this.productLoading = true;
@@ -862,6 +901,7 @@ export class Inventory implements OnInit {
           product_id: this.entryForm.product_id!,
           lot_code: this.entryForm.lot_code!,
           expiration_date: this.entryForm.expiration_date!,
+          supplier_id: Number(this.entryForm.supplier_id) ?? undefined,
         }).toPromise();
         lotId = lot.id;
         const list = this.lotsByProduct.get(p.id) ?? [];
@@ -875,6 +915,7 @@ export class Inventory implements OnInit {
         qty: this.entryForm.qty,
         unit_cost: this.entryForm.unit_cost,
         lot_id: lotId ?? undefined,
+        supplier_id: Number(this.entryForm.supplier_id) ?? undefined,
         notes: this.entryForm.notes || undefined,
         serial_codes: p.is_serialized ? this.entrySerialCodes : undefined,
         user_created: this.currentUserName
@@ -899,6 +940,7 @@ export class Inventory implements OnInit {
       expiration_date: '',
       serials: '',
       notes: '',
+      supplier_id: null
     };
     this.selectedProductEntry = null;
   }
@@ -1790,19 +1832,19 @@ export class Inventory implements OnInit {
 
   openCategoryModal(): void {
     this.editingCategory = null;
-    this.categoryForm = { code: '', name: '', description: '' };
+    this.categoryForm = { name: '', description: '' };
     this.showCategoryModal = true;
   }
 
   editCategory(c: Category): void {
     this.editingCategory = c;
-    this.categoryForm = { code: c.code, name: c.name, description: c.description ?? '' };
+    this.categoryForm = { name: c.name, description: c.description ?? '' };
     this.showCategoryModal = true;
   }
 
   async saveCategory(): Promise<void> {
     const f = this.categoryForm;
-    if (!f.code || !f.name) {
+    if (!f.name) {
       this.showToast('error', 'Complete todos los campos requeridos');
       return;
     }
@@ -1844,19 +1886,19 @@ export class Inventory implements OnInit {
 
   openUnitModal(): void {
     this.editingUnit = null;
-    this.unitForm = { code: '', name: '', abbreviation: '' };
+    this.unitForm = { name: '', abbreviation: '' };
     this.showUnitModal = true;
   }
 
   editUnit(u: Unit): void {
     this.editingUnit = u;
-    this.unitForm = { code: u.code, name: u.name, abbreviation: u.abbreviation };
+    this.unitForm = { name: u.name, abbreviation: u.abbreviation };
     this.showUnitModal = true;
   }
 
   async saveUnit(): Promise<void> {
     const f = this.unitForm;
-    if (!f.code || !f.name || !f.abbreviation) {
+    if (!f.name || !f.abbreviation) {
       this.showToast('error', 'Complete todos los campos requeridos');
       return;
     }
@@ -2349,7 +2391,7 @@ export class Inventory implements OnInit {
 
   // --- STOCK (modal de seriales) ---
   showStockSerialsModal = false;
-  currentStockSerials: Array<{ id: number; serial_code: string; lot_id: number | null }> = [];
+  currentStockSerials: Array<{ id: number; serial_code: string; lot_id: number | null; supplier_name: string | null }> = [];
   modalStockCtx: { productId: number; productName: string; lotId: number | null; lotCode: string | null } | null = null;
 
   async openStockSerials(item: { product_id: number; lot_id?: number | null }): Promise<void> {
@@ -2370,6 +2412,7 @@ export class Inventory implements OnInit {
         id: r.id,
         serial_code: r.serial_code,
         lot_id: r.lot_id ?? null,
+        supplier_name: (r as any).supplier?.name || null,
       }));
 
       this.modalStockCtx = { productId: item.product_id, productName, lotId, lotCode };
@@ -2671,6 +2714,59 @@ export class Inventory implements OnInit {
 
   onCountEntrySerialKeydown(): void {
     this.addCountEntrySerial();
+  }
+
+  // =========================================================
+  // MODALES PROVEEDOR (NUEVO)
+  // =========================================================
+  openSupplierModal() {
+    this.supplierForm = {
+      company_id: 1, // DEFAULT
+      document_type_id: this.documentTypes.length > 0 ? this.documentTypes[0].id : null,
+      document_number: '',
+      name: '',
+      commercial_name: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      country: '',
+    };
+    this.showSupplierModal = true;
+  }
+
+  closeSupplierModal() {
+    this.showSupplierModal = false;
+  }
+
+  async saveSupplier() {
+    if (!this.supplierForm.name || !this.supplierForm.document_number) {
+      this.showToast('error', 'El nombre y número de documento son obligatorios');
+      return;
+    }
+    try {
+      const created = await this.suppliersApi.create({
+        companyId: this.supplierForm.company_id || 1, // requires number
+        documentTypeId: Number(this.supplierForm.document_type_id),
+        documentNumber: this.supplierForm.document_number,
+        name: this.supplierForm.name,
+        tradeName: this.supplierForm.commercial_name,
+        email: this.supplierForm.email,
+        phone: this.supplierForm.phone,
+        address: this.supplierForm.address,
+        city: this.supplierForm.city,
+        country: this.supplierForm.country,
+      }).toPromise();
+
+      if (created) {
+        this.suppliers.push(created);
+        this.entryForm.supplier_id = created.id; // Auto-seleccionar
+        this.showToast('success', 'Proveedor creado exitosamente');
+        this.closeSupplierModal();
+      }
+    } catch (e: any) {
+      this.showToast('error', e?.error?.message || 'Error al crear proveedor');
+    }
   }
 
 }

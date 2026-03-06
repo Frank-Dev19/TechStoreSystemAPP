@@ -72,6 +72,7 @@ export type LotApi = {
     product_id: number;
     lot_code: string;
     expiration_date: string | null;
+    supplier_id?: number | null;
 };
 
 // ← back  (API -> Front)
@@ -80,6 +81,7 @@ export const mapLotFromApi = (api: LotApi): Lot => ({
     product_id: api.product_id,
     lot_code: api.lot_code,
     expiration_date: api.expiration_date,
+    supplier_id: api.supplier_id,
 });
 
 // → back  (Front -> API)  payload de creación
@@ -87,16 +89,19 @@ export type LotCreateApi = {
     product_id: number;
     lot_code: string;
     expiration_date: string | null;
+    supplier_id?: number | null;
 };
 
 export const mapLotToApi = (l: {
     product_id: number;
     lot_code: string;
     expiration_date: string;
+    supplier_id?: number;
 }): LotCreateApi => ({
     product_id: l.product_id,
     lot_code: l.lot_code,
     expiration_date: l.expiration_date ?? null,
+    supplier_id: l.supplier_id ?? null,
 });
 
 

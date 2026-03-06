@@ -11,7 +11,7 @@ export class LotsService {
 
     constructor(private baseSvc: BaseService) { }
 
-    create(body: { product_id: number; lot_code: string; expiration_date: string }): Observable<Lot> {
+    create(body: { product_id: number; lot_code: string; expiration_date: string; supplier_id?: number; }): Observable<Lot> {
         return this.baseSvc
             .post<LotApi>(this.base, mapLotToApi(body))
             .pipe(map(mapLotFromApi));

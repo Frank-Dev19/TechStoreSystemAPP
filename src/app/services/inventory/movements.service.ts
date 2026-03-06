@@ -16,7 +16,7 @@ export class MovementsService {
 
     entry(data: {
         product_id: number; qty: number; unit_cost: number;
-        notes?: string | null; lot_id?: number | null;
+        notes?: string | null; lot_id?: number | null; supplier_id?: number | null;
         serial_codes?: string[]; // NEW
         source_doc_type?: string | null; source_doc_id?: string | null; reason_code?: string | null; user_created?: string;
     }): Observable<Movement> {
@@ -28,6 +28,7 @@ export class MovementsService {
             reason_code: (data.reason_code ?? 'COMPRA'),
             notes: data.notes ?? null,
             lot_id: data.lot_id ?? null,
+            supplier_id: data.supplier_id ?? null,
             source_doc_type: data.source_doc_type ?? 'MANUAL',
             source_doc_id: data.source_doc_id ?? null,
             user_created: data.user_created

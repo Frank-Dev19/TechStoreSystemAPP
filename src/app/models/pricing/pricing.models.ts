@@ -36,7 +36,6 @@ export interface SavePriceListDto {
 
 export interface CategoryLite {
     id: number;
-    code: string;
     name: string;
 }
 
