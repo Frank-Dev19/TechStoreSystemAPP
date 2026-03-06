@@ -16,6 +16,8 @@ import { ServiceCatalog } from '../../pages/service-catalog/service-catalog';
 import { ReceptionPanel } from '../../pages/reception-panel/reception-panel';
 import { TechnicianPanel } from '../../pages/technician-panel/technician-panel';
 import { SupervisorPanel } from '../../pages/supervisor-panel/supervisor-panel';
+import { RoleGuard } from '../../helpers/role.guard';
+import { RECEPTIONIST_ROLE_NAMES, SUPERVISOR_ROLE_NAMES, TECHNICIAN_ROLE_NAMES } from '../../utils/role.utils';
 
 export const AdminLayoutRoutes: Routes = [
     { path: 'home', component: Home },
@@ -31,7 +33,22 @@ export const AdminLayoutRoutes: Routes = [
     { path: 'ventas', component: Ventas },
     { path: 'pricing', component: Pricing },
     { path: 'catalogo-servicios', component: ServiceCatalog },
-    { path: 'reception-panel', component: ReceptionPanel },
-    { path: 'technician-panel', component: TechnicianPanel },
-    { path: 'supervisor-panel', component: SupervisorPanel },
+    {
+        path: 'reception-panel',
+        component: ReceptionPanel,
+        canActivate: [RoleGuard],
+        data: { allowedRoles: RECEPTIONIST_ROLE_NAMES },
+    },
+    {
+        path: 'technician-panel',
+        component: TechnicianPanel,
+        canActivate: [RoleGuard],
+        data: { allowedRoles: TECHNICIAN_ROLE_NAMES },
+    },
+    {
+        path: 'supervisor-panel',
+        component: SupervisorPanel,
+        canActivate: [RoleGuard],
+        data: { allowedRoles: SUPERVISOR_ROLE_NAMES },
+    },
 ];

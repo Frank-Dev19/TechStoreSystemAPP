@@ -62,10 +62,10 @@ export const config = {
     categories: '/service-categories',
     services: '/services',
   },
-  tickets: {
-    tickets: '/ticket',
-    ticketItems: '/ticket/items',
-    quotes: '/quotes',
-    diagnostics: '/diagnostics',
+  serviceOrders: {
+    serviceOrders: '/service-orders',
+    serviceOrderItems: '/service-order-items',
+    serviceOrderQuotes: '/service-order-quotes',
+    serviceOrderDiagnoses: '/service-order-diagnoses',
   },
 };

@@ -1,8 +1,8 @@
-export interface Diagnostic {
+export interface ServiceOrderDiagnosis {
     id: number;
-    ticketItemId: number;
+    serviceOrderItemId: number;
     sequenceNumber: number;
-    status: DiagnosisStatus;
+    status: ServiceOrderDiagnosisStatus;
     summary: string;
     details: string | null;
     createdAt: Date;
@@ -10,7 +10,7 @@ export interface Diagnostic {
     deletedAt: Date | null;
 }
 
-export enum DiagnosisStatus {
+export enum ServiceOrderDiagnosisStatus {
     CURRENT = 'CURRENT',
     ARCHIVED = 'ARCHIVED'
 }

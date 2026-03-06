@@ -1,6 +1,6 @@
-import { EquipmentType, ServiceType } from './ticket-item';
+import { EquipmentType, ServiceType } from './service-order-item';
 
-export interface TicketItemSaveRequest {
+export interface ServiceOrderItemSaveRequest {
   equipmentType: EquipmentType;
   serviceType?: ServiceType;
   brand?: string | null;
@@ -11,6 +11,6 @@ export interface TicketItemSaveRequest {
   estimatedRepairHours?: number;
 }
 
-export interface TicketItemUpdateRequest extends Partial<TicketItemSaveRequest> {
+export interface ServiceOrderItemUpdateRequest extends Partial<ServiceOrderItemSaveRequest> {
   id: number;
 }

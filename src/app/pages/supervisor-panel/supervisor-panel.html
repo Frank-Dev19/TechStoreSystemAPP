@@ -2,19 +2,19 @@
   <div class="panel-header">
     <div class="title-section">
       <h1 class="page-title">Panel del Supervisor</h1>
-      <p class="page-subtitle">Revisa y aprueba cotizaciones pendientes</p>
+      <p class="page-subtitle">Monitorea cotizaciones, diagnósticos y equipos de todas las órdenes de servicio.</p>
     </div>
   </div>
 
   <div class="stats-grid">
     <div class="stat-card">
-      <div class="stat-icon warning">
-        <i class="fas fa-clock"></i>
+      <div class="stat-icon info">
+        <i class="fas fa-clipboard-list"></i>
       </div>
       <div class="stat-content">
-        <span class="stat-label">Pendientes de aprobar</span>
-        <h3 class="stat-value">{{ pendingQuotes.length }}</h3>
-        <p class="stat-meta">Requieren tu revisión</p>
+        <span class="stat-label">Abiertas</span>
+        <h3 class="stat-value">{{ openServiceOrderQuotes.length }}</h3>
+        <p class="stat-meta">Vigentes o esperando respuesta del cliente</p>
       </div>
     </div>
     <div class="stat-card">
@@ -22,228 +22,148 @@
         <i class="fas fa-check-circle"></i>
       </div>
       <div class="stat-content">
-        <span class="stat-label">Aprobadas</span>
-        <h3 class="stat-value">{{ approvedQuotes.length }}</h3>
-        <p class="stat-meta">Cotizaciones aprobadas</p>
+        <span class="stat-label">Respondidas</span>
+        <h3 class="stat-value">{{ answeredServiceOrderQuotes.length }}</h3>
+        <p class="stat-meta">Con aprobación o rechazo del cliente</p>
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon danger">
-        <i class="fas fa-times-circle"></i>
-      </div>
-      <div class="stat-content">
-        <span class="stat-label">Rechazadas</span>
-        <h3 class="stat-value">{{ rejectedQuotes.length }}</h3>
-        <p class="stat-meta">Necesitan corrección</p>
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon info">
+      <div class="stat-icon warning">
         <i class="fas fa-list"></i>
       </div>
       <div class="stat-content">
         <span class="stat-label">Total</span>
-        <h3 class="stat-value">{{ allQuotes.length }}</h3>
-        <p class="stat-meta">Todas las cotizaciones</p>
+        <h3 class="stat-value">{{ allServiceOrderQuotes.length }}</h3>
+        <p class="stat-meta">Todas las cotizaciones registradas</p>
       </div>
     </div>
   </div>
 
+  <section class="inbox-monitor">
+    <header class="inbox-monitor-header">
+      <div>
+        <h2>Monitoreo de conversaciones</h2>
+        <p>Canal público interno para supervisar trato y prevenir desvío de clientes.</p>
+      </div>
+      <span class="monitored-pill"><i class="fas fa-user-shield"></i> Supervisión total</span>
+    </header>
+
+    <div class="inbox-monitor-layout">
+      <aside class="inbox-monitor-list">
+        @for (thread of inboxThreads; track thread.id) {
+          <button
+            class="thread-item"
+            [class.active]="selectedInboxThread?.id === thread.id"
+            (click)="selectInboxThread(thread)"
+          >
+            <div>
+              <strong>{{ thread.serviceOrderCode }} · {{ thread.serviceOrderItemLabel }}</strong>
+              <small>{{ thread.technicianAlias }} · {{ thread.clientAlias }}</small>
+            </div>
+            <div class="thread-metrics">
+              @if (thread.unreadCount > 0) {
+                <span class="counter">{{ thread.unreadCount }}</span>
+              }
+              <span class="risk" [class.review]="thread.riskLevel === 'review'">
+                {{ thread.riskLevel === 'review' ? 'Revisar' : 'Normal' }}
+              </span>
+            </div>
+          </button>
+        }
+      </aside>
+
+      <section class="inbox-monitor-thread">
+        @if (selectedInboxThread) {
+          <div class="thread-title">
+            <h3>{{ selectedInboxThread.serviceOrderCode }} · {{ selectedInboxThread.serviceOrderItemLabel }}</h3>
+            <p>{{ selectedInboxThread.technicianAlias }} · {{ selectedInboxThread.clientAlias }}</p>
+          </div>
+          <div class="thread-messages">
+            @for (message of selectedInboxThread.messages; track message.id) {
+              <article class="thread-message" [class.tech]="message.author === 'TECHNICIAN'" [class.system]="message.author === 'SYSTEM'">
+                <header>
+                  <strong>{{ getInboxAuthorLabel(message.author) }}</strong>
+                  <small>{{ message.createdAt | date: 'dd/MM HH:mm' }}</small>
+                </header>
+                <p>{{ message.text }}</p>
+              </article>
+            }
+          </div>
+        } @else {
+          <p class="empty-text">Sin conversaciones para mostrar.</p>
+        }
+      </section>
+    </div>
+  </section>
+
   <div class="panel-container">
     <div class="tabs-navigation">
-      <button class="tab-btn" [class.active]="activeTab === 'pending'" (click)="activeTab = 'pending'">
-        <i class="fas fa-clock"></i>
-        Pendientes ({{ pendingQuotes.length }})
+      <button class="tab-btn" [class.active]="activeTab === 'open'" (click)="activeTab = 'open'">
+        <i class="fas fa-hourglass-half"></i>
+        Abiertas ({{ openServiceOrderQuotes.length }})
       </button>
-      <button class="tab-btn" [class.active]="activeTab === 'approved'" (click)="activeTab = 'approved'">
-        <i class="fas fa-check-circle"></i>
-        Aprobadas ({{ approvedQuotes.length }})
-      </button>
-      <button class="tab-btn" [class.active]="activeTab === 'rejected'" (click)="activeTab = 'rejected'">
-        <i class="fas fa-times-circle"></i>
-        Rechazadas ({{ rejectedQuotes.length }})
+      <button class="tab-btn" [class.active]="activeTab === 'answered'" (click)="activeTab = 'answered'">
+        <i class="fas fa-comments"></i>
+        Respondidas ({{ answeredServiceOrderQuotes.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="activeTab = 'all'">
         <i class="fas fa-list"></i>
-        Todas ({{ allQuotes.length }})
+        Todas ({{ allServiceOrderQuotes.length }})
       </button>
     </div>
 
-    <div class="quotes-grid">
-      @if (activeTab === 'pending') {
-        @if (pendingQuotes.length === 0) {
-          <div class="empty-state">
-            <i class="fas fa-inbox"></i>
-            <p>No hay cotizaciones pendientes de aprobación</p>
-          </div>
-        } @else {
-          @for (quote of pendingQuotes; track quote.id) {
-            <div class="quote-card" (click)="selectQuote(quote)" [class.selected]="selectedQuote?.id === quote.id">
-              <div class="card-header">
-                <div class="quote-info">
-                  <h3>{{ getQuoteHeaderLabel(quote) }}</h3>
-                  <span class="quote-badge" [ngClass]="getQuoteStatusClass(quote.status)">
-                    {{ getQuoteStatusLabel(quote.status) }}
-                  </span>
-                </div>
-              </div>
-              <div class="card-body">
-                <p class="quote-total">
-                  <i class="fas fa-money-bill-wave"></i>
-                  <strong>{{ quote.totalAmount | number: '1.2-2' }} {{ quote.currency }}</strong>
-                </p>
-                <p class="quote-date">
-                  <i class="fas fa-calendar-alt"></i>
-                  {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
-                </p>
-                <p class="quote-date">
-                  <i class="fas fa-tag"></i>
-                  {{ getServiceTypeLabel(quote.ticketItem?.serviceType) }}
-                </p>
-                @if (quote.notes) {
-                  <p class="quote-notes">
-                    <i class="fas fa-sticky-note"></i>
-                    {{ quote.notes }}
-                  </p>
-                }
+    <div class="serviceOrderQuotes-grid">
+      @if (isLoadingServiceOrderQuotes) {
+        <div class="empty-state">
+          <i class="fas fa-spinner fa-spin"></i>
+          <p>Cargando cotizaciones...</p>
+        </div>
+      } @else if (getVisibleQuotes().length === 0) {
+        <div class="empty-state">
+          <i class="fas fa-inbox"></i>
+          <p>No hay cotizaciones para esta vista.</p>
+        </div>
+      } @else {
+        @for (quote of getVisibleQuotes(); track quote.id) {
+          <div class="quote-card" (click)="selectServiceOrderQuote(quote)" [class.selected]="selectedServiceOrderQuote?.id === quote.id">
+            <div class="card-header">
+              <div class="quote-info">
+                <h3>{{ getServiceOrderQuoteHeaderLabel(quote) }}</h3>
+                <span class="quote-badge" [ngClass]="getServiceOrderQuoteStatusClass(quote.status)">
+                  {{ getServiceOrderQuoteStatusLabel(quote.status) }}
+                </span>
               </div>
             </div>
-          }
-        }
-      }
-
-      @if (activeTab === 'approved') {
-        @if (approvedQuotes.length === 0) {
-          <div class="empty-state">
-            <i class="fas fa-inbox"></i>
-            <p>No hay cotizaciones aprobadas</p>
-          </div>
-        } @else {
-          @for (quote of approvedQuotes; track quote.id) {
-            <div class="quote-card" (click)="selectQuote(quote)" [class.selected]="selectedQuote?.id === quote.id">
-              <div class="card-header">
-                <div class="quote-info">
-                  <h3>{{ getQuoteHeaderLabel(quote) }}</h3>
-                  <span class="quote-badge" [ngClass]="getQuoteStatusClass(quote.status)">
-                    {{ getQuoteStatusLabel(quote.status) }}
-                  </span>
-                </div>
-              </div>
-              <div class="card-body">
-                <p class="quote-total">
-                  <i class="fas fa-money-bill-wave"></i>
-                  <strong>{{ quote.totalAmount | number: '1.2-2' }} {{ quote.currency }}</strong>
+            <div class="card-body">
+              <p class="quote-total">
+                <i class="fas fa-money-bill-wave"></i>
+                <strong>{{ quote.totalAmount | number: '1.2-2' }} {{ quote.currency }}</strong>
+              </p>
+              <p class="quote-date">
+                <i class="fas fa-calendar-alt"></i>
+                {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+              </p>
+              <p class="quote-date">
+                <i class="fas fa-tag"></i>
+                {{ getServiceTypeLabel(quote.serviceOrderItem?.serviceType) }}
+              </p>
+              @if (quote.notes) {
+                <p class="quote-notes">
+                  <i class="fas fa-sticky-note"></i>
+                  {{ quote.notes }}
                 </p>
-                <p class="quote-date">
-                  <i class="fas fa-calendar-alt"></i>
-                  {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
-                </p>
-                <p class="quote-date">
-                  <i class="fas fa-tag"></i>
-                  {{ getServiceTypeLabel(quote.ticketItem?.serviceType) }}
-                </p>
-                @if (quote.approvedBySupervisorAt) {
-                  <p class="quote-date">
-                    <i class="fas fa-check"></i>
-                    Aprobada: {{ quote.approvedBySupervisorAt | date: 'dd/MM/yyyy HH:mm' }}
-                  </p>
-                }
-              </div>
+              }
             </div>
-          }
-        }
-      }
-
-      @if (activeTab === 'rejected') {
-        @if (rejectedQuotes.length === 0) {
-          <div class="empty-state">
-            <i class="fas fa-inbox"></i>
-            <p>No hay cotizaciones rechazadas</p>
           </div>
-        } @else {
-          @for (quote of rejectedQuotes; track quote.id) {
-            <div class="quote-card" (click)="selectQuote(quote)" [class.selected]="selectedQuote?.id === quote.id">
-              <div class="card-header">
-                <div class="quote-info">
-                  <h3>{{ getQuoteHeaderLabel(quote) }}</h3>
-                  <span class="quote-badge" [ngClass]="getQuoteStatusClass(quote.status)">
-                    {{ getQuoteStatusLabel(quote.status) }}
-                  </span>
-                </div>
-              </div>
-              <div class="card-body">
-                <p class="quote-total">
-                  <i class="fas fa-money-bill-wave"></i>
-                  <strong>{{ quote.totalAmount | number: '1.2-2' }} {{ quote.currency }}</strong>
-                </p>
-                <p class="quote-date">
-                  <i class="fas fa-calendar-alt"></i>
-                  {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
-                </p>
-                <p class="quote-date">
-                  <i class="fas fa-tag"></i>
-                  {{ getServiceTypeLabel(quote.ticketItem?.serviceType) }}
-                </p>
-                @if (quote.rejectedBySupervisorAt) {
-                  <p class="quote-date">
-                    <i class="fas fa-times"></i>
-                    Rechazada: {{ quote.rejectedBySupervisorAt | date: 'dd/MM/yyyy HH:mm' }}
-                  </p>
-                }
-                @if (quote.supervisorNotes) {
-                  <p class="quote-notes">
-                    <i class="fas fa-comment"></i>
-                    {{ quote.supervisorNotes }}
-                  </p>
-                }
-              </div>
-            </div>
-          }
-        }
-      }
-
-      @if (activeTab === 'all') {
-        @if (allQuotes.length === 0) {
-          <div class="empty-state">
-            <i class="fas fa-inbox"></i>
-            <p>No hay cotizaciones registradas</p>
-          </div>
-        } @else {
-          @for (quote of allQuotes; track quote.id) {
-            <div class="quote-card" (click)="selectQuote(quote)" [class.selected]="selectedQuote?.id === quote.id">
-              <div class="card-header">
-                <div class="quote-info">
-                  <h3>{{ getQuoteHeaderLabel(quote) }}</h3>
-                  <span class="quote-badge" [ngClass]="getQuoteStatusClass(quote.status)">
-                    {{ getQuoteStatusLabel(quote.status) }}
-                  </span>
-                </div>
-              </div>
-              <div class="card-body">
-                <p class="quote-total">
-                  <i class="fas fa-money-bill-wave"></i>
-                  <strong>{{ quote.totalAmount | number: '1.2-2' }} {{ quote.currency }}</strong>
-                </p>
-                <p class="quote-date">
-                  <i class="fas fa-calendar-alt"></i>
-                  {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
-                </p>
-                <p class="quote-date">
-                  <i class="fas fa-tag"></i>
-                  {{ getServiceTypeLabel(quote.ticketItem?.serviceType) }}
-                </p>
-              </div>
-            </div>
-          }
         }
       }
     </div>
 
-    @if (selectedQuote) {
+    @if (selectedServiceOrderQuote) {
       <div class="detail-view">
         <div class="detail-header">
-          <h2>Detalle de Cotización #{{ selectedQuote.sequenceNumber }}</h2>
-          <button class="btn-close" (click)="clearSelectedQuote()">
+          <h2>Detalle de Cotización #{{ selectedServiceOrderQuote.sequenceNumber }}</h2>
+          <button class="btn-close" (click)="clearSelectedServiceOrderQuote()">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -254,99 +174,72 @@
             <div class="info-grid">
               <div class="info-item">
                 <span class="info-label">Estado:</span>
-                <span class="quote-badge" [ngClass]="getQuoteStatusClass(selectedQuote.status)">
-                  {{ getQuoteStatusLabel(selectedQuote.status) }}
+                <span class="quote-badge" [ngClass]="getServiceOrderQuoteStatusClass(selectedServiceOrderQuote.status)">
+                  {{ getServiceOrderQuoteStatusLabel(selectedServiceOrderQuote.status) }}
                 </span>
               </div>
               <div class="info-item">
                 <span class="info-label">Total:</span>
-                <span class="info-value">{{ selectedQuote.totalAmount | number: '1.2-2' }} {{ selectedQuote.currency }}</span>
+                <span class="info-value">{{ selectedServiceOrderQuote.totalAmount | number: '1.2-2' }} {{ selectedServiceOrderQuote.currency }}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Versión:</span>
-                <span class="info-value">#{{ selectedQuote.sequenceNumber }}</span>
+                <span class="info-value">#{{ selectedServiceOrderQuote.sequenceNumber }}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Fecha de creación:</span>
-                <span class="info-value">{{ selectedQuote.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                <span class="info-value">{{ selectedServiceOrderQuote.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
               </div>
             </div>
-            @if (selectedQuote.notes) {
+            @if (selectedServiceOrderQuote.notes) {
               <div class="notes-box">
                 <strong>Notas de la cotización:</strong>
-                <p>{{ selectedQuote.notes }}</p>
+                <p>{{ selectedServiceOrderQuote.notes }}</p>
               </div>
             }
           </section>
 
-          @if (selectedQuote.approvedBySupervisorAt || selectedQuote.rejectedBySupervisorAt) {
-            <section class="detail-section">
-              <h3><i class="fas fa-user-tie"></i> Revisión de Supervisor</h3>
-              @if (selectedQuote.approvedBySupervisorAt) {
-                <p class="approval-info">
-                  <i class="fas fa-check-circle"></i>
-                  Aprobada el {{ selectedQuote.approvedBySupervisorAt | date: 'dd/MM/yyyy HH:mm' }}
-                </p>
-              }
-              @if (selectedQuote.rejectedBySupervisorAt) {
-                <p class="rejection-info">
-                  <i class="fas fa-times-circle"></i>
-                  Rechazada el {{ selectedQuote.rejectedBySupervisorAt | date: 'dd/MM/yyyy HH:mm' }}
-                </p>
-              }
-              @if (selectedQuote.supervisorNotes) {
-                <div class="notes-box">
-                  <strong>Notas del supervisor:</strong>
-                  <p>{{ selectedQuote.supervisorNotes }}</p>
-                </div>
-              }
-            </section>
-          }
-
-          @if (selectedQuote.sentToClientAt || selectedQuote.clientApprovedAt || selectedQuote.clientRejectedAt) {
+          @if (selectedServiceOrderQuote.sentToClientAt || selectedServiceOrderQuote.clientApprovedAt || selectedServiceOrderQuote.clientRejectedAt) {
             <section class="detail-section">
               <h3><i class="fas fa-user"></i> Respuesta del Cliente</h3>
-              @if (selectedQuote.sentToClientAt) {
+              @if (selectedServiceOrderQuote.sentToClientAt) {
                 <p class="info-text">
                   <i class="fas fa-paper-plane"></i>
-                  Enviada al cliente el {{ selectedQuote.sentToClientAt | date: 'dd/MM/yyyy HH:mm' }}
+                  Enviada al cliente el {{ selectedServiceOrderQuote.sentToClientAt | date: 'dd/MM/yyyy HH:mm' }}
                 </p>
               }
-              @if (selectedQuote.clientApprovedAt) {
+              @if (selectedServiceOrderQuote.clientApprovedAt) {
                 <p class="approval-info">
                   <i class="fas fa-check-circle"></i>
-                  Aprobada por cliente el {{ selectedQuote.clientApprovedAt | date: 'dd/MM/yyyy HH:mm' }}
+                  Aprobada por cliente el {{ selectedServiceOrderQuote.clientApprovedAt | date: 'dd/MM/yyyy HH:mm' }}
                 </p>
               }
-              @if (selectedQuote.clientRejectedAt) {
+              @if (selectedServiceOrderQuote.clientRejectedAt) {
                 <p class="rejection-info">
                   <i class="fas fa-times-circle"></i>
-                  Rechazada por cliente el {{ selectedQuote.clientRejectedAt | date: 'dd/MM/yyyy HH:mm' }}
+                  Rechazada por cliente el {{ selectedServiceOrderQuote.clientRejectedAt | date: 'dd/MM/yyyy HH:mm' }}
                 </p>
               }
-              @if (selectedQuote.clientNotes) {
+              @if (selectedServiceOrderQuote.clientNotes) {
                 <div class="notes-box">
                   <strong>Notas del cliente:</strong>
-                  <p>{{ selectedQuote.clientNotes }}</p>
+                  <p>{{ selectedServiceOrderQuote.clientNotes }}</p>
                 </div>
               }
             </section>
           }
 
-          @if (selectedQuote.productItems?.length) {
+          @if (selectedServiceOrderQuote.productItems?.length) {
             <section class="detail-section">
-              <h3><i class="fas fa-box"></i> Productos ({{ selectedQuote.productItems.length }})</h3>
+              <h3><i class="fas fa-box"></i> Productos ({{ selectedServiceOrderQuote.productItems.length }})</h3>
               <div class="items-list">
-                @for (product of selectedQuote.productItems; track product.id) {
+                @for (product of selectedServiceOrderQuote.productItems; track product.id) {
                   <div class="item-row">
                     <div class="item-name">{{ getProductLabel(product.productId) }}</div>
                     <div class="item-details">
                       <span class="item-quantity">Cant: {{ product.quantity }}</span>
-                      <span class="item-price">P.U: {{ product.unitPrice | number: '1.2-2' }} {{ selectedQuote.currency }}</span>
-                      <span class="item-total">Total: {{ (product.quantity * product.unitPrice) | number: '1.2-2' }} {{ selectedQuote.currency }}</span>
-                      @if (product.requiresPurchase) {
-                        <span class="badge badge-warning">Requiere compra</span>
-                      }
+                      <span class="item-price">P.U: {{ product.unitPrice | number: '1.2-2' }} {{ selectedServiceOrderQuote.currency }}</span>
+                      <span class="item-total">Total: {{ (product.quantity * product.unitPrice) | number: '1.2-2' }} {{ selectedServiceOrderQuote.currency }}</span>
                     </div>
                     @if (product.notes) {
                       <p class="item-notes">{{ product.notes }}</p>
@@ -357,15 +250,15 @@
             </section>
           }
 
-          @if (selectedQuote.serviceItems?.length) {
+          @if (selectedServiceOrderQuote.serviceItems?.length) {
             <section class="detail-section">
-              <h3><i class="fas fa-wrench"></i> Servicios ({{ selectedQuote.serviceItems.length }})</h3>
+              <h3><i class="fas fa-wrench"></i> Servicios ({{ selectedServiceOrderQuote.serviceItems.length }})</h3>
               <div class="items-list">
-                @for (service of selectedQuote.serviceItems; track service.id) {
+                @for (service of selectedServiceOrderQuote.serviceItems; track service.id) {
                   <div class="item-row">
                     <div class="item-name">{{ getServiceLabel(service.serviceId) }}</div>
                     <div class="item-details">
-                      <span class="item-price">Precio: {{ service.unitPrice | number: '1.2-2' }} {{ selectedQuote.currency }}</span>
+                      <span class="item-price">Precio: {{ service.unitPrice | number: '1.2-2' }} {{ selectedServiceOrderQuote.currency }}</span>
                     </div>
                     @if (service.notes) {
                       <p class="item-notes">{{ service.notes }}</p>
@@ -376,34 +269,34 @@
             </section>
           }
 
-          @if (selectedTicketItem) {
+          @if (selectedServiceOrderItem) {
             <section class="detail-section">
               <h3><i class="fas fa-laptop"></i> Equipo Relacionado</h3>
               <div class="info-grid">
                 <div class="info-item">
                   <span class="info-label">Tipo:</span>
-                  <span class="info-value">{{ getEquipmentTypeLabel(selectedTicketItem.equipmentType) }}</span>
+                  <span class="info-value">{{ getEquipmentTypeLabel(selectedServiceOrderItem.equipmentType) }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">Marca:</span>
-                  <span class="info-value">{{ selectedTicketItem.brand || 'Sin marca' }}</span>
+                  <span class="info-value">{{ selectedServiceOrderItem.brand || 'Sin marca' }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">Modelo:</span>
-                  <span class="info-value">{{ selectedTicketItem.model || 'Sin modelo' }}</span>
+                  <span class="info-value">{{ selectedServiceOrderItem.model || 'Sin modelo' }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">Técnico asignado:</span>
-                  <span class="info-value">{{ selectedTicketItem.assignedToTechnicianName || 'Sin asignar' }}</span>
+                  <span class="info-value">{{ selectedServiceOrderItem.assignedToTechnicianName || 'Sin asignar' }}</span>
                 </div>
               </div>
-              @if (selectedTicketItem.initialIssue) {
+              @if (selectedServiceOrderItem.initialIssue) {
                 <div class="notes-box">
                   <strong>Problema inicial:</strong>
-                  <p>{{ selectedTicketItem.initialIssue }}</p>
+                  <p>{{ selectedServiceOrderItem.initialIssue }}</p>
                 </div>
               }
-              @if (selectedTicketItem.serviceType === 'DIAGNOSIS') {
+              @if (selectedServiceOrderItem.serviceType === 'DIAGNOSIS') {
                 <div class="notes-box">
                   <strong>Diagnóstico del técnico:</strong>
                   @if (isLoadingDiagnosis) {
@@ -420,198 +313,10 @@
               }
             </section>
           }
-
-          <section class="detail-actions">
-            @if (selectedTicketItem) {
-              <button
-                class="btn btn-secondary"
-                (click)="openReassignTechnicianModal()"
-                [disabled]="!canReassignTechnician(selectedTicketItem)"
-              >
-                <i class="fas fa-user-cog"></i>
-                Reasignar técnico
-              </button>
-            }
-            @if (canApprove(selectedQuote)) {
-              <button class="btn btn-success" (click)="openApprovalModal()">
-                <i class="fas fa-check"></i>
-                Aprobar Cotización
-              </button>
-            }
-            @if (canReject(selectedQuote)) {
-              <button class="btn btn-danger" (click)="openRejectionModal()">
-                <i class="fas fa-times"></i>
-                Rechazar Cotización
-              </button>
-            }
-          </section>
         </div>
       </div>
     }
   </div>
-
-  @if (showApprovalModal) {
-    <div class="modal-overlay" (click)="closeApprovalModal()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-          <h2>Aprobar Cotización #{{ selectedQuote?.sequenceNumber }}</h2>
-          <button class="btn-close" (click)="closeApprovalModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-
-        <div class="modal-body">
-          <p class="modal-info">
-            <i class="fas fa-info-circle"></i>
-            Al aprobar esta cotización, se enviará al recepcionista para que la envíe al cliente.
-          </p>
-        </div>
-
-        <div class="modal-footer">
-          <button class="btn btn-secondary" (click)="closeApprovalModal()">Cancelar</button>
-          <button class="btn btn-success" (click)="submitApproval()" [disabled]="isProcessingAction">
-            <i class="fas fa-check"></i>
-            Aprobar
-          </button>
-        </div>
-      </div>
-    </div>
-  }
-
-  @if (showRejectionModal) {
-    <div class="modal-overlay" (click)="closeRejectionModal()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-          <h2>Rechazar Cotización #{{ selectedQuote?.sequenceNumber }}</h2>
-          <button class="btn-close" (click)="closeRejectionModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-
-        <form [formGroup]="rejectionForm" (ngSubmit)="submitRejection()" class="modal-body">
-          <p class="modal-warning">
-            <i class="fas fa-exclamation-triangle"></i>
-            Al rechazar esta cotización, el recepcionista deberá corregirla y enviarla nuevamente.
-          </p>
-
-          <div class="form-group">
-            <label for="rejection-notes">Motivo del rechazo *</label>
-            <textarea
-              id="rejection-notes"
-              class="form-control"
-              formControlName="notes"
-              rows="4"
-              placeholder="Explica por qué rechazas esta cotización (mínimo 10 caracteres)..."
-              [class.is-invalid]="rejectionForm.get('notes')?.invalid && rejectionForm.get('notes')?.touched"
-            ></textarea>
-            @if (rejectionForm.get('notes')?.invalid && rejectionForm.get('notes')?.touched) {
-              <div class="invalid-feedback">
-                El motivo del rechazo es obligatorio (mínimo 10 caracteres)
-              </div>
-            }
-          </div>
-        </form>
-
-        <div class="modal-footer">
-          <button class="btn btn-secondary" (click)="closeRejectionModal()">Cancelar</button>
-          <button class="btn btn-danger" (click)="submitRejection()" [disabled]="rejectionForm.invalid || isProcessingAction">
-            <i class="fas fa-times"></i>
-            Rechazar
-          </button>
-        </div>
-      </div>
-    </div>
-  }
-
-  @if (showAssignSupervisorModal) {
-    <div class="modal-overlay" (click)="closeAssignSupervisorModal()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-          <h2>Asignar Supervisor</h2>
-          <button class="btn-close" (click)="closeAssignSupervisorModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-
-        <form [formGroup]="assignSupervisorForm" (ngSubmit)="submitAssignSupervisor()" class="modal-body">
-          <div class="form-group">
-            <label for="supervisorId">Supervisor *</label>
-            <select
-              id="supervisorId"
-              class="form-control"
-              formControlName="supervisorId"
-              [class.is-invalid]="assignSupervisorForm.get('supervisorId')?.invalid && assignSupervisorForm.get('supervisorId')?.touched"
-            >
-              <option [ngValue]="null">Selecciona un supervisor</option>
-              @for (supervisor of supervisors; track supervisor.id) {
-                <option [ngValue]="supervisor.id">{{ supervisor.name }}</option>
-              }
-            </select>
-            @if (assignSupervisorForm.get('supervisorId')?.invalid && assignSupervisorForm.get('supervisorId')?.touched) {
-              <div class="invalid-feedback">
-                Debes seleccionar un supervisor
-              </div>
-            }
-          </div>
-        </form>
-
-        <div class="modal-footer">
-          <button class="btn btn-secondary" (click)="closeAssignSupervisorModal()">Cancelar</button>
-          <button class="btn btn-primary" (click)="submitAssignSupervisor()" [disabled]="assignSupervisorForm.invalid || isProcessingAction">
-            <i class="fas fa-save"></i>
-            Asignar
-          </button>
-        </div>
-      </div>
-    </div>
-  }
-
-  @if (showReassignTechnicianModal) {
-    <div class="modal-overlay" (click)="closeReassignTechnicianModal()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-          <h2>Reasignar Técnico</h2>
-          <button class="btn-close" (click)="closeReassignTechnicianModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-
-        <form [formGroup]="reassignTechnicianForm" (ngSubmit)="submitReassignTechnician()" class="modal-body">
-          <div class="form-group">
-            <label for="technicianId">Técnico *</label>
-            <select
-              id="technicianId"
-              class="form-control"
-              formControlName="technicianId"
-              [class.is-invalid]="reassignTechnicianForm.get('technicianId')?.invalid && reassignTechnicianForm.get('technicianId')?.touched"
-            >
-              <option [ngValue]="null">Selecciona un técnico</option>
-              @for (tech of technicians; track tech.id) {
-                <option [ngValue]="tech.id">{{ tech.name }}</option>
-              }
-            </select>
-            @if (reassignTechnicianForm.get('technicianId')?.invalid && reassignTechnicianForm.get('technicianId')?.touched) {
-              <div class="invalid-feedback">
-                Debes seleccionar un técnico
-              </div>
-            }
-          </div>
-          <p class="modal-info">
-            <i class="fas fa-info-circle"></i>
-            Técnico actual: {{ selectedTicketItem?.assignedToTechnicianName || 'Sin asignar' }}
-          </p>
-        </form>
-
-        <div class="modal-footer">
-          <button class="btn btn-secondary" (click)="closeReassignTechnicianModal()">Cancelar</button>
-          <button class="btn btn-primary" (click)="submitReassignTechnician()" [disabled]="reassignTechnicianForm.invalid || isProcessingAction">
-            <i class="fas fa-save"></i>
-            Guardar
-          </button>
-        </div>
-      </div>
-    </div>
-  }
 
   <div class="alert-container" [class.show]="showAlert">
     <div class="alert" [ngClass]="alertType">

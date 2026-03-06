@@ -4,7 +4,7 @@ import { LoginService } from '../../services/login-service.service';
 import { User } from '../../models/user/user';
 import { ProfileService } from '../../services/profile.service';
 import { CurrentUserService } from '../../services/current-user.service';
-import { hasAnyRole, RECEPTIONIST_ROLE_NAMES, TECHNICIAN_ROLE_NAMES, SUPERVISOR_ROLE_NAMES } from '../../utils/role.utils';
+import { hasAdminRole, hasAnyRole, RECEPTIONIST_ROLE_NAMES, TECHNICIAN_ROLE_NAMES, SUPERVISOR_ROLE_NAMES } from '../../utils/role.utils';
 declare interface RouteInfo {
   path: string
   title: string
@@ -76,15 +76,15 @@ export class Sidebar implements OnInit {
 
   // Métodos para verificar roles
   isReceptionist(): boolean {
-    return hasAnyRole(this.authenticatedUser?.roles, RECEPTIONIST_ROLE_NAMES)
+    return hasAdminRole(this.authenticatedUser?.roles) || hasAnyRole(this.authenticatedUser?.roles, RECEPTIONIST_ROLE_NAMES)
   }
 
   isTechnician(): boolean {
-    return hasAnyRole(this.authenticatedUser?.roles, TECHNICIAN_ROLE_NAMES)
+    return hasAdminRole(this.authenticatedUser?.roles) || hasAnyRole(this.authenticatedUser?.roles, TECHNICIAN_ROLE_NAMES)
   }
 
   isSupervisor(): boolean {
-    return hasAnyRole(this.authenticatedUser?.roles, SUPERVISOR_ROLE_NAMES)
+    return hasAdminRole(this.authenticatedUser?.roles) || hasAnyRole(this.authenticatedUser?.roles, SUPERVISOR_ROLE_NAMES)
   }
 
   // private currentUser(): void {

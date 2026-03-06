@@ -1,18 +1,37 @@
 import { Component, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { finalize } from "rxjs/operators"
-import { EquipmentType, ServiceType, TicketItem, TicketItemStatus } from "../../models/tickets/ticket-item"
-import { TicketItemService } from "../../services/tickets/ticket-item.service"
-import { DiagnosticService } from "../../services/tickets/diagnostic.service"
-import { Diagnostic } from "../../models/tickets/diagnostic"
-import { DiagnosticSaveRequest } from "../../models/tickets/diagnostic-request"
-import { Quote, QuoteProduct, QuoteService as QuoteServiceItem, QuoteStatus } from "../../models/tickets/quote"
-import { QuoteService } from "../../services/tickets/quote.service"
+import { EquipmentType, ServiceType, ServiceOrderItem, ServiceOrderItemStatus } from "../../models/service-orders/service-order-item"
+import { ServiceOrderItemService } from "../../services/service-orders/service-order-item.service"
+import { ServiceOrderDiagnosisService } from "../../services/service-orders/service-order-diagnosis.service"
+import { ServiceOrderDiagnosis } from "../../models/service-orders/service-order-diagnosis"
+import { ServiceOrderDiagnosisSaveRequest } from "../../models/service-orders/service-order-diagnosis-request"
+import { ServiceOrderQuote, ServiceOrderQuoteProduct, ServiceOrderQuoteService as ServiceOrderQuoteServiceItem, ServiceOrderQuoteStatus } from "../../models/service-orders/service-quote"
+import { ServiceOrderQuoteService } from "../../services/service-orders/service-quote.service"
 import { UsersApiService } from "../../services/rbac/users-api.service"
 import { UserApi } from "../../models/rbac/user.model"
 import { CurrentUserService } from "../../services/current-user.service"
 import { User } from "../../models/user/user"
 import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
+
+type InboxAuthor = "TECHNICIAN" | "CLIENT" | "SYSTEM"
+
+interface ServiceOrderItemInboxMessage {
+  id: number
+  author: InboxAuthor
+  text: string
+  createdAt: Date
+}
+
+interface ServiceOrderItemInboxThread {
+  serviceOrderItemId: number
+  serviceOrderCode: string
+  itemLabel: string
+  clientAlias: string
+  assignedTechnicianAlias: string
+  unreadForSupervisor: number
+  messages: ServiceOrderItemInboxMessage[]
+}
 
 @Component({
   selector: "app-technician-panel",
@@ -23,21 +42,21 @@ import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
 export class TechnicianPanel implements OnInit {
   activeTab: "todo" | "diagnosis" | "pending_approval" | "repair" | "repaired" | "all" = "todo"
 
-  todoItems: TicketItem[] = []           // Asignados y listos para reparar
-  diagnosisItems: TicketItem[] = []      // En diagnóstico activo
-  pendingApprovalItems: TicketItem[] = [] // Diagnosticados/cotizados esperando aprobación
-  repairItems: TicketItem[] = []         // En reparación
-  repairedItems: TicketItem[] = []       // Reparados pendientes de alistar
-  allItems: TicketItem[] = []
-  selectedItem: TicketItem | null = null
+  todoItems: ServiceOrderItem[] = []           // Asignados y listos para reparar
+  diagnosisItems: ServiceOrderItem[] = []      // En diagnóstico activo
+  pendingApprovalItems: ServiceOrderItem[] = [] // Diagnosticados/cotizados esperando respuesta
+  repairItems: ServiceOrderItem[] = []         // En reparación
+  repairedItems: ServiceOrderItem[] = []       // Reparados pendientes de alistar
+  allItems: ServiceOrderItem[] = []
+  selectedItem: ServiceOrderItem | null = null
 
   showDiagnosisModal = false
   diagnosisForm: FormGroup
   showRediagnosisModal = false
   rediagnosisForm: FormGroup
-  diagnosticHistory: Diagnostic[] = []
-  quoteSummary: Quote | null = null
-  isLoadingQuote = false
+  diagnosticHistory: ServiceOrderDiagnosis[] = []
+  quoteSummary: ServiceOrderQuote | null = null
+  isLoadingServiceOrderQuote = false
 
   itemInDiagnosis = false
   currentItemInDiagnosisId: number | null = null
@@ -50,6 +69,10 @@ export class TechnicianPanel implements OnInit {
   isLoadingItems = false
   isSavingDiagnosis = false
   isSubmittingRediagnosis = false
+  showInboxModal = false
+  inboxDraftMessage = ""
+  inboxActiveThread: ServiceOrderItemInboxThread | null = null
+  inboxThreads: ServiceOrderItemInboxThread[] = []
 
   private currentUser: User | null = null
   private isTechnician = false
@@ -71,9 +94,9 @@ export class TechnicianPanel implements OnInit {
 
   constructor(
     private readonly formBuilder: FormBuilder,
-    private readonly ticketItemService: TicketItemService,
-    private readonly diagnosticService: DiagnosticService,
-    private readonly quoteService: QuoteService,
+    private readonly serviceOrderItemService: ServiceOrderItemService,
+    private readonly diagnosticService: ServiceOrderDiagnosisService,
+    private readonly quoteService: ServiceOrderQuoteService,
     private readonly usersApi: UsersApiService,
     private readonly currentUserService: CurrentUserService,
   ) {
@@ -107,46 +130,45 @@ export class TechnicianPanel implements OnInit {
       limit: 50,
       assignedToMe: true,
     }
-    this.ticketItemService
+    this.serviceOrderItemService
       .findAll(params)
       .pipe(finalize(() => (this.isLoadingItems = false)))
       .subscribe({
         next: ({ data }) => this.hydrateLists(data ?? []),
-        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar tus tickets."),
+        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar tus órdenes asignadas."),
       })
   }
 
-  private hydrateLists(items: TicketItem[]): void {
+  private hydrateLists(items: ServiceOrderItem[]): void {
     this.allItems = [...items]
 
     // Por hacer: Asignados + Aprobados por cliente (listos para reparar)
     this.todoItems = items.filter((item) =>
       [
-        TicketItemStatus.ASSIGNED,
-        TicketItemStatus.READY_FOR_REPAIR,
-        TicketItemStatus.CLIENT_APPROVED,
+        ServiceOrderItemStatus.ASSIGNED,
+        ServiceOrderItemStatus.READY_FOR_REPAIR,
+        ServiceOrderItemStatus.CLIENT_APPROVED,
       ].includes(item.status),
     )
 
     // En diagnóstico: Solo items activamente en diagnóstico
     this.diagnosisItems = items.filter((item) =>
-      item.status === TicketItemStatus.IN_DIAGNOSIS
+      item.status === ServiceOrderItemStatus.IN_DIAGNOSIS
     )
 
-    // Esperando aprobación: Diagnosticados o cotizados esperando aprobación
+    // Pendientes: diagnosticados o cotizados esperando respuesta
     this.pendingApprovalItems = items.filter((item) =>
       [
-        TicketItemStatus.DIAGNOSED,
-        TicketItemStatus.QUOTED,
-        TicketItemStatus.SUPERVISOR_APPROVED,
-        TicketItemStatus.SENT_TO_CLIENT,
-        TicketItemStatus.AWAITING_CLIENT_RESPONSE,
+        ServiceOrderItemStatus.DIAGNOSED,
+        ServiceOrderItemStatus.QUOTED,
+        ServiceOrderItemStatus.SENT_TO_CLIENT,
+        ServiceOrderItemStatus.AWAITING_CLIENT_RESPONSE,
       ].includes(item.status),
     )
 
-    this.repairItems = items.filter((item) => item.status === TicketItemStatus.IN_REPAIR)
-    this.repairedItems = items.filter((item) => item.status === TicketItemStatus.REPAIRED)
-    const activeDiagnosis = this.diagnosisItems.find((item) => item.status === TicketItemStatus.IN_DIAGNOSIS)
+    this.repairItems = items.filter((item) => item.status === ServiceOrderItemStatus.IN_REPAIR)
+    this.repairedItems = items.filter((item) => item.status === ServiceOrderItemStatus.REPAIRED)
+    const activeDiagnosis = this.diagnosisItems.find((item) => item.status === ServiceOrderItemStatus.IN_DIAGNOSIS)
     this.itemInDiagnosis = !!activeDiagnosis
     this.currentItemInDiagnosisId = activeDiagnosis?.id ? Number(activeDiagnosis.id) : null
 
@@ -154,8 +176,8 @@ export class TechnicianPanel implements OnInit {
       const updated = items.find((entry) => Number(entry.id) === Number(this.selectedItem?.id))
       this.selectedItem = updated ?? null
       if (this.selectedItem) {
-        this.loadDiagnosticHistory(Number(this.selectedItem.id))
-        this.loadQuoteSummary(this.selectedItem)
+        this.loadServiceOrderDiagnosisHistory(Number(this.selectedItem.id))
+        this.loadServiceOrderQuoteSummary(this.selectedItem)
       } else {
         this.diagnosticHistory = []
         this.quoteSummary = null
@@ -163,12 +185,12 @@ export class TechnicianPanel implements OnInit {
     }
   }
 
-  selectItem(item: TicketItem): void {
+  selectItem(item: ServiceOrderItem): void {
     this.selectedItem = item
     const itemId = Number(item.id)
     if (itemId) {
-      this.loadDiagnosticHistory(itemId)
-      this.loadQuoteSummary(item)
+      this.loadServiceOrderDiagnosisHistory(itemId)
+      this.loadServiceOrderQuoteSummary(item)
     }
   }
 
@@ -178,15 +200,82 @@ export class TechnicianPanel implements OnInit {
     this.quoteSummary = null
   }
 
-  startDiagnosis(item: TicketItem): void {
+  canOpenClientInbox(item: ServiceOrderItem | null): boolean {
+    if (!item) return false
+    return ![
+      ServiceOrderItemStatus.DELIVERED,
+      ServiceOrderItemStatus.CANCELLED,
+      ServiceOrderItemStatus.CLOSED_REJECTED_CLIENT,
+    ].includes(item.status)
+  }
+
+  openWhatsAppInbox(item: ServiceOrderItem, event?: Event): void {
+    event?.stopPropagation()
+    if (!this.canOpenClientInbox(item)) return
+
+    const existing = this.inboxThreads.find((thread) => thread.serviceOrderItemId === Number(item.id))
+    if (existing) {
+      existing.unreadForSupervisor = 0
+      this.inboxActiveThread = existing
+      this.showInboxModal = true
+      return
+    }
+
+    const thread = this.buildInboxThread(item)
+    this.inboxThreads = [thread, ...this.inboxThreads]
+    this.inboxActiveThread = thread
+    this.showInboxModal = true
+  }
+
+  closeInboxModal(): void {
+    this.showInboxModal = false
+    this.inboxDraftMessage = ""
+    this.inboxActiveThread = null
+  }
+
+  sendInboxMessage(): void {
+    if (!this.inboxActiveThread) return
+    const text = this.inboxDraftMessage.trim()
+    if (!text) return
+
+    this.inboxActiveThread.messages.push({
+      id: Date.now(),
+      author: "TECHNICIAN",
+      text,
+      createdAt: new Date(),
+    })
+    this.inboxDraftMessage = ""
+
+    // Mock response to visualize monitored two-way flow.
+    this.inboxActiveThread.messages.push({
+      id: Date.now() + 1,
+      author: "CLIENT",
+      text: "Recibido. Gracias por la actualización técnica.",
+      createdAt: new Date(),
+    })
+    this.inboxActiveThread.unreadForSupervisor += 1
+  }
+
+  getInboxAuthorLabel(author: InboxAuthor): string {
+    switch (author) {
+      case "TECHNICIAN":
+        return "Técnico"
+      case "CLIENT":
+        return this.inboxActiveThread?.clientAlias ?? "Cliente anónimo"
+      default:
+        return "Sistema"
+    }
+  }
+
+  startDiagnosis(item: ServiceOrderItem): void {
     if (this.itemInDiagnosis && this.currentItemInDiagnosisId !== Number(item.id)) {
       this.showMessage("warning", "fas fa-exclamation-circle", "Completa el diagnóstico activo antes de iniciar otro.")
       return
     }
-    this.transitionItemStatus(item, TicketItemStatus.IN_DIAGNOSIS, "Diagnóstico iniciado correctamente.")
+    this.transitionItemStatus(item, ServiceOrderItemStatus.IN_DIAGNOSIS, "Diagnóstico iniciado correctamente.")
   }
 
-  startStandardService(item: TicketItem): void {
+  startStandardService(item: ServiceOrderItem): void {
     if (!this.isStandardService(item)) return
     this.startRepair(item)
   }
@@ -203,7 +292,7 @@ export class TechnicianPanel implements OnInit {
     this.diagnosisForm.reset()
   }
 
-  openRediagnosisModal(item: TicketItem): void {
+  openRediagnosisModal(item: ServiceOrderItem): void {
     this.selectItem(item)
     this.showRediagnosisModal = true
     this.rediagnosisForm.reset()
@@ -220,8 +309,8 @@ export class TechnicianPanel implements OnInit {
       return
     }
 
-    const payload: DiagnosticSaveRequest = {
-      ticketItemId: Number(this.selectedItem.id),
+    const payload: ServiceOrderDiagnosisSaveRequest = {
+      serviceOrderItemId: Number(this.selectedItem.id),
       summary: this.diagnosisForm.get("summary")?.value,
       details: this.diagnosisForm.get("details")?.value,
     }
@@ -248,7 +337,7 @@ export class TechnicianPanel implements OnInit {
 
     const reason = this.rediagnosisForm.get("reason")?.value
     this.isSubmittingRediagnosis = true
-    this.ticketItemService
+    this.serviceOrderItemService
       .requestRediagnosis(Number(this.selectedItem.id), reason)
       .pipe(finalize(() => (this.isSubmittingRediagnosis = false)))
       .subscribe({
@@ -263,13 +352,13 @@ export class TechnicianPanel implements OnInit {
       })
   }
 
-  startRepair(item: TicketItem): void {
-    if (this.isStandardService(item) && [TicketItemStatus.ASSIGNED, TicketItemStatus.READY_FOR_REPAIR].includes(item.status)) {
-      this.transitionItemStatus(item, TicketItemStatus.IN_REPAIR, "Servicio iniciado.")
+  startRepair(item: ServiceOrderItem): void {
+    if (this.isStandardService(item) && [ServiceOrderItemStatus.ASSIGNED, ServiceOrderItemStatus.READY_FOR_REPAIR].includes(item.status)) {
+      this.transitionItemStatus(item, ServiceOrderItemStatus.IN_REPAIR, "Servicio iniciado.")
       return
     }
 
-    if (item.status !== TicketItemStatus.CLIENT_APPROVED) {
+    if (item.status !== ServiceOrderItemStatus.CLIENT_APPROVED) {
       this.showMessage(
         "warning",
         "fas fa-exclamation-circle",
@@ -277,17 +366,17 @@ export class TechnicianPanel implements OnInit {
       )
       return
     }
-    this.transitionItemStatus(item, TicketItemStatus.IN_REPAIR, "Reparación iniciada.")
+    this.transitionItemStatus(item, ServiceOrderItemStatus.IN_REPAIR, "Reparación iniciada.")
   }
 
-  markRepaired(item: TicketItem): void {
-    if (item.status === TicketItemStatus.IN_REPAIR) {
+  markRepaired(item: ServiceOrderItem): void {
+    if (item.status === ServiceOrderItemStatus.IN_REPAIR) {
       const itemId = Number(item.id)
       if (!itemId) {
         this.showMessage("danger", "fas fa-times-circle", "ID de item inválido.")
         return
       }
-      this.ticketItemService.changeStatus(itemId, TicketItemStatus.REPAIRED).subscribe({
+      this.serviceOrderItemService.changeStatus(itemId, ServiceOrderItemStatus.REPAIRED).subscribe({
         next: () => {
           this.showMessage("success", "fas fa-check-circle", "Equipo marcado como reparado.")
           this.loadTechnicianItems()
@@ -299,23 +388,23 @@ export class TechnicianPanel implements OnInit {
     }
   }
 
-  canFinishRepair(item?: TicketItem | null): boolean {
+  canFinishRepair(item?: ServiceOrderItem | null): boolean {
     if (!item) return false
-    return item.status === TicketItemStatus.IN_REPAIR
+    return item.status === ServiceOrderItemStatus.IN_REPAIR
   }
 
   completeDiagnosis(): void {
     if (!this.selectedItem) return
-    this.transitionItemStatus(this.selectedItem, TicketItemStatus.DIAGNOSED, "Diagnóstico completado.")
+    this.transitionItemStatus(this.selectedItem, ServiceOrderItemStatus.DIAGNOSED, "Diagnóstico completado.")
   }
 
-  private transitionItemStatus(item: TicketItem, status: TicketItemStatus, successMessage: string): void {
+  private transitionItemStatus(item: ServiceOrderItem, status: ServiceOrderItemStatus, successMessage: string): void {
     const itemId = Number(item.id)
     if (!itemId) {
       this.showMessage("danger", "fas fa-times-circle", "ID de item inválido.")
       return
     }
-    this.ticketItemService.changeStatus(itemId, status).subscribe({
+    this.serviceOrderItemService.changeStatus(itemId, status).subscribe({
       next: () => {
         this.showMessage("success", "fas fa-check-circle", successMessage)
         this.loadTechnicianItems()
@@ -324,7 +413,7 @@ export class TechnicianPanel implements OnInit {
     })
   }
 
-  getTechnicianName(item: TicketItem): string {
+  getTechnicianName(item: ServiceOrderItem): string {
     if (item.assignedToTechnicianName) {
       return item.assignedToTechnicianName
     }
@@ -334,33 +423,65 @@ export class TechnicianPanel implements OnInit {
     return "Sin asignar"
   }
 
-  private loadDiagnosticHistory(itemId: number): void {
+  private loadServiceOrderDiagnosisHistory(itemId: number): void {
     const normalizedId = Number(itemId)
     if (!normalizedId) {
       this.diagnosticHistory = []
       return
     }
-    this.diagnosticService.findAll({ ticketItemId: normalizedId, limit: 20 }).subscribe({
+    this.diagnosticService.findAll({ serviceOrderItemId: normalizedId, limit: 20 }).subscribe({
       next: ({ data }) => (this.diagnosticHistory = data ?? []),
       error: () => this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el historial de diagnósticos."),
     })
   }
 
-  canStartDiagnosis(item: TicketItem): boolean {
-    return item.status === TicketItemStatus.ASSIGNED && item.serviceType === ServiceType.DIAGNOSIS
+  canStartDiagnosis(item: ServiceOrderItem): boolean {
+    return item.status === ServiceOrderItemStatus.ASSIGNED && item.serviceType === ServiceType.DIAGNOSIS
   }
 
-  canRequestRediagnosis(item: TicketItem | null): boolean {
+  canRequestRediagnosis(item: ServiceOrderItem | null): boolean {
     if (!item) return false
-    return item.status === TicketItemStatus.IN_REPAIR && item.serviceType === ServiceType.DIAGNOSIS
+    return item.status === ServiceOrderItemStatus.IN_REPAIR && item.serviceType === ServiceType.DIAGNOSIS
   }
 
-  canStartRepairDirectly(item: TicketItem): boolean {
-    return item.status === TicketItemStatus.CLIENT_APPROVED
+  canStartRepairDirectly(item: ServiceOrderItem): boolean {
+    return item.status === ServiceOrderItemStatus.CLIENT_APPROVED
   }
 
-  canStartStandardService(item: TicketItem): boolean {
-    return this.isStandardService(item) && item.status === TicketItemStatus.READY_FOR_REPAIR
+  canStartStandardService(item: ServiceOrderItem): boolean {
+    return this.isStandardService(item) && item.status === ServiceOrderItemStatus.READY_FOR_REPAIR
+  }
+
+  private buildInboxThread(item: ServiceOrderItem): ServiceOrderItemInboxThread {
+    const serviceOrderCode = item.serviceOrder?.code ?? `SO-${item.serviceOrderId}`
+    const itemLabel = `Equipo #${item.itemNumber || item.id}`
+    const shortRef = String(serviceOrderCode).slice(-4)
+    const clientAlias = `Cliente-${shortRef || "XXXX"}`
+    const techRef = item.assignedToTechnicianId ? String(item.assignedToTechnicianId).padStart(2, "0") : "00"
+    const assignedTechnicianAlias = `Tecnico-${techRef}`
+
+    return {
+      serviceOrderItemId: Number(item.id),
+      serviceOrderCode,
+      itemLabel,
+      clientAlias,
+      assignedTechnicianAlias,
+      unreadForSupervisor: 0,
+      messages: [
+        {
+          id: Date.now(),
+          author: "SYSTEM",
+          text: "Canal supervisado: no se muestran nombre ni datos de contacto del cliente.",
+          createdAt: new Date(),
+        },
+        {
+          id: Date.now() + 1,
+          author: "CLIENT",
+          text: "Buenos días, ¿podrían indicarme el avance del equipo?",
+          createdAt: new Date(),
+        },
+      ],
+    }
   }
 
   private showMessage(type: string, icon: string, message: string): void {
@@ -399,11 +520,11 @@ export class TechnicianPanel implements OnInit {
     })
   }
 
-  isDiagnosisService(item: TicketItem | null): boolean {
+  isDiagnosisService(item: ServiceOrderItem | null): boolean {
     return !!item && item.serviceType === ServiceType.DIAGNOSIS
   }
 
-  isStandardService(item: TicketItem | null): boolean {
+  isStandardService(item: ServiceOrderItem | null): boolean {
     return !!item && item.serviceType === ServiceType.STANDARD_SERVICE
   }
 
@@ -444,7 +565,7 @@ export class TechnicianPanel implements OnInit {
     }
   }
 
-  getProductName(product: QuoteProduct): string {
+  getProductName(product: ServiceOrderQuoteProduct): string {
     if (product?.product?.name) {
       const sku = product.product.sku ? `${product.product.sku} | ` : ""
       return `${sku}${product.product.name}`
@@ -453,7 +574,7 @@ export class TechnicianPanel implements OnInit {
     return "Producto sin referencia"
   }
 
-  getServiceName(service: QuoteServiceItem): string {
+  getServiceName(service: ServiceOrderQuoteServiceItem): string {
     if (service?.service?.name) {
       const code = service.service.code ? `${service.service.code} | ` : ""
       return `${code}${service.service.name}`
@@ -462,43 +583,43 @@ export class TechnicianPanel implements OnInit {
     return "Servicio sin referencia"
   }
 
-  private shouldLoadQuote(item: TicketItem | null): boolean {
+  private shouldLoadServiceOrderQuote(item: ServiceOrderItem | null): boolean {
     if (!item) return false
     return [
-      TicketItemStatus.SUPERVISOR_APPROVED,
-      TicketItemStatus.SENT_TO_CLIENT,
-      TicketItemStatus.AWAITING_CLIENT_RESPONSE,
-      TicketItemStatus.CLIENT_APPROVED,
-      TicketItemStatus.READY_FOR_REPAIR,
-      TicketItemStatus.IN_REPAIR,
-      TicketItemStatus.REPAIRED,
-      TicketItemStatus.DELIVERED,
+      ServiceOrderItemStatus.QUOTED,
+      ServiceOrderItemStatus.SENT_TO_CLIENT,
+      ServiceOrderItemStatus.AWAITING_CLIENT_RESPONSE,
+      ServiceOrderItemStatus.CLIENT_APPROVED,
+      ServiceOrderItemStatus.CLOSED_REJECTED_CLIENT,
+      ServiceOrderItemStatus.READY_FOR_REPAIR,
+      ServiceOrderItemStatus.IN_REPAIR,
+      ServiceOrderItemStatus.REPAIRED,
+      ServiceOrderItemStatus.DELIVERED,
     ].includes(item.status)
   }
 
-  canShowQuoteSection(item: TicketItem | null): boolean {
-    return this.shouldLoadQuote(item)
+  canShowServiceOrderQuoteSection(item: ServiceOrderItem | null): boolean {
+    return this.shouldLoadServiceOrderQuote(item)
   }
 
-  private loadQuoteSummary(item: TicketItem | null): void {
-    if (!item?.id || !this.shouldLoadQuote(item)) {
+  private loadServiceOrderQuoteSummary(item: ServiceOrderItem | null): void {
+    if (!item?.id || !this.shouldLoadServiceOrderQuote(item)) {
       this.quoteSummary = null
       return
     }
-    this.isLoadingQuote = true
+    this.isLoadingServiceOrderQuote = true
     this.quoteSummary = null
     this.quoteService
-      .findAll({ page: 1, limit: 5, ticketItemId: Number(item.id) })
-      .pipe(finalize(() => (this.isLoadingQuote = false)))
+      .findAll({ page: 1, limit: 5, serviceOrderItemId: Number(item.id) })
+      .pipe(finalize(() => (this.isLoadingServiceOrderQuote = false)))
       .subscribe({
         next: ({ data }) => {
           const list = data ?? []
           const preferredOrder = [
-            QuoteStatus.CLIENT_APPROVED,
-            QuoteStatus.CURRENT,
-            QuoteStatus.SENT_TO_CLIENT,
-            QuoteStatus.AWAITING_CLIENT_RESPONSE,
-            QuoteStatus.SUPERVISOR_APPROVED,
+            ServiceOrderQuoteStatus.CLIENT_APPROVED,
+            ServiceOrderQuoteStatus.CURRENT,
+            ServiceOrderQuoteStatus.SENT_TO_CLIENT,
+            ServiceOrderQuoteStatus.AWAITING_CLIENT_RESPONSE,
           ]
           const match = preferredOrder
             .map((status) => list.find((q) => q.status === status))
@@ -511,41 +632,39 @@ export class TechnicianPanel implements OnInit {
       })
   }
 
-  getItemStatusLabel(status: TicketItemStatus): string {
+  getItemStatusLabel(status: ServiceOrderItemStatus): string {
     switch (status) {
-      case TicketItemStatus.ASSIGNED:
+      case ServiceOrderItemStatus.ASSIGNED:
         return "Asignado"
-      case TicketItemStatus.IN_DIAGNOSIS:
+      case ServiceOrderItemStatus.IN_DIAGNOSIS:
         return "En diagnóstico"
-      case TicketItemStatus.DIAGNOSED:
+      case ServiceOrderItemStatus.DIAGNOSED:
         return "Diagnosticado"
-      case TicketItemStatus.QUOTED:
+      case ServiceOrderItemStatus.QUOTED:
         return "Cotizado"
-      case TicketItemStatus.SUPERVISOR_APPROVED:
-        return "Aprobado por supervisor"
-      case TicketItemStatus.SUPERVISOR_REJECTED:
-        return "Rechazado por supervisor"
-      case TicketItemStatus.SENT_TO_CLIENT:
+      case ServiceOrderItemStatus.SENT_TO_CLIENT:
         return "Enviado al cliente"
-      case TicketItemStatus.AWAITING_CLIENT_RESPONSE:
+      case ServiceOrderItemStatus.AWAITING_CLIENT_RESPONSE:
         return "Esperando respuesta del cliente"
-      case TicketItemStatus.CLIENT_APPROVED:
+      case ServiceOrderItemStatus.CLIENT_APPROVED:
         return "Aprobado por cliente"
-      case TicketItemStatus.QUOTE_EXPIRED:
+      case ServiceOrderItemStatus.QUOTE_EXPIRED:
         return "Cotización expirada"
-      case TicketItemStatus.READY_FOR_REPAIR:
+      case ServiceOrderItemStatus.READY_FOR_REPAIR:
         return "Listo para reparación"
-      case TicketItemStatus.CLIENT_REJECTED:
+      case ServiceOrderItemStatus.CLIENT_REJECTED:
         return "Rechazado por cliente"
-      case TicketItemStatus.AWAITING_PARTS:
+      case ServiceOrderItemStatus.CLOSED_REJECTED_CLIENT:
+        return "Cerrado por rechazo del cliente"
+      case ServiceOrderItemStatus.AWAITING_PARTS:
         return "Esperando repuestos"
-      case TicketItemStatus.IN_REPAIR:
+      case ServiceOrderItemStatus.IN_REPAIR:
         return "En reparación"
-      case TicketItemStatus.REPAIRED:
+      case ServiceOrderItemStatus.REPAIRED:
         return "Reparado"
-      case TicketItemStatus.DELIVERED:
+      case ServiceOrderItemStatus.DELIVERED:
         return "Entregado"
-      case TicketItemStatus.CANCELLED:
+      case ServiceOrderItemStatus.CANCELLED:
         return "Cancelado"
       default:
         return status

@@ -18,7 +18,7 @@
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'pending_approval'" (click)="activeTab = 'pending_approval'">
         <i class="fas fa-hourglass-half"></i>
-        Esperando aprobación ({{ pendingApprovalItems.length }})
+        Pendientes de cotización o respuesta ({{ pendingApprovalItems.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'repair'" (click)="activeTab = 'repair'">
         <i class="fas fa-wrench"></i>
@@ -39,13 +39,13 @@
         @if (todoItems.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay items por hacer</p>
+            <p>No hay equipos por atender</p>
           </div>
         } @else {
           @for (item of todoItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
-                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
                 <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
@@ -59,6 +59,13 @@
                 }
               </div>
               <div class="card-actions">
+                <button
+                  class="btn btn-sm btn-whatsapp"
+                  *ngIf="canOpenClientInbox(item)"
+                  (click)="openWhatsAppInbox(item, $event)"
+                >
+                  <i class="fab fa-whatsapp"></i> WhatsApp
+                </button>
                 <button
                   class="btn btn-sm btn-primary"
                   *ngIf="canStartDiagnosis(item)"
@@ -78,7 +85,7 @@
                   *ngIf="canStartRepairDirectly(item)"
                   (click)="selectItem(item); startRepair(item); $event.stopPropagation()"
                 >
-                  <i class="fas fa-tools"></i> Iniciar reparación
+                  <i class="fas fa-tools"></i> Iniciar servicio
                 </button>
               </div>
             </div>
@@ -90,14 +97,14 @@
         @if (diagnosisItems.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay items en diagnóstico</p>
+            <p>No hay equipos en diagnóstico</p>
           </div>
         } @else {
           @for (item of diagnosisItems; track item.id) {
             <div class="item-card active-item" (click)="selectItem(item)">
               <div class="active-indicator">EN DIAGNÓSTICO</div>
               <div class="card-header">
-                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
                 <span class="badge badge-warning">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
@@ -105,6 +112,13 @@
                 <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
+                <button
+                  class="btn btn-sm btn-whatsapp"
+                  *ngIf="canOpenClientInbox(item)"
+                  (click)="openWhatsAppInbox(item, $event)"
+                >
+                  <i class="fab fa-whatsapp"></i> WhatsApp
+                </button>
                 <button
                   class="btn btn-sm btn-primary"
                   *ngIf="isDiagnosisService(item)"
@@ -123,13 +137,13 @@
         @if (pendingApprovalItems.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay items esperando aprobación</p>
+            <p>No hay equipos pendientes de cotización o respuesta</p>
           </div>
         } @else {
           @for (item of pendingApprovalItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
-                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
                 <span class="badge badge-warning">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
@@ -143,9 +157,18 @@
                 } @else {
                   <p class="info-text pending-quote">
                     <i class="fas fa-info-circle"></i>
-                    Esperando aprobación de cotización
+                    Cotización creada o pendiente de respuesta
                   </p>
                 }
+              </div>
+              <div class="card-actions">
+                <button
+                  class="btn btn-sm btn-whatsapp"
+                  *ngIf="canOpenClientInbox(item)"
+                  (click)="openWhatsAppInbox(item, $event)"
+                >
+                  <i class="fab fa-whatsapp"></i> WhatsApp
+                </button>
               </div>
             </div>
           }
@@ -156,13 +179,13 @@
         @if (repairItems.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay items en reparación</p>
+            <p>No hay equipos en reparación</p>
           </div>
         } @else {
           @for (item of repairItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
-                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
                 <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
@@ -171,11 +194,18 @@
               </div>
               <div class="card-actions">
                 <button
+                  class="btn btn-sm btn-whatsapp"
+                  *ngIf="canOpenClientInbox(item)"
+                  (click)="openWhatsAppInbox(item, $event)"
+                >
+                  <i class="fab fa-whatsapp"></i> WhatsApp
+                </button>
+                <button
                   class="btn btn-sm btn-warning"
                   *ngIf="canFinishRepair(item)"
                   (click)="selectItem(item); markRepaired(item); $event.stopPropagation()"
                 >
-                  <i class="fas fa-flag-checkered"></i> Finalizar reparación
+                  <i class="fas fa-flag-checkered"></i> Finalizar servicio
                 </button>
                 <span class="muted" *ngIf="!canFinishRepair(item)">Entrega será realizada por recepción.</span>
               </div>
@@ -194,7 +224,7 @@
           @for (item of repairedItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
-                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
                 <span class="badge badge-success">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
@@ -202,6 +232,13 @@
                 <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
+                <button
+                  class="btn btn-sm btn-whatsapp"
+                  *ngIf="canOpenClientInbox(item)"
+                  (click)="openWhatsAppInbox(item, $event)"
+                >
+                  <i class="fab fa-whatsapp"></i> WhatsApp
+                </button>
                 <span class="muted">Entrega será realizada por recepción.</span>
               </div>
             </div>
@@ -219,7 +256,7 @@
           @for (item of allItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
-                <h3>{{ item.ticket?.code || 'SIN-CÓDIGO' }}</h3>
+                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
                 <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
               </div>
               <div class="card-body">
@@ -227,6 +264,13 @@
                 <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
+                <button
+                  class="btn btn-sm btn-whatsapp"
+                  *ngIf="canOpenClientInbox(item)"
+                  (click)="openWhatsAppInbox(item, $event)"
+                >
+                  <i class="fab fa-whatsapp"></i> WhatsApp
+                </button>
                 <button
                   class="btn btn-sm btn-outline-success"
                   *ngIf="canStartStandardService(item)"
@@ -244,7 +288,7 @@
     @if (selectedItem) {
       <div class="detail-view">
         <div class="detail-header">
-          <h2>{{ selectedItem.ticket?.code || 'Ticket' }}</h2>
+          <h2>{{ selectedItem.serviceOrder?.code || 'Orden de servicio' }}</h2>
           <button class="btn-close" (click)="clearSelectedItem()">
             <i class="fas fa-times"></i>
           </button>
@@ -297,12 +341,12 @@
           }
           @if (selectedItem.status === 'CLIENT_APPROVED' || selectedItem.status === 'READY_FOR_REPAIR') {
             <button class="btn btn-success" (click)="startRepair(selectedItem)">
-              <i class="fas fa-tools"></i> Iniciar reparación
+              <i class="fas fa-tools"></i> Iniciar servicio
             </button>
           }
           @if (canFinishRepair(selectedItem)) {
             <button class="btn btn-warning" (click)="markRepaired(selectedItem)">
-              <i class="fas fa-flag-checkered"></i> Finalizar reparación
+              <i class="fas fa-flag-checkered"></i> Finalizar servicio
             </button>
           }
           @if (canRequestRediagnosis(selectedItem)) {
@@ -313,7 +357,7 @@
         </section>
       }
 
-      @if (canShowQuoteSection(selectedItem)) {
+      @if (canShowServiceOrderQuoteSection(selectedItem)) {
         @if (quoteSummary) {
           <section class="detail-section">
             <h3><i class="fas fa-file-invoice-dollar"></i> Resumen de cotización</h3>
@@ -341,13 +385,13 @@
               <p class="empty-text">Cotización sin líneas detalladas.</p>
             }
           </section>
-        } @else if (isLoadingQuote) {
+        } @else if (isLoadingServiceOrderQuote) {
           <section class="detail-section">
             <p class="empty-text"><i class="fas fa-spinner fa-spin"></i> Cargando cotización...</p>
           </section>
         } @else {
           <section class="detail-section">
-            <p class="empty-text">Aún no hay una cotización aprobada para este equipo.</p>
+            <p class="empty-text">Aún no hay una cotización disponible para este equipo.</p>
           </section>
         }
       }
@@ -355,6 +399,66 @@
   </div>
 }
   </div>
+
+  @if (showInboxModal) {
+    <div class="modal-overlay inbox-overlay" (click)="closeInboxModal()">
+      <div class="modal-content inbox-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header inbox-header">
+          <div>
+            <h2>Canal de mensajería del servicio</h2>
+            <p>Identidad del cliente protegida. Canal monitoreado para cumplimiento y calidad de atención.</p>
+          </div>
+          <div class="inbox-header-actions">
+            <span class="monitored-chip"><i class="fas fa-eye"></i> Supervisado</span>
+            <button class="btn-close" (click)="closeInboxModal()">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="inbox-layout">
+          <section class="inbox-main">
+            @if (inboxActiveThread) {
+              <div class="inbox-thread-meta">
+                <div>
+                  <strong>{{ inboxActiveThread.serviceOrderCode }} · {{ inboxActiveThread.itemLabel }}</strong>
+                  <p>{{ inboxActiveThread.clientAlias }} · {{ inboxActiveThread.assignedTechnicianAlias }}</p>
+                </div>
+              </div>
+
+              <div class="inbox-messages">
+                @for (message of inboxActiveThread.messages; track message.id) {
+                  <article class="message-row" [class.tech]="message.author === 'TECHNICIAN'" [class.system]="message.author === 'SYSTEM'">
+                    <header>
+                      <strong>{{ getInboxAuthorLabel(message.author) }}</strong>
+                      <small>{{ message.createdAt | date: 'dd/MM HH:mm' }}</small>
+                    </header>
+                    <p>{{ message.text }}</p>
+                  </article>
+                }
+              </div>
+
+              <div class="inbox-composer">
+                <textarea
+                  [value]="inboxDraftMessage"
+                  (input)="inboxDraftMessage = $any($event.target).value"
+                  rows="3"
+                  placeholder="Escribe un mensaje técnico para el cliente (sin datos personales)"
+                ></textarea>
+                <div class="inbox-composer-actions">
+                  <button type="button" class="btn btn-success" (click)="sendInboxMessage()">
+                    <i class="fab fa-whatsapp"></i> Enviar por canal
+                  </button>
+                </div>
+              </div>
+            } @else {
+              <p class="empty-text">Selecciona una conversación para comenzar.</p>
+            }
+          </section>
+        </div>
+      </div>
+    </div>
+  }
 
   @if (showDiagnosisModal) {
     <div class="modal-overlay" (click)="closeDiagnosisModal()">

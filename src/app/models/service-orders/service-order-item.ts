@@ -1,8 +1,8 @@
-import type { Ticket } from "./ticket"
+import type { ServiceOrder } from './service-order';
 
-export interface TicketItem {
+export interface ServiceOrderItem {
   id: number;
-  ticketId: number;
+  serviceOrderId: number;
   itemNumber: number;
   equipmentType: EquipmentType;
   serviceType: ServiceType;
@@ -11,17 +11,11 @@ export interface TicketItem {
   serialNumber: string | null;
   initialIssue: string;
   accessories: string | null;
-  status: TicketItemStatus;
+  status: ServiceOrderItemStatus;
   assignedToTechnicianId: number | null;
   assignedToTechnicianName?: string | null;
-  assignedToSupervisorId?: number | null;
-  assignedToSupervisorName?: string | null;
   assignedAt: string | null;
   estimatedRepairHours: number | null;
-  actualDiagnosisHours: number | null;
-  actualRepairHours: number | null;
-  diagnosisEfficiencyPercent: number | null;
-  repairEfficiencyPercent: number | null;
   receivedAt: string;
   diagnosisStartedAt: string | null;
   diagnosisCompletedAt: string | null;
@@ -34,7 +28,7 @@ export interface TicketItem {
   repairCompletedAt: string | null;
   deliveredAt: string | null;
   cancelledAt: string | null;
-  finalAmount: number | null;
+  finalAmount?: number | null;
   discount: number;
   cancelledBy: number | null;
   cancellationReason: string | null;
@@ -44,27 +38,29 @@ export interface TicketItem {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
-  ticket?: Ticket;
+  serviceOrder?: ServiceOrder;
 }
 
 export enum ServiceType {
-  DIAGNOSIS = 'DIAGNOSIS',
   STANDARD_SERVICE = 'STANDARD_SERVICE',
+  DIAGNOSIS = 'DIAGNOSIS',
+  WARRANTY_SERVICE = 'WARRANTY_SERVICE',
+  ASSEMBLY = 'ASSEMBLY',
+  CUSTOMER_SERVICE = 'CUSTOMER_SERVICE',
 }
 
-export enum TicketItemStatus {
+export enum ServiceOrderItemStatus {
   ASSIGNED = 'ASSIGNED',
   IN_DIAGNOSIS = 'IN_DIAGNOSIS',
   DIAGNOSED = 'DIAGNOSED',
   QUOTED = 'QUOTED',
-  SUPERVISOR_APPROVED = 'SUPERVISOR_APPROVED',
-  SUPERVISOR_REJECTED = 'SUPERVISOR_REJECTED',
   SENT_TO_CLIENT = 'SENT_TO_CLIENT',
   AWAITING_CLIENT_RESPONSE = 'AWAITING_CLIENT_RESPONSE',
   CLIENT_APPROVED = 'CLIENT_APPROVED',
   QUOTE_EXPIRED = 'QUOTE_EXPIRED',
   READY_FOR_REPAIR = 'READY_FOR_REPAIR',
   CLIENT_REJECTED = 'CLIENT_REJECTED',
+  CLOSED_REJECTED_CLIENT = 'CLOSED_REJECTED_CLIENT',
   AWAITING_PARTS = 'AWAITING_PARTS',
   IN_REPAIR = 'IN_REPAIR',
   REPAIRED = 'REPAIRED',

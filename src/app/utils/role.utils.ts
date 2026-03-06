@@ -1,4 +1,5 @@
-export const RECEPTIONIST_ROLE_NAMES = ['recepcionista', 'receptionist'] as const
+export const ADMIN_ROLE_NAMES = ['admin'] as const
+export const RECEPTIONIST_ROLE_NAMES = ['recepcionista', 'receptionist', 'recepcionist'] as const
 export const TECHNICIAN_ROLE_NAMES = ['technician', 'tecnico'] as const
 export const SUPERVISOR_ROLE_NAMES = ['supervisor'] as const
 
@@ -17,3 +18,6 @@ export const hasAnyRole = (roles: NamedRole[] | undefined | null, allowed: reado
   }
   return roles.some((role) => roleNameMatches(role?.name, allowed))
 }
+
+export const hasAdminRole = (roles: NamedRole[] | undefined | null): boolean =>
+  hasAnyRole(roles, ADMIN_ROLE_NAMES)
