@@ -163,7 +163,8 @@ export class Inventory implements OnInit {
 
   // --- KARDEX (modal seriales) ---
   showMovementSerialsModal = false;
-  currentMovementSerials: Array<{ serial_id: number; serial_code: string; lot_id: number | null }> = [];
+  currentMovementProductManagesExpiration = false;
+  currentMovementSerials: Array<{ serial_id: number; serial_code: string; lot_id: number | null; lot_code?: string | null; supplier_name?: string | null }> = [];
 
   // --- CONTEO (seriales) ---
   countEntrySerialInput = '';
@@ -765,10 +766,21 @@ export class Inventory implements OnInit {
   onEntryProductBlur() {
     setTimeout(() => { this.showEntryProductDropdown = false; }, 200);
   }
-  selectEntryProduct(product: any) {
+  async selectEntryProduct(product: any) {
     this.entryProductSearchText = product.sku + ' - ' + product.name;
     this.entryForm.product_id = product.id;
+    this.selectedProductEntry = product;
     this.showEntryProductDropdown = false;
+
+    try {
+      const stockInfo = await this.stockSvc.getCurrentStock(product.id).toPromise();
+      this.selectedProductEntry!.stock_qty = stockInfo?.total_qty ?? 0;
+      this.selectedProductEntry!.avg_cost = stockInfo?.avg_cost ?? 0;
+    } catch {
+      this.selectedProductEntry!.stock_qty = 0;
+      this.selectedProductEntry!.avg_cost = 0;
+    }
+
     this.onProductChangeEntry();
   }
   clearEntryProductSelection() {
@@ -799,10 +811,21 @@ export class Inventory implements OnInit {
   onExitProductBlur() {
     setTimeout(() => { this.showExitProductDropdown = false; }, 200);
   }
-  selectExitProduct(product: any) {
+  async selectExitProduct(product: any) {
     this.exitProductSearchText = product.sku + ' - ' + product.name;
     this.exitForm.product_id = product.id;
+    this.selectedProductExit = product;
     this.showExitProductDropdown = false;
+
+    try {
+      const stockInfo = await this.stockSvc.getCurrentStock(product.id).toPromise();
+      this.selectedProductExit!.stock_qty = stockInfo?.total_qty ?? 0;
+      this.selectedProductExit!.avg_cost = stockInfo?.avg_cost ?? 0;
+    } catch {
+      this.selectedProductExit!.stock_qty = 0;
+      this.selectedProductExit!.avg_cost = 0;
+    }
+
     this.onProductChangeExit();
   }
   clearExitProductSelection() {
@@ -835,10 +858,21 @@ export class Inventory implements OnInit {
   onAdjProductBlur(): void {
     setTimeout(() => { this.showAdjProductDropdown = false; }, 200);
   }
-  selectAdjProduct(product: any) {
+  async selectAdjProduct(product: any) {
     this.adjProductSearchText = product.sku + ' - ' + product.name;
     this.adjustmentForm.product_id = product.id;
+    this.selectedProductAdjustment = product;
     this.showAdjProductDropdown = false;
+
+    try {
+      const stockInfo = await this.stockSvc.getCurrentStock(product.id).toPromise();
+      this.selectedProductAdjustment!.stock_qty = stockInfo?.total_qty ?? 0;
+      this.selectedProductAdjustment!.avg_cost = stockInfo?.avg_cost ?? 0;
+    } catch {
+      this.selectedProductAdjustment!.stock_qty = 0;
+      this.selectedProductAdjustment!.avg_cost = 0;
+    }
+
     this.onProductChangeAdjustment();
   }
   clearAdjProductSelection() {
@@ -872,9 +906,7 @@ export class Inventory implements OnInit {
   // OPERACIONES - ENTRADA
   // =========================================================
   onProductChangeEntry(): void {
-    this.selectedProductEntry = this.entryForm.product_id
-      ? this.productMap.get(this.entryForm.product_id) ?? null
-      : null;
+    // Decoupled: Product is already set by selectEntryProduct
   }
 
   async registerEntry(): Promise<void> {
@@ -949,7 +981,7 @@ export class Inventory implements OnInit {
   // OPERACIONES - SALIDA
   // =========================================================
   async onProductChangeExit(): Promise<void> {
-    this.selectedProductExit = this.exitForm.product_id ? this.productMap.get(this.exitForm.product_id) ?? null : null;
+    // Decoupled: Product is already set by selectExitProduct
     this.availableLotsForExit = [];
     this.availableSerialsForExit = [];
     this.exitSelectedSerialIds = [];
@@ -1737,6 +1769,7 @@ export class Inventory implements OnInit {
   async openMovementSerials(mov: Movement): Promise<void> {
     try {
       this.currentMovementSerials = await this.serialsSvc.byMovement(mov.id).toPromise();
+      this.currentMovementProductManagesExpiration = mov.product?.manages_expiration ?? false;
       this.showMovementSerialsModal = true;
     } catch {
       this.showToast('error', 'No se pudieron cargar seriales del movimiento');
@@ -1745,6 +1778,7 @@ export class Inventory implements OnInit {
   closeMovementSerials(): void {
     this.showMovementSerialsModal = false;
     this.currentMovementSerials = [];
+    this.currentMovementProductManagesExpiration = false;
   }
 
 
@@ -1941,6 +1975,19 @@ export class Inventory implements OnInit {
   getProductBySku(id: number | null | undefined): Product | undefined {
     if (!id) return undefined;
     return this.productMap.get(id);
+  }
+
+  getProductStock(productId: number): number {
+    return this.pagedStock.find((s) => s.product_id === productId)?.total_qty ?? 0;
+  }
+
+  getProductAvgCost(productId: number): number {
+    return this.pagedStock.find((s) => s.product_id === productId)?.avg_cost ?? 0;
+  }
+
+  getUnitAbbreviation(unitId?: number | null): string {
+    if (!unitId) return '-';
+    return this.units.find((u) => u.id === unitId)?.abbreviation ?? '-';
   }
 
   getCategoryName(id?: number | null): string {
@@ -2152,9 +2199,7 @@ export class Inventory implements OnInit {
 
   // Al cambiar el producto en Ajuste
   async onProductChangeAdjustment(): Promise<void> {
-    this.selectedProductAdjustment = this.adjustmentForm.product_id
-      ? this.productMap.get(this.adjustmentForm.product_id) ?? null
-      : null;
+    // Decoupled: Product is already set by selectAdjProduct
 
     this.adjustmentForm.lot_id = null;
 
@@ -2391,8 +2436,8 @@ export class Inventory implements OnInit {
 
   // --- STOCK (modal de seriales) ---
   showStockSerialsModal = false;
-  currentStockSerials: Array<{ id: number; serial_code: string; lot_id: number | null; supplier_name: string | null }> = [];
-  modalStockCtx: { productId: number; productName: string; lotId: number | null; lotCode: string | null } | null = null;
+  currentStockSerials: Array<{ id: number; serial_code: string; lot_id: number | null; lot_code: string | null; supplier_name: string | null }> = [];
+  modalStockCtx: { productId: number; productName: string; lotId: number | null; lotCode: string | null; productManagesExpiration: boolean } | null = null;
 
   async openStockSerials(item: { product_id: number; lot_id?: number | null }): Promise<void> {
     try {
@@ -2412,10 +2457,17 @@ export class Inventory implements OnInit {
         id: r.id,
         serial_code: r.serial_code,
         lot_id: r.lot_id ?? null,
-        supplier_name: (r as any).supplier?.name || null,
+        lot_code: (r as any).lot_code || null,
+        supplier_name: (r as any).supplier_name || null,
       }));
 
-      this.modalStockCtx = { productId: item.product_id, productName, lotId, lotCode };
+      this.modalStockCtx = { 
+        productId: item.product_id, 
+        productName, 
+        lotId, 
+        lotCode,
+        productManagesExpiration: p?.manages_expiration ?? false
+      };
       this.showStockSerialsModal = true;
     } catch {
       this.showToast('error', 'No se pudieron cargar los seriales en stock');

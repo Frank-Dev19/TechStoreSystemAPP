@@ -22,7 +22,7 @@ export class PricingProductsApiService {
     constructor(private base: BaseService) { }
 
     list(): Observable<InventoryCatalogProductDto[]> {
-        return this.base.get<InventoryCatalogProductDto[]>(this.baseUrl);
+        return this.base.get<InventoryCatalogProductDto[]>(this.baseUrl + '/all');
     }
 
     // helper para mapear a ProductLite

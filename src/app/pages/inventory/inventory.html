@@ -405,33 +405,33 @@
 
                 <!-- Columna Derecha: Contexto + Seriales -->
                 <div class="operation-context-col">
-                    <!-- Info Contextual del Producto -->
-                    <div class="context-card" *ngIf="getProductContextInfo(entryForm.product_id) as ctx">
+                    <!-- PRODUCT INFO (ENTRY) -->
+                    <div class="context-card" *ngIf="selectedProductEntry">
                         <h4><i class="fas fa-info-circle"></i> Información del Producto</h4>
                         <div class="context-grid">
                             <div class="context-item">
                                 <span class="ctx-label">Producto</span>
-                                <span class="ctx-value"><code>{{ ctx.sku }}</code> {{ ctx.name }}</span>
+                                <span class="ctx-value"><code>{{ selectedProductEntry.sku }}</code> {{ selectedProductEntry.name }}</span>
                             </div>
                             <div class="context-item">
                                 <span class="ctx-label">Categoría</span>
-                                <span class="ctx-value">{{ ctx.category || '-' }}</span>
+                                <span class="ctx-value">{{ getCategoryName(selectedProductEntry.category_id) }}</span>
                             </div>
                             <div class="context-item">
                                 <span class="ctx-label">Stock Actual</span>
-                                <span class="ctx-value">{{ ctx.stockQty }} unidades</span>
+                                <span class="ctx-value">{{ selectedProductEntry.stock_qty || 0 }} {{ getUnitAbbreviation(selectedProductEntry.unit_id) }}</span>
                             </div>
-                            <div class="context-item">
+                            <div class="context-item" *ngIf="selectedProductEntry.avg_cost">
                                 <span class="ctx-label">Costo Promedio</span>
-                                <span class="ctx-value">S/ {{ ctx.avgCost | number:'1.2-2' }}</span>
+                                <span class="ctx-value">S/ {{ selectedProductEntry.avg_cost?.toFixed(2) || '0.00' }}</span>
                             </div>
-                            <div class="context-item" *ngIf="ctx.managesExpiration">
-                                <span class="ctx-label">Lotes</span>
-                                <span class="ctx-value">{{ ctx.lotsCount }} lotes en stock</span>
-                            </div>
-                            <div class="context-item">
+                            <div class="context-item" *ngIf="selectedProductEntry.is_serialized">
                                 <span class="ctx-label">Serializado</span>
-                                <span class="ctx-value">{{ ctx.isSerialized ? 'Sí' : 'No' }}</span>
+                                <span class="ctx-value">Sí</span>
+                            </div>
+                            <div class="context-item" *ngIf="selectedProductEntry.manages_expiration">
+                                <span class="ctx-label">Vencimiento</span>
+                                <span class="ctx-value">Sí (Requiere Lote)</span>
                             </div>
                         </div>
                     </div>
@@ -562,24 +562,29 @@
                 </div>
 
                 <div class="operation-context-col">
-                    <div class="context-card" *ngIf="getProductContextInfo(exitForm.product_id) as ctx">
+                    <!-- PRODUCT INFO (EXIT) -->
+                    <div class="context-card" *ngIf="selectedProductExit">
                         <h4><i class="fas fa-info-circle"></i> Información del Producto</h4>
                         <div class="context-grid">
                             <div class="context-item">
                                 <span class="ctx-label">Producto</span>
-                                <span class="ctx-value"><code>{{ ctx.sku }}</code> {{ ctx.name }}</span>
+                                <span class="ctx-value"><code>{{ selectedProductExit.sku }}</code> {{ selectedProductExit.name }}</span>
                             </div>
                             <div class="context-item">
                                 <span class="ctx-label">Categoría</span>
-                                <span class="ctx-value">{{ ctx.category || '-' }}</span>
+                                <span class="ctx-value">{{ getCategoryName(selectedProductExit.category_id) }}</span>
                             </div>
                             <div class="context-item">
                                 <span class="ctx-label">Stock Actual</span>
-                                <span class="ctx-value"><strong>{{ ctx.stockQty }}</strong> unidades</span>
+                                <span class="ctx-value">
+                                    <span class="stock-badge" [class.danger]="(selectedProductExit.stock_qty || 0) <= (selectedProductExit.min_stock || 5)">
+                                        {{ selectedProductExit.stock_qty || 0 }} {{ getUnitAbbreviation(selectedProductExit.unit_id) }}
+                                    </span>
+                                </span>
                             </div>
                             <div class="context-item">
                                 <span class="ctx-label">Costo Promedio</span>
-                                <span class="ctx-value">S/ {{ ctx.avgCost | number:'1.2-2' }}</span>
+                                <span class="ctx-value">S/ {{ selectedProductExit.avg_cost?.toFixed(2) || '0.00' }}</span>
                             </div>
                         </div>
                     </div>
@@ -702,33 +707,33 @@
 
                 <!-- Columna Derecha: Contexto + Seriales -->
                 <div class="operation-context-col">
-                    <!-- Info Contextual del Producto -->
-                    <div class="context-card" *ngIf="getProductContextInfo(adjustmentForm.product_id) as ctx">
+                    <!-- PRODUCT INFO (ADJUSTMENT) -->
+                    <div class="context-card" *ngIf="selectedProductAdjustment">
                         <h4><i class="fas fa-info-circle"></i> Información del Producto</h4>
                         <div class="context-grid">
                             <div class="context-item">
                                 <span class="ctx-label">Producto</span>
-                                <span class="ctx-value"><code>{{ ctx.sku }}</code> {{ ctx.name }}</span>
+                                <span class="ctx-value"><code>{{ selectedProductAdjustment.sku }}</code> {{ selectedProductAdjustment.name }}</span>
                             </div>
                             <div class="context-item">
                                 <span class="ctx-label">Categoría</span>
-                                <span class="ctx-value">{{ ctx.category || '-' }}</span>
+                                <span class="ctx-value">{{ getCategoryName(selectedProductAdjustment.category_id) }}</span>
                             </div>
                             <div class="context-item">
-                                <span class="ctx-label">Stock Actual</span>
-                                <span class="ctx-value"><strong>{{ ctx.stockQty }}</strong> unidades</span>
+                                <span class="ctx-label">Stock Actual del Sistema</span>
+                                <span class="ctx-value">
+                                    <span class="stock-badge">
+                                        {{ selectedProductAdjustment.stock_qty || 0 }} {{ getUnitAbbreviation(selectedProductAdjustment.unit_id) }}
+                                    </span>
+                                </span>
                             </div>
                             <div class="context-item">
-                                <span class="ctx-label">Costo Promedio</span>
-                                <span class="ctx-value">S/ {{ ctx.avgCost | number:'1.2-2' }}</span>
-                            </div>
-                            <div class="context-item" *ngIf="ctx.managesExpiration">
-                                <span class="ctx-label">Lotes</span>
-                                <span class="ctx-value">{{ ctx.lotsCount }} lotes en stock</span>
-                            </div>
-                            <div class="context-item">
-                                <span class="ctx-label">Serializado</span>
-                                <span class="ctx-value">{{ ctx.isSerialized ? 'Sí' : 'No' }}</span>
+                                <span class="ctx-label">Nueva Diferencia Resultante</span>
+                                <span class="ctx-value">
+                                    <span class="stock-badge" [class.positive]="adjustmentForm.qty > 0" [class.negative]="adjustmentForm.qty < 0">
+                                        {{ (selectedProductAdjustment.stock_qty || 0) + adjustmentForm.qty }} {{ getUnitAbbreviation(selectedProductAdjustment.unit_id) }}
+                                    </span>
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -1358,6 +1363,7 @@
                             <th>Categoría</th>
                             <th>Lote</th>
                             <th>Venc.</th>
+                            <th>Proveedor</th>
                             <th>Cantidad</th>
                             <th>Costo Unit.</th>
                             <th>Costo Total</th>
@@ -1378,11 +1384,12 @@
                             </td>
                             <td>{{ mov.reason_code }}</td>
                             <td>{{ mov.source_doc_type || '-' }}</td>
-                            <td><code>{{ getProductBySku(mov.product_id)?.sku }}</code></td>
-                            <td>{{ getProductBySku(mov.product_id)?.name }}</td>
-                            <td>{{ getCategoryName(getProductBySku(mov.product_id)?.category_id) }}</td>
-                            <td>{{ mov.lot_id ? getLotCode(mov.lot_id) : '-' }}</td>
-                            <td>{{ mov.lot_id ? (getLotExpiration(mov.lot_id) | date:'dd/MM') : '-' }}</td>
+                            <td><code>{{ mov.product?.sku || '-' }}</code></td>
+                            <td>{{ mov.product?.name || '-' }}</td>
+                            <td>{{ mov.product?.category?.name || '-' }}</td>
+                            <td>{{ mov.lot?.lot_code || '-' }}</td>
+                            <td>{{ mov.lot?.expiration_date ? (mov.lot?.expiration_date | date:'dd/MM/yyyy') : '-' }}</td>
+                            <td>{{ mov.lot?.supplier?.name || mov.supplier?.name || '-' }}</td>
                             <td>
                                 <span class="qty-badge" [class.positive]="mov.qty > 0" [class.negative]="mov.qty < 0">
                                     {{ mov.qty > 0 ? '+' : '' }}{{ mov.qty }}
@@ -2001,16 +2008,18 @@
                         <thead>
                             <tr>
                                 <th>Serial</th>
-                                <th>Lote</th>
+                                <th *ngIf="currentMovementProductManagesExpiration">Lote</th>
+                                <th>Proveedor</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr *ngFor="let s of currentMovementSerials">
                                 <td><code>{{ s.serial_code }}</code></td>
-                                <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
+                                <td *ngIf="currentMovementProductManagesExpiration">{{ s.lot_code || '-' }}</td>
+                                <td>{{ s.supplier_name || '-' }}</td>
                             </tr>
                             <tr *ngIf="currentMovementSerials.length === 0">
-                                <td colspan="2" class="empty-message">
+                                <td [colSpan]="currentMovementProductManagesExpiration ? 3 : 2" class="empty-message">
                                     <i class="fas fa-inbox"></i>
                                     <p>No hay seriales vinculados</p>
                                 </td>
@@ -2043,17 +2052,17 @@
                             <tr>
                                 <th>Serial</th>
                                 <th>Proveedor</th>
-                                <th>Lote</th>
+                                <th *ngIf="modalStockCtx?.productManagesExpiration">Lote</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr *ngFor="let s of currentStockSerials">
                                 <td><code>{{ s.serial_code }}</code></td>
                                 <td>{{ s.supplier_name || '-' }}</td>
-                                <td>{{ s.lot_id ? getLotCode(s.lot_id) : '-' }}</td>
+                                <td *ngIf="modalStockCtx?.productManagesExpiration">{{ s.lot_code || '-' }}</td>
                             </tr>
                             <tr *ngIf="currentStockSerials.length === 0">
-                                <td colspan="3" class="empty-message">
+                                <td [colSpan]="modalStockCtx?.productManagesExpiration ? 3 : 2" class="empty-message">
                                     <i class="fas fa-inbox"></i>
                                     <p>No hay seriales en stock para este ítem</p>
                                 </td>
