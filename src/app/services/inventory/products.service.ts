@@ -27,8 +27,11 @@ export class ProductsService {
   constructor(private baseSvc: BaseService) { }
 
   list(): Observable<Product[]> {
-    return this.baseSvc.get<ProductApi[]>(this.base).pipe(
-      map(arr => (arr ?? []).map(mapProductFromApi))
+    return this.baseSvc.get<ProductApi[] | PaginatedResponse<ProductApi>>(this.base).pipe(
+      map((response) => {
+        const items = Array.isArray(response) ? response : (response.data ?? []);
+        return items.map(mapProductFromApi);
+      })
     );
   }
 

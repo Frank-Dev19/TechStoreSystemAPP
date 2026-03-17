@@ -764,8 +764,14 @@ export class Pricing implements OnInit {
   }
 
 
-  openProductPriceForm(productPrice?: ProductPriceRow): void {
-    if (productPrice) {
+  openProductPriceForm(target?: ProductPriceRow | ProductLite | MissingPriceItem): void {
+    const isProductPriceRow = !!target && 'priceListId' in target;
+    const preselectedProduct = target && !isProductPriceRow
+      ? this.resolveProductForPriceForm(target as ProductLite | MissingPriceItem)
+      : null;
+
+    if (isProductPriceRow && target) {
+      const productPrice = target as ProductPriceRow;
       this.editingProductPrice = productPrice;
 
       this.newProductPriceForm = {
@@ -785,8 +791,9 @@ export class Pricing implements OnInit {
 
     } else {
       this.editingProductPrice = null;
+      this.selectedProductForPrice = preselectedProduct;
       this.newProductPriceForm = {
-        productId: 0,
+        productId: preselectedProduct?.id ?? 0,
         minQty: 1,
         maxQty: null,
         unitPrice: 0,
@@ -817,17 +824,15 @@ export class Pricing implements OnInit {
 
   // mp: fila de missingProductPrices (puedes tiparlo con tu interfaz si ya la creaste)
   onAssignMissingPrice(mp: MissingPriceItem): void {
-    this.selectedProductForPrice =
-      this.products.find(p => p.id === mp.productId) ?? null;
+    this.openProductPriceForm(mp);
+  }
 
-    if (this.selectedProductForPrice) {
-      this.productPriceProductSearch =
-        `${this.selectedProductForPrice.name} (${this.selectedProductForPrice.sku})`;
-    } else {
-      this.productPriceProductSearch = '';
+  private resolveProductForPriceForm(target: ProductLite | MissingPriceItem): ProductLite | null {
+    if ('productId' in target) {
+      return this.products.find((product) => product.id === target.productId) ?? null;
     }
 
-    this.openProductPriceForm();
+    return this.products.find((product) => product.id === target.id) ?? null;
   }
 
 

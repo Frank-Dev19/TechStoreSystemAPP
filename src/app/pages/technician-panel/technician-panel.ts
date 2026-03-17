@@ -41,6 +41,8 @@ interface ServiceOrderItemInboxThread {
 })
 export class TechnicianPanel implements OnInit {
   activeTab: "todo" | "diagnosis" | "pending_approval" | "repair" | "repaired" | "all" = "todo"
+  currentPage = 1
+  itemsPerPage = 6
 
   todoItems: ServiceOrderItem[] = []           // Asignados y listos para reparar
   diagnosisItems: ServiceOrderItem[] = []      // En diagnóstico activo
@@ -108,6 +110,11 @@ export class TechnicianPanel implements OnInit {
     this.syncCurrentUserContext()
     this.loadTechnicianItems()
     this.loadTechnicians()
+  }
+
+  setActiveTab(tab: "todo" | "diagnosis" | "pending_approval" | "repair" | "repaired" | "all"): void {
+    this.activeTab = tab
+    this.currentPage = 1
   }
 
   private createDiagnosisForm(): FormGroup {
@@ -182,6 +189,48 @@ export class TechnicianPanel implements OnInit {
         this.diagnosticHistory = []
         this.quoteSummary = null
       }
+    }
+
+    if (this.currentPage > this.totalPages) {
+      this.currentPage = this.totalPages
+    }
+  }
+
+  get visibleItems(): ServiceOrderItem[] {
+    switch (this.activeTab) {
+      case "todo":
+        return this.todoItems
+      case "diagnosis":
+        return this.diagnosisItems
+      case "pending_approval":
+        return this.pendingApprovalItems
+      case "repair":
+        return this.repairItems
+      case "repaired":
+        return this.repairedItems
+      default:
+        return this.allItems
+    }
+  }
+
+  get paginatedVisibleItems(): ServiceOrderItem[] {
+    const start = (this.currentPage - 1) * this.itemsPerPage
+    return this.visibleItems.slice(start, start + this.itemsPerPage)
+  }
+
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.visibleItems.length / this.itemsPerPage))
+  }
+
+  prevPage(): void {
+    if (this.currentPage > 1) {
+      this.currentPage -= 1
+    }
+  }
+
+  nextPage(): void {
+    if (this.currentPage < this.totalPages) {
+      this.currentPage += 1
     }
   }
 
@@ -272,7 +321,11 @@ export class TechnicianPanel implements OnInit {
       this.showMessage("warning", "fas fa-exclamation-circle", "Completa el diagnóstico activo antes de iniciar otro.")
       return
     }
-    this.transitionItemStatus(item, ServiceOrderItemStatus.IN_DIAGNOSIS, "Diagnóstico iniciado correctamente.")
+    this.transitionItemStatus(
+      item,
+      ServiceOrderItemStatus.IN_DIAGNOSIS,
+      this.isWarrantyService(item) ? "Revisión de garantía iniciada correctamente." : "Diagnóstico iniciado correctamente.",
+    )
   }
 
   startStandardService(item: ServiceOrderItem): void {
@@ -398,6 +451,14 @@ export class TechnicianPanel implements OnInit {
     this.transitionItemStatus(this.selectedItem, ServiceOrderItemStatus.DIAGNOSED, "Diagnóstico completado.")
   }
 
+  acceptWarrantyReview(item: ServiceOrderItem): void {
+    this.transitionItemStatus(item, ServiceOrderItemStatus.CLIENT_APPROVED, "Garantía aceptada correctamente.")
+  }
+
+  rejectWarrantyReview(item: ServiceOrderItem): void {
+    this.transitionItemStatus(item, ServiceOrderItemStatus.CANCELLED, "Garantía rechazada correctamente.")
+  }
+
   private transitionItemStatus(item: ServiceOrderItem, status: ServiceOrderItemStatus, successMessage: string): void {
     const itemId = Number(item.id)
     if (!itemId) {
@@ -436,7 +497,8 @@ export class TechnicianPanel implements OnInit {
   }
 
   canStartDiagnosis(item: ServiceOrderItem): boolean {
-    return item.status === ServiceOrderItemStatus.ASSIGNED && item.serviceType === ServiceType.DIAGNOSIS
+    return item.status === ServiceOrderItemStatus.ASSIGNED &&
+      [ServiceType.DIAGNOSIS, ServiceType.WARRANTY_SERVICE].includes(item.serviceType)
   }
 
   canRequestRediagnosis(item: ServiceOrderItem | null): boolean {
@@ -446,6 +508,18 @@ export class TechnicianPanel implements OnInit {
 
   canStartRepairDirectly(item: ServiceOrderItem): boolean {
     return item.status === ServiceOrderItemStatus.CLIENT_APPROVED
+  }
+
+  isWarrantyService(item: ServiceOrderItem | null): boolean {
+    return !!item && item.serviceType === ServiceType.WARRANTY_SERVICE
+  }
+
+  canAcceptWarrantyReview(item: ServiceOrderItem | null): boolean {
+    return !!item && this.isWarrantyService(item) && item.status === ServiceOrderItemStatus.IN_DIAGNOSIS
+  }
+
+  canRejectWarrantyReview(item: ServiceOrderItem | null): boolean {
+    return !!item && this.isWarrantyService(item) && item.status === ServiceOrderItemStatus.IN_DIAGNOSIS
   }
 
   canStartStandardService(item: ServiceOrderItem): boolean {
@@ -546,9 +620,13 @@ export class TechnicianPanel implements OnInit {
     }
   }
 
-  getEquipmentTypeLabel(type?: EquipmentType | null): string {
+  getEquipmentTypeLabel(type?: EquipmentType | null, equipmentTypeOther?: string | null): string {
     if (!type) {
       return "Sin tipo"
+    }
+    if (type === EquipmentType.OTHER) {
+      const custom = String(equipmentTypeOther ?? "").trim()
+      return custom || (this.equipmentTypeLabels[type] ?? String(type))
     }
     return this.equipmentTypeLabels[type] ?? String(type)
   }
@@ -585,6 +663,7 @@ export class TechnicianPanel implements OnInit {
 
   private shouldLoadServiceOrderQuote(item: ServiceOrderItem | null): boolean {
     if (!item) return false
+    if (item.serviceType === ServiceType.WARRANTY_SERVICE) return false
     return [
       ServiceOrderItemStatus.QUOTED,
       ServiceOrderItemStatus.SENT_TO_CLIENT,
@@ -632,12 +711,12 @@ export class TechnicianPanel implements OnInit {
       })
   }
 
-  getItemStatusLabel(status: ServiceOrderItemStatus): string {
+  getItemStatusLabel(status: ServiceOrderItemStatus, item?: ServiceOrderItem | null): string {
     switch (status) {
       case ServiceOrderItemStatus.ASSIGNED:
         return "Asignado"
       case ServiceOrderItemStatus.IN_DIAGNOSIS:
-        return "En diagnóstico"
+        return item?.serviceType === ServiceType.WARRANTY_SERVICE ? "En revisión de garantía" : "En diagnóstico"
       case ServiceOrderItemStatus.DIAGNOSED:
         return "Diagnosticado"
       case ServiceOrderItemStatus.QUOTED:
@@ -647,7 +726,7 @@ export class TechnicianPanel implements OnInit {
       case ServiceOrderItemStatus.AWAITING_CLIENT_RESPONSE:
         return "Esperando respuesta del cliente"
       case ServiceOrderItemStatus.CLIENT_APPROVED:
-        return "Aprobado por cliente"
+        return item?.serviceType === ServiceType.WARRANTY_SERVICE ? "Garantía aceptada" : "Aprobado por cliente"
       case ServiceOrderItemStatus.QUOTE_EXPIRED:
         return "Cotización expirada"
       case ServiceOrderItemStatus.READY_FOR_REPAIR:
@@ -665,7 +744,7 @@ export class TechnicianPanel implements OnInit {
       case ServiceOrderItemStatus.DELIVERED:
         return "Entregado"
       case ServiceOrderItemStatus.CANCELLED:
-        return "Cancelado"
+        return item?.serviceType === ServiceType.WARRANTY_SERVICE ? "Garantía rechazada" : "Cancelado"
       default:
         return status
     }

@@ -23,6 +23,8 @@ export interface ServiceOrder {
   estimatedDeliveryDate: string | null;
   resolvedAt: string | null;
   closedAt: string | null;
+  isPaid: boolean;
+  paidAt: string | null;
   notes: string | null;
   itemsCount: number;
   completedItemsCount: number;

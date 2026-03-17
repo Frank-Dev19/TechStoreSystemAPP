@@ -16,6 +16,7 @@ export interface ServiceOrderUpdateRequest {
   contactName?: string;
   contactEmail?: string | null;
   contactPhone?: string | null;
+  isPaid?: boolean;
   priority?: ServiceOrderPriority;
   estimatedDeliveryDate?: string | null;
   notes?: string | null;

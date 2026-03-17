@@ -1,7 +1,10 @@
 import { Component, OnInit } from "@angular/core"
 import { finalize } from "rxjs/operators"
 import { ServiceOrderQuote, ServiceOrderQuoteStatus } from "../../models/service-orders/service-quote"
-import { ServiceOrderQuoteService } from "../../services/service-orders/service-quote.service"
+import {
+  ServiceOrderQuoteService,
+  TechnicianRevenueRanking,
+} from "../../services/service-orders/service-quote.service"
 import { EquipmentType, ServiceOrderItem } from "../../models/service-orders/service-order-item"
 import { ServiceOrderItemService } from "../../services/service-orders/service-order-item.service"
 import { ServiceOrderDiagnosisService } from "../../services/service-orders/service-order-diagnosis.service"
@@ -38,7 +41,10 @@ interface SupervisorInboxThread {
   styleUrls: ["./supervisor-panel.scss"],
 })
 export class SupervisorPanel implements OnInit {
+  activeSection: "ranking" | "inbox" | "quotes" = "ranking"
   activeTab: "open" | "answered" | "all" = "open"
+  currentPage = 1
+  itemsPerPage = 6
 
   openServiceOrderQuotes: ServiceOrderQuote[] = []
   answeredServiceOrderQuotes: ServiceOrderQuote[] = []
@@ -52,9 +58,11 @@ export class SupervisorPanel implements OnInit {
   services: Service[] = []
   inboxThreads: SupervisorInboxThread[] = []
   selectedInboxThread: SupervisorInboxThread | null = null
+  technicianRankings: TechnicianRevenueRanking[] = []
 
   isLoadingServiceOrderQuotes = false
   isLoadingDiagnosis = false
+  isLoadingTechnicianRankings = false
 
   showAlert = false
   alertType = ""
@@ -91,6 +99,17 @@ export class SupervisorPanel implements OnInit {
     this.loadServiceOrderQuotes()
     this.loadCatalogData()
     this.initializeInboxThreads()
+    this.loadTechnicianRankings()
+  }
+
+  setActiveSection(section: "ranking" | "inbox" | "quotes"): void {
+    this.activeSection = section
+    this.currentPage = 1
+  }
+
+  setActiveTab(tab: "open" | "answered" | "all"): void {
+    this.activeTab = tab
+    this.currentPage = 1
   }
 
   private initializeInboxThreads(): void {
@@ -178,6 +197,10 @@ export class SupervisorPanel implements OnInit {
         this.loadCurrentDiagnosis(this.selectedServiceOrderQuote.serviceOrderItemId)
       }
     }
+
+    if (this.currentPage > this.totalPages) {
+      this.currentPage = this.totalPages
+    }
   }
 
   private loadCatalogData(): void {
@@ -190,6 +213,91 @@ export class SupervisorPanel implements OnInit {
       next: ({ data }) => (this.services = data ?? []),
       error: () => (this.services = []),
     })
+  }
+
+  private loadTechnicianRankings(): void {
+    this.isLoadingTechnicianRankings = true
+    this.quoteService
+      .getTechnicianRevenueRankings()
+      .pipe(finalize(() => (this.isLoadingTechnicianRankings = false)))
+      .subscribe({
+        next: (response) => {
+          this.technicianRankings = response.technicians ?? []
+        },
+        error: () => {
+          this.technicianRankings = []
+          this.showMessage("warning", "fas fa-chart-line", "No pudimos cargar el ranking de técnicos.")
+        },
+      })
+  }
+
+  get topTechnician(): TechnicianRevenueRanking | null {
+    return this.technicianRankings[0] ?? null
+  }
+
+  get secondTechnician(): TechnicianRevenueRanking | null {
+    return this.technicianRankings[1] ?? null
+  }
+
+  get thirdTechnician(): TechnicianRevenueRanking | null {
+    return this.technicianRankings[2] ?? null
+  }
+
+  get remainingTechnicians(): TechnicianRevenueRanking[] {
+    return this.technicianRankings.slice(3)
+  }
+
+  get totalItems(): number {
+    switch (this.activeSection) {
+      case "ranking":
+        return this.technicianRankings.length
+      case "inbox":
+        return this.inboxThreads.length
+      default:
+        return this.getVisibleQuotes().length
+    }
+  }
+
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.totalItems / this.itemsPerPage))
+  }
+
+  get paginatedTechnicianRankings(): TechnicianRevenueRanking[] {
+    const start = (this.currentPage - 1) * this.itemsPerPage
+    return this.technicianRankings.slice(start, start + this.itemsPerPage)
+  }
+
+  get paginatedInboxThreads(): SupervisorInboxThread[] {
+    const start = (this.currentPage - 1) * this.itemsPerPage
+    return this.inboxThreads.slice(start, start + this.itemsPerPage)
+  }
+
+  get paginatedVisibleQuotes(): ServiceOrderQuote[] {
+    const visibleQuotes = this.getVisibleQuotes()
+    const start = (this.currentPage - 1) * this.itemsPerPage
+    return visibleQuotes.slice(start, start + this.itemsPerPage)
+  }
+
+  prevPage(): void {
+    if (this.currentPage > 1) {
+      this.currentPage -= 1
+    }
+  }
+
+  nextPage(): void {
+    if (this.currentPage < this.totalPages) {
+      this.currentPage += 1
+    }
+  }
+
+  formatMoney(value: number | null | undefined): string {
+    return `S/ ${Number(value || 0).toFixed(2)}`
+  }
+
+  getRevenueShare(technician: TechnicianRevenueRanking): number {
+    const total = this.technicianRankings.reduce((acc, item) => acc + Number(item.totalRevenue || 0), 0)
+    if (!total) return 0
+    return Math.min(100, (Number(technician.totalRevenue || 0) / total) * 100)
   }
 
   selectServiceOrderQuote(quote: ServiceOrderQuote): void {

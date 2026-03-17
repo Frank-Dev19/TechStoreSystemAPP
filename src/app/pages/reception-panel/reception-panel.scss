@@ -292,15 +292,14 @@ $bg-light: #f5f7fa;
       color: $text-muted;
       border-bottom: 2px solid $border;
 
-      &.toggle-column {
-        width: 50px;
+      &.select-column {
+        width: 44px;
         text-align: center;
       }
     }
 
     tbody tr {
       border-bottom: 1px solid $border;
-      cursor: pointer;
       transition: background 0.2s ease, transform 0.2s ease;
 
       &.pending-quote {
@@ -343,7 +342,7 @@ $bg-light: #f5f7fa;
         padding: 1rem;
         vertical-align: middle;
 
-        &.toggle-column {
+        &.select-column {
           text-align: center;
         }
 
@@ -367,6 +366,16 @@ $bg-light: #f5f7fa;
           font-size: 0.85rem;
           color: $text-muted;
         }
+
+        .equipment-summary {
+          display: flex;
+          flex-direction: column;
+          gap: 0.2rem;
+
+          strong {
+            color: #111827;
+          }
+        }
       }
 
       .code-cell {
@@ -374,34 +383,22 @@ $bg-light: #f5f7fa;
           font-size: 1rem;
           color: $primary-dark;
         }
+
+        .paid-label {
+          color: $success;
+          font-weight: 700;
+        }
       }
 
       .actions-column {
-        width: 140px;
+        width: 320px;
 
         .action-buttons {
           display: flex;
           gap: 0.5rem;
+          flex-wrap: wrap;
         }
       }
-    }
-  }
-
-  .btn-toggle {
-    width: 32px;
-    height: 32px;
-    border: 1px solid $border;
-    border-radius: 999px;
-    background: white;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease;
-
-    &:hover {
-      background: #f3f4f6;
-      border-color: darken($border, 5%);
     }
   }
 
@@ -501,60 +498,45 @@ $bg-light: #f5f7fa;
     text-align: center;
   }
 
-  .pagination-container {
+  .pagination {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
-    margin-top: 1rem;
-    flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: 14px;
+    margin-bottom: 18px;
 
     .pagination-info {
+      font-size: 13px;
       color: $text-muted;
-      font-size: 0.9rem;
     }
 
-    .pagination-controls {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .page-info {
-      color: $text-muted;
-      font-weight: 600;
-    }
-
-    .btn-pagination {
-      width: 36px;
-      height: 36px;
-      border: 1px solid $border;
-      background: white;
+    .btn-secondary {
+      padding: 9px 14px;
+      border: 2px solid $border;
       border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: background 0.2s ease, border-color 0.2s ease;
+      gap: 8px;
+      background: white;
+      color: #2d3748;
 
-      &:hover:not(:disabled) {
-        background: #f9fafb;
-        border-color: darken($border, 5%);
+      i {
+        font-size: 13px;
       }
 
       &:disabled {
         opacity: 0.5;
         cursor: not-allowed;
       }
-    }
 
-    @media (max-width: 768px) {
-      flex-direction: column;
-      align-items: flex-start;
-
-      .pagination-controls {
-        width: 100%;
-        justify-content: flex-start;
+      &:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+        background: #f5f9ff;
       }
     }
   }
@@ -921,8 +903,9 @@ $bg-light: #f5f7fa;
 }
 
 .btn-icon {
-  width: 38px;
+  min-width: 44px;
   height: 38px;
+  padding: 0 0.7rem;
   border-radius: 10px;
   border: none;
   display: inline-flex;
@@ -1440,6 +1423,41 @@ $bg-light: #f5f7fa;
           justify-content: space-between;
           gap: 1rem;
   }
+}
+
+.mock-boleta-modal {
+  width: min(960px, 96%);
+}
+
+.mock-boleta-summary,
+.mock-boleta-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.alert-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+
+  &.danger {
+    background: rgba($danger, 0.08);
+    color: darken($danger, 10%);
+  }
+
+  &.info {
+    background: rgba($info, 0.08);
+    color: darken($info, 20%);
+  }
+}
+
+.empty-state.compact {
+  padding: 1.5rem 1rem;
 }
 
 .quote-total {

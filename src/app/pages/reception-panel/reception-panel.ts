@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from "@angular/core"
+﻿import { Component, OnDestroy, OnInit } from "@angular/core"
 import { FormArray, FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { Subscription } from "rxjs"
 import { catchError, finalize, map, switchMap, tap } from "rxjs/operators"
@@ -30,6 +30,7 @@ import { UsersApiService } from "../../services/rbac/users-api.service"
 import { UserApi } from "../../models/rbac/user.model"
 import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
 import { PricingQueryApiService } from "../../services/pricing/pricing-query-api.service"
+import { ServiceOrderDocumentsService } from "../../services/service-orders/service-order-documents.service"
 
 interface ServiceOrderQuoteProductComposer {
   id: number
@@ -69,6 +70,26 @@ interface CreateServiceOrderStep {
   key: CreateServiceOrderStepKey
   label: string
   description: string
+}
+
+interface MockConsolidatedBoletaLine {
+  type: "product" | "service"
+  description: string
+  quantity: number
+  unitPrice: number
+  total: number
+  sourceOrderCode: string
+}
+
+interface MockConsolidatedBoletaPreview {
+  clientName: string
+  clientDocument: string
+  orderCodes: string[]
+  diagnosisOnlyOrderCodes: string[]
+  lines: MockConsolidatedBoletaLine[]
+  subtotal: number
+  tax: number
+  total: number
 }
 
 const SERVICE_ORDER_STATUS_LABELS: Record<ServiceOrderStatus, string> = {
@@ -186,7 +207,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   alertIcon = ""
 
   readonly equipmentTypeOptions = Object.values(EquipmentType)
-  readonly serviceTypeOptions = Object.values(ServiceType).filter((type) => type !== ServiceType.WARRANTY_SERVICE)
+  readonly serviceTypeOptions = Object.values(ServiceType)
   readonly requestOriginOptions = Object.values(RequestOrigin)
   private readonly companyId = Number(config.defaultCompanyId ?? 1) || 1
   showServiceOrderQuotesModal = false
@@ -222,6 +243,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   reassignTechnicianForm: FormGroup
   technicians: { id: number; name: string }[] = []
   isSaving = false
+  selectedMockBoletaOrderIds = new Set<number>()
+  showMockBoletaModal = false
+  mockBoletaPreview: MockConsolidatedBoletaPreview | null = null
+  mockBoletaError = ""
+  isLoadingMockBoletaPreview = false
 
   private readonly subscriptions = new Subscription()
 
@@ -238,6 +264,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     private readonly documentTypesService: DocumentTypesApiService,
     private readonly usersApi: UsersApiService,
     private readonly pricingQuery: PricingQueryApiService,
+    private readonly serviceOrderDocuments: ServiceOrderDocumentsService,
   ) {
     this.createServiceOrderForm = this.createServiceOrderFormGroup()
     this.createServiceOrderQuoteForm = this.createServiceOrderQuoteFormGroup()
@@ -287,18 +314,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   private createEditServiceOrderFormGroup(): FormGroup {
-    return this.formBuilder.group({
+    const group = this.formBuilder.group({
       contactName: ["", Validators.required],
       contactEmail: ["", Validators.email],
       contactPhone: ["", Validators.pattern(/^[0-9+\-\s]*$/)],
       priority: [ServiceOrderPriority.MEDIUM, Validators.required],
       notes: [""],
-    })
-  }
-
-  private createEditItemFormGroup(): FormGroup {
-    return this.formBuilder.group({
       equipmentType: [EquipmentType.LAPTOP, Validators.required],
+      equipmentTypeOther: [""],
       serviceType: [ServiceType.DIAGNOSIS, Validators.required],
       brand: [""],
       model: [""],
@@ -306,6 +329,23 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       initialIssue: ["", Validators.required],
       accessories: [""],
     })
+    this.configureEquipmentTypeOtherValidation(group)
+    return group
+  }
+
+  private createEditItemFormGroup(): FormGroup {
+    const group = this.formBuilder.group({
+      equipmentType: [EquipmentType.LAPTOP, Validators.required],
+      equipmentTypeOther: [""],
+      serviceType: [ServiceType.DIAGNOSIS, Validators.required],
+      brand: [""],
+      model: [""],
+      serialNumber: [""],
+      initialIssue: ["", Validators.required],
+      accessories: [""],
+    })
+    this.configureEquipmentTypeOtherValidation(group)
+    return group
   }
 
   private createReassignTechnicianFormGroup(): FormGroup {
@@ -318,7 +358,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.isLoadingServiceOrders = true
     const expandedSnapshot = this.snapshotExpandedItems()
     this.serviceOrderService
-      .findAll({ page: 1, limit: 50, includeItems: false })
+      .findAll({ page: 1, limit: 50, includeItems: true })
       .pipe(finalize(() => (this.isLoadingServiceOrders = false)))
       .subscribe({
         next: ({ data }) => {
@@ -375,6 +415,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           },
         })
       })
+    this.pruneSelectedMockBoletaOrders()
   }
 
   private loadClients(): void {
@@ -388,6 +429,157 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           this.showMessage("warning", "fas fa-exclamation-triangle", "No pudimos cargar los clientes.")
         },
       })
+  }
+
+  isSelectableForMockBoleta(serviceOrder: ServiceOrder): boolean {
+    const item = serviceOrder.items?.[0]
+    return !!item && !serviceOrder.isPaid && this.canCreateBoletaFromItem(item) && this.isSameClientSelection(serviceOrder)
+  }
+
+  isSelectedForMockBoleta(serviceOrderId: number): boolean {
+    return this.selectedMockBoletaOrderIds.has(Number(serviceOrderId))
+  }
+
+  toggleMockBoletaSelection(serviceOrder: ServiceOrder, event?: Event): void {
+    event?.stopPropagation()
+    if (!this.isSelectableForMockBoleta(serviceOrder)) {
+      if (serviceOrder.isPaid) {
+        this.showMessage("warning", "fas fa-info-circle", "La orden ya fue marcada como pagada.")
+      } else if (!this.isSameClientSelection(serviceOrder)) {
+        this.showMessage("warning", "fas fa-users", "Solo puedes seleccionar órdenes del mismo cliente.")
+      }
+      return
+    }
+
+    const id = Number(serviceOrder.id)
+    if (this.selectedMockBoletaOrderIds.has(id)) {
+      this.selectedMockBoletaOrderIds.delete(id)
+      return
+    }
+    this.selectedMockBoletaOrderIds.add(id)
+  }
+
+  get selectedMockBoletaOrdersCount(): number {
+    return this.selectedMockBoletaOrderIds.size
+  }
+
+  get selectedMockBoletaClientKey(): string | null {
+    const firstSelectedId = Array.from(this.selectedMockBoletaOrderIds)[0]
+    if (!firstSelectedId) {
+      return null
+    }
+    const serviceOrder = this.serviceOrders.find((order) => Number(order.id) === Number(firstSelectedId))
+    return serviceOrder ? this.getServiceOrderBoletaClientKey(serviceOrder) : null
+  }
+
+  openMockBoletaModal(): void {
+    if (!this.selectedMockBoletaOrderIds.size) {
+      this.showMessage("warning", "fas fa-info-circle", "Selecciona al menos una orden válida para la boleta.")
+      return
+    }
+
+    const requests = Array.from(this.selectedMockBoletaOrderIds).map((orderId) =>
+      this.loadServiceOrderDocumentContext({ id: orderId } as ServiceOrder),
+    )
+
+    this.showMockBoletaModal = true
+    this.mockBoletaPreview = null
+    this.mockBoletaError = ""
+    this.isLoadingMockBoletaPreview = true
+
+    forkJoin(requests)
+      .pipe(finalize(() => (this.isLoadingMockBoletaPreview = false)))
+      .subscribe({
+        next: (entries) => {
+          const distinctClientKeys = new Set(
+            entries.map(({ fullOrder }) =>
+              String(fullOrder.clientId ?? fullOrder.clientSnapshotDocumentNumber ?? fullOrder.clientSnapshotName ?? ""),
+            ),
+          )
+
+          if (distinctClientKeys.size > 1) {
+            this.mockBoletaError = "Solo puedes consolidar órdenes del mismo cliente."
+            return
+          }
+
+          const lines: MockConsolidatedBoletaLine[] = []
+          const diagnosisOnlyOrderCodes: string[] = []
+
+          entries.forEach(({ fullOrder, quote, item }) => {
+            if (!quote || item.serviceType === ServiceType.DIAGNOSIS) {
+              diagnosisOnlyOrderCodes.push(fullOrder.code)
+              return
+            }
+
+            quote.productItems.forEach((product) => {
+              lines.push({
+                type: "product",
+                description: product.productNameSnapshot || "Producto",
+                quantity: Number(product.quantity || 0),
+                unitPrice: Number(product.unitPrice || 0),
+                total: Number(product.lineTotal || 0),
+                sourceOrderCode: fullOrder.code,
+              })
+            })
+
+            quote.serviceItems.forEach((service) => {
+              lines.push({
+                type: "service",
+                description: service.serviceNameSnapshot || "Servicio",
+                quantity: 1,
+                unitPrice: Number(service.unitPrice || 0),
+                total: Number(service.lineTotal || 0),
+                sourceOrderCode: fullOrder.code,
+              })
+            })
+          })
+
+          const baseOrder = entries[0]?.fullOrder
+          const subtotal = lines.reduce((acc, line) => acc + line.total, 0)
+          const tax = Number((subtotal * 0.18).toFixed(2))
+
+          this.mockBoletaPreview = {
+            clientName: baseOrder ? this.getServiceOrderContactName(baseOrder) : "Sin cliente",
+            clientDocument: baseOrder
+              ? [baseOrder.clientSnapshotDocumentTypeName, baseOrder.clientSnapshotDocumentNumber].filter(Boolean).join(": ")
+              : "-",
+            orderCodes: entries.map(({ fullOrder }) => fullOrder.code),
+            diagnosisOnlyOrderCodes,
+            lines,
+            subtotal,
+            tax,
+            total: Number((subtotal + tax).toFixed(2)),
+          }
+        },
+        error: () => {
+          this.mockBoletaError = "No pudimos construir la previsualización de boleta."
+        },
+      })
+  }
+
+  closeMockBoletaModal(): void {
+    this.showMockBoletaModal = false
+    this.mockBoletaPreview = null
+    this.mockBoletaError = ""
+    this.isLoadingMockBoletaPreview = false
+  }
+
+  markServiceOrderAsPaid(serviceOrder: ServiceOrder, event?: Event): void {
+    event?.stopPropagation()
+    if (serviceOrder.isPaid) {
+      return
+    }
+
+    this.serviceOrderService.markPaid(Number(serviceOrder.id)).subscribe({
+      next: () => {
+        this.selectedMockBoletaOrderIds.delete(Number(serviceOrder.id))
+        this.showMessage("success", "fas fa-check-circle", "Orden marcada como pagada.")
+        this.loadServiceOrders()
+      },
+      error: () => {
+        this.showMessage("danger", "fas fa-times-circle", "No pudimos marcar la orden como pagada.")
+      },
+    })
   }
 
   private loadCatalogData(): void {
@@ -438,7 +630,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.documentSearchMessage = ""
     this.documentSearchError = ""
     const documentNumber = (this.createServiceOrderForm.get("documentNumber")?.value ?? "").trim()
-    console.debug("[docNumberInput] value", documentNumber, "expected", this.expectedDocumentDigits)
     this.createServiceOrderForm.patchValue({ clientId: null }, { emitEvent: false })
 
     const docTypeControl = this.createServiceOrderForm.get("documentTypeId")
@@ -449,7 +640,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     if (!documentNumber) {
-      console.debug("[docNumberInput] empty, docType stays", this.createServiceOrderForm.get("documentTypeId")?.value)
       return
     }
 
@@ -463,7 +653,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
     if (docType.digits && documentNumber.length > docType.digits) {
       const trimmed = documentNumber.slice(0, docType.digits)
-      console.debug("[docNumberInput] trim to", trimmed)
       this.createServiceOrderForm.get("documentNumber")?.setValue(trimmed)
       return
     }
@@ -471,8 +660,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     if (docType.digits && documentNumber.length === docType.digits) {
       this.lookupClientByDocument(documentNumber)
     }
-
-    console.debug("[docNumberInput] docType after input", this.createServiceOrderForm.get("documentTypeId")?.value)
   }
 
   getSelectedDocumentTypeName(): string {
@@ -510,6 +697,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return matchState && matchPriority && matchDate && matchSearch
     })
     this.updatePagination()
+    this.pruneSelectedMockBoletaOrders()
   }
 
   onSearchChange(): void {
@@ -519,7 +707,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   onDocumentTypeChange(): void {
     const typeId = this.createServiceOrderForm.get("documentTypeId")?.value
-    console.debug("[docTypeChange] typeId", typeId)
     this.updateExpectedDocumentDigits(typeId)
     this.documentSearchMessage = ""
     this.documentSearchError = ""
@@ -571,6 +758,15 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.paginatedServiceOrders = this.filteredServiceOrders.slice(start, end)
   }
 
+  private pruneSelectedMockBoletaOrders(): void {
+    const validIds = new Set(this.serviceOrders.map((serviceOrder) => Number(serviceOrder.id)))
+    Array.from(this.selectedMockBoletaOrderIds).forEach((id) => {
+      if (!validIds.has(id)) {
+        this.selectedMockBoletaOrderIds.delete(id)
+      }
+    })
+  }
+
   previousPage(): void {
     if (this.currentPage > 1) {
       this.currentPage--
@@ -616,6 +812,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   isFinalServiceOrder(serviceOrder?: ServiceOrder | null): boolean {
     if (!serviceOrder) return false
     return [ServiceOrderStatus.COMPLETED, ServiceOrderStatus.CANCELLED].includes(serviceOrder.status)
+  }
+
+  getPrimaryServiceOrderItem(serviceOrder: ServiceOrder): ServiceOrderItem | null {
+    return serviceOrder.items?.[0] ?? null
   }
 
   hasPendingServiceOrderQuoteItems(serviceOrder: ServiceOrder): boolean {
@@ -868,6 +1068,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       items: [
         {
           equipmentType: sourceItem.equipmentType,
+          equipmentTypeOther: sourceItem.equipmentTypeOther ?? null,
           serviceType: ServiceType.WARRANTY_SERVICE,
           brand: sourceItem.brand,
           model: sourceItem.model,
@@ -883,58 +1084,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
     this.serviceOrderService
       .create(payload)
-      .pipe(
-        switchMap((createdOrder) => {
-          const createdItem = createdOrder.items?.[0]
-          if (!createdItem) {
-            return of({ createdOrder, quoteCreated: false })
-          }
-
-          const quoteItems: ServiceOrderQuoteComposerItem[] = selectedLines.map((line) =>
-            line.kind === "service"
-              ? {
-                  id: Date.now() + Math.random(),
-                  type: "service",
-                  serviceId: line.serviceId ?? null,
-                  notes: "Línea generada por flujo de garantía",
-                }
-              : {
-                  id: Date.now() + Math.random(),
-                  type: "product",
-                  productId: line.productId ?? null,
-                  quantity: Math.max(1, Number(line.quantity ?? 1)),
-                  unitPrice: Number(line.unitPrice ?? 0),
-                  requiresPurchase: false,
-                  notes: "Línea generada por flujo de garantía",
-                },
-          )
-
-          return this.quoteService
-            .create(
-              this.buildServiceOrderQuotePayload(
-                Number(createdItem.id),
-                quoteItems,
-                `Cotización inicial generada desde garantía de ${sourceOrder.code}`,
-              ),
-            )
-            .pipe(
-              map(() => ({ createdOrder, quoteCreated: true })),
-              catchError(() => of({ createdOrder, quoteCreated: false })),
-            )
-        }),
-        finalize(() => (this.isCreatingWarrantyOrder = false)),
-      )
+      .pipe(finalize(() => (this.isCreatingWarrantyOrder = false)))
       .subscribe({
-        next: ({ quoteCreated }) => {
-          if (quoteCreated) {
-            this.showMessage("success", "fas fa-check-circle", "Orden de garantía y cotización inicial creadas.")
-          } else {
-            this.showMessage(
-              "success",
-              "fas fa-check-circle",
-              "Orden de garantía creada. La cotización inicial deberá registrarse manualmente.",
-            )
-          }
+        next: () => {
+          this.showMessage(
+            "success",
+            "fas fa-check-circle",
+            "Orden de garantía creada. El técnico deberá revisar y aceptar o rechazar la garantía.",
+          )
           this.closeWarrantyActionModal()
           this.loadServiceOrders()
         },
@@ -1092,8 +1249,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       tradeName: contactName,
       documentTypeId,
       documentNumber,
-      email: this.createServiceOrderForm.get("contactEmail")?.value ?? null,
-      phone: this.createServiceOrderForm.get("contactPhone")?.value ?? null,
+      email: String(this.createServiceOrderForm.get("contactEmail")?.value ?? "").trim() || null,
+      phone: String(this.createServiceOrderForm.get("contactPhone")?.value ?? "").trim() || null,
       address: null,
       city: null,
       country: null,
@@ -1173,7 +1330,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private updateExpectedDocumentDigits(documentTypeId: number | null): void {
     const docType = this.documentTypes.find((type) => Number(type.id) === Number(documentTypeId))
-    console.debug("[updateDigits] docTypeId", documentTypeId, "digits", docType?.digits)
     this.expectedDocumentDigits = docType?.digits ?? null
 
     const control = this.createServiceOrderForm.get("documentNumber")
@@ -1211,15 +1367,50 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private buildServiceOrderItemPayload(group: FormGroup): ServiceOrderItemSaveRequest {
     const workflowServiceType = this.createServiceOrderForm.get("workflowServiceType")?.value ?? ServiceType.DIAGNOSIS
+    const equipmentType = group.get("equipmentType")?.value
     return {
-      equipmentType: group.get("equipmentType")?.value,
+      equipmentType,
+      equipmentTypeOther:
+        equipmentType === EquipmentType.OTHER ? this.normalizeOptionalText(group.get("equipmentTypeOther")?.value) : null,
       serviceType: workflowServiceType,
-      brand: group.get("brand")?.value ?? null,
-      model: group.get("model")?.value ?? null,
-      serialNumber: group.get("serialNumber")?.value ?? null,
-      initialIssue: group.get("initialIssue")?.value,
-      accessories: group.get("accessories")?.value ?? null,
+      brand: this.normalizeOptionalText(group.get("brand")?.value),
+      model: this.normalizeOptionalText(group.get("model")?.value),
+      serialNumber: this.normalizeOptionalText(group.get("serialNumber")?.value),
+      initialIssue: String(group.get("initialIssue")?.value ?? "").trim(),
+      accessories: this.normalizeOptionalText(group.get("accessories")?.value),
     }
+  }
+
+  downloadServiceOrderSummaryPdf(serviceOrder: ServiceOrder, event?: Event): void {
+    event?.stopPropagation()
+    this.loadServiceOrderDocumentContext(serviceOrder).subscribe({
+      next: ({ fullOrder, item, quote }) => {
+        this.serviceOrderDocuments.downloadOrderSummaryPdf({
+          serviceOrder: fullOrder,
+          item,
+          quote,
+        })
+      },
+      error: () => {
+        this.showMessage("danger", "fas fa-times-circle", "No pudimos generar el resumen PDF de la orden.")
+      },
+    })
+  }
+
+  printServiceOrderSticker(serviceOrder: ServiceOrder, event?: Event): void {
+    event?.stopPropagation()
+    this.loadServiceOrderDocumentContext(serviceOrder).subscribe({
+      next: ({ fullOrder, item, quote }) => {
+        this.serviceOrderDocuments.openEquipmentStickerPdf({
+          serviceOrder: fullOrder,
+          item,
+          quote,
+        })
+      },
+      error: () => {
+        this.showMessage("danger", "fas fa-times-circle", "No pudimos generar el sticker de la orden.")
+      },
+    })
   }
 
   openCreateServiceOrderQuoteModal(serviceOrder: ServiceOrder, item?: ServiceOrderItem, event?: Event): void {
@@ -1502,7 +1693,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   getServiceOrderItemLabel(item: ServiceOrderItem): string {
     const parts = [
       `Equipo #${item.itemNumber}`,
-      this.getEquipmentTypeLabel(item.equipmentType),
+      this.getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther),
       item.brand || null,
       item.model || null,
       item.serialNumber ? `SN ${item.serialNumber}` : null,
@@ -1629,8 +1820,15 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return false
   }
 
-  getEquipmentTypeLabel(type: EquipmentType): string {
+  getEquipmentTypeLabel(type: EquipmentType, equipmentTypeOther?: string | null): string {
+    if (type === EquipmentType.OTHER) {
+      return this.normalizeOptionalText(equipmentTypeOther) ?? EQUIPMENT_TYPE_LABELS[type] ?? type
+    }
     return EQUIPMENT_TYPE_LABELS[type] ?? type
+  }
+
+  isOtherEquipmentType(type: EquipmentType | null | undefined): boolean {
+    return type === EquipmentType.OTHER
   }
 
   getServiceTypeLabel(type: ServiceType): string {
@@ -1731,14 +1929,17 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   private createServiceOrderItemGroup(): FormGroup {
-    return this.formBuilder.group({
+    const group = this.formBuilder.group({
       equipmentType: [EquipmentType.LAPTOP, Validators.required],
+      equipmentTypeOther: [""],
       brand: [""],
       model: [""],
       serialNumber: [""],
       initialIssue: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(500)]],
       accessories: [""],
     })
+    this.configureEquipmentTypeOtherValidation(group)
+    return group
   }
 
   private createProductComposer(): ServiceOrderQuoteProductComposer {
@@ -2020,7 +2221,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       const quoteItems = this.getCreateOrderQuoteItems(index)
       return {
         index,
-        equipmentTypeLabel: this.getEquipmentTypeLabel(group.get("equipmentType")?.value),
+        equipmentTypeLabel: this.getEquipmentTypeLabel(
+          group.get("equipmentType")?.value,
+          group.get("equipmentTypeOther")?.value,
+        ),
         serviceTypeLabel: this.getServiceTypeLabel(this.getSelectedWorkflowServiceType()),
         description: String(group.get("initialIssue")?.value ?? "").trim(),
         quoteItemsCount: quoteItems.length,
@@ -2304,6 +2508,115 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return "No se pudo calcular la vigencia de garantía."
     }
     return "La garantía está vencida."
+  }
+
+  private loadServiceOrderDocumentContext(serviceOrder: ServiceOrder) {
+    return this.serviceOrderService.findOne(Number(serviceOrder.id)).pipe(
+      switchMap((fullOrder) => {
+        const item = fullOrder.items?.[0]
+        if (!item) {
+          return throwError(() => new Error("Service order item not found"))
+        }
+        if (!this.canCreateBoletaFromItem(item)) {
+          return of({ fullOrder, item, quote: null as ServiceOrderQuote | null })
+        }
+        return this.quoteService.findAll({ page: 1, limit: 20, serviceOrderItemId: Number(item.id) }).pipe(
+          map(({ data }) => ({
+            fullOrder,
+            item,
+            quote: this.selectPreferredServiceOrderQuote(data ?? []),
+          })),
+        )
+      }),
+    )
+  }
+
+  private selectPreferredServiceOrderQuote(quotes: ServiceOrderQuote[]): ServiceOrderQuote | null {
+    const preferredStatuses = [
+      ServiceOrderQuoteStatus.CLIENT_APPROVED,
+      ServiceOrderQuoteStatus.CURRENT,
+      ServiceOrderQuoteStatus.SENT_TO_CLIENT,
+      ServiceOrderQuoteStatus.AWAITING_CLIENT_RESPONSE,
+    ]
+    for (const status of preferredStatuses) {
+      const match = quotes.find((quote) => quote.status === status)
+      if (match) {
+        return match
+      }
+    }
+    return quotes[0] ?? null
+  }
+
+  private canCreateBoletaFromItem(item: ServiceOrderItem): boolean {
+    if (![ServiceType.STANDARD_SERVICE, ServiceType.DIAGNOSIS].includes(item.serviceType)) {
+      return false
+    }
+
+    if (item.quoteApprovedAt) {
+      return true
+    }
+
+    return [
+      ServiceOrderItemStatus.CLIENT_APPROVED,
+      ServiceOrderItemStatus.READY_FOR_REPAIR,
+      ServiceOrderItemStatus.AWAITING_PARTS,
+      ServiceOrderItemStatus.IN_REPAIR,
+      ServiceOrderItemStatus.REPAIRED,
+      ServiceOrderItemStatus.DELIVERED,
+      ServiceOrderItemStatus.CLOSED_REJECTED_CLIENT,
+    ].includes(item.status)
+  }
+
+  canMarkServiceOrderAsPaid(serviceOrder: ServiceOrder): boolean {
+    const item = this.getPrimaryServiceOrderItem(serviceOrder)
+    return !!item && !serviceOrder.isPaid && this.canCreateBoletaFromItem(item)
+  }
+
+  private getServiceOrderBoletaClientKey(serviceOrder: ServiceOrder): string {
+    return String(
+      serviceOrder.clientId ??
+      serviceOrder.clientSnapshotDocumentNumber ??
+      serviceOrder.clientSnapshotPhone ??
+      serviceOrder.clientSnapshotName ??
+      serviceOrder.contactPhone ??
+      serviceOrder.contactName ??
+      serviceOrder.id,
+    )
+  }
+
+  private isSameClientSelection(serviceOrder: ServiceOrder): boolean {
+    const selectedClientKey = this.selectedMockBoletaClientKey
+    if (!selectedClientKey) {
+      return true
+    }
+    return this.getServiceOrderBoletaClientKey(serviceOrder) === selectedClientKey
+  }
+
+  private normalizeOptionalText(value: unknown): string | null {
+    const normalized = String(value ?? "").trim()
+    return normalized ? normalized : null
+  }
+
+  private configureEquipmentTypeOtherValidation(group: FormGroup): void {
+    const equipmentTypeControl = group.get("equipmentType")
+    const equipmentTypeOtherControl = group.get("equipmentTypeOther")
+    if (!equipmentTypeControl || !equipmentTypeOtherControl) {
+      return
+    }
+
+    const applyValidation = (type: EquipmentType | null | undefined) => {
+      if (type === EquipmentType.OTHER) {
+        equipmentTypeOtherControl.setValidators([Validators.required, Validators.maxLength(120)])
+      } else {
+        equipmentTypeOtherControl.setValue("", { emitEvent: false })
+        equipmentTypeOtherControl.clearValidators()
+      }
+      equipmentTypeOtherControl.updateValueAndValidity({ emitEvent: false })
+    }
+
+    applyValidation(equipmentTypeControl.value)
+    const subscription = equipmentTypeControl.valueChanges.subscribe((type) => applyValidation(type))
+    this.subscriptions.add(subscription)
   }
 
   private loadCurrentDiagnosis(serviceOrderItemId: number | null): void {
@@ -2601,13 +2914,23 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     if (this.isFinalServiceOrder(serviceOrder)) {
       return
     }
+    const primaryItem = this.getPrimaryServiceOrderItem(serviceOrder)
     this.editingServiceOrder = serviceOrder
+    this.editingItem = primaryItem
     this.editServiceOrderForm.patchValue({
       contactName: this.getServiceOrderContactName(serviceOrder),
       contactEmail: this.getServiceOrderContactEmail(serviceOrder),
       contactPhone: this.getServiceOrderContactPhone(serviceOrder),
       priority: serviceOrder.priority,
       notes: serviceOrder.notes,
+      equipmentType: primaryItem?.equipmentType ?? EquipmentType.LAPTOP,
+      equipmentTypeOther: primaryItem?.equipmentTypeOther ?? "",
+      serviceType: primaryItem?.serviceType ?? ServiceType.DIAGNOSIS,
+      brand: primaryItem?.brand ?? "",
+      model: primaryItem?.model ?? "",
+      serialNumber: primaryItem?.serialNumber ?? "",
+      initialIssue: primaryItem?.initialIssue ?? "",
+      accessories: primaryItem?.accessories ?? "",
     })
     this.showEditServiceOrderModal = true
   }
@@ -2615,6 +2938,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   closeEditServiceOrderModal(): void {
     this.showEditServiceOrderModal = false
     this.editingServiceOrder = null
+    this.editingItem = null
     this.editServiceOrderForm.reset()
   }
 
@@ -2625,20 +2949,42 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
     this.isSaving = true
     const formValue = this.editServiceOrderForm.getRawValue()
-    const payload: ServiceOrderUpdateRequest = {
+    const serviceOrderPayload: ServiceOrderUpdateRequest = {
       contactName: String(formValue.contactName ?? "").trim(),
       contactPhone: String(formValue.contactPhone ?? "").trim() || null,
       contactEmail: String(formValue.contactEmail ?? "").trim() || null,
       priority: formValue.priority,
       notes: formValue.notes ?? null,
     }
+    const equipmentType = formValue.equipmentType
+    const itemPayload = this.editingItem
+      ? {
+        equipmentType,
+        equipmentTypeOther:
+          equipmentType === EquipmentType.OTHER
+            ? this.normalizeOptionalText(formValue.equipmentTypeOther)
+            : null,
+        serviceType: formValue.serviceType,
+        brand: this.normalizeOptionalText(formValue.brand),
+        model: this.normalizeOptionalText(formValue.model),
+        serialNumber: this.normalizeOptionalText(formValue.serialNumber),
+        initialIssue: String(formValue.initialIssue ?? "").trim(),
+        accessories: this.normalizeOptionalText(formValue.accessories),
+      }
+      : null
 
-    this.serviceOrderService
-      .update(this.editingServiceOrder.id, payload)
+    const requests = [
+      this.serviceOrderService.update(this.editingServiceOrder.id, serviceOrderPayload),
+      ...(this.editingItem && itemPayload
+        ? [this.serviceOrderService.updateItem(this.editingItem.id, itemPayload)]
+        : []),
+    ]
+
+    forkJoin(requests)
       .pipe(finalize(() => (this.isSaving = false)))
       .subscribe({
         next: () => {
-          this.showMessage("success", "fas fa-check-circle", "ServiceOrder actualizado correctamente.")
+          this.showMessage("success", "fas fa-check-circle", "Orden actualizada correctamente.")
           this.closeEditServiceOrderModal()
           this.loadServiceOrders()
         },
@@ -2654,6 +3000,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.editingItem = item
     this.editItemForm.patchValue({
       equipmentType: item.equipmentType,
+      equipmentTypeOther: item.equipmentTypeOther ?? "",
       serviceType: item.serviceType,
       brand: item.brand,
       model: item.model,
@@ -2676,7 +3023,19 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     this.isSaving = true
-    const payload = this.editItemForm.value
+    const equipmentType = this.editItemForm.get("equipmentType")?.value
+    const payload = {
+      ...this.editItemForm.value,
+      equipmentTypeOther:
+        equipmentType === EquipmentType.OTHER
+          ? this.normalizeOptionalText(this.editItemForm.get("equipmentTypeOther")?.value)
+          : null,
+      brand: this.normalizeOptionalText(this.editItemForm.get("brand")?.value),
+      model: this.normalizeOptionalText(this.editItemForm.get("model")?.value),
+      serialNumber: this.normalizeOptionalText(this.editItemForm.get("serialNumber")?.value),
+      initialIssue: String(this.editItemForm.get("initialIssue")?.value ?? "").trim(),
+      accessories: this.normalizeOptionalText(this.editItemForm.get("accessories")?.value),
+    }
 
     this.serviceOrderService
       .updateItem(this.editingItem.id, payload)
@@ -2749,5 +3108,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     })
   }
 }
+
 
 

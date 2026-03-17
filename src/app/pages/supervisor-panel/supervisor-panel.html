@@ -39,6 +39,126 @@
     </div>
   </div>
 
+  <div class="tabs-navigation section-navigation">
+    <button class="tab-button" [class.active]="activeSection === 'ranking'" (click)="setActiveSection('ranking')">
+      <i class="fas fa-trophy"></i>
+      Ranking
+    </button>
+    <button class="tab-button" [class.active]="activeSection === 'inbox'" (click)="setActiveSection('inbox')">
+      <i class="fas fa-comments"></i>
+      Conversaciones
+    </button>
+    <button class="tab-button" [class.active]="activeSection === 'quotes'" (click)="setActiveSection('quotes')">
+      <i class="fas fa-file-invoice-dollar"></i>
+      Cotizaciones
+    </button>
+  </div>
+
+  @if (activeSection === 'ranking') {
+  <section class="ranking-panel">
+    <header class="ranking-header">
+      <div>
+        <h2>Ranking económico de técnicos</h2>
+        <p>Basado en el aporte monetario de órdenes de tipo diagnóstico y estándar, separado por productos y servicios.</p>
+      </div>
+      <span class="ranking-pill"><i class="fas fa-trophy"></i> Ranking actual</span>
+    </header>
+
+    @if (isLoadingTechnicianRankings) {
+      <div class="empty-state">
+        <i class="fas fa-spinner fa-spin"></i>
+        <p>Cargando ranking...</p>
+      </div>
+    } @else if (!technicianRankings.length) {
+      <div class="empty-state">
+        <i class="fas fa-chart-line"></i>
+        <p>Aún no hay información suficiente para construir el ranking.</p>
+      </div>
+    } @else {
+      <div class="ranking-podium">
+        @if (secondTechnician) {
+          <article class="podium-card silver">
+            <span class="podium-rank">2</span>
+            <h3>{{ secondTechnician.technicianName }}</h3>
+            <strong>{{ formatMoney(secondTechnician.totalRevenue) }}</strong>
+            <small>{{ secondTechnician.itemsCount }} órdenes con impacto económico</small>
+          </article>
+        }
+        @if (topTechnician) {
+          <article class="podium-card gold featured">
+            <span class="podium-rank">1</span>
+            <h3>{{ topTechnician.technicianName }}</h3>
+            <strong>{{ formatMoney(topTechnician.totalRevenue) }}</strong>
+            <small>{{ topTechnician.itemsCount }} órdenes con impacto económico</small>
+          </article>
+        }
+        @if (thirdTechnician) {
+          <article class="podium-card bronze">
+            <span class="podium-rank">3</span>
+            <h3>{{ thirdTechnician.technicianName }}</h3>
+            <strong>{{ formatMoney(thirdTechnician.totalRevenue) }}</strong>
+            <small>{{ thirdTechnician.itemsCount }} órdenes con impacto económico</small>
+          </article>
+        }
+      </div>
+
+      <div class="ranking-list">
+        @for (technician of paginatedTechnicianRankings; track technician.technicianId) {
+          <article class="ranking-row">
+            <div class="ranking-main">
+              <div class="ranking-rank">#{{ technician.rank }}</div>
+              <div>
+                <h3>{{ technician.technicianName }}</h3>
+                <p>{{ technician.itemsCount }} órdenes · {{ technician.diagnosisItemsCount }} diagnóstico · {{ technician.standardItemsCount }} estándar</p>
+              </div>
+            </div>
+            <div class="ranking-metrics">
+              <div class="metric-chip">
+                <span>Total</span>
+                <strong>{{ formatMoney(technician.totalRevenue) }}</strong>
+              </div>
+              <div class="metric-chip">
+                <span>Productos</span>
+                <strong>{{ formatMoney(technician.productRevenue) }}</strong>
+              </div>
+              <div class="metric-chip">
+                <span>Servicios</span>
+                <strong>{{ formatMoney(technician.serviceRevenue) }}</strong>
+              </div>
+              <div class="metric-chip">
+                <span>Diagnóstico</span>
+                <strong>{{ formatMoney(technician.diagnosisRevenue) }}</strong>
+              </div>
+              <div class="metric-chip">
+                <span>Estándar</span>
+                <strong>{{ formatMoney(technician.standardRevenue) }}</strong>
+              </div>
+            </div>
+            <div class="ranking-share">
+              <div class="share-bar">
+                <span class="share-fill" [style.width.%]="getRevenueShare(technician)"></span>
+              </div>
+              <small>{{ getRevenueShare(technician) | number: '1.0-1' }}% del total</small>
+            </div>
+          </article>
+        }
+      </div>
+      @if (technicianRankings.length > itemsPerPage) {
+        <div class="pagination">
+          <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
+            <i class="fas fa-chevron-left"></i> Anterior
+          </button>
+          <span class="pagination-info">Página {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span>
+          <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
+            Siguiente <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      }
+    }
+  </section>
+  }
+
+  @if (activeSection === 'inbox') {
   <section class="inbox-monitor">
     <header class="inbox-monitor-header">
       <div>
@@ -50,7 +170,7 @@
 
     <div class="inbox-monitor-layout">
       <aside class="inbox-monitor-list">
-        @for (thread of inboxThreads; track thread.id) {
+        @for (thread of paginatedInboxThreads; track thread.id) {
           <button
             class="thread-item"
             [class.active]="selectedInboxThread?.id === thread.id"
@@ -94,19 +214,32 @@
         }
       </section>
     </div>
+    @if (inboxThreads.length > itemsPerPage) {
+      <div class="pagination">
+        <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
+          <i class="fas fa-chevron-left"></i> Anterior
+        </button>
+        <span class="pagination-info">Página {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span>
+        <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
+          Siguiente <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+    }
   </section>
+  }
 
+  @if (activeSection === 'quotes') {
   <div class="panel-container">
     <div class="tabs-navigation">
-      <button class="tab-btn" [class.active]="activeTab === 'open'" (click)="activeTab = 'open'">
+      <button class="tab-btn" [class.active]="activeTab === 'open'" (click)="setActiveTab('open')">
         <i class="fas fa-hourglass-half"></i>
         Abiertas ({{ openServiceOrderQuotes.length }})
       </button>
-      <button class="tab-btn" [class.active]="activeTab === 'answered'" (click)="activeTab = 'answered'">
+      <button class="tab-btn" [class.active]="activeTab === 'answered'" (click)="setActiveTab('answered')">
         <i class="fas fa-comments"></i>
         Respondidas ({{ answeredServiceOrderQuotes.length }})
       </button>
-      <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="activeTab = 'all'">
+      <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="setActiveTab('all')">
         <i class="fas fa-list"></i>
         Todas ({{ allServiceOrderQuotes.length }})
       </button>
@@ -124,7 +257,7 @@
           <p>No hay cotizaciones para esta vista.</p>
         </div>
       } @else {
-        @for (quote of getVisibleQuotes(); track quote.id) {
+        @for (quote of paginatedVisibleQuotes; track quote.id) {
           <div class="quote-card" (click)="selectServiceOrderQuote(quote)" [class.selected]="selectedServiceOrderQuote?.id === quote.id">
             <div class="card-header">
               <div class="quote-info">
@@ -158,6 +291,17 @@
         }
       }
     </div>
+    @if (getVisibleQuotes().length > itemsPerPage) {
+      <div class="pagination">
+        <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
+          <i class="fas fa-chevron-left"></i> Anterior
+        </button>
+        <span class="pagination-info">Página {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span>
+        <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
+          Siguiente <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+    }
 
     @if (selectedServiceOrderQuote) {
       <div class="detail-view">
@@ -317,6 +461,7 @@
       </div>
     }
   </div>
+  }
 
   <div class="alert-container" [class.show]="showAlert">
     <div class="alert" [ngClass]="alertType">

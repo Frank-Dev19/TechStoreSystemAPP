@@ -1,6 +1,6 @@
 // src/app/services/pricing/pricing-products-api.service.ts
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { BaseService } from '../base.service';
 import { config } from '../../../environments/environment';
 import { ProductLite } from '../../models/pricing/pricing.models';
@@ -15,6 +15,10 @@ interface InventoryCatalogProductDto {
     managesExpiration?: boolean;
 }
 
+interface InventoryCatalogProductListResponse {
+    data?: InventoryCatalogProductDto[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class PricingProductsApiService {
     private readonly baseUrl = config.catalogs.products;
@@ -22,7 +26,11 @@ export class PricingProductsApiService {
     constructor(private base: BaseService) { }
 
     list(): Observable<InventoryCatalogProductDto[]> {
-        return this.base.get<InventoryCatalogProductDto[]>(this.baseUrl);
+        return this.base
+            .get<InventoryCatalogProductDto[] | InventoryCatalogProductListResponse>(this.baseUrl)
+            .pipe(
+                map((response) => Array.isArray(response) ? response : (response.data ?? []))
+            );
     }
 
     // helper para mapear a ProductLite

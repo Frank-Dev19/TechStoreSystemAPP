@@ -12,6 +12,25 @@ export interface PaginatedResponse<T> {
   limit: number;
 }
 
+export interface TechnicianRevenueRanking {
+  rank: number;
+  technicianId: number;
+  technicianName: string;
+  itemsCount: number;
+  totalRevenue: number;
+  productRevenue: number;
+  serviceRevenue: number;
+  diagnosisRevenue: number;
+  standardRevenue: number;
+  diagnosisItemsCount: number;
+  standardItemsCount: number;
+}
+
+export interface TechnicianRevenueRankingResponse {
+  generatedAt: string;
+  technicians: TechnicianRevenueRanking[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ServiceOrderQuoteService {
   constructor(private base: BaseService) {}
@@ -24,6 +43,10 @@ export class ServiceOrderQuoteService {
     return this.base.get<ServiceOrderQuote>(`${config.serviceOrders.serviceOrderQuotes}/${id}`, {
       params: { withDeleted: String(withDeleted) },
     });
+  }
+
+  getTechnicianRevenueRankings(): Observable<TechnicianRevenueRankingResponse> {
+    return this.base.get<TechnicianRevenueRankingResponse>(`${config.serviceOrders.serviceOrderQuotes}/technician-rankings`)
   }
 
   create(payload: ServiceOrderQuoteRequest): Observable<ServiceOrderQuote> {

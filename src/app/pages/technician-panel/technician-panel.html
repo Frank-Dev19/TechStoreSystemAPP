@@ -8,27 +8,27 @@
 
   <div class="panel-container">
     <div class="tabs-navigation">
-      <button class="tab-btn" [class.active]="activeTab === 'todo'" (click)="activeTab = 'todo'">
+      <button class="tab-btn" [class.active]="activeTab === 'todo'" (click)="setActiveTab('todo')">
         <i class="fas fa-tasks"></i>
         Por hacer ({{ todoItems.length }})
       </button>
-      <button class="tab-btn" [class.active]="activeTab === 'diagnosis'" (click)="activeTab = 'diagnosis'">
+      <button class="tab-btn" [class.active]="activeTab === 'diagnosis'" (click)="setActiveTab('diagnosis')">
         <i class="fas fa-stethoscope"></i>
         En diagnóstico ({{ diagnosisItems.length }})
       </button>
-      <button class="tab-btn" [class.active]="activeTab === 'pending_approval'" (click)="activeTab = 'pending_approval'">
+      <button class="tab-btn" [class.active]="activeTab === 'pending_approval'" (click)="setActiveTab('pending_approval')">
         <i class="fas fa-hourglass-half"></i>
         Pendientes de cotización o respuesta ({{ pendingApprovalItems.length }})
       </button>
-      <button class="tab-btn" [class.active]="activeTab === 'repair'" (click)="activeTab = 'repair'">
+      <button class="tab-btn" [class.active]="activeTab === 'repair'" (click)="setActiveTab('repair')">
         <i class="fas fa-wrench"></i>
         En reparación ({{ repairItems.length }})
       </button>
-      <button class="tab-btn" [class.active]="activeTab === 'repaired'" (click)="activeTab = 'repaired'">
+      <button class="tab-btn" [class.active]="activeTab === 'repaired'" (click)="setActiveTab('repaired')">
         <i class="fas fa-check-circle"></i>
         Reparados ({{ repairedItems.length }})
       </button>
-      <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="activeTab = 'all'">
+      <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="setActiveTab('all')">
         <i class="fas fa-list"></i>
         Todos ({{ allItems.length }})
       </button>
@@ -42,14 +42,14 @@
             <p>No hay equipos por atender</p>
           </div>
         } @else {
-          @for (item of todoItems; track item.id) {
+          @for (item of paginatedVisibleItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
                 <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
+                <span class="badge badge-info">{{ getItemStatusLabel(item.status, item) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
                 <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
                 @if (item.status === 'ASSIGNED' && item.serviceType === 'STANDARD_SERVICE') {
                   <p class="info-text pending-quote">
@@ -60,18 +60,20 @@
               </div>
               <div class="card-actions">
                 <button
-                  class="btn btn-sm btn-whatsapp"
+                  class="btn btn-sm btn-whatsapp btn-icon-only"
                   *ngIf="canOpenClientInbox(item)"
+                  title="WhatsApp"
+                  aria-label="WhatsApp"
                   (click)="openWhatsAppInbox(item, $event)"
                 >
-                  <i class="fab fa-whatsapp"></i> WhatsApp
+                  <i class="fab fa-whatsapp"></i>
                 </button>
                 <button
                   class="btn btn-sm btn-primary"
                   *ngIf="canStartDiagnosis(item)"
                   (click)="selectItem(item); startDiagnosis(item); $event.stopPropagation()"
                 >
-                  <i class="fas fa-play"></i> Iniciar diagnóstico
+                  <i class="fas fa-play"></i> {{ isWarrantyService(item) ? 'Iniciar revisión' : 'Iniciar diagnóstico' }}
                 </button>
                 <button
                   class="btn btn-sm btn-primary"
@@ -100,24 +102,26 @@
             <p>No hay equipos en diagnóstico</p>
           </div>
         } @else {
-          @for (item of diagnosisItems; track item.id) {
+          @for (item of paginatedVisibleItems; track item.id) {
             <div class="item-card active-item" (click)="selectItem(item)">
               <div class="active-indicator">EN DIAGNÓSTICO</div>
               <div class="card-header">
                 <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-warning">{{ getItemStatusLabel(item.status) }}</span>
+                <span class="badge badge-warning">{{ getItemStatusLabel(item.status, item) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
                 <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
                 <button
-                  class="btn btn-sm btn-whatsapp"
+                  class="btn btn-sm btn-whatsapp btn-icon-only"
                   *ngIf="canOpenClientInbox(item)"
+                  title="WhatsApp"
+                  aria-label="WhatsApp"
                   (click)="openWhatsAppInbox(item, $event)"
                 >
-                  <i class="fab fa-whatsapp"></i> WhatsApp
+                  <i class="fab fa-whatsapp"></i>
                 </button>
                 <button
                   class="btn btn-sm btn-primary"
@@ -126,7 +130,8 @@
                 >
                   <i class="fas fa-plus"></i> Registrar diagnóstico
                 </button>
-                <span class="muted" *ngIf="!isDiagnosisService(item)">Servicio estándar: sin diagnósticos adicionales</span>
+                <span class="muted" *ngIf="isWarrantyService(item)">Revisa si el caso procede como garantía.</span>
+                <span class="muted" *ngIf="!isDiagnosisService(item) && !isWarrantyService(item)">Servicio estándar: sin diagnósticos adicionales</span>
               </div>
             </div>
           }
@@ -140,14 +145,14 @@
             <p>No hay equipos pendientes de cotización o respuesta</p>
           </div>
         } @else {
-          @for (item of pendingApprovalItems; track item.id) {
+          @for (item of paginatedVisibleItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
                 <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-warning">{{ getItemStatusLabel(item.status) }}</span>
+                <span class="badge badge-warning">{{ getItemStatusLabel(item.status, item) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
                 <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
                 @if (item.status === 'DIAGNOSED') {
                   <p class="info-text pending-quote">
@@ -163,11 +168,13 @@
               </div>
               <div class="card-actions">
                 <button
-                  class="btn btn-sm btn-whatsapp"
+                  class="btn btn-sm btn-whatsapp btn-icon-only"
                   *ngIf="canOpenClientInbox(item)"
+                  title="WhatsApp"
+                  aria-label="WhatsApp"
                   (click)="openWhatsAppInbox(item, $event)"
                 >
-                  <i class="fab fa-whatsapp"></i> WhatsApp
+                  <i class="fab fa-whatsapp"></i>
                 </button>
               </div>
             </div>
@@ -182,23 +189,25 @@
             <p>No hay equipos en reparación</p>
           </div>
         } @else {
-          @for (item of repairItems; track item.id) {
+          @for (item of paginatedVisibleItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
                 <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
+                <span class="badge badge-info">{{ getItemStatusLabel(item.status, item) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
                 <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
                 <button
-                  class="btn btn-sm btn-whatsapp"
+                  class="btn btn-sm btn-whatsapp btn-icon-only"
                   *ngIf="canOpenClientInbox(item)"
+                  title="WhatsApp"
+                  aria-label="WhatsApp"
                   (click)="openWhatsAppInbox(item, $event)"
                 >
-                  <i class="fab fa-whatsapp"></i> WhatsApp
+                  <i class="fab fa-whatsapp"></i>
                 </button>
                 <button
                   class="btn btn-sm btn-warning"
@@ -221,23 +230,25 @@
             <p>No hay equipos reparados</p>
           </div>
         } @else {
-          @for (item of repairedItems; track item.id) {
+          @for (item of paginatedVisibleItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
                 <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-success">{{ getItemStatusLabel(item.status) }}</span>
+                <span class="badge badge-success">{{ getItemStatusLabel(item.status, item) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
                 <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
                 <button
-                  class="btn btn-sm btn-whatsapp"
+                  class="btn btn-sm btn-whatsapp btn-icon-only"
                   *ngIf="canOpenClientInbox(item)"
+                  title="WhatsApp"
+                  aria-label="WhatsApp"
                   (click)="openWhatsAppInbox(item, $event)"
                 >
-                  <i class="fab fa-whatsapp"></i> WhatsApp
+                  <i class="fab fa-whatsapp"></i>
                 </button>
                 <span class="muted">Entrega será realizada por recepción.</span>
               </div>
@@ -253,23 +264,25 @@
             <p>No hay equipos registrados</p>
           </div>
         } @else {
-          @for (item of allItems; track item.id) {
+          @for (item of paginatedVisibleItems; track item.id) {
             <div class="item-card" (click)="selectItem(item)">
               <div class="card-header">
                 <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-info">{{ getItemStatusLabel(item.status) }}</span>
+                <span class="badge badge-info">{{ getItemStatusLabel(item.status, item) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType) }}</p>
+                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
                 <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
                 <button
-                  class="btn btn-sm btn-whatsapp"
+                  class="btn btn-sm btn-whatsapp btn-icon-only"
                   *ngIf="canOpenClientInbox(item)"
+                  title="WhatsApp"
+                  aria-label="WhatsApp"
                   (click)="openWhatsAppInbox(item, $event)"
                 >
-                  <i class="fab fa-whatsapp"></i> WhatsApp
+                  <i class="fab fa-whatsapp"></i>
                 </button>
                 <button
                   class="btn btn-sm btn-outline-success"
@@ -285,6 +298,18 @@
       }
     </div>
 
+    @if (visibleItems.length > itemsPerPage) {
+      <div class="pagination">
+        <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
+          <i class="fas fa-chevron-left"></i> Anterior
+        </button>
+        <span class="pagination-info">Página {{ currentPage }} de {{ totalPages }} ({{ visibleItems.length }} total)</span>
+        <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
+          Siguiente <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+    }
+
     @if (selectedItem) {
       <div class="detail-view">
         <div class="detail-header">
@@ -297,7 +322,7 @@
         <div class="detail-content">
           <section class="detail-section">
             <h3><i class="fas fa-info-circle"></i> Información del equipo</h3>
-            <p><strong>Tipo:</strong> {{ getEquipmentTypeLabel(selectedItem.equipmentType) }}</p>
+            <p><strong>Tipo:</strong> {{ getEquipmentTypeLabel(selectedItem.equipmentType, selectedItem.equipmentTypeOther) }}</p>
             <p><strong>Problema reportado:</strong> {{ selectedItem.initialIssue || 'Sin detalle del problema' }}</p>
             <p><strong>Técnico asignado:</strong> {{ getTechnicianName(selectedItem) }}</p>
             <p><strong>Recibido:</strong> {{ selectedItem.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</p>
@@ -306,39 +331,56 @@
           <section class="detail-section">
             <h3><i class="fas fa-signal"></i> Estado actual</h3>
             <div [class]="'state-badge state-' + selectedItem.status">
-              {{ getItemStatusLabel(selectedItem.status) }}
+              {{ getItemStatusLabel(selectedItem.status, selectedItem) }}
             </div>
           </section>
 
-          @if (isDiagnosisService(selectedItem)) {
+          @if (isDiagnosisService(selectedItem) || isWarrantyService(selectedItem)) {
             <section class="detail-section full-width">
-              <h3><i class="fas fa-history"></i> Historial de diagnósticos</h3>
-              @if (diagnosticHistory.length === 0) {
-                <div class="empty-text">Sin diagnósticos registrados</div>
-              } @else {
-                @for (dx of diagnosticHistory; track dx.id) {
-                  <div class="history-card">
-                    <div class="history-header">
-                      <span class="history-number">DX #{{ dx.sequenceNumber }}</span>
-                      <span [class]="'badge badge-' + (dx.status === 'CURRENT' ? 'primary' : 'secondary')">
-                        {{ getDiagnosisStatusLabel(dx.status) }}
-                      </span>
+              <h3><i class="fas fa-history"></i> {{ isWarrantyService(selectedItem) ? 'Revisión de garantía' : 'Historial de diagnósticos' }}</h3>
+              @if (isDiagnosisService(selectedItem)) {
+                @if (diagnosticHistory.length === 0) {
+                  <div class="empty-text">Sin diagnósticos registrados</div>
+                } @else {
+                  @for (dx of diagnosticHistory; track dx.id) {
+                    <div class="history-card">
+                      <div class="history-header">
+                        <span class="history-number">DX #{{ dx.sequenceNumber }}</span>
+                        <span [class]="'badge badge-' + (dx.status === 'CURRENT' ? 'primary' : 'secondary')">
+                          {{ getDiagnosisStatusLabel(dx.status) }}
+                        </span>
+                      </div>
+                      <p class="history-summary"><strong>{{ dx.summary }}</strong></p>
+                      <p class="history-details">{{ dx.details }}</p>
+                      <small class="history-meta">{{ dx.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
                     </div>
-                    <p class="history-summary"><strong>{{ dx.summary }}</strong></p>
-                    <p class="history-details">{{ dx.details }}</p>
-                    <small class="history-meta">{{ dx.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
-                  </div>
+                  }
                 }
+              } @else {
+                <div class="history-card">
+                  <p class="history-summary"><strong>Evaluación técnica requerida</strong></p>
+                  <p class="history-details">Confirma si el daño corresponde a garantía o si debe rechazarse por uso indebido u otra causal.</p>
+                </div>
               }
 
-              @if (selectedItem.status === 'IN_DIAGNOSIS' && diagnosticHistory.length > 0) {
+              @if (selectedItem.status === 'IN_DIAGNOSIS' && isDiagnosisService(selectedItem) && diagnosticHistory.length > 0) {
                 <button class="btn btn-primary" (click)="completeDiagnosis()">
                   <i class="fas fa-check"></i> Completar diagnóstico
                 </button>
               }
-          @if (selectedItem.status === 'IN_DIAGNOSIS' && diagnosticHistory.length === 0) {
-            <p class="empty-text">Registra un diagnóstico antes de completarlo.</p>
-          }
+              @if (selectedItem.status === 'IN_DIAGNOSIS' && isDiagnosisService(selectedItem) && diagnosticHistory.length === 0) {
+                <p class="empty-text">Registra un diagnóstico antes de completarlo.</p>
+              }
+              @if (canAcceptWarrantyReview(selectedItem)) {
+                <button class="btn btn-success" (click)="acceptWarrantyReview(selectedItem)">
+                  <i class="fas fa-check-circle"></i> Aceptar garantía
+                </button>
+              }
+              @if (canRejectWarrantyReview(selectedItem)) {
+                <button class="btn btn-outline-danger" (click)="rejectWarrantyReview(selectedItem)">
+                  <i class="fas fa-ban"></i> Rechazar garantía
+                </button>
+              }
           @if (selectedItem.status === 'CLIENT_APPROVED' || selectedItem.status === 'READY_FOR_REPAIR') {
             <button class="btn btn-success" (click)="startRepair(selectedItem)">
               <i class="fas fa-tools"></i> Iniciar servicio

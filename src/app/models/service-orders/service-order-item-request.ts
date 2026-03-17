@@ -2,6 +2,7 @@ import { EquipmentType, ServiceType } from './service-order-item';
 
 export interface ServiceOrderItemSaveRequest {
   equipmentType: EquipmentType;
+  equipmentTypeOther?: string | null;
   serviceType?: ServiceType;
   brand?: string | null;
   model?: string | null;

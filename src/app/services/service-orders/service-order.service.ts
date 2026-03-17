@@ -32,6 +32,10 @@ export class ServiceOrderService {
         return this.base.patch<ServiceOrder>(`${config.serviceOrders.serviceOrders}/${id}`, payload);
     }
 
+    markPaid(id: number): Observable<ServiceOrder> {
+        return this.base.patch<ServiceOrder>(`${config.serviceOrders.serviceOrders}/${id}`, { isPaid: true });
+    }
+
     softDelete(id: number): Observable<{ ok: boolean; message: string }> {
         return this.base.delete<{ ok: boolean; message: string }>(`${config.serviceOrders.serviceOrders}/${id}`);
     }

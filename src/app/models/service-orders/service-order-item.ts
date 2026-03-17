@@ -5,6 +5,7 @@ export interface ServiceOrderItem {
   serviceOrderId: number;
   itemNumber: number;
   equipmentType: EquipmentType;
+  equipmentTypeOther?: string | null;
   serviceType: ServiceType;
   brand: string | null;
   model: string | null;

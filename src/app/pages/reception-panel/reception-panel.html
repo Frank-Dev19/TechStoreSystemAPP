@@ -113,6 +113,18 @@
         </div>
       </div>
       <div class="actions-wrapper">
+        <button
+          class="btn btn-outline-secondary"
+          type="button"
+          [disabled]="selectedMockBoletaOrdersCount === 0"
+          (click)="openMockBoletaModal()"
+        >
+          <i class="fas fa-receipt"></i>
+          Crear boleta
+          @if (selectedMockBoletaOrdersCount > 0) {
+            <span>({{ selectedMockBoletaOrdersCount }})</span>
+          }
+        </button>
         <button class="btn btn-primary new-service-order-btn" type="button" (click)="openCreateServiceOrderModal()">
           <i class="fas fa-plus"></i>
           Nueva orden de servicio
@@ -143,12 +155,12 @@
           <table class="data-table serviceOrders-table">
             <thead>
               <tr>
-                <th class="toggle-column"></th>
+                <th class="select-column"></th>
                 <th>Código</th>
                 <th>Cliente</th>
                 <th>Prioridad</th>
                 <th>Estado</th>
-                <th>Equipos</th>
+                <th>Equipo</th>
                 <!-- Pago column ocultada -->
                 <th class="actions-column">Acciones</th>
               </tr>
@@ -157,19 +169,25 @@
               @for (serviceOrder of paginatedServiceOrders; track serviceOrder.id) {
                 <ng-container>
                   <tr
-                    (click)="toggleServiceOrderExpansion(serviceOrder.id)"
                     [class.pending-quote]="hasPendingServiceOrderQuoteItems(serviceOrder)"
                     [class.quote-rejected]="hasRejectedServiceOrderQuoteItems(serviceOrder)"
                     [class.pending-delivery]="hasPendingDeliveryItems(serviceOrder)"
                   >
-                    <td class="toggle-column">
-                      <button class="btn-toggle" type="button" (click)="toggleServiceOrderExpansion(serviceOrder.id, $event)">
-                        <i class="fas" [ngClass]="isServiceOrderExpanded(serviceOrder.id) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-                      </button>
+                    <td class="select-column">
+                      <input
+                        type="checkbox"
+                        [checked]="isSelectedForMockBoleta(serviceOrder.id)"
+                        [disabled]="!isSelectableForMockBoleta(serviceOrder)"
+                        (click)="$event.stopPropagation()"
+                        (change)="toggleMockBoletaSelection(serviceOrder, $event)"
+                      >
                     </td>
                   <td class="code-cell">
                     <strong>{{ serviceOrder.code }}</strong>
                     <small>{{ serviceOrder.createdAt | date: 'dd/MM HH:mm' }}</small>
+                    @if (serviceOrder.isPaid) {
+                      <small class="paid-label">Pagada</small>
+                    }
                   </td>
                   <td>
                     <div class="client-name">{{ getServiceOrderContactName(serviceOrder) || 'Sin contacto' }}</div>
@@ -187,20 +205,19 @@
                     </span>
                   </td>
                   <td>
-                    <strong>{{ serviceOrder.completedItemsCount }}/{{ serviceOrder.itemsCount }}</strong>
-                    <small>Completado</small>
+                    @if (getPrimaryServiceOrderItem(serviceOrder); as primaryItem) {
+                      <div class="equipment-summary">
+                        <strong>{{ getEquipmentTypeLabel(primaryItem.equipmentType, primaryItem.equipmentTypeOther) }}</strong>
+                        <small>{{ primaryItem.brand || 'Sin marca' }} · {{ primaryItem.model || 'Sin modelo' }}</small>
+                        <small>Técnico: {{ primaryItem.assignedToTechnicianName || 'Sin asignar' }}</small>
+                      </div>
+                    } @else {
+                      <span class="muted">Sin equipo</span>
+                    }
                   </td>
                   <!-- Pago column ocultada -->
                 <td class="actions-column">
                   <div class="action-buttons">
-                      <button
-                        class="btn-icon btn-primary"
-                        type="button"
-                        (click)="toggleServiceOrderExpansion(serviceOrder.id, $event)"
-                        title="Ver equipos"
-                      >
-                        <i class="fas fa-layer-group"></i>
-                      </button>
                       <button
                         class="btn-icon btn-secondary"
                         type="button"
@@ -210,109 +227,83 @@
                       >
                         <i class="fas fa-edit"></i>
                       </button>
+                      <button
+                        class="btn-icon btn-primary"
+                        type="button"
+                        (click)="downloadServiceOrderSummaryPdf(serviceOrder, $event)"
+                        title="Descargar resumen PDF"
+                      >
+                        <i class="fas fa-file-pdf"></i>
+                      </button>
+                        <button
+                          class="btn-icon btn-secondary"
+                          type="button"
+                          (click)="printServiceOrderSticker(serviceOrder, $event)"
+                          title="Imprimir sticker"
+                        >
+                          <i class="fas fa-tag"></i>
+                        </button>
+                        <button
+                          class="btn-icon btn-success"
+                          type="button"
+                          [disabled]="!canMarkServiceOrderAsPaid(serviceOrder)"
+                          (click)="markServiceOrderAsPaid(serviceOrder, $event)"
+                          title="Marcar pagada"
+                        >
+                          <i class="fas fa-money-check-alt"></i>
+                        </button>
+                      @if (getPrimaryServiceOrderItem(serviceOrder); as primaryItem) {
+                        @if (primaryItem.serviceType !== serviceTypeEnum.WARRANTY_SERVICE) {
+                          <button
+                            type="button"
+                            class="btn-icon btn-primary"
+                            [disabled]="!canServiceOrderQuoteItem(primaryItem)"
+                            (click)="openCreateServiceOrderQuoteModal(serviceOrder, primaryItem, $event)"
+                            title="Cotizar"
+                          >
+                            <i class="fas fa-file-invoice-dollar"></i>
+                          </button>
+                        }
+                        <button
+                          type="button"
+                          class="btn-icon btn-secondary"
+                          (click)="viewItemServiceOrderQuotes(serviceOrder, primaryItem, $event)"
+                          title="Ver cotizaciones"
+                        >
+                          <i class="fas fa-list"></i>
+                        </button>
+                        @if (canOpenWarrantyAction(serviceOrder, primaryItem)) {
+                          <button
+                            type="button"
+                            class="btn-icon btn-outline"
+                            (click)="openWarrantyActionModal(serviceOrder, primaryItem, $event)"
+                            title="Garantía"
+                          >
+                            <i class="fas fa-shield-alt"></i>
+                          </button>
+                        }
+                        <button
+                          type="button"
+                          class="btn-icon btn-success"
+                          *ngIf="canDeliverItem(primaryItem)"
+                          (click)="deliverItem(primaryItem, $event)"
+                          title="Entregar"
+                        >
+                          <i class="fas fa-truck"></i>
+                        </button>
+                        <button
+                          type="button"
+                          class="btn-icon btn-info"
+                          [disabled]="isFinalServiceOrder(serviceOrder) || !canReassignTechnician(primaryItem)"
+                          (click)="openReassignTechnicianModal(primaryItem, $event)"
+                          title="Reasignar técnico"
+                        >
+                          <i class="fas fa-user-cog"></i>
+                        </button>
+                      }
                     </div>
                   </td>
                 </tr>
-                @if (isServiceOrderExpanded(serviceOrder.id)) {
-                  <tr class="service-order-items-row">
-                    <td [attr.colspan]="8">
-                      <div class="service-order-items-header">
-                        <h4>Equipos de la orden</h4>
-                        <span>{{ serviceOrder.items?.length || 0 }} registrados</span>
-                      </div>
-                      @if (serviceOrder.items?.length) {
-                        <div class="service-order-items-list">
-                          @for (item of serviceOrder.items; track item.id) {
-                            <div class="service-order-item-card" [class.selected]="selectedServiceOrderItemId === item.id">
-                            <div class="item-main">
-                              <div>
-                                <p class="item-title">
-                                  Equipo #{{ item.itemNumber }} · {{ getEquipmentTypeLabel(item.equipmentType) }}
-                                </p>
-                                <p class="item-meta">{{ item.brand || 'Sin marca' }} · {{ item.model || 'Sin modelo' }}</p>
-                              </div>
-                              <div class="item-status">
-                                {{ getServiceOrderItemStatusLabel(item.status) }}
-                              </div>
-                            </div>
-                            <div class="item-financial">
-                              @if (isServiceOrderQuoteApproved(item)) {
-                                <span class="muted">Cotización aprobada:</span>
-                                <strong>S/{{ getServiceOrderItemServiceOrderQuoteTotal(item) | number: '1.2-2' }}</strong>
-                              } @else {
-                                <strong>{{ getServiceOrderItemServiceOrderQuoteStatusText(item) }}</strong>
-                              }
-                            </div>
-                            <p class="item-issue">{{ item.initialIssue || 'Sin descripción' }}</p>
-                            <div class="item-actions">
-                              @if (item.serviceType !== serviceTypeEnum.WARRANTY_SERVICE) {
-                                <button
-                                  type="button"
-                                  class="btn btn-sm btn-primary"
-                                  [disabled]="!canServiceOrderQuoteItem(item)"
-                                  (click)="openCreateServiceOrderQuoteModal(serviceOrder, item, $event)"
-                                  >
-                                    <i class="fas fa-file-invoice-dollar"></i>
-                                    Cotizar
-                                  </button>
-                              }
-                                <button
-                                  type="button"
-                                  class="btn btn-sm btn-secondary"
-                                  (click)="viewItemServiceOrderQuotes(serviceOrder, item, $event)"
-                                >
-                                  <i class="fas fa-list"></i>
-                                  Ver cotizaciones
-                                </button>
-                                @if (canOpenWarrantyAction(serviceOrder, item)) {
-                                  <button
-                                    type="button"
-                                    class="btn btn-sm btn-outline"
-                                    (click)="openWarrantyActionModal(serviceOrder, item, $event)"
-                                  >
-                                    <i class="fas fa-shield-alt"></i>
-                                    Garantía
-                                  </button>
-                                }
-                                <button
-                                  type="button"
-                                  class="btn btn-sm btn-success"
-                                  *ngIf="canDeliverItem(item)"
-                                  (click)="deliverItem(item, $event)"
-                                >
-                                  <i class="fas fa-truck"></i>
-                                  Entregar
-                                </button>
-                                <button
-                                  type="button"
-                                  class="btn btn-sm btn-info"
-                                  [disabled]="isFinalServiceOrder(serviceOrder) || !canReassignTechnician(item)"
-                                  (click)="openReassignTechnicianModal(item, $event)"
-                                >
-                                  <i class="fas fa-user-cog"></i>
-                                  Reasignar técnico
-                                </button>
-                                <button
-                                  type="button"
-                                  class="btn btn-sm btn-warning"
-                                  (click)="openEditItemModal(item, $event)"
-                                  [disabled]="isFinalServiceOrder(serviceOrder)"
-                                >
-                                  <i class="fas fa-edit"></i>
-                                  Editar equipo
-                                </button>
-                              </div>
-                            </div>
-                          }
-                        </div>
-                      } @else {
-                        <div class="empty-service-order-items">
-                          <p>Esta orden aún no tiene equipos registrados.</p>
-                        </div>
-                      }
-                    </td>
-                  </tr>
-                }
                 </ng-container>
               }
             </tbody>
@@ -322,22 +313,122 @@
     </div>
   </div>
   @if (filteredServiceOrders.length > 0) {
-    <div class="pagination-container">
-      <div class="pagination-info">
-        Mostrando
-        {{ (currentPage - 1) * itemsPerPage + 1 }}
-        -
-        {{ Math.min(currentPage * itemsPerPage, filteredServiceOrders.length) }}
-        de {{ filteredServiceOrders.length }} órdenes
-      </div>
-      <div class="pagination-controls">
-        <button class="btn-pagination" type="button" [disabled]="currentPage === 1" (click)="previousPage()">
-          <i class="fas fa-chevron-left"></i>
-        </button>
-        <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
-        <button class="btn-pagination" type="button" [disabled]="currentPage === totalPages" (click)="nextPage()">
-          <i class="fas fa-chevron-right"></i>
-        </button>
+    <div class="pagination">
+      <button class="btn-secondary" type="button" [disabled]="currentPage === 1" (click)="previousPage()">
+        <i class="fas fa-chevron-left"></i> Anterior
+      </button>
+      <span class="pagination-info">Página {{ currentPage }} de {{ totalPages }} ({{ filteredServiceOrders.length }} total)</span>
+      <button class="btn-secondary" type="button" [disabled]="currentPage === totalPages" (click)="nextPage()">
+        Siguiente <i class="fas fa-chevron-right"></i>
+      </button>
+    </div>
+  }
+
+  @if (showMockBoletaModal) {
+    <div class="modal-overlay" (click)="closeMockBoletaModal()">
+      <div class="modal-content mock-boleta-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <p class="modal-eyebrow">Comprobante</p>
+            <h2>Boleta consolidada</h2>
+          </div>
+          <button class="btn-close" type="button" (click)="closeMockBoletaModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          @if (isLoadingMockBoletaPreview) {
+            <div class="empty-state compact">
+              <div class="empty-icon">
+                <i class="fas fa-spinner fa-spin"></i>
+              </div>
+              <p>Construyendo previsualización...</p>
+            </div>
+          } @else if (mockBoletaError) {
+            <div class="alert-inline danger">
+              <i class="fas fa-exclamation-circle"></i>
+              <span>{{ mockBoletaError }}</span>
+            </div>
+          } @else if (mockBoletaPreview) {
+            <div class="mock-boleta-summary">
+              <div class="info-tile">
+                <span class="muted">Cliente</span>
+                <strong>{{ mockBoletaPreview.clientName }}</strong>
+              </div>
+              <div class="info-tile">
+                <span class="muted">Documento</span>
+                <strong>{{ mockBoletaPreview.clientDocument || '-' }}</strong>
+              </div>
+              <div class="info-tile">
+                <span class="muted">Órdenes incluidas</span>
+                <strong>{{ mockBoletaPreview.orderCodes.join(', ') }}</strong>
+              </div>
+            </div>
+
+            @if (mockBoletaPreview.lines.length) {
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Origen</th>
+                      <th>Tipo</th>
+                      <th>Descripción</th>
+                      <th>Cant.</th>
+                      <th>P. unitario</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (line of mockBoletaPreview.lines; track $index) {
+                      <tr>
+                        <td>{{ line.sourceOrderCode }}</td>
+                        <td>{{ line.type === 'product' ? 'Producto' : 'Servicio' }}</td>
+                        <td>{{ line.description }}</td>
+                        <td>{{ line.quantity | number: '1.2-2' }}</td>
+                        <td>S/{{ line.unitPrice | number: '1.2-2' }}</td>
+                        <td>S/{{ line.total | number: '1.2-2' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="empty-state compact">
+                <div class="empty-icon">
+                  <i class="fas fa-file-invoice-dollar"></i>
+                </div>
+                <p>No se detectaron líneas facturables en las órdenes seleccionadas.</p>
+              </div>
+            }
+
+            @if (mockBoletaPreview.diagnosisOnlyOrderCodes.length) {
+              <div class="alert-inline info">
+                <i class="fas fa-info-circle"></i>
+                <span>Órdenes diagnóstico sin líneas facturables: {{ mockBoletaPreview.diagnosisOnlyOrderCodes.join(', ') }}</span>
+              </div>
+            }
+
+            <div class="mock-boleta-totals">
+              <div class="info-tile">
+                <span class="muted">Subtotal</span>
+                <strong>S/{{ mockBoletaPreview.subtotal | number: '1.2-2' }}</strong>
+              </div>
+              <div class="info-tile">
+                <span class="muted">IGV</span>
+                <strong>S/{{ mockBoletaPreview.tax | number: '1.2-2' }}</strong>
+              </div>
+              <div class="info-tile total-emphasis">
+                <span class="muted">Total</span>
+                <strong>S/{{ mockBoletaPreview.total | number: '1.2-2' }}</strong>
+              </div>
+            </div>
+          }
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" (click)="closeMockBoletaModal()">Cerrar</button>
+        </div>
       </div>
     </div>
   }
@@ -583,26 +674,14 @@
                   <h4>{{ getCreateOrderItemsTitle() }}</h4>
                   <p>{{ getCreateOrderItemsDescription() }}</p>
                 </div>
-                <div class="service-order-items-header">
-                <h4>{{ getCreateOrderItemsTitle() }}</h4>
-                  <button class="btn btn-sm btn-info" type="button" (click)="addServiceOrderItem()">
-                    <i class="fas fa-plus"></i>
-                    Agregar equipo
-                </button>
-              </div>
 
               @for (item of serviceOrderItems.controls; let i = $index; track i) {
                 <div class="service-order-item-card" [formGroupName]="i">
                   <div class="service-order-item-card-header">
                     <div class="item-title">
                       <i class="fas fa-laptop"></i>
-                      Equipo #{{ i + 1 }}
+                      Equipo
                     </div>
-                    @if (serviceOrderItems.length > 1) {
-                      <button class="btn-icon btn-delete" type="button" (click)="removeServiceOrderItem(i)">
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    }
                   </div>
                   <div class="form-grid">
                     <div class="form-group">
@@ -613,6 +692,23 @@
                         }
                       </select>
                     </div>
+                    @if (isOtherEquipmentType(getServiceOrderItemControl(i, 'equipmentType')?.value)) {
+                      <div class="form-group">
+                        <label>Especifica el tipo de equipo *</label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          formControlName="equipmentTypeOther"
+                          placeholder="Ej: Impresora, monitor, tablet"
+                          [class.is-invalid]="getServiceOrderItemControl(i, 'equipmentTypeOther')?.invalid && getServiceOrderItemControl(i, 'equipmentTypeOther')?.touched"
+                        >
+                        @if (getServiceOrderItemControl(i, 'equipmentTypeOther')?.invalid && getServiceOrderItemControl(i, 'equipmentTypeOther')?.touched) {
+                          <div class="invalid-feedback">
+                            Especifica el tipo de equipo.
+                          </div>
+                        }
+                      </div>
+                    }
                     <div class="form-group">
                       <label>Flujo aplicado</label>
                       <input
@@ -677,7 +773,7 @@
                   <div class="service-order-item-card-header">
                     <div class="item-title">
                       <i class="fas fa-file-invoice-dollar"></i>
-                      Equipo #{{ i + 1 }} · {{ getEquipmentTypeLabel(getServiceOrderItemControl(i, 'equipmentType')?.value) }}
+                      Equipo · {{ getEquipmentTypeLabel(getServiceOrderItemControl(i, 'equipmentType')?.value, getServiceOrderItemControl(i, 'equipmentTypeOther')?.value) }}
                     </div>
                     <div class="quote-chip-row">
                       <button class="btn btn-sm btn-outline" type="button" (click)="addProductToCreateOrderItemQuote(i)">
@@ -853,12 +949,12 @@
               </div>
 
               <div class="summary-card">
-                <h5>Equipos</h5>
+                <h5>Equipo</h5>
                 @for (summaryItem of getCreateOrderSummaryItems(); track summaryItem.index) {
                   <div class="review-item-card">
                     <div class="review-item-header">
                       <div>
-                        <strong>Equipo #{{ summaryItem.index + 1 }} · {{ summaryItem.equipmentTypeLabel }}</strong>
+                        <strong>{{ summaryItem.equipmentTypeLabel }}</strong>
                         <p class="muted small">{{ summaryItem.serviceTypeLabel }}</p>
                       </div>
                       @if (requiresCreateServiceOrderInitialQuoteStep()) {
@@ -1561,34 +1657,8 @@
               </select>
             </div>
             <div class="form-group full-width">
-              <label for="edit-notes">Notas</label>
-              <textarea id="edit-notes" class="form-control" formControlName="notes" rows="3"></textarea>
+              <label class="section-label">Equipo y servicio</label>
             </div>
-          </div>
-        </form>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" type="button" (click)="closeEditServiceOrderModal()">Cancelar</button>
-          <button class="btn btn-primary" type="button" (click)="submitEditServiceOrder()" [disabled]="editServiceOrderForm.invalid || isSaving">
-            <i class="fas fa-save"></i>
-            Guardar cambios
-          </button>
-        </div>
-      </div>
-    </div>
-  }
-
-  <!-- Modal de edición de item -->
-  @if (showEditItemModal) {
-    <div class="modal-overlay" (click)="closeEditItemModal()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-          <h2>Editar Equipo #{{ editingItem?.itemNumber }}</h2>
-          <button class="btn-close" type="button" (click)="closeEditItemModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        <form [formGroup]="editItemForm" class="modal-body">
-          <div class="form-grid">
             <div class="form-group">
               <label for="edit-equipmentType">Tipo de equipo *</label>
               <select id="edit-equipmentType" class="form-control" formControlName="equipmentType">
@@ -1604,11 +1674,31 @@
                 <option value="OTHER">Otro</option>
               </select>
             </div>
+            @if (isOtherEquipmentType(editServiceOrderForm.get('equipmentType')?.value)) {
+              <div class="form-group">
+                <label for="edit-equipmentTypeOther">Especifica el tipo de equipo *</label>
+                <input
+                  id="edit-equipmentTypeOther"
+                  class="form-control"
+                  formControlName="equipmentTypeOther"
+                  type="text"
+                  [class.is-invalid]="editServiceOrderForm.get('equipmentTypeOther')?.invalid && editServiceOrderForm.get('equipmentTypeOther')?.touched"
+                >
+                @if (editServiceOrderForm.get('equipmentTypeOther')?.invalid && editServiceOrderForm.get('equipmentTypeOther')?.touched) {
+                  <div class="invalid-feedback">
+                    Especifica el tipo de equipo.
+                  </div>
+                }
+              </div>
+            }
             <div class="form-group">
               <label for="edit-serviceType">Tipo de servicio *</label>
               <select id="edit-serviceType" class="form-control" formControlName="serviceType">
                 <option value="DIAGNOSIS">Diagnóstico</option>
                 <option value="STANDARD_SERVICE">Estándar</option>
+                <option value="WARRANTY_SERVICE">Garantía</option>
+                <option value="ASSEMBLY">Ensamblaje</option>
+                <option value="CUSTOMER_SERVICE">Atención al cliente</option>
               </select>
             </div>
             <div class="form-group">
@@ -1624,18 +1714,22 @@
               <input id="edit-serialNumber" class="form-control" formControlName="serialNumber" type="text">
             </div>
             <div class="form-group full-width">
-              <label for="edit-initialIssue">Problema inicial *</label>
+              <label for="edit-initialIssue">Problema inicial o detalle del servicio *</label>
               <textarea id="edit-initialIssue" class="form-control" formControlName="initialIssue" rows="3"></textarea>
             </div>
             <div class="form-group full-width">
               <label for="edit-accessories">Accesorios</label>
               <textarea id="edit-accessories" class="form-control" formControlName="accessories" rows="2"></textarea>
             </div>
+            <div class="form-group full-width">
+              <label for="edit-notes">Notas</label>
+              <textarea id="edit-notes" class="form-control" formControlName="notes" rows="3"></textarea>
+            </div>
           </div>
         </form>
         <div class="modal-footer">
-          <button class="btn btn-secondary" type="button" (click)="closeEditItemModal()">Cancelar</button>
-          <button class="btn btn-primary" type="button" (click)="submitEditItem()" [disabled]="editItemForm.invalid || isSaving">
+          <button class="btn btn-secondary" type="button" (click)="closeEditServiceOrderModal()">Cancelar</button>
+          <button class="btn btn-primary" type="button" (click)="submitEditServiceOrder()" [disabled]="editServiceOrderForm.invalid || isSaving">
             <i class="fas fa-save"></i>
             Guardar cambios
           </button>

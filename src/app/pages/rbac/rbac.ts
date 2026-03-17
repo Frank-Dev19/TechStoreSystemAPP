@@ -23,6 +23,7 @@ import { RolesApiService } from '../../services/rbac/roles-api.service';
 import { UsersApiService } from '../../services/rbac/users-api.service';
 import { UserPermsApiService, parseScope } from '../../services/rbac/user-perms-api.service';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
+import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
 
 // ==== Interfaces iguales a tu HTML (las mantengo para no tocar plantillas) ====
 interface Permission extends PermissionUI { }
@@ -52,7 +53,7 @@ export class Rbac implements OnInit {
   private modulesById = new Map<number, PermissionModuleApi>();
   private permissionsById = new Map<number, PermissionApi>();
   private rolesById = new Map<number, RoleApi>();
-  private documentTypes: DocumentTypeApi[] = [];
+  private documentTypes: DocumentTypeResponse[] = [];
 
   // Filtros
   searchPermission = '';
@@ -472,8 +473,13 @@ export class Rbac implements OnInit {
       this.userForm = { ...user, roles: [...(user.roles || [])] };
     } else {
       this.editingUser = false;
-      this.userForm = { roles: [], isActive: true };
+      this.userForm = {
+        roles: [],
+        isActive: true,
+        tipoDocumento: this.documentTypes[0]?.name ?? '',
+      };
     }
+    this.onUserDocumentTypeChange();
     this.showUserModal = true;
   }
   closeUserModal(): void {
@@ -490,16 +496,78 @@ export class Rbac implements OnInit {
     return dt ? Number((dt as any).id) : undefined;  // 👈 fuerza a number
   }
 
+  private findUserDocumentType(name: string | undefined): DocumentTypeResponse | undefined {
+    if (!name) return undefined;
+    return this.documentTypes.find((documentType) => documentType.name?.toLowerCase() === name.toLowerCase());
+  }
+
+  getUserDocumentTypes(): DocumentTypeResponse[] {
+    return this.documentTypes.filter((documentType) => !documentType.deletedAt);
+  }
+
+  getSelectedUserDocumentTypeDigits(): number | null {
+    return this.findUserDocumentType(this.userForm.tipoDocumento)?.digits ?? null;
+  }
+
+  getUserDocumentPlaceholder(): string {
+    const digits = this.getSelectedUserDocumentTypeDigits();
+    return digits ? `Exactamente ${digits} caracteres` : 'Ingresa el número de documento';
+  }
+
+  onUserDocumentTypeChange(): void {
+    this.userForm.nroDocumento = this.normalizeUserDocumentNumber(
+      this.userForm.nroDocumento,
+      this.getSelectedUserDocumentTypeDigits(),
+    );
+  }
+
+  onUserDocumentNumberInput(): void {
+    this.userForm.nroDocumento = this.normalizeUserDocumentNumber(
+      this.userForm.nroDocumento,
+      this.getSelectedUserDocumentTypeDigits(),
+    );
+  }
+
+  private normalizeUserDocumentNumber(value: string | undefined, maxLength: number | null): string {
+    let normalized = String(value ?? '')
+      .replace(/[^A-Za-z0-9-]/g, '')
+      .toUpperCase();
+
+    if (maxLength && normalized.length > maxLength) {
+      normalized = normalized.slice(0, maxLength);
+    }
+
+    return normalized;
+  }
+
 
   async saveUser(): Promise<void> {
+    const selectedDocumentType = this.findUserDocumentType(this.userForm.tipoDocumento);
+    const normalizedDocumentNumber = this.normalizeUserDocumentNumber(
+      this.userForm.nroDocumento,
+      selectedDocumentType?.digits ?? null,
+    );
+
+    if (!selectedDocumentType) {
+      alert('Tipo de documento no válido');
+      return;
+    }
+
+    if (!normalizedDocumentNumber || normalizedDocumentNumber.length !== selectedDocumentType.digits) {
+      alert(`El número de documento debe tener exactamente ${selectedDocumentType.digits} caracteres para ${selectedDocumentType.name}`);
+      return;
+    }
+
+    this.userForm.nroDocumento = normalizedDocumentNumber;
+
     // password = nroDocumento (como tu UI indica)
     if (this.editingUser && this.userForm.id) {
       const dto: UserUpdateRequest = {
         name: this.userForm.nombre,
         email: this.userForm.email,
         phone: this.userForm.celular ?? null,
-        documentTypeId: Number(this.findDocTypeIdByName(this.userForm.tipoDocumento)), // 👈
-        documentNumber: this.userForm.nroDocumento,
+        documentTypeId: Number(selectedDocumentType.id),
+        documentNumber: normalizedDocumentNumber,
         roleIds: (this.userForm.roles || []).map(Number), // 👈 por si vienen como "1"
         isActive: this.userForm.isActive,
       };
@@ -507,15 +575,15 @@ export class Rbac implements OnInit {
       const idx = this.users.findIndex(u => u.id === updated.id);
       if (idx > -1) this.users[idx] = mapUserApiToUI(updated);
     } else {
-      const docTypeId = Number(this.findDocTypeIdByName(this.userForm.tipoDocumento)); // 👈
+      const docTypeId = Number(selectedDocumentType.id);
       if (!docTypeId) { alert('Tipo de documento no válido'); return; }
       const dto: UserCreateRequest = {
         name: this.userForm.nombre!,
         email: this.userForm.email!,
         phone: this.userForm.celular ?? null,
-        documentTypeId: docTypeId,              // 👈 ya numérico
-        documentNumber: this.userForm.nroDocumento!,
-        password: this.userForm.nroDocumento!,  // como definiste
+        documentTypeId: docTypeId,
+        documentNumber: normalizedDocumentNumber,
+        password: normalizedDocumentNumber,
         roleIds: (this.userForm.roles || []).map(Number), // 👈
       };
       const created = await lastValueFrom(this.usersApi.create(dto));

@@ -485,7 +485,7 @@
                             <span class="permission-description">{{ permission.descripcion }}</span>
                         </div>
                     </div>
-                </div>
+</div>
             </div>
         </div>
         <div class="modal-footer">
@@ -523,19 +523,23 @@
                 </div>
                 <div class="form-group">
                     <label>Tipo de Documento *</label>
-                    <select [(ngModel)]="userForm.tipoDocumento" class="form-control">
-                        <option value="DNI">DNI</option>
-                        <option value="RUC">RUC</option>
-                        <option value="CE">Carnet de Extranjería</option>
-                        <option value="Pasaporte">Pasaporte</option>
+                    <select [(ngModel)]="userForm.tipoDocumento" class="form-control" (ngModelChange)="onUserDocumentTypeChange()">
+                        
+                        <option [ngValue]="''">Selecciona un tipo</option>
+                        <option *ngFor="let documentType of getUserDocumentTypes()" [ngValue]="documentType.name">
+                            {{ documentType.name }}
+                        </option>
                     </select>
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>Nro de Documento *</label>
-                    <input type="text" [(ngModel)]="userForm.nroDocumento" placeholder="12345678" class="form-control">
-                    <small class="form-hint">La contraseña será igual al número de documento</small>
+                    <input type="text" [(ngModel)]="userForm.nroDocumento"
+                        [attr.maxlength]="getSelectedUserDocumentTypeDigits() || null"
+                        [placeholder]="getUserDocumentPlaceholder()" class="form-control"
+                        (ngModelChange)="onUserDocumentNumberInput()">
+                    <small class="form-hint">La contrase&#241;a ser&#225; igual al n&#250;mero de documento.<span *ngIf="getSelectedUserDocumentTypeDigits() as digits"> Se permiten {{ digits }} caracteres.</span></small>
                 </div>
                 <div class="form-group">
                     <label>Estado</label>
@@ -700,3 +704,4 @@
         </div>
     </div>
 </div>
+
