@@ -29,7 +29,7 @@ export class StockService {
     constructor(private base: BaseService) { }
 
     list(): Observable<Stock[]> {
-        return this.base.get<StockApi[]>(config.inventory.stock).pipe(
+        return this.base.get<StockApi[]>(config.inventory.stock + '/all').pipe(
             map(arr => (arr ?? []).map(mapStockFromApi))
         );
     }
