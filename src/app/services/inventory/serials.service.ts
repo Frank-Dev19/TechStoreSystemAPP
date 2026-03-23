@@ -22,13 +22,15 @@ export class SerialsService {
                 product_id: a.productId,
                 serial_code: a.serialCode,
                 lot_id: a.lotId ?? null,
+                lot_code: (a as any).lot?.lotCode ?? null,
+                supplier_name: (a as any).supplier?.name ?? null,
                 status: a.status,
                 created_at: a.createdAt,
             })))
         );
     }
 
-    byMovement(movement_id: number): Observable<{ serial_id: number; serial_code: string; lot_id: number | null }[]> {
+    byMovement(movement_id: number): Observable<{ serial_id: number; serial_code: string; lot_id: number | null; lot_code?: string | null; supplier_name?: string | null }[]> {
         return this.baseSvc.get<any[]>(`${this.base}/by-movement/${movement_id}`);
     }
 

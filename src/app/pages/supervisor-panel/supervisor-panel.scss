@@ -1,4 +1,4 @@
-// Color variables - Aligned with reception-panel
+﻿// Color variables - Aligned with reception-panel
 $primary: #2c5282;
 $primary-dark: #1a365d;
 $secondary: #3b6ba8;
@@ -627,7 +627,7 @@ $bg-light: #f5f7fa;
       }
     }
 
-    .serviceOrderQuotes-grid {
+    .serviceOrderAgreements-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
       gap: 1.5rem;
@@ -1355,7 +1355,7 @@ $bg-light: #f5f7fa;
   }
 }
 
-// ServiceOrderQuote status badges
+// ServiceOrderAgreement status badges
 .status-pending-supervisor {
   background: #fef3c7;
   color: #92400e;
@@ -1405,3 +1405,4 @@ $bg-light: #f5f7fa;
   background: #f3f4f6;
   color: #6b7280;
 }
+

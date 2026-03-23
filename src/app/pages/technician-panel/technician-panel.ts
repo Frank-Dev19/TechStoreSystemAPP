@@ -1,13 +1,35 @@
-import { Component, OnInit } from "@angular/core"
+﻿import { Component, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
-import { finalize } from "rxjs/operators"
-import { EquipmentType, ServiceType, ServiceOrderItem, ServiceOrderItemStatus } from "../../models/service-orders/service-order-item"
-import { ServiceOrderItemService } from "../../services/service-orders/service-order-item.service"
+import { forkJoin, of } from "rxjs"
+import { finalize, map, switchMap } from "rxjs/operators"
+import {
+  EquipmentType,
+  ServiceOrder,
+  ServiceOrderPaymentStatus,
+  ServiceOrderStatus,
+  ServiceOrderWorkflowStatus,
+  ServiceType,
+} from "../../models/service-orders/service-order"
+import { ServiceOrderService } from "../../services/service-orders/service-order.service"
 import { ServiceOrderDiagnosisService } from "../../services/service-orders/service-order-diagnosis.service"
-import { ServiceOrderDiagnosis } from "../../models/service-orders/service-order-diagnosis"
+import {
+  ServiceOrderDiagnosis,
+  ServiceOrderDiagnosisOutcome,
+  ServiceOrderDiagnosisStatus,
+} from "../../models/service-orders/service-order-diagnosis"
 import { ServiceOrderDiagnosisSaveRequest } from "../../models/service-orders/service-order-diagnosis-request"
-import { ServiceOrderQuote, ServiceOrderQuoteProduct, ServiceOrderQuoteService as ServiceOrderQuoteServiceItem, ServiceOrderQuoteStatus } from "../../models/service-orders/service-quote"
-import { ServiceOrderQuoteService } from "../../services/service-orders/service-quote.service"
+import {
+  ServiceOrderAgreement,
+  ServiceOrderAgreementProduct,
+  ServiceOrderAgreementService as ServiceOrderAgreementServiceItem,
+  ServiceOrderAgreementStatus,
+} from "../../models/service-orders/service-agreement"
+import { ServiceOrderAgreementService } from "../../services/service-orders/service-agreement.service"
+import { ProductsService } from "../../services/inventory/products.service"
+import { Product } from "../../models/catalog/product"
+import { ServiceService } from "../../services/service-catalog/service.service"
+import { Service } from "../../models/service-catalog/service"
+import { PricingQueryApiService } from "../../services/pricing/pricing-query-api.service"
 import { UsersApiService } from "../../services/rbac/users-api.service"
 import { UserApi } from "../../models/rbac/user.model"
 import { CurrentUserService } from "../../services/current-user.service"
@@ -16,22 +38,41 @@ import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
 
 type InboxAuthor = "TECHNICIAN" | "CLIENT" | "SYSTEM"
 
-interface ServiceOrderItemInboxMessage {
+interface ServiceOrderInboxMessage {
   id: number
   author: InboxAuthor
   text: string
   createdAt: Date
 }
 
-interface ServiceOrderItemInboxThread {
-  serviceOrderItemId: number
+interface ServiceOrderInboxThread {
+  serviceOrderId: number
   serviceOrderCode: string
-  itemLabel: string
+  equipmentLabel: string
   clientAlias: string
   assignedTechnicianAlias: string
   unreadForSupervisor: number
-  messages: ServiceOrderItemInboxMessage[]
+  messages: ServiceOrderInboxMessage[]
 }
+
+interface AgreementProductComposer {
+  id: number
+  type: "product"
+  productId: number | null
+  quantity: number
+  unitPrice: number
+  requiresPurchase: boolean
+  notes: string
+}
+
+interface AgreementServiceComposer {
+  id: number
+  type: "service"
+  serviceId: number | null
+  notes: string
+}
+
+type AgreementComposerItem = AgreementProductComposer | AgreementServiceComposer
 
 @Component({
   selector: "app-technician-panel",
@@ -44,41 +85,44 @@ export class TechnicianPanel implements OnInit {
   currentPage = 1
   itemsPerPage = 6
 
-  todoItems: ServiceOrderItem[] = []           // Asignados y listos para reparar
-  diagnosisItems: ServiceOrderItem[] = []      // En diagnóstico activo
-  pendingApprovalItems: ServiceOrderItem[] = [] // Diagnosticados/cotizados esperando respuesta
-  repairItems: ServiceOrderItem[] = []         // En reparación
-  repairedItems: ServiceOrderItem[] = []       // Reparados pendientes de alistar
-  allItems: ServiceOrderItem[] = []
-  selectedItem: ServiceOrderItem | null = null
+  todoOrders: ServiceOrder[] = []
+  diagnosisOrders: ServiceOrder[] = []
+  pendingApprovalOrders: ServiceOrder[] = []
+  repairOrders: ServiceOrder[] = []
+  repairedOrders: ServiceOrder[] = []
+  allOrders: ServiceOrder[] = []
+  selectedServiceOrder: ServiceOrder | null = null
 
   showDiagnosisModal = false
   diagnosisForm: FormGroup
-  showRediagnosisModal = false
-  rediagnosisForm: FormGroup
+  showAgreementModal = false
+  agreementForm: FormGroup
   diagnosticHistory: ServiceOrderDiagnosis[] = []
-  quoteSummary: ServiceOrderQuote | null = null
-  isLoadingServiceOrderQuote = false
+  agreementSummary: ServiceOrderAgreement | null = null
+  agreementHistory: ServiceOrderAgreement[] = []
+  isLoadingServiceOrderAgreement = false
+  isSavingAgreement = false
+  agreementItems: AgreementComposerItem[] = []
+  products: Product[] = []
+  services: Service[] = []
+  productPriceLoading: Record<number, boolean> = {}
 
-  itemInDiagnosis = false
-  currentItemInDiagnosisId: number | null = null
+  orderInDiagnosis = false
+  currentOrderInDiagnosisId: number | null = null
 
   showAlert = false
   alertType = ""
   alertMessage = ""
   alertIcon = ""
 
-  isLoadingItems = false
+  isLoadingOrders = false
   isSavingDiagnosis = false
-  isSubmittingRediagnosis = false
   showInboxModal = false
   inboxDraftMessage = ""
-  inboxActiveThread: ServiceOrderItemInboxThread | null = null
-  inboxThreads: ServiceOrderItemInboxThread[] = []
+  inboxActiveThread: ServiceOrderInboxThread | null = null
+  inboxThreads: ServiceOrderInboxThread[] = []
 
   private currentUser: User | null = null
-  private isTechnician = false
-
   private techniciansMap = new Map<number, string>()
 
   private readonly equipmentTypeLabels: Record<EquipmentType, string> = {
@@ -86,7 +130,7 @@ export class TechnicianPanel implements OnInit {
     [EquipmentType.DESKTOP_PC]: "PC de escritorio",
     [EquipmentType.ALL_IN_ONE]: "All in One",
     [EquipmentType.PRINTER]: "Impresora",
-    [EquipmentType.SCANNER]: "Escáner",
+    [EquipmentType.SCANNER]: "Escaner",
     [EquipmentType.PROJECTOR]: "Proyector",
     [EquipmentType.MONITOR]: "Monitor",
     [EquipmentType.SERVER]: "Servidor",
@@ -96,19 +140,23 @@ export class TechnicianPanel implements OnInit {
 
   constructor(
     private readonly formBuilder: FormBuilder,
-    private readonly serviceOrderItemService: ServiceOrderItemService,
+    private readonly serviceOrderService: ServiceOrderService,
     private readonly diagnosticService: ServiceOrderDiagnosisService,
-    private readonly quoteService: ServiceOrderQuoteService,
+    private readonly agreementService: ServiceOrderAgreementService,
+    private readonly productsService: ProductsService,
+    private readonly serviceCatalog: ServiceService,
+    private readonly pricingQuery: PricingQueryApiService,
     private readonly usersApi: UsersApiService,
     private readonly currentUserService: CurrentUserService,
   ) {
     this.diagnosisForm = this.createDiagnosisForm()
-    this.rediagnosisForm = this.createRediagnosisForm()
+    this.agreementForm = this.createAgreementForm()
   }
 
   ngOnInit(): void {
     this.syncCurrentUserContext()
-    this.loadTechnicianItems()
+    this.loadAgreementCatalogs()
+    this.loadTechnicianOrders()
     this.loadTechnicians()
   }
 
@@ -121,73 +169,94 @@ export class TechnicianPanel implements OnInit {
     return this.formBuilder.group({
       summary: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(100)]],
       details: ["", [Validators.required, Validators.minLength(10), Validators.maxLength(1000)]],
+      outcome: [ServiceOrderDiagnosisOutcome.REPAIRABLE, Validators.required],
     })
   }
 
-  private createRediagnosisForm(): FormGroup {
+  private createAgreementForm(): FormGroup {
     return this.formBuilder.group({
-      reason: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(255)]],
+      notes: ["", Validators.maxLength(500)],
+      currency: ["PEN", Validators.required],
     })
   }
 
-  private loadTechnicianItems(): void {
-    this.isLoadingItems = true
-    const params: Record<string, string | number | boolean | undefined> = {
-      page: 1,
-      limit: 50,
-      assignedToMe: true,
+  private loadAgreementCatalogs(): void {
+    forkJoin({
+      products: this.productsService.list(),
+      services: this.serviceCatalog.findAll({ page: 1, limit: 100 }),
+    }).subscribe({
+      next: ({ products, services }) => {
+        this.products = products ?? []
+        this.services = services.data ?? []
+      },
+      error: () => {
+        this.products = []
+        this.services = []
+      },
+    })
+  }
+
+  private loadTechnicianOrders(): void {
+    const technicianId = this.getCurrentUserId()
+    if (!technicianId) {
+      this.allOrders = []
+      this.hydrateLists([])
+      return
     }
-    this.serviceOrderItemService
-      .findAll(params)
-      .pipe(finalize(() => (this.isLoadingItems = false)))
+
+    this.isLoadingOrders = true
+    this.serviceOrderService
+      .findAll({
+        page: 1,
+        limit: 50,
+        technicianId,
+      })
+      .pipe(finalize(() => (this.isLoadingOrders = false)))
       .subscribe({
         next: ({ data }) => this.hydrateLists(data ?? []),
-        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar tus órdenes asignadas."),
+        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar tus ordenes asignadas."),
       })
   }
 
-  private hydrateLists(items: ServiceOrderItem[]): void {
-    this.allItems = [...items]
+  private hydrateLists(orders: ServiceOrder[]): void {
+    this.allOrders = [...orders]
 
-    // Por hacer: Asignados + Aprobados por cliente (listos para reparar)
-    this.todoItems = items.filter((item) =>
+    this.todoOrders = orders.filter((order) =>
       [
-        ServiceOrderItemStatus.ASSIGNED,
-        ServiceOrderItemStatus.READY_FOR_REPAIR,
-        ServiceOrderItemStatus.CLIENT_APPROVED,
-      ].includes(item.status),
+        ServiceOrderWorkflowStatus.ASSIGNED,
+        ServiceOrderWorkflowStatus.APPROVED_FOR_WORK,
+      ].includes(order.workflowStatus),
     )
 
-    // En diagnóstico: Solo items activamente en diagnóstico
-    this.diagnosisItems = items.filter((item) =>
-      item.status === ServiceOrderItemStatus.IN_DIAGNOSIS
-    )
+    this.diagnosisOrders = orders.filter((order) => order.workflowStatus === ServiceOrderWorkflowStatus.UNDER_REVIEW)
 
-    // Pendientes: diagnosticados o cotizados esperando respuesta
-    this.pendingApprovalItems = items.filter((item) =>
+    this.pendingApprovalOrders = orders.filter((order) =>
       [
-        ServiceOrderItemStatus.DIAGNOSED,
-        ServiceOrderItemStatus.QUOTED,
-        ServiceOrderItemStatus.SENT_TO_CLIENT,
-        ServiceOrderItemStatus.AWAITING_CLIENT_RESPONSE,
-      ].includes(item.status),
+        ServiceOrderWorkflowStatus.DIAGNOSIS_READY,
+        ServiceOrderWorkflowStatus.UNDER_COORDINATION,
+      ].includes(order.workflowStatus),
     )
 
-    this.repairItems = items.filter((item) => item.status === ServiceOrderItemStatus.IN_REPAIR)
-    this.repairedItems = items.filter((item) => item.status === ServiceOrderItemStatus.REPAIRED)
-    const activeDiagnosis = this.diagnosisItems.find((item) => item.status === ServiceOrderItemStatus.IN_DIAGNOSIS)
-    this.itemInDiagnosis = !!activeDiagnosis
-    this.currentItemInDiagnosisId = activeDiagnosis?.id ? Number(activeDiagnosis.id) : null
+    this.repairOrders = orders.filter((order) =>
+      [ServiceOrderWorkflowStatus.IN_SERVICE, ServiceOrderWorkflowStatus.WAITING_PARTS].includes(order.workflowStatus),
+    )
 
-    if (this.selectedItem) {
-      const updated = items.find((entry) => Number(entry.id) === Number(this.selectedItem?.id))
-      this.selectedItem = updated ?? null
-      if (this.selectedItem) {
-        this.loadServiceOrderDiagnosisHistory(Number(this.selectedItem.id))
-        this.loadServiceOrderQuoteSummary(this.selectedItem)
+    this.repairedOrders = orders.filter((order) => order.workflowStatus === ServiceOrderWorkflowStatus.SERVICE_DONE)
+
+    const activeDiagnosis = this.diagnosisOrders.find((order) => order.workflowStatus === ServiceOrderWorkflowStatus.UNDER_REVIEW)
+    this.orderInDiagnosis = !!activeDiagnosis
+    this.currentOrderInDiagnosisId = activeDiagnosis?.id ? Number(activeDiagnosis.id) : null
+
+    if (this.selectedServiceOrder) {
+      const updated = orders.find((entry) => Number(entry.id) === Number(this.selectedServiceOrder?.id))
+      this.selectedServiceOrder = updated ?? null
+      if (this.selectedServiceOrder) {
+        this.loadServiceOrderDiagnosisHistory(Number(this.selectedServiceOrder.id))
+        this.loadServiceOrderAgreementSummary(this.selectedServiceOrder)
       } else {
         this.diagnosticHistory = []
-        this.quoteSummary = null
+        this.agreementSummary = null
+        this.agreementHistory = []
       }
     }
 
@@ -196,30 +265,30 @@ export class TechnicianPanel implements OnInit {
     }
   }
 
-  get visibleItems(): ServiceOrderItem[] {
+  get visibleOrders(): ServiceOrder[] {
     switch (this.activeTab) {
       case "todo":
-        return this.todoItems
+        return this.todoOrders
       case "diagnosis":
-        return this.diagnosisItems
+        return this.diagnosisOrders
       case "pending_approval":
-        return this.pendingApprovalItems
+        return this.pendingApprovalOrders
       case "repair":
-        return this.repairItems
+        return this.repairOrders
       case "repaired":
-        return this.repairedItems
+        return this.repairedOrders
       default:
-        return this.allItems
+        return this.allOrders
     }
   }
 
-  get paginatedVisibleItems(): ServiceOrderItem[] {
+  get paginatedVisibleOrders(): ServiceOrder[] {
     const start = (this.currentPage - 1) * this.itemsPerPage
-    return this.visibleItems.slice(start, start + this.itemsPerPage)
+    return this.visibleOrders.slice(start, start + this.itemsPerPage)
   }
 
   get totalPages(): number {
-    return Math.max(1, Math.ceil(this.visibleItems.length / this.itemsPerPage))
+    return Math.max(1, Math.ceil(this.visibleOrders.length / this.itemsPerPage))
   }
 
   prevPage(): void {
@@ -234,35 +303,33 @@ export class TechnicianPanel implements OnInit {
     }
   }
 
-  selectItem(item: ServiceOrderItem): void {
-    this.selectedItem = item
-    const itemId = Number(item.id)
-    if (itemId) {
-      this.loadServiceOrderDiagnosisHistory(itemId)
-      this.loadServiceOrderQuoteSummary(item)
-    }
+  selectServiceOrder(order: ServiceOrder): void {
+    this.selectedServiceOrder = order
+    this.loadServiceOrderDiagnosisHistory(Number(order.id))
+    this.loadServiceOrderAgreementSummary(order)
   }
 
-  clearSelectedItem(): void {
-    this.selectedItem = null
+  clearSelectedServiceOrder(): void {
+    this.selectedServiceOrder = null
     this.diagnosticHistory = []
-    this.quoteSummary = null
+    this.agreementSummary = null
+    this.agreementHistory = []
   }
 
-  canOpenClientInbox(item: ServiceOrderItem | null): boolean {
-    if (!item) return false
+  canOpenClientInbox(order: ServiceOrder | null): boolean {
+    if (!order) return false
     return ![
-      ServiceOrderItemStatus.DELIVERED,
-      ServiceOrderItemStatus.CANCELLED,
-      ServiceOrderItemStatus.CLOSED_REJECTED_CLIENT,
-    ].includes(item.status)
+      ServiceOrderStatus.DELIVERED,
+      ServiceOrderStatus.CANCELLED,
+      ServiceOrderStatus.CLOSED_NO_SOLUTION,
+    ].includes(order.status)
   }
 
-  openWhatsAppInbox(item: ServiceOrderItem, event?: Event): void {
+  openWhatsAppInbox(order: ServiceOrder, event?: Event): void {
     event?.stopPropagation()
-    if (!this.canOpenClientInbox(item)) return
+    if (!this.canOpenClientInbox(order)) return
 
-    const existing = this.inboxThreads.find((thread) => thread.serviceOrderItemId === Number(item.id))
+    const existing = this.inboxThreads.find((thread) => thread.serviceOrderId === Number(order.id))
     if (existing) {
       existing.unreadForSupervisor = 0
       this.inboxActiveThread = existing
@@ -270,7 +337,7 @@ export class TechnicianPanel implements OnInit {
       return
     }
 
-    const thread = this.buildInboxThread(item)
+    const thread = this.buildInboxThread(order)
     this.inboxThreads = [thread, ...this.inboxThreads]
     this.inboxActiveThread = thread
     this.showInboxModal = true
@@ -295,11 +362,10 @@ export class TechnicianPanel implements OnInit {
     })
     this.inboxDraftMessage = ""
 
-    // Mock response to visualize monitored two-way flow.
     this.inboxActiveThread.messages.push({
       id: Date.now() + 1,
       author: "CLIENT",
-      text: "Recibido. Gracias por la actualización técnica.",
+      text: "Recibido. Gracias por la actualizacion tecnica.",
       createdAt: new Date(),
     })
     this.inboxActiveThread.unreadForSupervisor += 1
@@ -308,236 +374,526 @@ export class TechnicianPanel implements OnInit {
   getInboxAuthorLabel(author: InboxAuthor): string {
     switch (author) {
       case "TECHNICIAN":
-        return "Técnico"
+        return "Tecnico"
       case "CLIENT":
-        return this.inboxActiveThread?.clientAlias ?? "Cliente anónimo"
+        return this.inboxActiveThread?.clientAlias ?? "Cliente anonimo"
       default:
         return "Sistema"
     }
   }
 
-  startDiagnosis(item: ServiceOrderItem): void {
-    if (this.itemInDiagnosis && this.currentItemInDiagnosisId !== Number(item.id)) {
-      this.showMessage("warning", "fas fa-exclamation-circle", "Completa el diagnóstico activo antes de iniciar otro.")
+  startDiagnosis(order: ServiceOrder): void {
+    if (this.orderInDiagnosis && this.currentOrderInDiagnosisId !== Number(order.id)) {
+      this.showMessage("warning", "fas fa-exclamation-circle", "Completa la revision activa antes de iniciar otra.")
       return
     }
-    this.transitionItemStatus(
-      item,
-      ServiceOrderItemStatus.IN_DIAGNOSIS,
-      this.isWarrantyService(item) ? "Revisión de garantía iniciada correctamente." : "Diagnóstico iniciado correctamente.",
+    this.transitionWorkflow(
+      order,
+      ServiceOrderWorkflowStatus.UNDER_REVIEW,
+      this.isWarrantyService(order) ? "Revision de garantia iniciada correctamente." : "Diagnostico iniciado correctamente.",
     )
   }
 
-  startStandardService(item: ServiceOrderItem): void {
-    if (!this.isStandardService(item)) return
-    this.startRepair(item)
+  startStandardService(order: ServiceOrder): void {
+    if (!this.isStandardService(order)) return
+    this.startRepair(order)
   }
 
-  openDiagnosisModal(): void {
-    if (!this.selectedItem) return
-    if (!this.isDiagnosisService(this.selectedItem)) return
+  openDiagnosisModal(
+    order?: ServiceOrder,
+    event?: Event,
+    presetOutcome: ServiceOrderDiagnosisOutcome = ServiceOrderDiagnosisOutcome.REPAIRABLE,
+  ): void {
+    event?.stopPropagation()
+    if (order) {
+      this.selectServiceOrder(order)
+    }
+    if (!this.selectedServiceOrder) return
+    if (!this.isDiagnosisService(this.selectedServiceOrder)) return
     this.showDiagnosisModal = true
-    this.diagnosisForm.reset()
+    this.diagnosisForm.reset({
+      summary: "",
+      details: "",
+      outcome: presetOutcome,
+    })
   }
 
   closeDiagnosisModal(): void {
     this.showDiagnosisModal = false
-    this.diagnosisForm.reset()
+    this.diagnosisForm.reset({
+      summary: "",
+      details: "",
+      outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE,
+    })
   }
 
-  openRediagnosisModal(item: ServiceOrderItem): void {
-    this.selectItem(item)
-    this.showRediagnosisModal = true
-    this.rediagnosisForm.reset()
+  openAgreementModal(order: ServiceOrder, event?: Event): void {
+    event?.stopPropagation()
+    this.selectServiceOrder(order)
+    this.showAgreementModal = true
+    this.agreementSummary = null
+    this.agreementItems = []
+    this.agreementForm.reset({ notes: "", currency: "PEN" })
+    this.isLoadingServiceOrderAgreement = true
+
+    this.agreementService
+      .findAll({ page: 1, limit: 5, serviceOrderId: Number(order.id) })
+      .pipe(finalize(() => (this.isLoadingServiceOrderAgreement = false)))
+      .subscribe({
+        next: ({ data }) => {
+          const list = data ?? []
+          this.agreementHistory = list
+          const draft = list.find((entry) => entry.status === ServiceOrderAgreementStatus.DRAFT)
+          const confirmed = list.find((entry) => entry.status === ServiceOrderAgreementStatus.CONFIRMED)
+          const allowNewAgreement = this.canManageAgreement(order)
+          this.agreementSummary = draft ?? (!allowNewAgreement ? confirmed ?? null : null)
+          this.agreementForm.patchValue({
+            notes: this.agreementSummary?.notes ?? "",
+            currency: this.agreementSummary?.currency ?? "PEN",
+          })
+          if (this.agreementSummary) {
+            this.hydrateAgreementComposer(this.agreementSummary)
+          }
+        },
+        error: () => {
+          this.agreementSummary = null
+          this.agreementHistory = []
+        },
+      })
   }
 
-  closeRediagnosisModal(): void {
-    this.showRediagnosisModal = false
-    this.rediagnosisForm.reset()
+  openAgreementHistoryModal(agreement: ServiceOrderAgreement, event?: Event): void {
+    event?.stopPropagation()
+    if (!this.selectedServiceOrder) return
+
+    this.showAgreementModal = true
+    this.agreementSummary = agreement
+    this.agreementForm.reset({
+      notes: agreement.notes ?? "",
+      currency: agreement.currency ?? "PEN",
+    })
+    this.hydrateAgreementComposer(agreement)
+  }
+
+  closeAgreementModal(): void {
+    this.showAgreementModal = false
+    this.agreementForm.reset({ notes: "", currency: "PEN" })
+    this.agreementItems = []
+    this.productPriceLoading = {}
+  }
+
+  addAgreementProduct(): void {
+    if (!this.isAgreementEditable()) return
+    this.agreementItems.push({
+      id: Date.now() + Math.random(),
+      type: "product",
+      productId: null,
+      quantity: 1,
+      unitPrice: 0,
+      requiresPurchase: true,
+      notes: "",
+    })
+  }
+
+  addAgreementService(): void {
+    if (!this.isAgreementEditable()) return
+    this.agreementItems.push({
+      id: Date.now() + Math.random(),
+      type: "service",
+      serviceId: null,
+      notes: "",
+    })
+  }
+
+  removeAgreementItem(index: number): void {
+    if (!this.isAgreementEditable()) return
+    this.agreementItems.splice(index, 1)
+  }
+
+  onAgreementProductSelected(item: AgreementProductComposer, value: any): void {
+    item.productId = this.toNumericId(value)
+    if (!item.productId) {
+      item.unitPrice = 0
+      return
+    }
+    this.fetchAgreementProductPrice(item)
+  }
+
+  onAgreementProductQuantityChange(item: AgreementProductComposer, value: any): void {
+    item.quantity = Math.max(1, Number(value) || 1)
+    if (item.productId) {
+      this.fetchAgreementProductPrice(item)
+    }
+  }
+
+  private fetchAgreementProductPrice(item: AgreementProductComposer): void {
+    if (!item.productId) return
+    this.productPriceLoading[item.id] = true
+    this.pricingQuery
+      .getProductPrice(item.productId, Math.max(1, Number(item.quantity) || 1))
+      .pipe(finalize(() => (this.productPriceLoading[item.id] = false)))
+      .subscribe({
+        next: (res) => {
+          item.unitPrice = res.finalUnitPrice ?? res.baseUnitPrice ?? 0
+        },
+        error: () => {
+          this.showMessage("warning", "fas fa-info-circle", "No pudimos obtener el precio del producto.")
+        },
+      })
+  }
+
+  calculateAgreementItemSubtotal(item: AgreementComposerItem): number {
+    if (item.type === "product") {
+      return Number(item.quantity ?? 0) * Number(item.unitPrice ?? 0)
+    }
+    const service = this.services.find((entry) => Number(entry.id) === Number(item.serviceId))
+    return Number(service?.price ?? 0)
+  }
+
+  calculateAgreementTotal(): number {
+    return this.agreementItems.reduce((total, item) => total + this.calculateAgreementItemSubtotal(item), 0)
+  }
+
+  submitAgreement(confirmImmediately = true): void {
+    const order = this.selectedServiceOrder
+    if (!order?.id) return
+    if (!this.isAgreementEditable()) {
+      this.showMessage("warning", "fas fa-info-circle", "El acuerdo ya esta confirmado y no puede modificarse.")
+      return
+    }
+    if (!this.agreementItems.length) {
+      this.showMessage("warning", "fas fa-exclamation-circle", "Agrega al menos un producto o servicio al acuerdo.")
+      return
+    }
+
+    const currentDiagnosisId = this.toNumericId(
+      this.diagnosticHistory.find((entry) => entry.status === ServiceOrderDiagnosisStatus.CURRENT)?.id,
+    )
+
+    const payload = {
+      serviceOrderId: Number(order.id),
+      ...(currentDiagnosisId ? { diagnosisId: currentDiagnosisId } : {}),
+      notes: this.agreementForm.get("notes")?.value || undefined,
+      products: this.agreementItems.flatMap((entry) => {
+        if (entry.type !== "product") return []
+        const productId = this.toNumericId(entry.productId)
+        if (!productId) return []
+        return [{
+          productId,
+          quantity: Math.max(1, Number(entry.quantity) || 1),
+          unitPrice: Number(entry.unitPrice || 0),
+          requiresPurchase: entry.requiresPurchase,
+          notes: entry.notes || undefined,
+        }]
+      }),
+      services: this.agreementItems.flatMap((entry) => {
+        if (entry.type !== "service") return []
+        const serviceId = this.toNumericId(entry.serviceId)
+        if (!serviceId) return []
+        return [{ serviceId, notes: entry.notes || undefined }]
+      }),
+    }
+
+    const request$ = this.agreementSummary?.status === ServiceOrderAgreementStatus.DRAFT
+      ? this.agreementService.update(this.agreementSummary.id, payload)
+      : this.agreementService.create(payload)
+
+    this.isSavingAgreement = true
+    request$
+      .pipe(finalize(() => (this.isSavingAgreement = false)))
+      .subscribe({
+        next: (agreement) => {
+          if (!confirmImmediately) {
+            this.agreementSummary = agreement
+            this.showMessage("success", "fas fa-check-circle", "Borrador de acuerdo guardado.")
+            this.closeAgreementModal()
+            this.loadTechnicianOrders()
+            return
+          }
+
+          this.confirmAgreement(agreement.id)
+        },
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos guardar el acuerdo."),
+      })
+  }
+
+  confirmAgreement(agreementId: number): void {
+    if (!this.isAgreementEditable()) {
+      this.showMessage("warning", "fas fa-info-circle", "El acuerdo ya esta confirmado.")
+      return
+    }
+    this.isSavingAgreement = true
+    this.agreementService
+      .confirm(agreementId)
+      .pipe(finalize(() => (this.isSavingAgreement = false)))
+      .subscribe({
+        next: () => {
+          this.showMessage("success", "fas fa-check-circle", "Acuerdo confirmado. Ya puedes continuar con el servicio.")
+          this.closeAgreementModal()
+          this.loadTechnicianOrders()
+        },
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos confirmar el acuerdo."),
+      })
+  }
+
+  markNoAgreement(order: ServiceOrder, event?: Event): void {
+    event?.stopPropagation()
+    this.selectServiceOrder(order)
+    this.isSavingAgreement = true
+    this.agreementService
+      .createDiagnosisFeeAgreement(Number(order.id))
+      .pipe(finalize(() => (this.isSavingAgreement = false)))
+      .subscribe({
+        next: () => {
+          this.showMessage("success", "fas fa-check-circle", "Orden marcada para recojo con cargo de diagnóstico.")
+          this.closeAgreementModal()
+          this.loadTechnicianOrders()
+        },
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos cerrar la orden sin acuerdo."),
+      })
   }
 
   submitDiagnosis(): void {
-    if (this.diagnosisForm.invalid || !this.selectedItem) {
+    if (this.diagnosisForm.invalid || !this.selectedServiceOrder) {
       this.markFormGroupAsTouched(this.diagnosisForm)
       return
     }
 
+    const wasInService = this.selectedServiceOrder.workflowStatus === ServiceOrderWorkflowStatus.IN_SERVICE
+    const orderId = Number(this.selectedServiceOrder.id)
+    const selectedOutcome =
+      (this.diagnosisForm.get("outcome")?.value as ServiceOrderDiagnosisOutcome | null) ??
+      ServiceOrderDiagnosisOutcome.REPAIRABLE
+    const chargesDiagnosisFee = selectedOutcome === ServiceOrderDiagnosisOutcome.IRREPARABLE
+    const waivesCharge = selectedOutcome === ServiceOrderDiagnosisOutcome.NO_FAULT_FOUND
+
     const payload: ServiceOrderDiagnosisSaveRequest = {
-      serviceOrderItemId: Number(this.selectedItem.id),
+      serviceOrderId: orderId,
       summary: this.diagnosisForm.get("summary")?.value,
       details: this.diagnosisForm.get("details")?.value,
+      outcome: selectedOutcome,
     }
 
     this.isSavingDiagnosis = true
     this.diagnosticService
       .create(payload)
-      .pipe(finalize(() => (this.isSavingDiagnosis = false)))
+      .pipe(
+        switchMap(() => {
+          if (chargesDiagnosisFee) {
+            return this.agreementService.createDiagnosisFeeAgreement(orderId).pipe(map(() => "DIAGNOSIS_FEE"))
+          }
+
+          if (waivesCharge) {
+            return this.serviceOrderService
+              .update(orderId, { paymentStatus: ServiceOrderPaymentStatus.WAIVED })
+              .pipe(
+                switchMap(() =>
+                  this.serviceOrderService.changeWorkflowStatus(orderId, ServiceOrderWorkflowStatus.READY_FOR_PICKUP),
+                ),
+                map(() => "WAIVED"),
+              )
+          }
+
+          return of("NORMAL")
+        }),
+        finalize(() => (this.isSavingDiagnosis = false)),
+      )
       .subscribe({
-        next: () => {
-          this.showMessage("success", "fas fa-check-circle", "Diagnóstico registrado correctamente.")
+        next: (resolution) => {
+          this.showMessage(
+            "success",
+            "fas fa-check-circle",
+            resolution === "DIAGNOSIS_FEE"
+              ? "Diagnostico registrado. La orden quedo lista para entrega con cobro de diagnostico."
+              : resolution === "WAIVED"
+                ? "Diagnostico registrado. La orden quedo lista para entrega sin cobro."
+                : wasInService
+                  ? "Nuevo diagnostico registrado. La orden volvio a coordinacion para generar un nuevo acuerdo."
+                  : "Diagnostico registrado correctamente.",
+          )
           this.closeDiagnosisModal()
-          this.loadTechnicianItems()
+          this.loadTechnicianOrders()
         },
-        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar el diagnóstico."),
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar el diagnostico."),
       })
   }
 
-  submitRediagnosis(): void {
-    if (this.rediagnosisForm.invalid || !this.selectedItem) {
-      this.markFormGroupAsTouched(this.rediagnosisForm)
-      return
+  submitDiagnosisAsNoSolution(): void {
+    if (!this.selectedServiceOrder || !this.isDiagnosisService(this.selectedServiceOrder)) return
+
+    const currentOutcome =
+      (this.diagnosisForm.get("outcome")?.value as ServiceOrderDiagnosisOutcome | null) ??
+      ServiceOrderDiagnosisOutcome.REPAIRABLE
+
+    if (currentOutcome === ServiceOrderDiagnosisOutcome.REPAIRABLE) {
+      this.diagnosisForm.patchValue({ outcome: ServiceOrderDiagnosisOutcome.IRREPARABLE })
     }
 
-    const reason = this.rediagnosisForm.get("reason")?.value
-    this.isSubmittingRediagnosis = true
-    this.serviceOrderItemService
-      .requestRediagnosis(Number(this.selectedItem.id), reason)
-      .pipe(finalize(() => (this.isSubmittingRediagnosis = false)))
-      .subscribe({
-        next: () => {
-          this.showMessage("success", "fas fa-check-circle", "Se solicitó un nuevo diagnóstico.")
-          this.closeRediagnosisModal()
-          this.loadTechnicianItems()
-        },
-        error: () => {
-          this.showMessage("danger", "fas fa-times-circle", "No pudimos solicitar el nuevo diagnóstico.")
-        },
-      })
+    this.submitDiagnosis()
   }
 
-  startRepair(item: ServiceOrderItem): void {
-    if (this.isStandardService(item) && [ServiceOrderItemStatus.ASSIGNED, ServiceOrderItemStatus.READY_FOR_REPAIR].includes(item.status)) {
-      this.transitionItemStatus(item, ServiceOrderItemStatus.IN_REPAIR, "Servicio iniciado.")
-      return
-    }
+  canSubmitDiagnosisAsIrreparable(): boolean {
+    return this.diagnosisForm.get("outcome")?.value === ServiceOrderDiagnosisOutcome.IRREPARABLE
+  }
 
-    if (item.status !== ServiceOrderItemStatus.CLIENT_APPROVED) {
+  startRepair(order: ServiceOrder): void {
+    if (order.workflowStatus !== ServiceOrderWorkflowStatus.APPROVED_FOR_WORK) {
       this.showMessage(
         "warning",
         "fas fa-exclamation-circle",
-        "Finaliza el diagnóstico y aprueba la cotización antes de iniciar la reparación.",
+        "La orden debe estar aprobada para iniciar el servicio.",
       )
       return
     }
-    this.transitionItemStatus(item, ServiceOrderItemStatus.IN_REPAIR, "Reparación iniciada.")
+    this.transitionWorkflow(order, ServiceOrderWorkflowStatus.IN_SERVICE, "Servicio iniciado.")
   }
 
-  markRepaired(item: ServiceOrderItem): void {
-    if (item.status === ServiceOrderItemStatus.IN_REPAIR) {
-      const itemId = Number(item.id)
-      if (!itemId) {
-        this.showMessage("danger", "fas fa-times-circle", "ID de item inválido.")
-        return
-      }
-      this.serviceOrderItemService.changeStatus(itemId, ServiceOrderItemStatus.REPAIRED).subscribe({
-        next: () => {
-          this.showMessage("success", "fas fa-check-circle", "Equipo marcado como reparado.")
-          this.loadTechnicianItems()
-        },
-        error: () =>
-          this.showMessage("danger", "fas fa-times-circle", "No pudimos marcar el equipo como reparado."),
-      })
+  markRepaired(order: ServiceOrder): void {
+    if (order.workflowStatus !== ServiceOrderWorkflowStatus.IN_SERVICE) {
       return
     }
+    this.transitionWorkflow(order, ServiceOrderWorkflowStatus.SERVICE_DONE, "Equipo marcado como reparado.")
   }
 
-  canFinishRepair(item?: ServiceOrderItem | null): boolean {
-    if (!item) return false
-    return item.status === ServiceOrderItemStatus.IN_REPAIR
+  canFinishRepair(order?: ServiceOrder | null): boolean {
+    if (!order) return false
+    return order.workflowStatus === ServiceOrderWorkflowStatus.IN_SERVICE
   }
 
-  completeDiagnosis(): void {
-    if (!this.selectedItem) return
-    this.transitionItemStatus(this.selectedItem, ServiceOrderItemStatus.DIAGNOSED, "Diagnóstico completado.")
+  acceptWarrantyReview(order: ServiceOrder): void {
+    this.transitionWorkflow(order, ServiceOrderWorkflowStatus.APPROVED_FOR_WORK, "Garantia aceptada correctamente.")
   }
 
-  acceptWarrantyReview(item: ServiceOrderItem): void {
-    this.transitionItemStatus(item, ServiceOrderItemStatus.CLIENT_APPROVED, "Garantía aceptada correctamente.")
+  rejectWarrantyReview(order: ServiceOrder): void {
+    this.transitionWorkflow(order, ServiceOrderWorkflowStatus.CANCELLED, "Garantia rechazada correctamente.")
   }
 
-  rejectWarrantyReview(item: ServiceOrderItem): void {
-    this.transitionItemStatus(item, ServiceOrderItemStatus.CANCELLED, "Garantía rechazada correctamente.")
-  }
-
-  private transitionItemStatus(item: ServiceOrderItem, status: ServiceOrderItemStatus, successMessage: string): void {
-    const itemId = Number(item.id)
-    if (!itemId) {
-      this.showMessage("danger", "fas fa-times-circle", "ID de item inválido.")
+  private transitionWorkflow(order: ServiceOrder, status: ServiceOrderWorkflowStatus, successMessage: string): void {
+    const orderId = Number(order.id)
+    if (!orderId) {
+      this.showMessage("danger", "fas fa-times-circle", "ID de orden invalido.")
       return
     }
-    this.serviceOrderItemService.changeStatus(itemId, status).subscribe({
+
+    this.serviceOrderService.changeWorkflowStatus(orderId, status).subscribe({
       next: () => {
         this.showMessage("success", "fas fa-check-circle", successMessage)
-        this.loadTechnicianItems()
+        this.loadTechnicianOrders()
       },
-      error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos actualizar el estado del item."),
+      error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos actualizar el estado de la orden."),
     })
   }
 
-  getTechnicianName(item: ServiceOrderItem): string {
-    if (item.assignedToTechnicianName) {
-      return item.assignedToTechnicianName
+  getTechnicianName(order: ServiceOrder): string {
+    if (order.assignedToTechnicianName) {
+      return order.assignedToTechnicianName
     }
-    if (item.assignedToTechnicianId) {
-      return this.techniciansMap.get(item.assignedToTechnicianId) ?? `Técnico #${item.assignedToTechnicianId}`
+    if (order.assignedToTechnicianId) {
+      return this.techniciansMap.get(order.assignedToTechnicianId) ?? `Tecnico #${order.assignedToTechnicianId}`
     }
     return "Sin asignar"
   }
 
-  private loadServiceOrderDiagnosisHistory(itemId: number): void {
-    const normalizedId = Number(itemId)
+  private loadServiceOrderDiagnosisHistory(serviceOrderId: number): void {
+    const normalizedId = Number(serviceOrderId)
     if (!normalizedId) {
       this.diagnosticHistory = []
       return
     }
-    this.diagnosticService.findAll({ serviceOrderItemId: normalizedId, limit: 20 }).subscribe({
+    this.diagnosticService.findAll({ serviceOrderId: normalizedId, limit: 20 }).subscribe({
       next: ({ data }) => (this.diagnosticHistory = data ?? []),
-      error: () => this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el historial de diagnósticos."),
+      error: () => this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el historial de diagnosticos."),
     })
   }
 
-  canStartDiagnosis(item: ServiceOrderItem): boolean {
-    return item.status === ServiceOrderItemStatus.ASSIGNED &&
-      [ServiceType.DIAGNOSIS, ServiceType.WARRANTY_SERVICE].includes(item.serviceType)
+  canStartDiagnosis(order: ServiceOrder): boolean {
+    return order.workflowStatus === ServiceOrderWorkflowStatus.ASSIGNED &&
+      [ServiceType.DIAGNOSIS, ServiceType.WARRANTY_SERVICE].includes(order.serviceType)
   }
 
-  canRequestRediagnosis(item: ServiceOrderItem | null): boolean {
-    if (!item) return false
-    return item.status === ServiceOrderItemStatus.IN_REPAIR && item.serviceType === ServiceType.DIAGNOSIS
+  canOpenRediagnosis(order: ServiceOrder | null): boolean {
+    if (!order) return false
+    return order.workflowStatus === ServiceOrderWorkflowStatus.IN_SERVICE && order.serviceType === ServiceType.DIAGNOSIS
   }
 
-  canStartRepairDirectly(item: ServiceOrderItem): boolean {
-    return item.status === ServiceOrderItemStatus.CLIENT_APPROVED
+  canManageAgreement(order: ServiceOrder | null): boolean {
+    if (!order || this.isWarrantyService(order)) return false
+    return [
+      ServiceOrderWorkflowStatus.DIAGNOSIS_READY,
+      ServiceOrderWorkflowStatus.UNDER_COORDINATION,
+    ].includes(order.workflowStatus)
   }
 
-  isWarrantyService(item: ServiceOrderItem | null): boolean {
-    return !!item && item.serviceType === ServiceType.WARRANTY_SERVICE
+  isAgreementEditable(): boolean {
+    return !this.agreementSummary || this.agreementSummary.status === ServiceOrderAgreementStatus.DRAFT
   }
 
-  canAcceptWarrantyReview(item: ServiceOrderItem | null): boolean {
-    return !!item && this.isWarrantyService(item) && item.status === ServiceOrderItemStatus.IN_DIAGNOSIS
+  getAgreementModalMessage(): string | null {
+    if (!this.agreementSummary) {
+      return null
+    }
+
+    switch (this.agreementSummary.status) {
+      case ServiceOrderAgreementStatus.DRAFT:
+        return 'Este acuerdo esta en borrador. Puedes editarlo o confirmarlo.'
+      case ServiceOrderAgreementStatus.CONFIRMED:
+        return 'Este acuerdo ya esta confirmado. Solo puedes revisarlo.'
+      case ServiceOrderAgreementStatus.SUPERSEDED:
+        return 'Este acuerdo fue reemplazado por una version mas reciente. Solo puedes revisarlo.'
+      case ServiceOrderAgreementStatus.VOIDED:
+        return 'Este acuerdo fue anulado. Solo puedes revisarlo.'
+      default:
+        return null
+    }
   }
 
-  canRejectWarrantyReview(item: ServiceOrderItem | null): boolean {
-    return !!item && this.isWarrantyService(item) && item.status === ServiceOrderItemStatus.IN_DIAGNOSIS
+  isAdditionalDiagnosisFlow(): boolean {
+    return this.selectedServiceOrder?.workflowStatus === ServiceOrderWorkflowStatus.IN_SERVICE
   }
 
-  canStartStandardService(item: ServiceOrderItem): boolean {
-    return this.isStandardService(item) && item.status === ServiceOrderItemStatus.READY_FOR_REPAIR
+  getDiagnosisOutcomeOptions(): Array<{ value: ServiceOrderDiagnosisOutcome; label: string }> {
+    return [
+      { value: ServiceOrderDiagnosisOutcome.REPAIRABLE, label: "Reparable" },
+      { value: ServiceOrderDiagnosisOutcome.IRREPARABLE, label: "Sin arreglo / irreparable" },
+      { value: ServiceOrderDiagnosisOutcome.NO_FAULT_FOUND, label: "No replicable" },
+    ]
   }
 
-  private buildInboxThread(item: ServiceOrderItem): ServiceOrderItemInboxThread {
-    const serviceOrderCode = item.serviceOrder?.code ?? `SO-${item.serviceOrderId}`
-    const itemLabel = `Equipo #${item.itemNumber || item.id}`
+  canStartRepairDirectly(order: ServiceOrder): boolean {
+    return (
+      order.workflowStatus === ServiceOrderWorkflowStatus.APPROVED_FOR_WORK &&
+      !this.isStandardService(order)
+    )
+  }
+
+  isWarrantyService(order: ServiceOrder | null): boolean {
+    return !!order && order.serviceType === ServiceType.WARRANTY_SERVICE
+  }
+
+  canAcceptWarrantyReview(order: ServiceOrder | null): boolean {
+    return !!order && this.isWarrantyService(order) && order.workflowStatus === ServiceOrderWorkflowStatus.UNDER_REVIEW
+  }
+
+  canRejectWarrantyReview(order: ServiceOrder | null): boolean {
+    return !!order && this.isWarrantyService(order) && order.workflowStatus === ServiceOrderWorkflowStatus.UNDER_REVIEW
+  }
+
+  canStartStandardService(order: ServiceOrder): boolean {
+    return this.isStandardService(order) && order.workflowStatus === ServiceOrderWorkflowStatus.APPROVED_FOR_WORK
+  }
+
+  private buildInboxThread(order: ServiceOrder): ServiceOrderInboxThread {
+    const serviceOrderCode = order.code ?? `SO-${order.id}`
+    const equipmentLabel = this.getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther)
     const shortRef = String(serviceOrderCode).slice(-4)
     const clientAlias = `Cliente-${shortRef || "XXXX"}`
-    const techRef = item.assignedToTechnicianId ? String(item.assignedToTechnicianId).padStart(2, "0") : "00"
+    const techRef = order.assignedToTechnicianId ? String(order.assignedToTechnicianId).padStart(2, "0") : "00"
     const assignedTechnicianAlias = `Tecnico-${techRef}`
 
     return {
-      serviceOrderItemId: Number(item.id),
+      serviceOrderId: Number(order.id),
       serviceOrderCode,
-      itemLabel,
+      equipmentLabel,
       clientAlias,
       assignedTechnicianAlias,
       unreadForSupervisor: 0,
@@ -551,7 +907,7 @@ export class TechnicianPanel implements OnInit {
         {
           id: Date.now() + 1,
           author: "CLIENT",
-          text: "Buenos días, ¿podrían indicarme el avance del equipo?",
+          text: "Buenos dias, podrian indicarme el avance del equipo?",
           createdAt: new Date(),
         },
       ],
@@ -594,18 +950,21 @@ export class TechnicianPanel implements OnInit {
     })
   }
 
-  isDiagnosisService(item: ServiceOrderItem | null): boolean {
-    return !!item && item.serviceType === ServiceType.DIAGNOSIS
+  isDiagnosisService(order: ServiceOrder | null): boolean {
+    return !!order && order.serviceType === ServiceType.DIAGNOSIS
   }
 
-  isStandardService(item: ServiceOrderItem | null): boolean {
-    return !!item && item.serviceType === ServiceType.STANDARD_SERVICE
+  isStandardService(order: ServiceOrder | null): boolean {
+    return !!order && [ServiceType.STANDARD_SERVICE, ServiceType.ASSEMBLY].includes(order.serviceType)
   }
 
   private syncCurrentUserContext(): void {
-    const current = this.currentUserService.value ?? this.restoreUserFromStorage()
-    this.currentUser = current
-    this.isTechnician = hasAnyRole(current?.roles, TECHNICIAN_ROLE_NAMES)
+    this.currentUser = this.currentUserService.value ?? this.restoreUserFromStorage()
+  }
+
+  private getCurrentUserId(): number | null {
+    const id = Number(this.currentUser?.id)
+    return Number.isFinite(id) && id > 0 ? id : null
   }
 
   private restoreUserFromStorage(): User | null {
@@ -631,19 +990,19 @@ export class TechnicianPanel implements OnInit {
     return this.equipmentTypeLabels[type] ?? String(type)
   }
 
-  getDiagnosisStatusLabel(status?: string | null): string {
+  getDiagnosisStatusLabel(status?: ServiceOrderDiagnosisStatus | null): string {
     if (!status) return "Sin estado"
     switch (status) {
-      case "CURRENT":
+      case ServiceOrderDiagnosisStatus.CURRENT:
         return "Actual"
-      case "ARCHIVED":
-        return "Archivado"
+      case ServiceOrderDiagnosisStatus.SUPERSEDED:
+        return "Reemplazado"
       default:
         return status
     }
   }
 
-  getProductName(product: ServiceOrderQuoteProduct): string {
+  getProductName(product: ServiceOrderAgreementProduct): string {
     if (product?.product?.name) {
       const sku = product.product.sku ? `${product.product.sku} | ` : ""
       return `${sku}${product.product.name}`
@@ -652,7 +1011,13 @@ export class TechnicianPanel implements OnInit {
     return "Producto sin referencia"
   }
 
-  getServiceName(service: ServiceOrderQuoteServiceItem): string {
+  getCatalogProductName(productId: number | null): string {
+    const product = this.products.find((entry) => Number(entry.id) === Number(productId))
+    if (!product) return "Producto"
+    return product.sku ? `${product.sku} | ${product.name}` : product.name
+  }
+
+  getServiceName(service: ServiceOrderAgreementServiceItem): string {
     if (service?.service?.name) {
       const code = service.service.code ? `${service.service.code} | ` : ""
       return `${code}${service.service.name}`
@@ -661,92 +1026,140 @@ export class TechnicianPanel implements OnInit {
     return "Servicio sin referencia"
   }
 
-  private shouldLoadServiceOrderQuote(item: ServiceOrderItem | null): boolean {
-    if (!item) return false
-    if (item.serviceType === ServiceType.WARRANTY_SERVICE) return false
+  getCatalogServiceName(serviceId: number | null): string {
+    const service = this.services.find((entry) => Number(entry.id) === Number(serviceId))
+    if (!service) return "Servicio"
+    return service.code ? `${service.code} | ${service.name}` : service.name
+  }
+
+  private shouldLoadServiceOrderAgreement(order: ServiceOrder | null): boolean {
+    if (!order) return false
+    if (order.serviceType === ServiceType.WARRANTY_SERVICE) return false
     return [
-      ServiceOrderItemStatus.QUOTED,
-      ServiceOrderItemStatus.SENT_TO_CLIENT,
-      ServiceOrderItemStatus.AWAITING_CLIENT_RESPONSE,
-      ServiceOrderItemStatus.CLIENT_APPROVED,
-      ServiceOrderItemStatus.CLOSED_REJECTED_CLIENT,
-      ServiceOrderItemStatus.READY_FOR_REPAIR,
-      ServiceOrderItemStatus.IN_REPAIR,
-      ServiceOrderItemStatus.REPAIRED,
-      ServiceOrderItemStatus.DELIVERED,
-    ].includes(item.status)
+      ServiceOrderWorkflowStatus.DIAGNOSIS_READY,
+      ServiceOrderWorkflowStatus.UNDER_COORDINATION,
+      ServiceOrderWorkflowStatus.APPROVED_FOR_WORK,
+      ServiceOrderWorkflowStatus.IN_SERVICE,
+      ServiceOrderWorkflowStatus.WAITING_PARTS,
+      ServiceOrderWorkflowStatus.SERVICE_DONE,
+    ].includes(order.workflowStatus)
   }
 
-  canShowServiceOrderQuoteSection(item: ServiceOrderItem | null): boolean {
-    return this.shouldLoadServiceOrderQuote(item)
+  canShowServiceOrderAgreementSection(order: ServiceOrder | null): boolean {
+    return this.shouldLoadServiceOrderAgreement(order)
   }
 
-  private loadServiceOrderQuoteSummary(item: ServiceOrderItem | null): void {
-    if (!item?.id || !this.shouldLoadServiceOrderQuote(item)) {
-      this.quoteSummary = null
+  private loadServiceOrderAgreementSummary(order: ServiceOrder | null): void {
+    if (!order?.id || !this.shouldLoadServiceOrderAgreement(order)) {
+      this.agreementSummary = null
+      this.agreementHistory = []
       return
     }
-    this.isLoadingServiceOrderQuote = true
-    this.quoteSummary = null
-    this.quoteService
-      .findAll({ page: 1, limit: 5, serviceOrderItemId: Number(item.id) })
-      .pipe(finalize(() => (this.isLoadingServiceOrderQuote = false)))
+    this.isLoadingServiceOrderAgreement = true
+    this.agreementSummary = null
+    this.agreementHistory = []
+    this.agreementService
+      .findAll({ page: 1, limit: 20, serviceOrderId: Number(order.id) })
+      .pipe(finalize(() => (this.isLoadingServiceOrderAgreement = false)))
       .subscribe({
         next: ({ data }) => {
           const list = data ?? []
-          const preferredOrder = [
-            ServiceOrderQuoteStatus.CLIENT_APPROVED,
-            ServiceOrderQuoteStatus.CURRENT,
-            ServiceOrderQuoteStatus.SENT_TO_CLIENT,
-            ServiceOrderQuoteStatus.AWAITING_CLIENT_RESPONSE,
-          ]
-          const match = preferredOrder
-            .map((status) => list.find((q) => q.status === status))
-            .find((q) => !!q)
-          this.quoteSummary = match ?? list[0] ?? null
+          this.agreementHistory = list
+          const draft = list.find((agreement) => agreement.status === ServiceOrderAgreementStatus.DRAFT) ?? null
+          const confirmed = list.find((agreement) => agreement.status === ServiceOrderAgreementStatus.CONFIRMED) ?? null
+          if (this.canManageAgreement(order) && !draft) {
+            this.agreementSummary = null
+            return
+          }
+          this.agreementSummary = draft ?? confirmed ?? list[0] ?? null
         },
         error: () => {
-          this.quoteSummary = null
+          this.agreementSummary = null
+          this.agreementHistory = []
         },
       })
   }
 
-  getItemStatusLabel(status: ServiceOrderItemStatus, item?: ServiceOrderItem | null): string {
+  private hydrateAgreementComposer(agreement: ServiceOrderAgreement): void {
+    this.agreementItems = []
+    agreement.productItems?.forEach((product) => {
+      this.agreementItems.push({
+        id: Date.now() + Math.random(),
+        type: "product",
+        productId: product.productId,
+        quantity: product.quantity,
+        unitPrice: product.unitPrice,
+        requiresPurchase: product.requiresPurchase,
+        notes: product.notes || "",
+      })
+    })
+    agreement.serviceItems?.forEach((service) => {
+      this.agreementItems.push({
+        id: Date.now() + Math.random(),
+        type: "service",
+        serviceId: service.serviceId,
+        notes: service.notes || "",
+      })
+    })
+  }
+
+  getAgreementStatusLabel(status?: ServiceOrderAgreementStatus | null): string {
+    if (!status) return "Sin estado"
     switch (status) {
-      case ServiceOrderItemStatus.ASSIGNED:
-        return "Asignado"
-      case ServiceOrderItemStatus.IN_DIAGNOSIS:
-        return item?.serviceType === ServiceType.WARRANTY_SERVICE ? "En revisión de garantía" : "En diagnóstico"
-      case ServiceOrderItemStatus.DIAGNOSED:
-        return "Diagnosticado"
-      case ServiceOrderItemStatus.QUOTED:
-        return "Cotizado"
-      case ServiceOrderItemStatus.SENT_TO_CLIENT:
-        return "Enviado al cliente"
-      case ServiceOrderItemStatus.AWAITING_CLIENT_RESPONSE:
-        return "Esperando respuesta del cliente"
-      case ServiceOrderItemStatus.CLIENT_APPROVED:
-        return item?.serviceType === ServiceType.WARRANTY_SERVICE ? "Garantía aceptada" : "Aprobado por cliente"
-      case ServiceOrderItemStatus.QUOTE_EXPIRED:
-        return "Cotización expirada"
-      case ServiceOrderItemStatus.READY_FOR_REPAIR:
-        return "Listo para reparación"
-      case ServiceOrderItemStatus.CLIENT_REJECTED:
-        return "Rechazado por cliente"
-      case ServiceOrderItemStatus.CLOSED_REJECTED_CLIENT:
-        return "Cerrado por rechazo del cliente"
-      case ServiceOrderItemStatus.AWAITING_PARTS:
-        return "Esperando repuestos"
-      case ServiceOrderItemStatus.IN_REPAIR:
-        return "En reparación"
-      case ServiceOrderItemStatus.REPAIRED:
-        return "Reparado"
-      case ServiceOrderItemStatus.DELIVERED:
-        return "Entregado"
-      case ServiceOrderItemStatus.CANCELLED:
-        return item?.serviceType === ServiceType.WARRANTY_SERVICE ? "Garantía rechazada" : "Cancelado"
+      case ServiceOrderAgreementStatus.DRAFT:
+        return "Borrador"
+      case ServiceOrderAgreementStatus.CONFIRMED:
+        return "Confirmado"
+      case ServiceOrderAgreementStatus.SUPERSEDED:
+        return "Reemplazado"
+      case ServiceOrderAgreementStatus.VOIDED:
+        return "Anulado"
       default:
         return status
+    }
+  }
+
+  private toNumericId(value: unknown): number | null {
+    const numeric = Number(value)
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null
+  }
+
+  productSearchFn = (term: string, item: Product): boolean => {
+    const query = term.toLowerCase().trim()
+    return !query || `${item?.sku ?? ""} ${item?.name ?? ""}`.toLowerCase().includes(query)
+  }
+
+  serviceSearchFn = (term: string, item: Service): boolean => {
+    const query = term.toLowerCase().trim()
+    return !query || `${item?.code ?? ""} ${item?.name ?? ""}`.toLowerCase().includes(query)
+  }
+
+  getWorkflowLabel(order: ServiceOrder): string {
+    switch (order.workflowStatus) {
+      case ServiceOrderWorkflowStatus.ASSIGNED:
+        return "Asignado"
+      case ServiceOrderWorkflowStatus.UNDER_REVIEW:
+        return this.isWarrantyService(order) ? "En revision de garantia" : "En diagnostico"
+      case ServiceOrderWorkflowStatus.DIAGNOSIS_READY:
+        return "Diagnosticado"
+      case ServiceOrderWorkflowStatus.UNDER_COORDINATION:
+        return "En coordinacion"
+      case ServiceOrderWorkflowStatus.APPROVED_FOR_WORK:
+        return this.isWarrantyService(order) ? "Garantia aceptada" : "Aprobado para servicio"
+      case ServiceOrderWorkflowStatus.IN_SERVICE:
+        return "En servicio"
+      case ServiceOrderWorkflowStatus.WAITING_PARTS:
+        return "Esperando repuestos"
+      case ServiceOrderWorkflowStatus.SERVICE_DONE:
+        return "Servicio finalizado"
+      case ServiceOrderWorkflowStatus.NO_SOLUTION:
+        return "Sin solucion"
+      case ServiceOrderWorkflowStatus.READY_FOR_PICKUP:
+        return "Pendiente de recojo"
+      case ServiceOrderWorkflowStatus.CANCELLED:
+        return this.isWarrantyService(order) ? "Garantia rechazada" : "Cancelado"
+      default:
+        return order.workflowStatus
     }
   }
 }

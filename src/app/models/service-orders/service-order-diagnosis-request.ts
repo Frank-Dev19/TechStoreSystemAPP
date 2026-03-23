@@ -1,17 +1,23 @@
-import { ServiceOrderDiagnosisStatus } from './service-order-diagnosis';
+import { ServiceOrderDiagnosisOutcome, ServiceOrderDiagnosisStatus } from './service-order-diagnosis';
 
 export interface ServiceOrderDiagnosisSaveRequest {
-  serviceOrderItemId: number;
+  serviceOrderId?: number;
   sequenceNumber?: number;
   status?: ServiceOrderDiagnosisStatus | null;
+  outcome?: ServiceOrderDiagnosisOutcome | null;
   summary: string;
   details?: string | null;
+  outcomeReason?: string | null;
+  recommendedAction?: string | null;
 }
 
 export interface ServiceOrderDiagnosisUpdateRequest {
-  serviceOrderItemId: number;
+  serviceOrderId?: number;
   sequenceNumber?: number;
   status?: ServiceOrderDiagnosisStatus | null;
-  summary: string;
+  outcome?: ServiceOrderDiagnosisOutcome | null;
+  summary?: string;
   details?: string | null;
+  outcomeReason?: string | null;
+  recommendedAction?: string | null;
 }

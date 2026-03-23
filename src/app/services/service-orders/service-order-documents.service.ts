@@ -1,56 +1,52 @@
-import { Injectable } from "@angular/core"
+﻿import { Injectable } from "@angular/core"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
-import { ServiceOrder } from "../../models/service-orders/service-order"
-import { ServiceOrderItem, ServiceType } from "../../models/service-orders/service-order-item"
-import { ServiceOrderQuote } from "../../models/service-orders/service-quote"
+import { EquipmentType, ServiceOrder, ServiceType } from "../../models/service-orders/service-order"
+import { ServiceOrderAgreement } from "../../models/service-orders/service-agreement"
 
 type OrderSummaryContext = {
   serviceOrder: ServiceOrder
-  item: ServiceOrderItem
-  quote: ServiceOrderQuote | null
+  agreement: ServiceOrderAgreement | null
 }
 
 @Injectable({ providedIn: "root" })
 export class ServiceOrderDocumentsService {
   downloadOrderSummaryPdf(context: OrderSummaryContext): void {
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-    const item = context.item
     const serviceOrder = context.serviceOrder
-    const quote = context.quote
-    const isCommercial = item.serviceType === ServiceType.STANDARD_SERVICE && !!quote
+    const quote = context.agreement
+    const isCommercial = serviceOrder.serviceType === ServiceType.STANDARD_SERVICE && !!quote
 
     this.drawHeader(doc, "Resumen de orden de servicio", serviceOrder.code)
 
-    let cursorY = 34
+    let cursorY = 30
     cursorY = this.drawInfoGrid(doc, cursorY, [
       ["Fecha y hora", this.formatDateTime(serviceOrder.createdAt)],
       ["Estado", this.getOrderStatusLabel(serviceOrder.status)],
-      ["Tipo de servicio", this.getServiceTypeLabel(item.serviceType)],
+      ["Tipo de servicio", this.getServiceTypeLabel(serviceOrder.serviceType)],
       ["Cliente", this.getClientName(serviceOrder)],
       ["Documento", this.getClientDocument(serviceOrder)],
-      ["Teléfono", serviceOrder.clientSnapshotPhone || serviceOrder.contactPhone || "-"],
+      ["Telefono", serviceOrder.clientSnapshotPhone || serviceOrder.contactPhone || "-"],
       ["Correo", serviceOrder.clientSnapshotEmail || serviceOrder.contactEmail || "-"],
-      ["Método de pago", isCommercial ? "No registrado" : "No aplica en esta etapa"],
     ])
 
-    cursorY = this.drawSectionTitle(doc, cursorY + 4, "Equipo")
+    cursorY = this.drawSectionTitle(doc, cursorY + 5, "Equipo")
     cursorY = this.drawMultilineBlock(doc, cursorY, [
-      `Tipo: ${this.getEquipmentTypeLabel(item)}`,
-      `Marca: ${item.brand || "-"}`,
-      `Modelo: ${item.model || "-"}`,
-      `Serie/Identificador: ${item.serialNumber || "-"}`,
-      `Accesorios: ${item.accessories || "-"}`,
+      `Tipo: ${this.getEquipmentTypeLabel(serviceOrder.equipmentType, serviceOrder.equipmentTypeOther)}`,
+      `Marca: ${serviceOrder.brand || "-"}`,
+      `Modelo: ${serviceOrder.model || "-"}`,
+      `Serie/Identificador: ${serviceOrder.serialNumber || "-"}`,
+      `Accesorios: ${serviceOrder.accessories || "-"}`,
       `Notas u observaciones: ${serviceOrder.notes || "-"}`,
     ])
 
-    if (item.serviceType === ServiceType.DIAGNOSIS) {
-      cursorY = this.drawSectionTitle(doc, cursorY + 4, "Detalle inicial")
-      cursorY = this.drawParagraph(doc, cursorY, item.initialIssue || "Sin detalle registrado.")
+    if (serviceOrder.serviceType === ServiceType.DIAGNOSIS) {
+      cursorY = this.drawSectionTitle(doc, cursorY + 5, "Detalle inicial")
+      cursorY = this.drawParagraph(doc, cursorY, serviceOrder.initialIssue || "Sin detalle registrado.")
     }
 
     if (isCommercial && quote) {
-      cursorY = this.drawSectionTitle(doc, cursorY + 4, "Detalle comercial")
+      cursorY = this.drawSectionTitle(doc, cursorY + 5, "Detalle comercial")
       const rows: Array<Array<string | number>> = []
 
       quote.productItems.forEach((product) => {
@@ -75,18 +71,39 @@ export class ServiceOrderDocumentsService {
 
       autoTable(doc, {
         startY: cursorY,
-        head: [["Tipo", "Descripción", "Cantidad", "P. unitario", "Importe"]],
+        head: [["Tipo", "Descripcion", "Cantidad", "P. unitario", "Importe"]],
         body: rows,
         theme: "grid",
-        styles: { fontSize: 9, cellPadding: 2.5 },
-        headStyles: { fillColor: [31, 64, 104], textColor: 255 },
-        margin: { left: 14, right: 14 },
+        styles: {
+          font: "courier",
+          fontSize: 9.5,
+          cellPadding: 2.3,
+          lineColor: [25, 25, 25],
+          lineWidth: 0.2,
+          textColor: [20, 20, 20],
+        },
+        headStyles: {
+          fillColor: [255, 255, 255],
+          textColor: [20, 20, 20],
+          fontStyle: "bold",
+          lineColor: [25, 25, 25],
+          lineWidth: 0.25,
+        },
+        margin: { left: 10, right: 10 },
+        tableWidth: 190,
+        columnStyles: {
+          0: { cellWidth: 22 },
+          1: { cellWidth: 86 },
+          2: { cellWidth: 22, halign: "right" },
+          3: { cellWidth: 30, halign: "right" },
+          4: { cellWidth: 30, halign: "right" },
+        },
       })
 
       const finalY = (doc as any).lastAutoTable?.finalY ?? cursorY
-      cursorY = finalY + 6
+      cursorY = finalY + 7
       const subtotal = Number(quote.totalAmount || 0)
-      const discount = Number(item.discount || 0)
+      const discount = Number(serviceOrder.discount || 0)
       const total = Math.max(0, subtotal - discount)
 
       cursorY = this.drawTotals(doc, cursorY, [
@@ -100,19 +117,19 @@ export class ServiceOrderDocumentsService {
   }
 
   openEquipmentStickerPdf(context: OrderSummaryContext): void {
-    const { serviceOrder, item } = context
-    const width = 112
-    const margin = 2.5
-    const maxChars = 48
-    const columnChars = 24
+    const { serviceOrder } = context
+    const width = 118
+    const margin = 1.5
+    const maxChars = 68
+    const columnChars = 34
     const lineHeight = 4
     const pageLines: string[] = []
     const fields: Array<[string, string]> = [
-      ["Tipo", this.getEquipmentTypeLabel(item)],
-      ["Marca", item.brand || "-"],
-      ["Modelo", item.model || "-"],
-      ["Serie", item.serialNumber || "-"],
-      ["Accesorios", item.accessories || "-"],
+      ["Tipo", this.getEquipmentTypeLabel(serviceOrder.equipmentType, serviceOrder.equipmentTypeOther)],
+      ["Marca", serviceOrder.brand || "-"],
+      ["Modelo", serviceOrder.model || "-"],
+      ["Serie", serviceOrder.serialNumber || "-"],
+      ["Accesorios", serviceOrder.accessories || "-"],
       ["Ingreso", this.formatDateTime(serviceOrder.createdAt)],
       ["Estado", this.getOrderStatusLabel(serviceOrder.status)],
       ["Notas", serviceOrder.notes || "-"],
@@ -150,18 +167,15 @@ export class ServiceOrderDocumentsService {
 
     pageLines.push("-".repeat(maxChars))
 
-    const pageHeight = Math.max(34, margin * 2 + pageLines.length * lineHeight + 1.5)
+    const pageHeight = Math.max(30, margin * 2 + pageLines.length * lineHeight + 1.5)
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [width, pageHeight] })
     doc.setFont("courier", "normal")
-    doc.setFontSize(8.8)
+    doc.setFontSize(8.1)
 
-    let currentY = margin + 1.8
-    pageLines.forEach((line, index) => {
+    let currentY = margin + 1.6
+    pageLines.forEach((line) => {
       doc.text(line, margin, currentY)
       currentY += lineHeight
-      if (index === 1) {
-        doc.setFont("courier", "normal")
-      }
     })
 
     const blobUrl = doc.output("bloburl")
@@ -169,68 +183,77 @@ export class ServiceOrderDocumentsService {
   }
 
   private drawHeader(doc: jsPDF, title: string, code: string): void {
-    doc.setFillColor(31, 64, 104)
-    doc.rect(0, 0, 210, 22, "F")
-    doc.setTextColor(255, 255, 255)
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(17)
-    doc.text(title, 14, 12)
-    doc.setFontSize(10)
-    doc.text(`Orden ${code}`, 14, 18)
+    doc.setDrawColor(20, 20, 20)
+    doc.setLineWidth(0.5)
+    doc.line(10, 12, 200, 12)
+    doc.setFont("courier", "bold")
+    doc.setFontSize(16)
+    doc.text(title.toUpperCase(), 105, 20, { align: "center" })
+    doc.setFontSize(12)
+    doc.text(code, 105, 27, { align: "center" })
+    doc.line(10, 31, 200, 31)
     doc.setTextColor(20, 20, 20)
   }
 
   private drawInfoGrid(doc: jsPDF, startY: number, rows: string[][]): number {
-    let y = startY
+    const leftX = 10
+    const rightX = 106
+    const rowHeight = 10
+
     rows.forEach((row, index) => {
-      const leftX = index % 2 === 0 ? 14 : 108
-      const currentY = y + Math.floor(index / 2) * 11
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(9)
-      doc.text(row[0], leftX, currentY)
-      doc.setFont("helvetica", "normal")
-      doc.setFontSize(10)
-      doc.text(row[1] || "-", leftX, currentY + 5)
+      const currentX = index % 2 === 0 ? leftX : rightX
+      const currentY = startY + Math.floor(index / 2) * rowHeight
+      const value = row[1] || "-"
+
+      doc.setFont("courier", "bold")
+      doc.setFontSize(9.5)
+      doc.text(`${row[0]}:`, currentX, currentY)
+      doc.setFont("courier", "normal")
+      doc.text(doc.splitTextToSize(value, 84), currentX, currentY + 4.5)
     })
-    return startY + Math.ceil(rows.length / 2) * 11
+
+    return startY + Math.ceil(rows.length / 2) * rowHeight + 1
   }
 
   private drawSectionTitle(doc: jsPDF, y: number, title: string): number {
-    doc.setDrawColor(220, 226, 232)
-    doc.line(14, y, 196, y)
-    doc.setFont("helvetica", "bold")
+    doc.setDrawColor(20, 20, 20)
+    doc.setLineWidth(0.3)
+    doc.line(10, y, 200, y)
+    doc.setFont("courier", "bold")
     doc.setFontSize(11)
-    doc.text(title, 14, y + 6)
+    doc.text(title.toUpperCase(), 10, y + 6)
     return y + 10
   }
 
   private drawMultilineBlock(doc: jsPDF, startY: number, lines: string[]): number {
     let y = startY
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(10)
+    doc.setFont("courier", "normal")
+    doc.setFontSize(10.5)
     lines.forEach((line) => {
-      const split = doc.splitTextToSize(line, 180)
-      doc.text(split, 14, y)
-      y += split.length * 5
+      const split = doc.splitTextToSize(line, 190)
+      doc.text(split, 10, y)
+      y += split.length * 5.2
     })
     return y
   }
 
   private drawParagraph(doc: jsPDF, startY: number, text: string): number {
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(10)
-    const split = doc.splitTextToSize(text || "-", 180)
-    doc.text(split, 14, startY)
-    return startY + split.length * 5
+    doc.setFont("courier", "normal")
+    doc.setFontSize(10.5)
+    const split = doc.splitTextToSize(text || "-", 190)
+    doc.text(split, 10, startY)
+    return startY + split.length * 5.2
   }
 
   private drawTotals(doc: jsPDF, startY: number, rows: Array<[string, string]>): number {
     let y = startY
+    doc.setDrawColor(20, 20, 20)
+    doc.line(128, y - 4, 200, y - 4)
     rows.forEach(([label, value], index) => {
-      doc.setFont("helvetica", index === rows.length - 1 ? "bold" : "normal")
+      doc.setFont("courier", index === rows.length - 1 ? "bold" : "normal")
       doc.setFontSize(index === rows.length - 1 ? 11 : 10)
-      doc.text(label, 142, y)
-      doc.text(value, 196, y, { align: "right" })
+      doc.text(label, 130, y)
+      doc.text(value, 200, y, { align: "right" })
       y += 6
     })
     return y
@@ -246,32 +269,32 @@ export class ServiceOrderDocumentsService {
     return [docType, docNumber].filter(Boolean).join(": ") || "-"
   }
 
-  private getEquipmentTypeLabel(item: ServiceOrderItem): string {
-    if (item.equipmentType === "OTHER" && item.equipmentTypeOther?.trim()) {
-      return item.equipmentTypeOther.trim()
+  private getEquipmentTypeLabel(type?: EquipmentType | null, equipmentTypeOther?: string | null): string {
+    if (type === EquipmentType.OTHER && equipmentTypeOther?.trim()) {
+      return equipmentTypeOther.trim()
     }
     const labels: Record<string, string> = {
       LAPTOP: "Laptop",
       DESKTOP_PC: "PC de escritorio",
       ALL_IN_ONE: "All in One",
       PRINTER: "Impresora",
-      SCANNER: "Escáner",
+      SCANNER: "Escaner",
       PROJECTOR: "Proyector",
       MONITOR: "Monitor",
       SERVER: "Servidor",
       NETWORK_DEVICE: "Equipo de red",
       OTHER: "Otro",
     }
-    return labels[item.equipmentType] || item.equipmentType
+    return labels[String(type ?? "")] || String(type ?? "-")
   }
 
   private getServiceTypeLabel(type: ServiceType): string {
     const labels: Record<ServiceType, string> = {
-      [ServiceType.STANDARD_SERVICE]: "Estándar",
-      [ServiceType.DIAGNOSIS]: "Diagnóstico",
-      [ServiceType.WARRANTY_SERVICE]: "Garantía",
+      [ServiceType.STANDARD_SERVICE]: "Estandar",
+      [ServiceType.DIAGNOSIS]: "Diagnostico",
+      [ServiceType.WARRANTY_SERVICE]: "Garantia",
       [ServiceType.ASSEMBLY]: "Ensamblaje",
-      [ServiceType.CUSTOMER_SERVICE]: "Atención al cliente",
+      [ServiceType.CUSTOMER_SERVICE]: "Atencion al cliente",
     }
     return labels[type] || type
   }
@@ -279,10 +302,11 @@ export class ServiceOrderDocumentsService {
   private getOrderStatusLabel(status: string): string {
     const labels: Record<string, string> = {
       OPEN: "Abierto",
-      IN_PROGRESS: "En progreso",
-      PARTIALLY_COMPLETED: "Parcialmente completado",
-      COMPLETED: "Completado",
+      ACTIVE: "En progreso",
+      READY_FOR_PICKUP: "Listo para entrega",
+      DELIVERED: "Entregado",
       CANCELLED: "Cancelado",
+      CLOSED_NO_SOLUTION: "Sin solucion",
     }
     return labels[status] || status
   }
@@ -376,3 +400,5 @@ export class ServiceOrderDocumentsService {
     return lines
   }
 }
+
+

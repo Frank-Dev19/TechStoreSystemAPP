@@ -5,7 +5,7 @@ import { lastValueFrom } from 'rxjs'
 
 @Injectable({ providedIn: 'root' })
 export class ProductsApiService {
-  private readonly baseUrl = '/inventory/catalogs/products'
+  private readonly baseUrl = '/inventory/catalogs/products/all'
 
   constructor(private base: BaseService) {}
 

@@ -1,8 +1,8 @@
-<div class="technician-panel">
+﻿<div class="technician-panel">
   <div class="panel-header">
     <div class="title-section">
-      <h1 class="page-title">Panel del Técnico</h1>
-      <p class="page-subtitle">Gestiona los equipos asignados y diagnósticos</p>
+      <h1 class="page-title">Panel del Tecnico</h1>
+      <p class="page-subtitle">Gestiona las ordenes asignadas y sus diagnosticos</p>
     </div>
   </div>
 
@@ -10,82 +10,82 @@
     <div class="tabs-navigation">
       <button class="tab-btn" [class.active]="activeTab === 'todo'" (click)="setActiveTab('todo')">
         <i class="fas fa-tasks"></i>
-        Por hacer ({{ todoItems.length }})
+        Por hacer ({{ todoOrders.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'diagnosis'" (click)="setActiveTab('diagnosis')">
         <i class="fas fa-stethoscope"></i>
-        En diagnóstico ({{ diagnosisItems.length }})
+        En diagnostico ({{ diagnosisOrders.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'pending_approval'" (click)="setActiveTab('pending_approval')">
         <i class="fas fa-hourglass-half"></i>
-        Pendientes de cotización o respuesta ({{ pendingApprovalItems.length }})
+        Pendientes de coordinacion o acuerdo ({{ pendingApprovalOrders.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'repair'" (click)="setActiveTab('repair')">
         <i class="fas fa-wrench"></i>
-        En reparación ({{ repairItems.length }})
+        En servicio ({{ repairOrders.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'repaired'" (click)="setActiveTab('repaired')">
         <i class="fas fa-check-circle"></i>
-        Reparados ({{ repairedItems.length }})
+        Finalizados ({{ repairedOrders.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="setActiveTab('all')">
         <i class="fas fa-list"></i>
-        Todos ({{ allItems.length }})
+        Todos ({{ allOrders.length }})
       </button>
     </div>
 
     <div class="items-grid">
       @if (activeTab === 'todo') {
-        @if (todoItems.length === 0) {
+        @if (todoOrders.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay equipos por atender</p>
+            <p>No hay ordenes por atender</p>
           </div>
         } @else {
-          @for (item of paginatedVisibleItems; track item.id) {
-            <div class="item-card" (click)="selectItem(item)">
+          @for (order of paginatedVisibleOrders; track order.id) {
+            <div class="item-card" (click)="selectServiceOrder(order)">
               <div class="card-header">
-                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-info">{{ getItemStatusLabel(item.status, item) }}</span>
+                <h3>{{ order.code || 'SIN-CODIGO' }}</h3>
+                <span class="badge badge-info">{{ getWorkflowLabel(order) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
-                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
-                @if (item.status === 'ASSIGNED' && item.serviceType === 'STANDARD_SERVICE') {
+                <p class="equipment-type"><i class="fas fa-desktop"></i> {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</p>
+                <p class="issue-text"><i class="fas fa-screwdriver-wrench"></i> {{ order.initialIssue || 'Sin detalle del problema' }}</p>
+                @if (order.workflowStatus === 'ASSIGNED' && order.serviceType === 'STANDARD_SERVICE') {
                   <p class="info-text pending-quote">
                     <i class="fas fa-hourglass-half"></i>
-                    Esperando cotización
+                    Esperando inicio de servicio
                   </p>
                 }
               </div>
               <div class="card-actions">
                 <button
                   class="btn btn-sm btn-whatsapp btn-icon-only"
-                  *ngIf="canOpenClientInbox(item)"
+                  *ngIf="canOpenClientInbox(order)"
                   title="WhatsApp"
                   aria-label="WhatsApp"
-                  (click)="openWhatsAppInbox(item, $event)"
+                  (click)="openWhatsAppInbox(order, $event)"
                 >
                   <i class="fab fa-whatsapp"></i>
                 </button>
                 <button
                   class="btn btn-sm btn-primary"
-                  *ngIf="canStartDiagnosis(item)"
-                  (click)="selectItem(item); startDiagnosis(item); $event.stopPropagation()"
+                  *ngIf="canStartDiagnosis(order)"
+                  (click)="selectServiceOrder(order); startDiagnosis(order); $event.stopPropagation()"
                 >
-                  <i class="fas fa-play"></i> {{ isWarrantyService(item) ? 'Iniciar revisión' : 'Iniciar diagnóstico' }}
+                  <i class="fas fa-play"></i> {{ isWarrantyService(order) ? 'Iniciar revision' : 'Iniciar diagnostico' }}
                 </button>
                 <button
                   class="btn btn-sm btn-primary"
-                  *ngIf="canStartStandardService(item)"
-                  (click)="selectItem(item); startStandardService(item); $event.stopPropagation()"
+                  *ngIf="canStartStandardService(order)"
+                  (click)="selectServiceOrder(order); startStandardService(order); $event.stopPropagation()"
                 >
                   <i class="fas fa-play"></i> Iniciar servicio
                 </button>
                 <button
                   class="btn btn-sm btn-success"
-                  *ngIf="canStartRepairDirectly(item)"
-                  (click)="selectItem(item); startRepair(item); $event.stopPropagation()"
+                  *ngIf="canStartRepairDirectly(order)"
+                  (click)="selectServiceOrder(order); startRepair(order); $event.stopPropagation()"
                 >
                   <i class="fas fa-tools"></i> Iniciar servicio
                 </button>
@@ -96,42 +96,55 @@
       }
 
       @if (activeTab === 'diagnosis') {
-        @if (diagnosisItems.length === 0) {
+        @if (diagnosisOrders.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay equipos en diagnóstico</p>
+            <p>No hay ordenes en diagnostico</p>
           </div>
         } @else {
-          @for (item of paginatedVisibleItems; track item.id) {
-            <div class="item-card active-item" (click)="selectItem(item)">
-              <div class="active-indicator">EN DIAGNÓSTICO</div>
+          @for (order of paginatedVisibleOrders; track order.id) {
+            <div class="item-card active-item" (click)="selectServiceOrder(order)">
+              <div class="active-indicator">EN DIAGNOSTICO</div>
               <div class="card-header">
-                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-warning">{{ getItemStatusLabel(item.status, item) }}</span>
+                <h3>{{ order.code || 'SIN-CODIGO' }}</h3>
+                <span class="badge badge-warning">{{ getWorkflowLabel(order) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
-                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
+                <p class="equipment-type"><i class="fas fa-desktop"></i> {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</p>
+                <p class="issue-text"><i class="fas fa-screwdriver-wrench"></i> {{ order.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
                 <button
                   class="btn btn-sm btn-whatsapp btn-icon-only"
-                  *ngIf="canOpenClientInbox(item)"
+                  *ngIf="canOpenClientInbox(order)"
                   title="WhatsApp"
                   aria-label="WhatsApp"
-                  (click)="openWhatsAppInbox(item, $event)"
+                  (click)="openWhatsAppInbox(order, $event)"
                 >
                   <i class="fab fa-whatsapp"></i>
                 </button>
                 <button
                   class="btn btn-sm btn-primary"
-                  *ngIf="isDiagnosisService(item)"
-                  (click)="selectItem(item); openDiagnosisModal(); $event.stopPropagation()"
+                  *ngIf="isDiagnosisService(order)"
+                  (click)="selectServiceOrder(order); openDiagnosisModal(); $event.stopPropagation()"
                 >
-                  <i class="fas fa-plus"></i> Registrar diagnóstico
+                  <i class="fas fa-plus"></i> Registrar diagnostico
                 </button>
-                <span class="muted" *ngIf="isWarrantyService(item)">Revisa si el caso procede como garantía.</span>
-                <span class="muted" *ngIf="!isDiagnosisService(item) && !isWarrantyService(item)">Servicio estándar: sin diagnósticos adicionales</span>
+                <button
+                  class="btn btn-sm btn-success"
+                  *ngIf="canAcceptWarrantyReview(order)"
+                  (click)="selectServiceOrder(order); acceptWarrantyReview(order); $event.stopPropagation()"
+                >
+                  <i class="fas fa-check-circle"></i> Aceptar garantia
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-danger"
+                  *ngIf="canRejectWarrantyReview(order)"
+                  (click)="selectServiceOrder(order); rejectWarrantyReview(order); $event.stopPropagation()"
+                >
+                  <i class="fas fa-ban"></i> Rechazar garantia
+                </button>
+                <span class="muted" *ngIf="!isDiagnosisService(order) && !isWarrantyService(order)">Servicio estandar: sin diagnosticos adicionales</span>
               </div>
             </div>
           }
@@ -139,42 +152,50 @@
       }
 
       @if (activeTab === 'pending_approval') {
-        @if (pendingApprovalItems.length === 0) {
+        @if (pendingApprovalOrders.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay equipos pendientes de cotización o respuesta</p>
+            <p>No hay ordenes pendientes de coordinacion o acuerdo</p>
           </div>
         } @else {
-          @for (item of paginatedVisibleItems; track item.id) {
-            <div class="item-card" (click)="selectItem(item)">
+          @for (order of paginatedVisibleOrders; track order.id) {
+            <div class="item-card" (click)="selectServiceOrder(order)">
               <div class="card-header">
-                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-warning">{{ getItemStatusLabel(item.status, item) }}</span>
+                <h3>{{ order.code || 'SIN-CODIGO' }}</h3>
+                <span class="badge badge-warning">{{ getWorkflowLabel(order) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
-                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
-                @if (item.status === 'DIAGNOSED') {
+                <p class="equipment-type"><i class="fas fa-desktop"></i> {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</p>
+                <p class="issue-text"><i class="fas fa-screwdriver-wrench"></i> {{ order.initialIssue || 'Sin detalle del problema' }}</p>
+                @if (order.workflowStatus === 'DIAGNOSIS_READY') {
                   <p class="info-text pending-quote">
                     <i class="fas fa-hourglass-half"></i>
-                    Esperando cotización
+                    Esperando coordinacion
                   </p>
                 } @else {
                   <p class="info-text pending-quote">
                     <i class="fas fa-info-circle"></i>
-                    Cotización creada o pendiente de respuesta
+                    Acuerdo creado o pendiente de cierre
                   </p>
                 }
               </div>
               <div class="card-actions">
                 <button
                   class="btn btn-sm btn-whatsapp btn-icon-only"
-                  *ngIf="canOpenClientInbox(item)"
+                  *ngIf="canOpenClientInbox(order)"
                   title="WhatsApp"
                   aria-label="WhatsApp"
-                  (click)="openWhatsAppInbox(item, $event)"
+                  (click)="openWhatsAppInbox(order, $event)"
                 >
                   <i class="fab fa-whatsapp"></i>
+                </button>
+                <button
+                  class="btn btn-sm btn-primary"
+                  *ngIf="canManageAgreement(order)"
+                  (click)="openAgreementModal(order, $event)"
+                >
+                  <i class="fas fa-handshake"></i>
+                  Acuerdo
                 </button>
               </div>
             </div>
@@ -183,40 +204,47 @@
       }
 
       @if (activeTab === 'repair') {
-        @if (repairItems.length === 0) {
+        @if (repairOrders.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay equipos en reparación</p>
+            <p>No hay ordenes en servicio</p>
           </div>
         } @else {
-          @for (item of paginatedVisibleItems; track item.id) {
-            <div class="item-card" (click)="selectItem(item)">
+          @for (order of paginatedVisibleOrders; track order.id) {
+            <div class="item-card" (click)="selectServiceOrder(order)">
               <div class="card-header">
-                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-info">{{ getItemStatusLabel(item.status, item) }}</span>
+                <h3>{{ order.code || 'SIN-CODIGO' }}</h3>
+                <span class="badge badge-info">{{ getWorkflowLabel(order) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
-                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
+                <p class="equipment-type"><i class="fas fa-desktop"></i> {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</p>
+                <p class="issue-text"><i class="fas fa-screwdriver-wrench"></i> {{ order.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
                 <button
                   class="btn btn-sm btn-whatsapp btn-icon-only"
-                  *ngIf="canOpenClientInbox(item)"
+                  *ngIf="canOpenClientInbox(order)"
                   title="WhatsApp"
                   aria-label="WhatsApp"
-                  (click)="openWhatsAppInbox(item, $event)"
+                  (click)="openWhatsAppInbox(order, $event)"
                 >
                   <i class="fab fa-whatsapp"></i>
                 </button>
                 <button
+                  class="btn btn-sm btn-outline-danger"
+                  *ngIf="canOpenRediagnosis(order)"
+                  (click)="selectServiceOrder(order); openDiagnosisModal(order, $event); $event.stopPropagation()"
+                >
+                  <i class="fas fa-stethoscope"></i> Nuevo diagnostico
+                </button>
+                <button
                   class="btn btn-sm btn-warning"
-                  *ngIf="canFinishRepair(item)"
-                  (click)="selectItem(item); markRepaired(item); $event.stopPropagation()"
+                  *ngIf="canFinishRepair(order)"
+                  (click)="selectServiceOrder(order); markRepaired(order); $event.stopPropagation()"
                 >
                   <i class="fas fa-flag-checkered"></i> Finalizar servicio
                 </button>
-                <span class="muted" *ngIf="!canFinishRepair(item)">Entrega será realizada por recepción.</span>
+                <span class="muted" *ngIf="!canFinishRepair(order)">Entrega sera realizada por recepcion.</span>
               </div>
             </div>
           }
@@ -224,33 +252,33 @@
       }
 
       @if (activeTab === 'repaired') {
-        @if (repairedItems.length === 0) {
+        @if (repairedOrders.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay equipos reparados</p>
+            <p>No hay ordenes finalizadas</p>
           </div>
         } @else {
-          @for (item of paginatedVisibleItems; track item.id) {
-            <div class="item-card" (click)="selectItem(item)">
+          @for (order of paginatedVisibleOrders; track order.id) {
+            <div class="item-card" (click)="selectServiceOrder(order)">
               <div class="card-header">
-                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-success">{{ getItemStatusLabel(item.status, item) }}</span>
+                <h3>{{ order.code || 'SIN-CODIGO' }}</h3>
+                <span class="badge badge-success">{{ getWorkflowLabel(order) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
-                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
+                <p class="equipment-type"><i class="fas fa-desktop"></i> {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</p>
+                <p class="issue-text"><i class="fas fa-screwdriver-wrench"></i> {{ order.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
                 <button
                   class="btn btn-sm btn-whatsapp btn-icon-only"
-                  *ngIf="canOpenClientInbox(item)"
+                  *ngIf="canOpenClientInbox(order)"
                   title="WhatsApp"
                   aria-label="WhatsApp"
-                  (click)="openWhatsAppInbox(item, $event)"
+                  (click)="openWhatsAppInbox(order, $event)"
                 >
                   <i class="fab fa-whatsapp"></i>
                 </button>
-                <span class="muted">Entrega será realizada por recepción.</span>
+                <span class="muted">Entrega sera realizada por recepcion.</span>
               </div>
             </div>
           }
@@ -258,36 +286,36 @@
       }
 
       @if (activeTab === 'all') {
-        @if (allItems.length === 0) {
+        @if (allOrders.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay equipos registrados</p>
+            <p>No hay ordenes registradas</p>
           </div>
         } @else {
-          @for (item of paginatedVisibleItems; track item.id) {
-            <div class="item-card" (click)="selectItem(item)">
+          @for (order of paginatedVisibleOrders; track order.id) {
+            <div class="item-card" (click)="selectServiceOrder(order)">
               <div class="card-header">
-                <h3>{{ item.serviceOrder?.code || 'SIN-CÓDIGO' }}</h3>
-                <span class="badge badge-info">{{ getItemStatusLabel(item.status, item) }}</span>
+                <h3>{{ order.code || 'SIN-CODIGO' }}</h3>
+                <span class="badge badge-info">{{ getWorkflowLabel(order) }}</span>
               </div>
               <div class="card-body">
-                <p class="equipment-type">💻 {{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</p>
-                <p class="issue-text">🛠️ {{ item.initialIssue || 'Sin detalle del problema' }}</p>
+                <p class="equipment-type"><i class="fas fa-desktop"></i> {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</p>
+                <p class="issue-text"><i class="fas fa-screwdriver-wrench"></i> {{ order.initialIssue || 'Sin detalle del problema' }}</p>
               </div>
               <div class="card-actions">
                 <button
                   class="btn btn-sm btn-whatsapp btn-icon-only"
-                  *ngIf="canOpenClientInbox(item)"
+                  *ngIf="canOpenClientInbox(order)"
                   title="WhatsApp"
                   aria-label="WhatsApp"
-                  (click)="openWhatsAppInbox(item, $event)"
+                  (click)="openWhatsAppInbox(order, $event)"
                 >
                   <i class="fab fa-whatsapp"></i>
                 </button>
                 <button
                   class="btn btn-sm btn-outline-success"
-                  *ngIf="canStartStandardService(item)"
-                  (click)="selectItem(item); startStandardService(item); $event.stopPropagation()"
+                  *ngIf="canStartStandardService(order)"
+                  (click)="selectServiceOrder(order); startStandardService(order); $event.stopPropagation()"
                 >
                   <i class="fas fa-play"></i> Iniciar servicio
                 </button>
@@ -298,49 +326,42 @@
       }
     </div>
 
-    @if (visibleItems.length > itemsPerPage) {
+    @if (visibleOrders.length > itemsPerPage) {
       <div class="pagination">
         <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
           <i class="fas fa-chevron-left"></i> Anterior
         </button>
-        <span class="pagination-info">Página {{ currentPage }} de {{ totalPages }} ({{ visibleItems.length }} total)</span>
+        <span class="pagination-info">Pagina {{ currentPage }} de {{ totalPages }} ({{ visibleOrders.length }} total)</span>
         <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
           Siguiente <i class="fas fa-chevron-right"></i>
         </button>
       </div>
     }
 
-    @if (selectedItem) {
+    @if (selectedServiceOrder) {
       <div class="detail-view">
         <div class="detail-header">
-          <h2>{{ selectedItem.serviceOrder?.code || 'Orden de servicio' }}</h2>
-          <button class="btn-close" (click)="clearSelectedItem()">
+          <h2>{{ selectedServiceOrder.code || 'Orden de servicio' }}</h2>
+          <button class="btn-close" (click)="clearSelectedServiceOrder()">
             <i class="fas fa-times"></i>
           </button>
         </div>
 
         <div class="detail-content">
           <section class="detail-section">
-            <h3><i class="fas fa-info-circle"></i> Información del equipo</h3>
-            <p><strong>Tipo:</strong> {{ getEquipmentTypeLabel(selectedItem.equipmentType, selectedItem.equipmentTypeOther) }}</p>
-            <p><strong>Problema reportado:</strong> {{ selectedItem.initialIssue || 'Sin detalle del problema' }}</p>
-            <p><strong>Técnico asignado:</strong> {{ getTechnicianName(selectedItem) }}</p>
-            <p><strong>Recibido:</strong> {{ selectedItem.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</p>
+            <h3><i class="fas fa-info-circle"></i> Informacion del equipo</h3>
+            <p><strong>Tipo:</strong> {{ getEquipmentTypeLabel(selectedServiceOrder.equipmentType, selectedServiceOrder.equipmentTypeOther) }}</p>
+            <p><strong>Problema reportado:</strong> {{ selectedServiceOrder.initialIssue || 'Sin detalle del problema' }}</p>
+            <p><strong>Tecnico asignado:</strong> {{ getTechnicianName(selectedServiceOrder) }}</p>
+            <p><strong>Recibido:</strong> {{ selectedServiceOrder.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</p>
           </section>
 
-          <section class="detail-section">
-            <h3><i class="fas fa-signal"></i> Estado actual</h3>
-            <div [class]="'state-badge state-' + selectedItem.status">
-              {{ getItemStatusLabel(selectedItem.status, selectedItem) }}
-            </div>
-          </section>
-
-          @if (isDiagnosisService(selectedItem) || isWarrantyService(selectedItem)) {
+          @if (isDiagnosisService(selectedServiceOrder) || isWarrantyService(selectedServiceOrder)) {
             <section class="detail-section full-width">
-              <h3><i class="fas fa-history"></i> {{ isWarrantyService(selectedItem) ? 'Revisión de garantía' : 'Historial de diagnósticos' }}</h3>
-              @if (isDiagnosisService(selectedItem)) {
+              <h3><i class="fas fa-history"></i> {{ isWarrantyService(selectedServiceOrder) ? 'Revision de garantia' : 'Historial de diagnosticos' }}</h3>
+              @if (isDiagnosisService(selectedServiceOrder)) {
                 @if (diagnosticHistory.length === 0) {
-                  <div class="empty-text">Sin diagnósticos registrados</div>
+                  <div class="empty-text">Sin diagnosticos registrados</div>
                 } @else {
                   @for (dx of diagnosticHistory; track dx.id) {
                     <div class="history-card">
@@ -358,97 +379,186 @@
                 }
               } @else {
                 <div class="history-card">
-                  <p class="history-summary"><strong>Evaluación técnica requerida</strong></p>
-                  <p class="history-details">Confirma si el daño corresponde a garantía o si debe rechazarse por uso indebido u otra causal.</p>
+                  <p class="history-summary"><strong>Evaluacion tecnica requerida</strong></p>
+                  <p class="history-details">Confirma si el dano corresponde a garantia o si debe rechazarse por uso indebido u otra causal.</p>
                 </div>
               }
 
-              @if (selectedItem.status === 'IN_DIAGNOSIS' && isDiagnosisService(selectedItem) && diagnosticHistory.length > 0) {
-                <button class="btn btn-primary" (click)="completeDiagnosis()">
-                  <i class="fas fa-check"></i> Completar diagnóstico
-                </button>
+              @if (selectedServiceOrder.workflowStatus === 'UNDER_REVIEW' && isDiagnosisService(selectedServiceOrder) && diagnosticHistory.length === 0) {
+                <p class="empty-text">Registra un diagnostico antes de completarlo.</p>
               }
-              @if (selectedItem.status === 'IN_DIAGNOSIS' && isDiagnosisService(selectedItem) && diagnosticHistory.length === 0) {
-                <p class="empty-text">Registra un diagnóstico antes de completarlo.</p>
-              }
-              @if (canAcceptWarrantyReview(selectedItem)) {
-                <button class="btn btn-success" (click)="acceptWarrantyReview(selectedItem)">
-                  <i class="fas fa-check-circle"></i> Aceptar garantía
-                </button>
-              }
-              @if (canRejectWarrantyReview(selectedItem)) {
-                <button class="btn btn-outline-danger" (click)="rejectWarrantyReview(selectedItem)">
-                  <i class="fas fa-ban"></i> Rechazar garantía
-                </button>
-              }
-          @if (selectedItem.status === 'CLIENT_APPROVED' || selectedItem.status === 'READY_FOR_REPAIR') {
-            <button class="btn btn-success" (click)="startRepair(selectedItem)">
-              <i class="fas fa-tools"></i> Iniciar servicio
-            </button>
+            </section>
           }
-          @if (canFinishRepair(selectedItem)) {
-            <button class="btn btn-warning" (click)="markRepaired(selectedItem)">
-              <i class="fas fa-flag-checkered"></i> Finalizar servicio
-            </button>
-          }
-          @if (canRequestRediagnosis(selectedItem)) {
-            <button class="btn btn-outline-danger" (click)="openRediagnosisModal(selectedItem)">
-              <i class="fas fa-stethoscope"></i> Solicitar nuevo diagnóstico
-            </button>
-          }
-        </section>
-      }
 
-      @if (canShowServiceOrderQuoteSection(selectedItem)) {
-        @if (quoteSummary) {
-          <section class="detail-section">
-            <h3><i class="fas fa-file-invoice-dollar"></i> Resumen de cotización</h3>
-            @if (quoteSummary.productItems?.length) {
-              <div class="quote-items">
-                <h4>Productos</h4>
-                @for (product of quoteSummary.productItems; track product.id) {
-                  <div class="quote-line">
-                    <span>{{ product.quantity }} x {{ getProductName(product) }}</span>
+          @if (canShowServiceOrderAgreementSection(selectedServiceOrder)) {
+            @if (isLoadingServiceOrderAgreement) {
+              <section class="detail-section">
+                <p class="empty-text"><i class="fas fa-spinner fa-spin"></i> Cargando acuerdo...</p>
+              </section>
+            }
+            @if (agreementHistory.length > 0) {
+              <section class="detail-section full-width">
+                <h3><i class="fas fa-clock-rotate-left"></i> Historial de acuerdos</h3>
+                <div class="quote-items">
+                  @for (agreement of agreementHistory; track agreement.id) {
+                    <div class="history-card agreement-history-card" (click)="openAgreementHistoryModal(agreement, $event)">
+                      <div class="history-header">
+                        <span class="history-number">Acuerdo #{{ agreement.sequenceNumber }}</span>
+                        <span [class]="'badge badge-' + (agreement.status === 'CONFIRMED' ? 'success' : agreement.status === 'DRAFT' ? 'info' : agreement.status === 'SUPERSEDED' ? 'secondary' : 'danger')">
+                          {{ getAgreementStatusLabel(agreement.status) }}
+                        </span>
+                      </div>
+                      <p class="history-summary"><strong>{{ agreement.totalAmount | number: '1.2-2' }} {{ agreement.currency || 'PEN' }}</strong></p>
+                      @if (agreement.notes) {
+                        <p class="history-details">{{ agreement.notes }}</p>
+                      }
+                      <p class="history-details mt-3">
+                        {{ agreement.productItems?.length || 0 }} productos · {{ agreement.serviceItems?.length || 0 }} servicios
+                      </p>
+                      <p class="history-meta-action">Haz clic para ver el detalle</p>
+                      <small class="history-meta">{{ agreement.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
+                    </div>
+                  }
+                </div>
+              </section>
+            }
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  @if (showAgreementModal && selectedServiceOrder) {
+    <div class="modal-overlay" (click)="closeAgreementModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h2>Gestionar acuerdo</h2>
+            <p class="muted">{{ selectedServiceOrder.code }} · {{ getEquipmentTypeLabel(selectedServiceOrder.equipmentType, selectedServiceOrder.equipmentTypeOther) }}</p>
+          </div>
+          <button class="btn-close" (click)="closeAgreementModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <form [formGroup]="agreementForm" class="modal-body">
+          @if (getAgreementModalMessage(); as agreementModalMessage) {
+            <p class="empty-text">{{ agreementModalMessage }}</p>
+          }
+          <div class="card-actions mb-3">
+            <button type="button" class="btn btn-sm btn-info" [disabled]="!isAgreementEditable()" (click)="addAgreementProduct()">
+              <i class="fas fa-box"></i> Producto
+            </button>
+            <button type="button" class="btn btn-sm btn-info" [disabled]="!isAgreementEditable()" (click)="addAgreementService()">
+              <i class="fas fa-tools"></i> Servicio
+            </button>
+          </div>
+
+          @if (!agreementItems.length) {
+            <p class="empty-text">Agrega productos o servicios para registrar el acuerdo.</p>
+          } @else {
+            <div class="quote-items">
+              @for (item of agreementItems; let i = $index; track item.id) {
+                <div class="history-card mb-3">
+                  <div class="history-header">
+                    <span class="history-number">{{ item.type === 'product' ? 'Producto' : 'Servicio' }} #{{ i + 1 }}</span>
+                    <button type="button" class="btn-icon" [disabled]="!isAgreementEditable()" (click)="removeAgreementItem(i)">
+                      <i class="fas fa-trash"></i>
+                    </button>
                   </div>
-                }
-              </div>
+
+                  @if (item.type === 'product') {
+                    <label>Producto</label>
+                    <ng-select
+                      [items]="products"
+                      bindValue="id"
+                      [searchFn]="productSearchFn"
+                      [clearable]="true"
+                      [readonly]="!isAgreementEditable()"
+                      placeholder="Selecciona"
+                      [(ngModel)]="item.productId"
+                      (ngModelChange)="onAgreementProductSelected(item, $event)"
+                      [ngModelOptions]="{ standalone: true }"
+                    >
+                      <ng-template ng-label-tmp let-product="item">
+                        {{ product?.sku }} · {{ product?.name }}
+                      </ng-template>
+                      <ng-template ng-option-tmp let-product="item">
+                        {{ product?.sku }} · {{ product?.name }}
+                      </ng-template>
+                    </ng-select>
+                    <div class="detail-grid mt-3 agreement-line-grid">
+                      <div>
+                        <label>Cantidad</label>
+                        <input type="number" min="1" [disabled]="!isAgreementEditable()" [(ngModel)]="item.quantity" (ngModelChange)="onAgreementProductQuantityChange(item, $event)" [ngModelOptions]="{ standalone: true }" />
+                      </div>
+                      <div>
+                        <label>Precio</label>
+                        <div class="selected-item price-readonly">{{ item.unitPrice | number: '1.2-2' }} PEN</div>
+                      </div>
+                    </div>
+                    <div class="detail-total mt-3">Subtotal: {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }} PEN</div>
+                  }
+
+                  @if (item.type === 'service') {
+                    <label>Servicio</label>
+                    <ng-select
+                      [items]="services"
+                      bindValue="id"
+                      [searchFn]="serviceSearchFn"
+                      [clearable]="true"
+                      [readonly]="!isAgreementEditable()"
+                      placeholder="Selecciona"
+                      [(ngModel)]="item.serviceId"
+                      [ngModelOptions]="{ standalone: true }"
+                    >
+                      <ng-template ng-label-tmp let-service="item">
+                        {{ service?.code }} · {{ service?.name }}
+                      </ng-template>
+                      <ng-template ng-option-tmp let-service="item">
+                        {{ service?.code }} · {{ service?.name }}
+                      </ng-template>
+                    </ng-select>
+                    <div class="detail-total mt-3">Subtotal: {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }} PEN</div>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          <div class="form-group">
+            <label>Notas del acuerdo</label>
+            <textarea formControlName="notes" rows="3" [readonly]="!isAgreementEditable()" placeholder="Resumen de lo coordinado con el cliente"></textarea>
+          </div>
+
+          <div class="detail-total mb-3">Total: {{ calculateAgreementTotal() | number: '1.2-2' }} PEN</div>
+
+          <div class="card-actions">
+            <button type="button" class="btn btn-secondary" (click)="closeAgreementModal()">Cancelar</button>
+            @if (selectedServiceOrder && isDiagnosisService(selectedServiceOrder) && canManageAgreement(selectedServiceOrder) && isAgreementEditable()) {
+              <button type="button" class="btn btn-outline-danger" [disabled]="isSavingAgreement" (click)="markNoAgreement(selectedServiceOrder)">
+                <i class="fas fa-box-open"></i> Cerrar sin acuerdo
+              </button>
             }
-            @if (quoteSummary.serviceItems?.length) {
-              <div class="quote-items">
-                <h4>Servicios</h4>
-                @for (service of quoteSummary.serviceItems; track service.id) {
-                  <div class="quote-line">
-                    <span>{{ getServiceName(service) }}</span>
-                  </div>
-                }
-              </div>
-            }
-            @if (!quoteSummary.productItems?.length && !quoteSummary.serviceItems?.length) {
-              <p class="empty-text">Cotización sin líneas detalladas.</p>
-            }
-          </section>
-        } @else if (isLoadingServiceOrderQuote) {
-          <section class="detail-section">
-            <p class="empty-text"><i class="fas fa-spinner fa-spin"></i> Cargando cotización...</p>
-          </section>
-        } @else {
-          <section class="detail-section">
-            <p class="empty-text">Aún no hay una cotización disponible para este equipo.</p>
-          </section>
-        }
-      }
+            <button type="button" class="btn btn-outline-primary" [disabled]="!isAgreementEditable() || !agreementItems.length || isSavingAgreement" (click)="submitAgreement(false)">
+              Guardar borrador
+            </button>
+            <button type="button" class="btn btn-success" [disabled]="!isAgreementEditable() || !agreementItems.length || isSavingAgreement" (click)="submitAgreement(true)">
+              <i class="fas fa-check"></i> Confirmar acuerdo
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
-}
-  </div>
+  }
 
   @if (showInboxModal) {
     <div class="modal-overlay inbox-overlay" (click)="closeInboxModal()">
       <div class="modal-content inbox-modal" (click)="$event.stopPropagation()">
         <div class="modal-header inbox-header">
           <div>
-            <h2>Canal de mensajería del servicio</h2>
-            <p>Identidad del cliente protegida. Canal monitoreado para cumplimiento y calidad de atención.</p>
+            <h2>Canal de mensajeria del servicio</h2>
+            <p>Identidad del cliente protegida. Canal monitoreado para cumplimiento y calidad de atencion.</p>
           </div>
           <div class="inbox-header-actions">
             <span class="monitored-chip"><i class="fas fa-eye"></i> Supervisado</span>
@@ -463,8 +573,8 @@
             @if (inboxActiveThread) {
               <div class="inbox-thread-meta">
                 <div>
-                  <strong>{{ inboxActiveThread.serviceOrderCode }} · {{ inboxActiveThread.itemLabel }}</strong>
-                  <p>{{ inboxActiveThread.clientAlias }} · {{ inboxActiveThread.assignedTechnicianAlias }}</p>
+                  <strong>{{ inboxActiveThread.serviceOrderCode }} . {{ inboxActiveThread.equipmentLabel }}</strong>
+                  <p>{{ inboxActiveThread.clientAlias }} . {{ inboxActiveThread.assignedTechnicianAlias }}</p>
                 </div>
               </div>
 
@@ -485,7 +595,7 @@
                   [value]="inboxDraftMessage"
                   (input)="inboxDraftMessage = $any($event.target).value"
                   rows="3"
-                  placeholder="Escribe un mensaje técnico para el cliente (sin datos personales)"
+                  placeholder="Escribe un mensaje tecnico para el cliente (sin datos personales)"
                 ></textarea>
                 <div class="inbox-composer-actions">
                   <button type="button" class="btn btn-success" (click)="sendInboxMessage()">
@@ -494,7 +604,7 @@
                 </div>
               </div>
             } @else {
-              <p class="empty-text">Selecciona una conversación para comenzar.</p>
+              <p class="empty-text">Selecciona una conversacion para comenzar.</p>
             }
           </section>
         </div>
@@ -506,15 +616,28 @@
     <div class="modal-overlay" (click)="closeDiagnosisModal()">
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
-          <h2>Registrar diagnóstico</h2>
+          <h2>Registrar diagnostico</h2>
           <button class="btn-close" (click)="closeDiagnosisModal()">
             <i class="fas fa-times"></i>
           </button>
         </div>
 
         <form [formGroup]="diagnosisForm" (ngSubmit)="submitDiagnosis()" class="modal-body">
+          @if (isAdditionalDiagnosisFlow()) {
+            <div class="info-banner mb-3">
+              Registra aqui el hallazgo adicional. No sobrescribas el diagnostico anterior; este nuevo diagnostico quedara en el historial y reabrira la coordinacion para un nuevo acuerdo.
+            </div>
+          }
           <div class="form-group">
-            <label for="summary">Resumen del diagnóstico *</label>
+            <label for="outcome">Conclusion tecnica *</label>
+            <select id="outcome" class="form-control" formControlName="outcome">
+              @for (option of getDiagnosisOutcomeOptions(); track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="summary">Resumen del diagnostico *</label>
             <input
               type="text"
               id="summary"
@@ -531,7 +654,7 @@
           </div>
 
           <div class="form-group">
-            <label for="details">Detalles técnicos *</label>
+            <label for="details">Detalles tecnicos *</label>
             <textarea
               id="details"
               class="form-control"
@@ -549,55 +672,26 @@
         </form>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" (click)="closeDiagnosisModal()">Cancelar</button>
-          <button class="btn btn-primary" (click)="submitDiagnosis()" [disabled]="diagnosisForm.invalid || isSavingDiagnosis">
-            <i class="fas fa-save"></i> Guardar diagnóstico
+          <button type="button" class="btn btn-secondary" (click)="closeDiagnosisModal()">Cancelar</button>
+          @if (selectedServiceOrder && isDiagnosisService(selectedServiceOrder)) {
+            <button
+              type="button"
+              class="btn btn-outline-danger"
+              (click)="submitDiagnosisAsNoSolution()"
+              [disabled]="diagnosisForm.invalid || isSavingDiagnosis || !canSubmitDiagnosisAsIrreparable()"
+            >
+              <i class="fas fa-times-circle"></i> Sin arreglo
+            </button>
+          }
+          <button type="button" class="btn btn-primary" (click)="submitDiagnosis()" [disabled]="diagnosisForm.invalid || isSavingDiagnosis">
+            <i class="fas fa-save"></i> Guardar diagnostico
           </button>
         </div>
       </div>
     </div>
   }
 
-  @if (showRediagnosisModal) {
-    <div class="modal-overlay" (click)="closeRediagnosisModal()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-          <h2>Solicitar nuevo diagnóstico</h2>
-          <button class="btn-close" (click)="closeRediagnosisModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-
-        <form [formGroup]="rediagnosisForm" (ngSubmit)="submitRediagnosis()" class="modal-body">
-          <div class="form-group">
-            <label for="rediagnosis-reason">Motivo *</label>
-            <textarea
-              id="rediagnosis-reason"
-              class="form-control"
-              formControlName="reason"
-              rows="4"
-              placeholder="Describe por qué se necesita un nuevo diagnóstico"
-              [class.is-invalid]="rediagnosisForm.get('reason')?.invalid && rediagnosisForm.get('reason')?.touched"
-            ></textarea>
-            @if (rediagnosisForm.get('reason')?.invalid && rediagnosisForm.get('reason')?.touched) {
-              <div class="invalid-feedback">
-                El motivo es requerido (5-255 caracteres)
-              </div>
-            }
-          </div>
-        </form>
-
-        <div class="modal-footer">
-          <button class="btn btn-secondary" (click)="closeRediagnosisModal()">Cancelar</button>
-          <button class="btn btn-danger" (click)="submitRediagnosis()" [disabled]="rediagnosisForm.invalid || isSubmittingRediagnosis">
-            <i class="fas fa-stethoscope"></i> Solicitar diagnóstico
-          </button>
-        </div>
-      </div>
-    </div>
-  }
-
-  <div class="alert-container" [class.show]="showAlert">
+    <div class="alert-container" [class.show]="showAlert">
     <div class="alert" [ngClass]="alertType">
       <i [class]="alertIcon"></i>
       <span>{{ alertMessage }}</span>
@@ -607,3 +701,4 @@
     </div>
   </div>
 </div>
+

@@ -1,8 +1,10 @@
-<div class="reception-panel-container">
+﻿<div class="reception-panel-container">
   <div class="header-section">
     <div class="title-section">
       <h1 class="page-title">Panel de Recepción</h1>
-      <p class="page-subtitle">Coordina órdenes de servicio, pagos y cotizaciones desde una sola pantalla</p>
+      <p class="page-subtitle">
+        Coordina órdenes de servicio, pagos y acuerdos desde una sola pantalla
+      </p>
     </div>
   </div>
 
@@ -42,9 +44,9 @@
         <i class="fas fa-tools"></i>
       </div>
       <div class="stat-content">
-        <span class="stat-label">Equipos por cotizar</span>
-        <h3 class="stat-value">{{ diagnosticPendingServiceOrderQuotesCount }}</h3>
-        <p class="stat-meta">Diagnosticados sin cotización</p>
+        <span class="stat-label">Equipos por coordinar</span>
+        <h3 class="stat-value">{{ diagnosticPendingServiceOrderAgreementsCount }}</h3>
+        <p class="stat-meta">Diagnosticados sin acuerdo</p>
       </div>
     </div>
   </div>
@@ -58,7 +60,7 @@
           placeholder="Buscar por código, cliente o correo..."
           [(ngModel)]="searchTerm"
           (input)="onSearchChange()"
-        >
+        />
       </div>
       <div class="filters-wrapper">
         <div class="filter-control">
@@ -99,7 +101,7 @@
             class="select-control"
             [(ngModel)]="filterStartDate"
             (change)="onFilterChange()"
-          >
+          />
         </div>
         <div class="filter-control">
           <label for="filter-end-date">Fecha fin</label>
@@ -109,7 +111,7 @@
             class="select-control"
             [(ngModel)]="filterEndDate"
             (change)="onFilterChange()"
-          >
+          />
         </div>
       </div>
       <div class="actions-wrapper">
@@ -125,7 +127,11 @@
             <span>({{ selectedMockBoletaOrdersCount }})</span>
           }
         </button>
-        <button class="btn btn-primary new-service-order-btn" type="button" (click)="openCreateServiceOrderModal()">
+        <button
+          class="btn btn-primary new-service-order-btn"
+          type="button"
+          (click)="openCreateServiceOrderModal()"
+        >
           <i class="fas fa-plus"></i>
           Nueva orden de servicio
         </button>
@@ -169,8 +175,8 @@
               @for (serviceOrder of paginatedServiceOrders; track serviceOrder.id) {
                 <ng-container>
                   <tr
-                    [class.pending-quote]="hasPendingServiceOrderQuoteItems(serviceOrder)"
-                    [class.quote-rejected]="hasRejectedServiceOrderQuoteItems(serviceOrder)"
+                    [class.pending-quote]="hasPendingServiceOrderAgreementItems(serviceOrder)"
+                    [class.quote-rejected]="hasRejectedServiceOrderAgreementItems(serviceOrder)"
                     [class.pending-delivery]="hasPendingDeliveryItems(serviceOrder)"
                   >
                     <td class="select-column">
@@ -180,130 +186,189 @@
                         [disabled]="!isSelectableForMockBoleta(serviceOrder)"
                         (click)="$event.stopPropagation()"
                         (change)="toggleMockBoletaSelection(serviceOrder, $event)"
-                      >
+                      />
                     </td>
-                  <td class="code-cell">
-                    <strong>{{ serviceOrder.code }}</strong>
-                    <small>{{ serviceOrder.createdAt | date: 'dd/MM HH:mm' }}</small>
-                    @if (serviceOrder.isPaid) {
-                      <small class="paid-label">Pagada</small>
-                    }
-                  </td>
-                  <td>
-                    <div class="client-name">{{ getServiceOrderContactName(serviceOrder) || 'Sin contacto' }}</div>
-                    <div class="client-contact">{{ getServiceOrderContactEmail(serviceOrder) || 'Sin correo' }}</div>
-                    <div class="client-contact">{{ getServiceOrderContactPhone(serviceOrder) || 'Sin teléfono' }}</div>
-                  </td>
-                  <td>
-                    <span [class]="'badge ' + getPriorityBadgeClass(serviceOrder.priority)">
-                      {{ getPriorityLabel(serviceOrder.priority) }}
-                    </span>
-                  </td>
-                  <td>
-                    <span class="status-chip" [ngClass]="serviceOrder.status.toLowerCase()">
-                      {{ getServiceOrderStatusLabel(serviceOrder.status) }}
-                    </span>
-                  </td>
-                  <td>
-                    @if (getPrimaryServiceOrderItem(serviceOrder); as primaryItem) {
-                      <div class="equipment-summary">
-                        <strong>{{ getEquipmentTypeLabel(primaryItem.equipmentType, primaryItem.equipmentTypeOther) }}</strong>
-                        <small>{{ primaryItem.brand || 'Sin marca' }} · {{ primaryItem.model || 'Sin modelo' }}</small>
-                        <small>Técnico: {{ primaryItem.assignedToTechnicianName || 'Sin asignar' }}</small>
-                      </div>
-                    } @else {
-                      <span class="muted">Sin equipo</span>
-                    }
-                  </td>
-                  <!-- Pago column ocultada -->
-                <td class="actions-column">
-                  <div class="action-buttons">
-                      <button
-                        class="btn-icon btn-secondary"
-                        type="button"
-                        (click)="openEditServiceOrderModal(serviceOrder, $event)"
-                        [disabled]="isFinalServiceOrder(serviceOrder)"
-                        title="Editar orden"
-                      >
-                        <i class="fas fa-edit"></i>
-                      </button>
-                      <button
-                        class="btn-icon btn-primary"
-                        type="button"
-                        (click)="downloadServiceOrderSummaryPdf(serviceOrder, $event)"
-                        title="Descargar resumen PDF"
-                      >
-                        <i class="fas fa-file-pdf"></i>
-                      </button>
-                        <button
-                          class="btn-icon btn-secondary"
-                          type="button"
-                          (click)="printServiceOrderSticker(serviceOrder, $event)"
-                          title="Imprimir sticker"
-                        >
-                          <i class="fas fa-tag"></i>
-                        </button>
-                        <button
-                          class="btn-icon btn-success"
-                          type="button"
-                          [disabled]="!canMarkServiceOrderAsPaid(serviceOrder)"
-                          (click)="markServiceOrderAsPaid(serviceOrder, $event)"
-                          title="Marcar pagada"
-                        >
-                          <i class="fas fa-money-check-alt"></i>
-                        </button>
-                      @if (getPrimaryServiceOrderItem(serviceOrder); as primaryItem) {
-                        @if (primaryItem.serviceType !== serviceTypeEnum.WARRANTY_SERVICE) {
-                          <button
-                            type="button"
-                            class="btn-icon btn-primary"
-                            [disabled]="!canServiceOrderQuoteItem(primaryItem)"
-                            (click)="openCreateServiceOrderQuoteModal(serviceOrder, primaryItem, $event)"
-                            title="Cotizar"
-                          >
-                            <i class="fas fa-file-invoice-dollar"></i>
-                          </button>
-                        }
-                        <button
-                          type="button"
-                          class="btn-icon btn-secondary"
-                          (click)="viewItemServiceOrderQuotes(serviceOrder, primaryItem, $event)"
-                          title="Ver cotizaciones"
-                        >
-                          <i class="fas fa-list"></i>
-                        </button>
-                        @if (canOpenWarrantyAction(serviceOrder, primaryItem)) {
-                          <button
-                            type="button"
-                            class="btn-icon btn-outline"
-                            (click)="openWarrantyActionModal(serviceOrder, primaryItem, $event)"
-                            title="Garantía"
-                          >
-                            <i class="fas fa-shield-alt"></i>
-                          </button>
-                        }
-                        <button
-                          type="button"
-                          class="btn-icon btn-success"
-                          *ngIf="canDeliverItem(primaryItem)"
-                          (click)="deliverItem(primaryItem, $event)"
-                          title="Entregar"
-                        >
-                          <i class="fas fa-truck"></i>
-                        </button>
-                        <button
-                          type="button"
-                          class="btn-icon btn-info"
-                          [disabled]="isFinalServiceOrder(serviceOrder) || !canReassignTechnician(primaryItem)"
-                          (click)="openReassignTechnicianModal(primaryItem, $event)"
-                          title="Reasignar técnico"
-                        >
-                          <i class="fas fa-user-cog"></i>
-                        </button>
+                    <td class="code-cell">
+                      <strong>{{ serviceOrder.code }}</strong>
+                      <small>{{ serviceOrder.createdAt | date: 'dd/MM HH:mm' }}</small>
+                      @if (serviceOrder.isPaid) {
+                        <small class="paid-label">Pagada</small>
                       }
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                    <td>
+                      <div class="client-name">
+                        {{ getServiceOrderContactName(serviceOrder) || 'Sin contacto' }}
+                      </div>
+                      <div class="client-contact">
+                        {{ getServiceOrderContactEmail(serviceOrder) || 'Sin correo' }}
+                      </div>
+                      <div class="client-contact">
+                        {{ getServiceOrderContactPhone(serviceOrder) || 'Sin teléfono' }}
+                      </div>
+                    </td>
+                    <td>
+                      <span [class]="'badge ' + getPriorityBadgeClass(serviceOrder.priority)">
+                        {{ getPriorityLabel(serviceOrder.priority) }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="status-chip" [ngClass]="serviceOrder.status.toLowerCase()">
+                        {{ getServiceOrderStatusLabel(serviceOrder.status) }}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="equipment-summary">
+                        <strong>{{
+                          getEquipmentTypeLabel(
+                            serviceOrder.equipmentType,
+                            serviceOrder.equipmentTypeOther
+                          )
+                        }}</strong>
+                        <small
+                          >{{ serviceOrder.brand || 'Sin marca' }} ·
+                          {{ serviceOrder.model || 'Sin modelo' }}</small
+                        >
+                        <small
+                          >Técnico:
+                          {{ serviceOrder.assignedToTechnicianName || 'Sin asignar' }}</small
+                        >
+                      </div>
+                    </td>
+                    <!-- Pago column ocultada -->
+                    <td class="actions-column actions">
+                      <div class="action-buttons">
+                        <button
+                          class="btn-icon"
+                          type="button"
+                          (click)="openEditServiceOrderModal(serviceOrder, $event)"
+                          [disabled]="isFinalServiceOrder(serviceOrder)"
+                          title="Editar orden"
+                        >
+                          <i class="fas fa-edit"></i>
+                        </button>
+                        @if (canViewServiceOrderBoleta(serviceOrder)) {
+                          <button
+                            class="btn-icon"
+                            type="button"
+                            (click)="openServiceOrderBoletaPreview(serviceOrder, $event)"
+                            title="Ver boleta"
+                          >
+                            <i class="fas fa-receipt"></i>
+                          </button>
+                        }
+                        @if (serviceOrder.serviceType !== serviceTypeEnum.WARRANTY_SERVICE) {
+                          <button
+                            type="button"
+                            class="btn-icon"
+                            (click)="viewServiceOrderAgreements(serviceOrder, $event)"
+                            title="Ver acuerdos"
+                          >
+                            <i class="fas fa-list"></i>
+                          </button>
+                        }
+                        <button
+                          class="btn-icon"
+                          type="button"
+                          (click)="openReceptionInbox(serviceOrder, $event)"
+                          [disabled]="!canOpenReceptionInbox(serviceOrder)"
+                          title="Coordinar con cliente"
+                        >
+                          <i class="fab fa-whatsapp"></i>
+                        </button>
+                        <div class="action-menu-wrapper">
+                          <button
+                            type="button"
+                            class="btn-icon"
+                            (click)="toggleActionMenu(serviceOrder.id, $event)"
+                            title="Más acciones"
+                          >
+                            <i class="fas fa-ellipsis-h"></i>
+                          </button>
+                          @if (isActionMenuOpen(serviceOrder.id)) {
+                            <div
+                              class="action-menu"
+                              [ngStyle]="actionMenuStyle"
+                              (click)="$event.stopPropagation()"
+                            >
+                              <button
+                                type="button"
+                                class="action-menu-item"
+                                (click)="
+                                  downloadServiceOrderSummaryPdf(serviceOrder, $event);
+                                  closeActionMenu()
+                                "
+                              >
+                                <i class="fas fa-file-pdf"></i>
+                                <span>Resumen PDF</span>
+                              </button>
+                              <button
+                                type="button"
+                                class="action-menu-item"
+                                (click)="printServiceOrderSticker(serviceOrder, $event); closeActionMenu()"
+                              >
+                                <i class="fas fa-tag"></i>
+                                <span>Sticker</span>
+                              </button>
+                              <button
+                                type="button"
+                                class="action-menu-item"
+                                [disabled]="!canMarkServiceOrderAsPaid(serviceOrder)"
+                                (click)="markServiceOrderAsPaid(serviceOrder, $event); closeActionMenu()"
+                              >
+                                <i class="fas fa-money-check-alt"></i>
+                                <span>Marcar pagada</span>
+                              </button>
+                              @if (
+                                serviceOrder.serviceType !== serviceTypeEnum.WARRANTY_SERVICE &&
+                                canServiceOrderAgreement(serviceOrder)
+                              ) {
+                                <button
+                                  type="button"
+                                  class="action-menu-item"
+                                  (click)="viewServiceOrderAgreements(serviceOrder, $event); closeActionMenu()"
+                                >
+                                  <i class="fas fa-list"></i>
+                                  <span>Ver acuerdos</span>
+                                </button>
+                              }
+                              @if (canOpenWarrantyAction(serviceOrder)) {
+                                <button
+                                  type="button"
+                                  class="action-menu-item"
+                                  (click)="openWarrantyActionModal(serviceOrder, $event); closeActionMenu()"
+                                >
+                                  <i class="fas fa-shield-alt"></i>
+                                  <span>Garantía</span>
+                                </button>
+                              }
+                              @if (canDeliverItem(serviceOrder)) {
+                                <button
+                                  type="button"
+                                  class="action-menu-item"
+                                  (click)="deliverItem(serviceOrder, $event); closeActionMenu()"
+                                >
+                                  <i class="fas fa-truck"></i>
+                                  <span>Entregar</span>
+                                </button>
+                              }
+                              <button
+                                type="button"
+                                class="action-menu-item"
+                                [disabled]="
+                                  isFinalServiceOrder(serviceOrder) ||
+                                  !canReassignTechnician(serviceOrder)
+                                "
+                                (click)="openReassignTechnicianModal(serviceOrder, $event); closeActionMenu()"
+                              >
+                                <i class="fas fa-user-cog"></i>
+                                <span>Reasignar técnico</span>
+                              </button>
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
                 </ng-container>
               }
             </tbody>
@@ -314,11 +379,26 @@
   </div>
   @if (filteredServiceOrders.length > 0) {
     <div class="pagination">
-      <button class="btn-secondary" type="button" [disabled]="currentPage === 1" (click)="previousPage()">
+      <button
+        class="btn-secondary"
+        type="button"
+        [disabled]="currentPage === 1"
+        (click)="previousPage()"
+      >
         <i class="fas fa-chevron-left"></i> Anterior
       </button>
-      <span class="pagination-info">Página {{ currentPage }} de {{ totalPages }} ({{ filteredServiceOrders.length }} total)</span>
-      <button class="btn-secondary" type="button" [disabled]="currentPage === totalPages" (click)="nextPage()">
+      <span class="pagination-info"
+        >Página {{ currentPage }} de {{ totalPages }} ({{
+          filteredServiceOrders.length
+        }}
+        total)</span
+      >
+      <button
+        class="btn-secondary"
+        type="button"
+        [disabled]="currentPage === totalPages"
+        (click)="nextPage()"
+      >
         Siguiente <i class="fas fa-chevron-right"></i>
       </button>
     </div>
@@ -405,7 +485,10 @@
             @if (mockBoletaPreview.diagnosisOnlyOrderCodes.length) {
               <div class="alert-inline info">
                 <i class="fas fa-info-circle"></i>
-                <span>Órdenes diagnóstico sin líneas facturables: {{ mockBoletaPreview.diagnosisOnlyOrderCodes.join(', ') }}</span>
+                <span
+                  >Órdenes diagnóstico sin líneas facturables:
+                  {{ mockBoletaPreview.diagnosisOnlyOrderCodes.join(', ') }}</span
+                >
               </div>
             }
 
@@ -427,12 +510,14 @@
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" type="button" (click)="closeMockBoletaModal()">Cerrar</button>
+          <button class="btn btn-secondary" type="button" (click)="closeMockBoletaModal()">
+            Cerrar
+          </button>
         </div>
       </div>
     </div>
   }
-  
+
   @if (showCreateServiceOrderModal) {
     <div class="modal-overlay">
       <div class="modal-content modal-lg">
@@ -446,12 +531,18 @@
           </button>
         </div>
 
-        <form [formGroup]="createServiceOrderForm" (ngSubmit)="submitCreateServiceOrder()" class="modal-body create-service-order-body">
-          <input type="hidden" formControlName="clientId">
+        <form
+          [formGroup]="createServiceOrderForm"
+          (ngSubmit)="submitCreateServiceOrder()"
+          class="modal-body create-service-order-body"
+        >
+          <input type="hidden" formControlName="clientId" />
 
           <div class="form-section">
             <div class="section-header">
-              <h4>Paso {{ createServiceOrderStep + 1 }} de {{ getCreateServiceOrderSteps().length }}</h4>
+              <h4>
+                Paso {{ createServiceOrderStep + 1 }} de {{ getCreateServiceOrderSteps().length }}
+              </h4>
               <p>{{ getCurrentCreateServiceOrderStep().description }}</p>
             </div>
             <div class="wizard-hero">
@@ -459,11 +550,17 @@
                 <p class="wizard-eyebrow">{{ getCreateOrderWorkflowAccent() }}</p>
                 <h3>{{ getServiceTypeLabel(getSelectedWorkflowServiceType()) }}</h3>
               </div>
-              <span class="wizard-origin-badge">{{ isInternalRequestOrigin() ? 'Origen interno' : 'Origen cliente' }}</span>
+              <span class="wizard-origin-badge">{{
+                isInternalRequestOrigin() ? 'Origen interno' : 'Origen cliente'
+              }}</span>
             </div>
             <div class="wizard-step-row">
               @for (step of getCreateServiceOrderSteps(); let i = $index; track step.key) {
-                <div class="wizard-step" [class.active]="isCreateServiceOrderStepActive(i)" [class.completed]="i < createServiceOrderStep">
+                <div
+                  class="wizard-step"
+                  [class.active]="isCreateServiceOrderStepActive(i)"
+                  [class.completed]="i < createServiceOrderStep"
+                >
                   <span class="wizard-step-index">{{ i + 1 }}</span>
                   <div>
                     <strong>{{ step.label }}</strong>
@@ -490,7 +587,9 @@
                     (change)="onCreateWorkflowServiceTypeChange()"
                   >
                     @for (serviceType of serviceTypeOptions; track serviceType) {
-                      <option [ngValue]="serviceType">{{ getServiceTypeLabel(serviceType) }}</option>
+                      <option [ngValue]="serviceType">
+                        {{ getServiceTypeLabel(serviceType) }}
+                      </option>
                     }
                   </select>
                 </div>
@@ -522,19 +621,41 @@
                 <h5>Cómo se procesará esta orden</h5>
                 @switch (getSelectedWorkflowServiceType()) {
                   @case (serviceTypeEnum.STANDARD_SERVICE) {
-                    <p>Registrarás los equipos y además una cotización inicial por cada uno. La aprobación del cliente será automática.</p>
+                    <p>
+                      Registrarás los equipos y además un acuerdo inicial por cada uno. La
+                      aprobación del cliente será automática.
+                    </p>
                   }
                   @case (serviceTypeEnum.DIAGNOSIS) {
-                    <p>Registrarás el ingreso del equipo. La cotización se construirá después del diagnóstico técnico.</p>
+                    <p>
+                      Registrarás el ingreso del equipo. El acuerdo se construirá después del
+                      diagnóstico técnico.
+                    </p>
                   }
                   @case (serviceTypeEnum.ASSEMBLY) {
-                    <p>Registrarás un trabajo de ensamblaje. Si el origen es interno, la orden quedará sin cliente asociado.</p>
+                    <p>
+                      Registrarás un trabajo de ensamblaje. Si el origen es interno, la orden
+                      quedará sin cliente asociado.
+                    </p>
                   }
                   @case (serviceTypeEnum.CUSTOMER_SERVICE) {
-                    <p>Seguirá el flujo de diagnóstico, pero los servicios no se cobrarán en la cotización; sólo los repuestos.</p>
+                    <p>
+                      Seguirá el flujo de diagnóstico, pero los servicios no se cobrarán en la
+                      acuerdo; sólo los repuestos.
+                    </p>
                     <div class="info-tile">
                       <span class="muted">Regla comercial</span>
                       <strong>Servicios sin cobro, repuestos cobrables</strong>
+                    </div>
+                  }
+                  @case (serviceTypeEnum.WARRANTY_SERVICE) {
+                    <p>
+                      Registrarás el ingreso para revisión de garantía. El técnico validará si el
+                      caso procede como garantía o si debe rechazarse por uso indebido u otra causal.
+                    </p>
+                    <div class="info-tile">
+                      <span class="muted">Regla comercial</span>
+                      <strong>Si procede, se atiende sin cobro; si no procede, el caso se rechaza o se deriva.</strong>
                     </div>
                   }
                 }
@@ -543,140 +664,255 @@
           }
 
           @if (isCreateServiceOrderStepActive(1)) {
-          @if (!isInternalRequestOrigin()) {
             <div class="form-section">
               <div class="section-header">
-                <h4>{{ getCreateOrderClientTitle() }}</h4>
-                <p>{{ getCreateOrderClientDescription() }}</p>
+                <h4>Asignación técnica</h4>
+                <p>
+                  El sistema sugiere el técnico con menor carga y mejor balance para este tipo de
+                  servicio. Puedes cambiarlo antes de continuar.
+                </p>
               </div>
-            <div class="form-grid form-grid--wide">
-            <div class="form-group">
-              <label for="documentTypeId">Tipo de documento *</label>
-              <select
-                id="documentTypeId"
-                class="form-control"
-                formControlName="documentTypeId"
-                (change)="onDocumentTypeChange()"
-              >
-                <option [ngValue]="null">Selecciona un tipo</option>
-                @for (docType of documentTypes; track docType.id) {
-                  <option [ngValue]="docType.id">{{ docType.name }} ({{ docType.digits }} dígitos)</option>
-                }
-              </select>
-              @if (createServiceOrderForm.get('documentTypeId')?.invalid && createServiceOrderForm.get('documentTypeId')?.touched) {
-                <div class="invalid-feedback">
-                  Selecciona un tipo de documento válido
+
+              @if (isLoadingAssignmentSuggestion) {
+                <div class="summary-card">
+                  <p><i class="fas fa-spinner fa-spin"></i> Calculando sugerencia de técnico...</p>
+                </div>
+              } @else if (assignmentSuggestionError) {
+                <div class="summary-card">
+                  <p>{{ assignmentSuggestionError }}</p>
+                </div>
+              } @else if (assignmentSuggestion?.technicians?.length) {
+                <div class="summary-card">
+                  <h5>Recomendación automática</h5>
+                  <div class="info-tile total-emphasis">
+                    <span class="muted">Técnico sugerido</span>
+                    <strong>{{ assignmentSuggestion.technicians[0].technicianName }}</strong>
+                  </div>
+                </div>
+
+                <div class="quote-cards-grid">
+                  @for (candidate of assignmentSuggestion.technicians; track candidate.technicianId) {
+                    <button
+                      type="button"
+                      class="quote-card-modern technician-option-card"
+                      [class.active]="
+                        createServiceOrderForm.get('assignedToTechnicianId')?.value ===
+                        candidate.technicianId
+                      "
+                      (click)="selectSuggestedTechnician(candidate.technicianId)"
+                    >
+                      <div class="quote-card-top">
+                        <div>
+                          <p class="quote-label">Técnico</p>
+                          <h4>{{ candidate.technicianName }}</h4>
+                          <p class="quote-subline">
+                            <i class="fas fa-clipboard-list"></i>
+                            Activos totales: {{ candidate.totalActiveCount }}
+                          </p>
+                          <p class="quote-subline">
+                            <i class="fas fa-stethoscope"></i>
+                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.DIAGNOSIS) > 0) {
+                              Diagnóstico: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.DIAGNOSIS) }}
+                            } @else {
+                              Sin diagnósticos activos
+                            }
+                          </p>
+                          <p class="quote-subline">
+                            <i class="fas fa-shield-alt"></i>
+                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.WARRANTY_SERVICE) > 0) {
+                              Garantías: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.WARRANTY_SERVICE) }}
+                            } @else {
+                              Sin garantías activas
+                            }
+                          </p>
+                          <p class="quote-subline">
+                            <i class="fas fa-concierge-bell"></i>
+                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.STANDARD_SERVICE) > 0) {
+                              Estándar: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.STANDARD_SERVICE) }}
+                            } @else {
+                              Sin servicios estándar activos
+                            }
+                          </p>
+                          <p class="quote-subline">
+                            <i class="fas fa-toolbox"></i>
+                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.ASSEMBLY) > 0) {
+                              Ensamblajes: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.ASSEMBLY) }}
+                            } @else {
+                              Sin ensamblajes activos
+                            }
+                          </p>
+                          <p class="quote-subline">
+                            <i class="fas fa-user-friends"></i>
+                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.CUSTOMER_SERVICE) > 0) {
+                              Atención al cliente: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.CUSTOMER_SERVICE) }}
+                            } @else {
+                              Sin atenciones activas
+                            }
+                          </p>
+                        </div>
+                        @if (candidate.isSuggested) {
+                          <span class="service-quote-status status-approved">Sugerido</span>
+                        }
+                      </div>
+                    </button>
+                  }
                 </div>
               }
             </div>
-
-            <div class="form-group">
-              <label for="documentNumber">Documento del cliente *</label>
-              <input
-                type="text"
-                id="documentNumber"
-                class="form-control"
-                formControlName="documentNumber"
-                [attr.maxlength]="expectedDocumentDigits || 11"
-                (input)="onDocumentNumberInput()"
-                placeholder="Ingresa el número según el tipo seleccionado"
-              >
-              @if (createServiceOrderForm.get('documentNumber')?.invalid && createServiceOrderForm.get('documentNumber')?.touched) {
-                <div class="invalid-feedback">
-                  Ingresa solo números (longitud según el tipo seleccionado).
-                </div>
-              }
-              <div class="input-hint" *ngIf="isSearchingPartner">
-                <i class="fas fa-spinner fa-spin"></i> Buscando cliente...
-              </div>
-              <div class="input-hint success" *ngIf="documentSearchMessage">
-                {{ documentSearchMessage }}
-              </div>
-              <div class="input-hint error" *ngIf="documentSearchError">
-                {{ documentSearchError }}
-              </div>
-            </div>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <div class="section-header">
-              <h4>Contacto</h4>
-              <p>Datos de la persona responsable.</p>
-            </div>
-            <div class="form-grid form-grid--wide">
-              <div class="form-group">
-                <label for="contactName">Nombre de contacto *</label>
-                <input
-                  type="text"
-                  id="contactName"
-                  class="form-control"
-                  formControlName="contactName"
-                  placeholder="Ej: Carlos Ramos"
-                  [class.is-invalid]="createServiceOrderForm.get('contactName')?.invalid && createServiceOrderForm.get('contactName')?.touched"
-                >
-                @if (createServiceOrderForm.get('contactName')?.invalid && createServiceOrderForm.get('contactName')?.touched) {
-                  <div class="invalid-feedback">
-                    Ingresa un nombre
-                  </div>
-                }
-              </div>
-
-              <div class="form-group">
-                <label for="contactEmail">Correo</label>
-                <input
-                  type="email"
-                  id="contactEmail"
-                  class="form-control"
-                  formControlName="contactEmail"
-                  placeholder="contacto@empresa.com"
-                  [class.is-invalid]="createServiceOrderForm.get('contactEmail')?.invalid && createServiceOrderForm.get('contactEmail')?.touched"
-                >
-                @if (createServiceOrderForm.get('contactEmail')?.invalid && createServiceOrderForm.get('contactEmail')?.touched) {
-                  <div class="invalid-feedback">
-                    Ingresa un correo válido
-                  </div>
-                }
-              </div>
-
-              <div class="form-group">
-                <label for="contactPhone">Teléfono *</label>
-                <input
-                  type="text"
-                  id="contactPhone"
-                  class="form-control"
-                  formControlName="contactPhone"
-                  placeholder="Ej: 987654321"
-                  [class.is-invalid]="createServiceOrderForm.get('contactPhone')?.invalid && createServiceOrderForm.get('contactPhone')?.touched"
-                >
-                @if (createServiceOrderForm.get('contactPhone')?.invalid && createServiceOrderForm.get('contactPhone')?.touched) {
-                  <div class="invalid-feedback">
-                    Ingresa un teléfono válido
-                  </div>
-                }
-              </div>
-            </div>
-          </div>
-          } @else {
-            <div class="form-section">
-              <div class="section-header">
-                <h4>Responsable interno</h4>
-                <p>Esta orden se registrará sin cliente asociado porque el origen es interno.</p>
-              </div>
-            </div>
-          }
           }
 
           @if (isCreateServiceOrderStepActive(2)) {
+            @if (!isInternalRequestOrigin()) {
+              <div class="form-section">
+                <div class="section-header">
+                  <h4>{{ getCreateOrderClientTitle() }}</h4>
+                  <p>{{ getCreateOrderClientDescription() }}</p>
+                </div>
+                <div class="form-grid form-grid--wide">
+                  <div class="form-group">
+                    <label for="documentTypeId">Tipo de documento *</label>
+                    <select
+                      id="documentTypeId"
+                      class="form-control"
+                      formControlName="documentTypeId"
+                      (change)="onDocumentTypeChange()"
+                    >
+                      <option [ngValue]="null">Selecciona un tipo</option>
+                      @for (docType of documentTypes; track docType.id) {
+                        <option [ngValue]="docType.id">
+                          {{ docType.name }} ({{ docType.digits }} dígitos)
+                        </option>
+                      }
+                    </select>
+                    @if (
+                      createServiceOrderForm.get('documentTypeId')?.invalid &&
+                      createServiceOrderForm.get('documentTypeId')?.touched
+                    ) {
+                      <div class="invalid-feedback">Selecciona un tipo de documento válido</div>
+                    }
+                  </div>
+
+                  <div class="form-group">
+                    <label for="documentNumber">Documento del cliente *</label>
+                    <input
+                      type="text"
+                      id="documentNumber"
+                      class="form-control"
+                      formControlName="documentNumber"
+                      [attr.maxlength]="expectedDocumentDigits || 11"
+                      (input)="onDocumentNumberInput()"
+                      placeholder="Ingresa el número según el tipo seleccionado"
+                    />
+                    @if (
+                      createServiceOrderForm.get('documentNumber')?.invalid &&
+                      createServiceOrderForm.get('documentNumber')?.touched
+                    ) {
+                      <div class="invalid-feedback">
+                        Ingresa solo números (longitud según el tipo seleccionado).
+                      </div>
+                    }
+                    <div class="input-hint" *ngIf="isSearchingPartner">
+                      <i class="fas fa-spinner fa-spin"></i> Buscando cliente...
+                    </div>
+                    <div class="input-hint success" *ngIf="documentSearchMessage">
+                      {{ documentSearchMessage }}
+                    </div>
+                    <div class="input-hint error" *ngIf="documentSearchError">
+                      {{ documentSearchError }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-section">
+                <div class="section-header">
+                  <h4>Contacto</h4>
+                  <p>Datos de la persona responsable.</p>
+                </div>
+                <div class="form-grid form-grid--wide">
+                  <div class="form-group">
+                    <label for="contactName">Nombre de contacto *</label>
+                    <input
+                      type="text"
+                      id="contactName"
+                      class="form-control"
+                      formControlName="contactName"
+                      placeholder="Ej: Carlos Ramos"
+                      [class.is-invalid]="
+                        createServiceOrderForm.get('contactName')?.invalid &&
+                        createServiceOrderForm.get('contactName')?.touched
+                      "
+                    />
+                    @if (
+                      createServiceOrderForm.get('contactName')?.invalid &&
+                      createServiceOrderForm.get('contactName')?.touched
+                    ) {
+                      <div class="invalid-feedback">Ingresa un nombre</div>
+                    }
+                  </div>
+
+                  <div class="form-group">
+                    <label for="contactEmail">Correo</label>
+                    <input
+                      type="email"
+                      id="contactEmail"
+                      class="form-control"
+                      formControlName="contactEmail"
+                      placeholder="contacto@empresa.com"
+                      [class.is-invalid]="
+                        createServiceOrderForm.get('contactEmail')?.invalid &&
+                        createServiceOrderForm.get('contactEmail')?.touched
+                      "
+                    />
+                    @if (
+                      createServiceOrderForm.get('contactEmail')?.invalid &&
+                      createServiceOrderForm.get('contactEmail')?.touched
+                    ) {
+                      <div class="invalid-feedback">Ingresa un correo válido</div>
+                    }
+                  </div>
+
+                  <div class="form-group">
+                    <label for="contactPhone">Teléfono *</label>
+                    <input
+                      type="text"
+                      id="contactPhone"
+                      class="form-control"
+                      formControlName="contactPhone"
+                      placeholder="Ej: 987654321"
+                      [class.is-invalid]="
+                        createServiceOrderForm.get('contactPhone')?.invalid &&
+                        createServiceOrderForm.get('contactPhone')?.touched
+                      "
+                    />
+                    @if (
+                      createServiceOrderForm.get('contactPhone')?.invalid &&
+                      createServiceOrderForm.get('contactPhone')?.touched
+                    ) {
+                      <div class="invalid-feedback">Ingresa un teléfono válido</div>
+                    }
+                  </div>
+                </div>
+              </div>
+            } @else {
+              <div class="form-section">
+                <div class="section-header">
+                  <h4>Responsable interno</h4>
+                  <p>Esta orden se registrará sin cliente asociado porque el origen es interno.</p>
+                </div>
+              </div>
+            }
+          }
+
+          @if (isCreateServiceOrderStepActive(3)) {
             <div class="form-section">
-              <div class="service-order-items-builder" formArrayName="serviceOrderItems">
+              <div class="service-order-items-builder">
                 <div class="section-header">
                   <h4>{{ getCreateOrderItemsTitle() }}</h4>
                   <p>{{ getCreateOrderItemsDescription() }}</p>
                 </div>
 
-              @for (item of serviceOrderItems.controls; let i = $index; track i) {
-                <div class="service-order-item-card" [formGroupName]="i">
+                <div class="service-order-item-card">
                   <div class="service-order-item-card-header">
                     <div class="item-title">
                       <i class="fas fa-laptop"></i>
@@ -688,11 +924,13 @@
                       <label>Tipo de equipo *</label>
                       <select class="form-control" formControlName="equipmentType">
                         @for (equipment of equipmentTypeOptions; track equipment) {
-                          <option [ngValue]="equipment">{{ getEquipmentTypeLabel(equipment) }}</option>
+                          <option [ngValue]="equipment">
+                            {{ getEquipmentTypeLabel(equipment) }}
+                          </option>
                         }
                       </select>
                     </div>
-                    @if (isOtherEquipmentType(getServiceOrderItemControl(i, 'equipmentType')?.value)) {
+                    @if (isOtherEquipmentType(getCreateServiceOrderControl('equipmentType')?.value)) {
                       <div class="form-group">
                         <label>Especifica el tipo de equipo *</label>
                         <input
@@ -700,12 +938,16 @@
                           class="form-control"
                           formControlName="equipmentTypeOther"
                           placeholder="Ej: Impresora, monitor, tablet"
-                          [class.is-invalid]="getServiceOrderItemControl(i, 'equipmentTypeOther')?.invalid && getServiceOrderItemControl(i, 'equipmentTypeOther')?.touched"
-                        >
-                        @if (getServiceOrderItemControl(i, 'equipmentTypeOther')?.invalid && getServiceOrderItemControl(i, 'equipmentTypeOther')?.touched) {
-                          <div class="invalid-feedback">
-                            Especifica el tipo de equipo.
-                          </div>
+                          [class.is-invalid]="
+                            getCreateServiceOrderControl('equipmentTypeOther')?.invalid &&
+                            getCreateServiceOrderControl('equipmentTypeOther')?.touched
+                          "
+                        />
+                        @if (
+                          getCreateServiceOrderControl('equipmentTypeOther')?.invalid &&
+                          getCreateServiceOrderControl('equipmentTypeOther')?.touched
+                        ) {
+                          <div class="invalid-feedback">Especifica el tipo de equipo.</div>
                         }
                       </div>
                     }
@@ -716,34 +958,46 @@
                         class="form-control"
                         [value]="getServiceTypeLabel(createServiceOrderForm.get('workflowServiceType')?.value)"
                         readonly
-                      >
+                      />
                     </div>
                     <div class="form-group">
                       <label>Marca</label>
-                      <input type="text" class="form-control" formControlName="brand" placeholder="Ej: Lenovo">
+                      <input type="text" class="form-control" formControlName="brand" placeholder="Ej: Lenovo" />
                     </div>
                     <div class="form-group">
                       <label>Modelo</label>
-                      <input type="text" class="form-control" formControlName="model" placeholder="Ej: ThinkPad X1">
+                      <input type="text" class="form-control" formControlName="model" placeholder="Ej: ThinkPad X1" />
                     </div>
                     <div class="form-group">
                       <label>Serie</label>
-                      <input type="text" class="form-control" formControlName="serialNumber" placeholder="Ej: SN123456">
+                      <input type="text" class="form-control" formControlName="serialNumber" placeholder="Ej: SN123456" />
                     </div>
                   </div>
                   <div class="form-group">
-                    <label>{{ getSelectedWorkflowServiceType() === serviceTypeEnum.ASSEMBLY ? 'Detalle del ensamblaje *' : 'Detalle del servicio o problema *' }}</label>
+                    <label>{{
+                      getSelectedWorkflowServiceType() === serviceTypeEnum.ASSEMBLY
+                        ? 'Detalle del ensamblaje *'
+                        : 'Detalle del servicio o problema *'
+                    }}</label>
                     <textarea
                       class="form-control"
                       formControlName="initialIssue"
                       rows="3"
-                      [placeholder]="getSelectedWorkflowServiceType() === serviceTypeEnum.ASSEMBLY ? 'Describe el ensamblaje solicitado' : 'Describe brevemente la falla reportada'"
-                      [class.is-invalid]="getServiceOrderItemControl(i, 'initialIssue')?.invalid && getServiceOrderItemControl(i, 'initialIssue')?.touched"
+                      [placeholder]="
+                        getSelectedWorkflowServiceType() === serviceTypeEnum.ASSEMBLY
+                          ? 'Describe el ensamblaje solicitado'
+                          : 'Describe brevemente la falla reportada'
+                      "
+                      [class.is-invalid]="
+                        getCreateServiceOrderControl('initialIssue')?.invalid &&
+                        getCreateServiceOrderControl('initialIssue')?.touched
+                      "
                     ></textarea>
-                    @if (getServiceOrderItemControl(i, 'initialIssue')?.invalid && getServiceOrderItemControl(i, 'initialIssue')?.touched) {
-                      <div class="invalid-feedback">
-                        Describe el detalle principal
-                      </div>
+                    @if (
+                      getCreateServiceOrderControl('initialIssue')?.invalid &&
+                      getCreateServiceOrderControl('initialIssue')?.touched
+                    ) {
+                      <div class="invalid-feedback">Describe el detalle principal</div>
                     }
                   </div>
                   <div class="form-group">
@@ -756,52 +1010,78 @@
                     ></textarea>
                   </div>
                 </div>
-              }
+              </div>
             </div>
-          </div>
           }
 
-          @if (isCreateServiceOrderStepActive(3) && requiresCreateServiceOrderInitialQuoteStep()) {
-            <div class="form-section">
+          @if (isCreateServiceOrderStepActive(4) && requiresCreateServiceOrderInitialAgreementStep()) {
+            <div class="form-section initial-agreement-section">
               <div class="section-header">
-                <h4>Cotización inicial</h4>
-                <p>Agrega productos y servicios para cada equipo. Esta cotización se registrará automáticamente al crear la orden.</p>
+                <h4>Acuerdo inicial</h4>
+                <p>
+                  Agrega productos y servicios para cada equipo. Este acuerdo se registrará
+                  automáticamente al crear la orden.
+                </p>
               </div>
 
-              @for (item of serviceOrderItems.controls; let i = $index; track i) {
-                <div class="summary-card">
+              <div class="summary-card initial-agreement-card">
                   <div class="service-order-item-card-header">
                     <div class="item-title">
                       <i class="fas fa-file-invoice-dollar"></i>
-                      Equipo · {{ getEquipmentTypeLabel(getServiceOrderItemControl(i, 'equipmentType')?.value, getServiceOrderItemControl(i, 'equipmentTypeOther')?.value) }}
+                      Equipo ·
+                      {{
+                        getEquipmentTypeLabel(
+                          getCreateServiceOrderControl('equipmentType')?.value,
+                          getCreateServiceOrderControl('equipmentTypeOther')?.value
+                        )
+                      }}
                     </div>
                     <div class="quote-chip-row">
-                      <button class="btn btn-sm btn-outline" type="button" (click)="addProductToCreateOrderItemQuote(i)">
+                      <button
+                        class="btn btn-sm btn-outline"
+                        type="button"
+                        (click)="addProductToCreateOrderItemAgreement(0)"
+                      >
                         <i class="fas fa-box"></i> Agregar producto
                       </button>
-                      <button class="btn btn-sm btn-outline" type="button" (click)="addServiceToCreateOrderItemQuote(i)">
+                      <button
+                        class="btn btn-sm btn-outline"
+                        type="button"
+                        (click)="addServiceToCreateOrderItemAgreement(0)"
+                      >
                         <i class="fas fa-tools"></i> Agregar servicio
                       </button>
                     </div>
                   </div>
 
-                  @if (getCreateOrderQuoteItems(i).length === 0) {
+                  @if (getCreateOrderAgreementItems(0).length === 0) {
                     <div class="wizard-empty-quote-state">
                       <i class="fas fa-file-circle-plus"></i>
                       <p>Todavía no agregaste líneas para este equipo.</p>
                     </div>
                   } @else {
                     <div class="quote-items-list">
-                      @for (quoteItem of getCreateOrderQuoteItems(i); let quoteIndex = $index; track quoteItem.id) {
+                      @for (
+                        quoteItem of getCreateOrderAgreementItems(0);
+                        let quoteIndex = $index;
+                        track quoteItem.id
+                      ) {
                         <div class="quote-item-card">
                           <div class="quote-item-card-header">
                             <div class="pill">
-                              <i class="fas" [ngClass]="quoteItem.type === 'product' ? 'fa-box' : 'fa-tools'"></i>
+                              <i
+                                class="fas"
+                                [ngClass]="quoteItem.type === 'product' ? 'fa-box' : 'fa-tools'"
+                              ></i>
                               {{ quoteItem.type === 'product' ? 'Producto' : 'Servicio' }}
                             </div>
                             <div class="item-actions">
                               <span class="muted small">Item #{{ quoteIndex + 1 }}</span>
-                              <button type="button" class="btn-icon btn-delete" (click)="removeCreateOrderItemQuote(i, quoteIndex)">
+                              <button
+                                type="button"
+                                class="btn-icon btn-delete"
+                                (click)="removeCreateOrderItemAgreement(0, quoteIndex)"
+                              >
                                 <i class="fas fa-trash"></i>
                               </button>
                             </div>
@@ -818,7 +1098,7 @@
                                   [clearable]="true"
                                   placeholder="Selecciona"
                                   [(ngModel)]="quoteItem.productId"
-                                  (ngModelChange)="onCreateOrderProductSelected(i, quoteItem, $event)"
+                                  (ngModelChange)="onCreateOrderProductSelected(0, quoteItem, $event)"
                                   [ngModelOptions]="{ standalone: true }"
                                 >
                                   <ng-template ng-label-tmp let-product="item">
@@ -837,16 +1117,21 @@
                                   type="number"
                                   min="1"
                                   [(ngModel)]="quoteItem.quantity"
-                                  (ngModelChange)="onCreateOrderProductQuantityChange(i, quoteItem, $event)"
-                                  [ngModelOptions]="{ standalone: true }">
+                                  (ngModelChange)="onCreateOrderProductQuantityChange(0, quoteItem, $event)"
+                                  [ngModelOptions]="{ standalone: true }"
+                                />
                               </div>
                               <div class="item-input price">
                                 <label>Precio</label>
                                 <div class="price-display">
-                                  @if (isCreateOrderProductPriceLoading(i, quoteItem.id)) {
-                                    <span class="muted"><i class="fas fa-spinner fa-spin"></i> Calculando</span>
+                                  @if (isCreateOrderProductPriceLoading(0, quoteItem.id)) {
+                                    <span class="muted"
+                                      ><i class="fas fa-spinner fa-spin"></i> Calculando</span
+                                    >
                                   } @else {
-                                    <strong>{{ quoteItem.unitPrice || 0 | number: '1.2-2' }} PEN</strong>
+                                    <strong
+                                      >{{ quoteItem.unitPrice || 0 | number: '1.2-2' }} PEN</strong
+                                    >
                                   }
                                 </div>
                               </div>
@@ -854,7 +1139,12 @@
                             <div class="quote-item-row">
                               <div class="item-input full-width">
                                 <label>Notas</label>
-                                <input type="text" placeholder="Observaciones" [(ngModel)]="quoteItem.notes" [ngModelOptions]="{ standalone: true }">
+                                <input
+                                  type="text"
+                                  placeholder="Observaciones"
+                                  [(ngModel)]="quoteItem.notes"
+                                  [ngModelOptions]="{ standalone: true }"
+                                />
                               </div>
                             </div>
                           }
@@ -873,10 +1163,12 @@
                                   [ngModelOptions]="{ standalone: true }"
                                 >
                                   <ng-template ng-label-tmp let-service="item">
-                                    {{ service?.code }} · {{ service?.name }} · {{ getServiceCategoryName(service?.categoryId) }}
+                                    {{ service?.code }} · {{ service?.name }} ·
+                                    {{ getServiceCategoryName(service?.categoryId) }}
                                   </ng-template>
                                   <ng-template ng-option-tmp let-service="item">
-                                    {{ service?.code }} · {{ service?.name }} · {{ getServiceCategoryName(service?.categoryId) }}
+                                    {{ service?.code }} · {{ service?.name }} ·
+                                    {{ getServiceCategoryName(service?.categoryId) }}
                                   </ng-template>
                                 </ng-select>
                               </div>
@@ -884,14 +1176,21 @@
                             <div class="quote-item-row">
                               <div class="item-input full-width">
                                 <label>Notas</label>
-                                <input type="text" placeholder="Observaciones" [(ngModel)]="quoteItem.notes" [ngModelOptions]="{ standalone: true }">
+                                <input
+                                  type="text"
+                                  placeholder="Observaciones"
+                                  [(ngModel)]="quoteItem.notes"
+                                  [ngModelOptions]="{ standalone: true }"
+                                />
                               </div>
                             </div>
                           }
 
                           <div class="quote-item-footer">
                             <span class="muted">Subtotal</span>
-                            <strong>{{ calculateItemSubtotal(quoteItem) | number: '1.2-2' }} PEN</strong>
+                            <strong
+                              >{{ calculateItemSubtotal(quoteItem) | number: '1.2-2' }} PEN</strong
+                            >
                           </div>
                         </div>
                       }
@@ -900,10 +1199,11 @@
 
                   <div class="quote-item-footer">
                     <span class="muted">Total del equipo</span>
-                    <strong>{{ calculateCreateOrderItemQuoteTotal(i) | number: '1.2-2' }} PEN</strong>
+                    <strong
+                      >{{ calculateCreateOrderItemAgreementTotal(0) | number: '1.2-2' }} PEN</strong
+                    >
                   </div>
                 </div>
-              }
             </div>
           }
 
@@ -927,19 +1227,31 @@
                   </div>
                   <div class="info-tile">
                     <span class="muted">Prioridad</span>
-                    <strong>{{ getPriorityLabel(createServiceOrderForm.get('priority')?.value) }}</strong>
+                    <strong>{{
+                      getPriorityLabel(createServiceOrderForm.get('priority')?.value)
+                    }}</strong>
+                  </div>
+                  <div class="info-tile">
+                    <span class="muted">Técnico asignado</span>
+                    <strong>{{ selectedAssignmentTechnician?.technicianName || '-' }}</strong>
                   </div>
                   @if (!isInternalRequestOrigin()) {
                     <div class="info-tile">
-                      <span class="muted">{{ getSelectedWorkflowServiceType() === serviceTypeEnum.CUSTOMER_SERVICE ? 'Socio o contacto' : 'Contacto' }}</span>
+                      <span class="muted">{{
+                        getSelectedWorkflowServiceType() === serviceTypeEnum.CUSTOMER_SERVICE
+                          ? 'Socio o contacto'
+                          : 'Contacto'
+                      }}</span>
                       <strong>{{ createServiceOrderForm.get('contactName')?.value || '-' }}</strong>
                     </div>
                     <div class="info-tile">
                       <span class="muted">Teléfono</span>
-                      <strong>{{ createServiceOrderForm.get('contactPhone')?.value || '-' }}</strong>
+                      <strong>{{
+                        createServiceOrderForm.get('contactPhone')?.value || '-'
+                      }}</strong>
                     </div>
                   }
-                  @if (requiresCreateServiceOrderInitialQuoteStep()) {
+                  @if (requiresCreateServiceOrderInitialAgreementStep()) {
                     <div class="info-tile total-emphasis">
                       <span class="muted">Total estimado</span>
                       <strong>{{ calculateCreateOrderGrandTotal() | number: '1.2-2' }} PEN</strong>
@@ -957,7 +1269,7 @@
                         <strong>{{ summaryItem.equipmentTypeLabel }}</strong>
                         <p class="muted small">{{ summaryItem.serviceTypeLabel }}</p>
                       </div>
-                      @if (requiresCreateServiceOrderInitialQuoteStep()) {
+                      @if (requiresCreateServiceOrderInitialAgreementStep()) {
                         <div class="review-item-total">
                           <span class="muted small">{{ summaryItem.quoteItemsCount }} líneas</span>
                           <strong>{{ summaryItem.quoteTotal | number: '1.2-2' }} PEN</strong>
@@ -971,50 +1283,64 @@
                         <strong>{{ summaryItem.description || 'Sin detalle adicional' }}</strong>
                       </div>
 
-                      @if (getServiceOrderItemControl(summaryItem.index, 'brand')?.value || getServiceOrderItemControl(summaryItem.index, 'model')?.value || getServiceOrderItemControl(summaryItem.index, 'serialNumber')?.value) {
+                      @if (
+                        getCreateServiceOrderControl('brand')?.value ||
+                        getCreateServiceOrderControl('model')?.value ||
+                        getCreateServiceOrderControl('serialNumber')?.value
+                      ) {
                         <div class="review-grid">
-                          @if (getServiceOrderItemControl(summaryItem.index, 'brand')?.value) {
+                          @if (getCreateServiceOrderControl('brand')?.value) {
                             <div class="info-tile">
                               <span class="muted">Marca</span>
-                              <strong>{{ getServiceOrderItemControl(summaryItem.index, 'brand')?.value }}</strong>
+                              <strong>{{ getCreateServiceOrderControl('brand')?.value }}</strong>
                             </div>
                           }
-                          @if (getServiceOrderItemControl(summaryItem.index, 'model')?.value) {
+                          @if (getCreateServiceOrderControl('model')?.value) {
                             <div class="info-tile">
                               <span class="muted">Modelo</span>
-                              <strong>{{ getServiceOrderItemControl(summaryItem.index, 'model')?.value }}</strong>
+                              <strong>{{ getCreateServiceOrderControl('model')?.value }}</strong>
                             </div>
                           }
-                          @if (getServiceOrderItemControl(summaryItem.index, 'serialNumber')?.value) {
+                          @if (getCreateServiceOrderControl('serialNumber')?.value) {
                             <div class="info-tile">
                               <span class="muted">Serie</span>
-                              <strong>{{ getServiceOrderItemControl(summaryItem.index, 'serialNumber')?.value }}</strong>
+                              <strong>{{ getCreateServiceOrderControl('serialNumber')?.value }}</strong>
                             </div>
                           }
                         </div>
                       }
 
-                      @if (getServiceOrderItemControl(summaryItem.index, 'accessories')?.value) {
+                      @if (getCreateServiceOrderControl('accessories')?.value) {
                         <div class="info-tile full-span">
                           <span class="muted">Accesorios</span>
-                          <strong>{{ getServiceOrderItemControl(summaryItem.index, 'accessories')?.value }}</strong>
+                          <strong>{{ getCreateServiceOrderControl('accessories')?.value }}</strong>
                         </div>
                       }
 
-                      @if (requiresCreateServiceOrderInitialQuoteStep()) {
+                      @if (requiresCreateServiceOrderInitialAgreementStep()) {
                         <div class="review-quote-lines">
                           <div class="review-quote-lines-header">
-                            <strong>Líneas de cotización</strong>
+                            <strong>Líneas del acuerdo</strong>
                           </div>
-                          @for (quoteItem of getCreateOrderQuoteItems(summaryItem.index); track quoteItem.id) {
+                          @for (
+                            quoteItem of getCreateOrderAgreementItems(summaryItem.index);
+                            track quoteItem.id
+                          ) {
                             <div class="review-quote-line">
                               <div class="review-quote-main">
                                 <span class="pill review-pill">
-                                  <i class="fas" [ngClass]="quoteItem.type === 'product' ? 'fa-box' : 'fa-tools'"></i>
+                                  <i
+                                    class="fas"
+                                    [ngClass]="quoteItem.type === 'product' ? 'fa-box' : 'fa-tools'"
+                                  ></i>
                                   {{ quoteItem.type === 'product' ? 'Producto' : 'Servicio' }}
                                 </span>
                                 <strong>
-                                  {{ quoteItem.type === 'product' ? getProductLabel(quoteItem.productId) : getServiceLabel(quoteItem.serviceId) }}
+                                  {{
+                                    quoteItem.type === 'product'
+                                      ? getProductLabel(quoteItem.productId)
+                                      : getServiceLabel(quoteItem.serviceId)
+                                  }}
                                 </strong>
                                 @if (quoteItem.notes) {
                                   <span class="muted small">{{ quoteItem.notes }}</span>
@@ -1024,7 +1350,12 @@
                                 @if (quoteItem.type === 'product') {
                                   <span class="muted small">x{{ quoteItem.quantity }}</span>
                                 }
-                                <strong>{{ calculateItemSubtotal(quoteItem) | number: '1.2-2' }} PEN</strong>
+                                <strong
+                                  >{{
+                                    calculateItemSubtotal(quoteItem) | number: '1.2-2'
+                                  }}
+                                  PEN</strong
+                                >
                               </div>
                             </div>
                           }
@@ -1038,7 +1369,13 @@
               <div class="summary-card">
                 <h5>Notas</h5>
                 <div class="form-group full-width">
-                  <textarea id="notes" class="form-control" formControlName="notes" rows="2" placeholder="Notas adicionales"></textarea>
+                  <textarea
+                    id="notes"
+                    class="form-control"
+                    formControlName="notes"
+                    rows="2"
+                    placeholder="Notas adicionales"
+                  ></textarea>
                 </div>
               </div>
             </div>
@@ -1046,9 +1383,15 @@
         </form>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" type="button" (click)="closeCreateServiceOrderModal()">Cancelar</button>
+          <button class="btn btn-secondary" type="button" (click)="closeCreateServiceOrderModal()">
+            Cancelar
+          </button>
           @if (createServiceOrderStep > 0) {
-            <button class="btn btn-outline" type="button" (click)="previousCreateServiceOrderStep()">
+            <button
+              class="btn btn-outline"
+              type="button"
+              (click)="previousCreateServiceOrderStep()"
+            >
               <i class="fas fa-arrow-left"></i>
               Anterior
             </button>
@@ -1059,7 +1402,12 @@
               <i class="fas fa-arrow-right"></i>
             </button>
           } @else {
-            <button class="btn btn-primary" type="button" (click)="submitCreateServiceOrder()" [disabled]="isCreatingServiceOrder">
+            <button
+              class="btn btn-primary"
+              type="button"
+              (click)="submitCreateServiceOrder()"
+              [disabled]="isCreatingServiceOrder"
+            >
               <i class="fas fa-save"></i>
               Crear orden de servicio
             </button>
@@ -1069,20 +1417,28 @@
     </div>
   }
 
-  @if (showCreateServiceOrderQuoteModal && quoteServiceOrder) {
-    <div class="modal-overlay" (click)="closeCreateServiceOrderQuoteModal()">
+  @if (showCreateServiceOrderAgreementModal && agreementServiceOrder) {
+    <div class="modal-overlay" (click)="closeCreateServiceOrderAgreementModal()">
       <div class="quote-modal" (click)="$event.stopPropagation()">
         <div class="quote-topbar">
           <div>
-            <p class="modal-eyebrow">Cotización</p>
-            <h2>{{ isResubmittingServiceOrderQuote ? 'Reenviar cotización' : 'Nueva cotización' }}</h2>
+            <p class="modal-eyebrow">Acuerdo</p>
+            <h2>
+              {{
+                isEditingDraftServiceOrderAgreement
+                  ? 'Editar borrador'
+                  : isResubmittingServiceOrderAgreement
+                    ? 'Actualizar acuerdo'
+                    : 'Nuevo acuerdo'
+              }}
+            </h2>
             <div class="quote-chip-row">
               <span class="quote-chip">
-                <i class="fas fa-clipboard-list"></i> {{ quoteServiceOrder.code }}
+                <i class="fas fa-clipboard-list"></i> {{ agreementServiceOrder.code }}
               </span>
-              @if (selectedServiceOrderItem) {
+              @if (selectedServiceOrder) {
                 <span class="quote-chip subtle">
-                  <i class="fas fa-laptop"></i> Equipo #{{ selectedServiceOrderItem.itemNumber }}
+                  <i class="fas fa-laptop"></i> {{ getServiceOrderLabel(selectedServiceOrder) }}
                 </span>
               } @else {
                 <span class="quote-chip subtle muted-chip">
@@ -1090,33 +1446,50 @@
                 </span>
               }
             </div>
-            @if (isResubmittingServiceOrderQuote && selectedServiceOrderQuoteDetail) {
-              <p class="muted">Editando la versión #{{ selectedServiceOrderQuoteDetail.sequenceNumber }}</p>
+            @if ((isResubmittingServiceOrderAgreement || isEditingDraftServiceOrderAgreement) && selectedServiceOrderAgreementDetail) {
+              <p class="muted">
+                Editando la versión #{{ selectedServiceOrderAgreementDetail.sequenceNumber }}
+              </p>
             }
-            @if (isWarrantyServiceOrderQuoteContext()) {
-              <p class="muted">Garantía: cotización no facturable (productos y servicios en S/ 0.00).</p>
+            @if (isWarrantyServiceOrderAgreementContext()) {
+              <p class="muted">
+                Garantía: acuerdo no facturable (productos y servicios en S/ 0.00).
+              </p>
             }
           </div>
           <div class="quote-total-display">
             <p>Total estimado</p>
-            <h3>{{ calculateServiceOrderQuoteTotal() | number: '1.2-2' }} {{ createServiceOrderQuoteForm.get('currency')?.value }}</h3>
+            <h3>
+              {{ calculateServiceOrderAgreementTotal() | number: '1.2-2' }}
+              {{ createServiceOrderAgreementForm.get('currency')?.value }}
+            </h3>
             <small class="muted">Actualiza al agregar items</small>
           </div>
         </div>
 
-        <form [formGroup]="createServiceOrderQuoteForm" class="quote-shell">
+        <form [formGroup]="createServiceOrderAgreementForm" class="quote-shell">
           <div class="quote-main">
             <div class="quote-items-pane">
               <div class="pane-header">
                 <div>
-                  <h4><i class="fas fa-layer-group"></i> Items de la cotización</h4>
-                  <p class="muted">Agrega productos o servicios; los precios se calculan automáticamente.</p>
+                  <h4><i class="fas fa-layer-group"></i> Items del acuerdo</h4>
+                  <p class="muted">
+                    Agrega productos o servicios; los precios se calculan automáticamente.
+                  </p>
                 </div>
                 <div class="add-item-buttons">
-                  <button type="button" class="btn btn-sm btn-info" (click)="addProductToServiceOrderQuote()">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-info"
+                    (click)="addProductToServiceOrderAgreement()"
+                  >
                     <i class="fas fa-box"></i> Producto
                   </button>
-                  <button type="button" class="btn btn-sm btn-info" (click)="addServiceToServiceOrderQuote()">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-info"
+                    (click)="addServiceToServiceOrderAgreement()"
+                  >
                     <i class="fas fa-tools"></i> Servicio
                   </button>
                   <a
@@ -1134,7 +1507,7 @@
               @if (quoteItems.length === 0) {
                 <div class="empty-state-tall">
                   <i class="fas fa-layer-group"></i>
-                  <p>Agrega productos o servicios para comenzar la cotización.</p>
+                  <p>Agrega productos o servicios para comenzar el acuerdo.</p>
                 </div>
               } @else {
                 <div class="quote-items-list">
@@ -1142,12 +1515,20 @@
                     <div class="quote-item-card">
                       <div class="quote-item-card-header">
                         <div class="pill">
-                          <i class="fas" [ngClass]="item.type === 'product' ? 'fa-box' : 'fa-tools'"></i>
+                          <i
+                            class="fas"
+                            [ngClass]="item.type === 'product' ? 'fa-box' : 'fa-tools'"
+                          ></i>
                           {{ item.type === 'product' ? 'Producto' : 'Servicio' }}
                         </div>
                         <div class="item-actions">
                           <span class="muted small">Item #{{ i + 1 }}</span>
-                          <button type="button" class="btn-icon btn-delete" (click)="removeServiceOrderQuoteItem(i)" title="Eliminar">
+                          <button
+                            type="button"
+                            class="btn-icon btn-delete"
+                            (click)="removeServiceOrderAgreementItem(i)"
+                            title="Eliminar"
+                          >
                             <i class="fas fa-trash"></i>
                           </button>
                         </div>
@@ -1184,19 +1565,28 @@
                               min="1"
                               [(ngModel)]="item.quantity"
                               (ngModelChange)="onProductQuantityChange(item, $event)"
-                              [ngModelOptions]="{ standalone: true }">
+                              [ngModelOptions]="{ standalone: true }"
+                            />
                           </div>
                           <div class="item-input price">
                             <label>Precio</label>
                             <div class="price-display">
-                              <strong>{{ item.unitPrice || 0 | number: '1.2-2' }} {{ createServiceOrderQuoteForm.get('currency')?.value }}</strong>
+                              <strong
+                                >{{ item.unitPrice || 0 | number: '1.2-2' }}
+                                {{ createServiceOrderAgreementForm.get('currency')?.value }}</strong
+                              >
                             </div>
                           </div>
                         </div>
                         <div class="quote-item-row">
                           <div class="item-input full-width">
                             <label>Notas</label>
-                            <input type="text" placeholder="Observaciones" [(ngModel)]="item.notes" [ngModelOptions]="{ standalone: true }">
+                            <input
+                              type="text"
+                              placeholder="Observaciones"
+                              [(ngModel)]="item.notes"
+                              [ngModelOptions]="{ standalone: true }"
+                            />
                           </div>
                         </div>
                       }
@@ -1215,10 +1605,12 @@
                               [ngModelOptions]="{ standalone: true }"
                             >
                               <ng-template ng-label-tmp let-service="item">
-                                {{ service?.code }} · {{ service?.name }} · {{ getServiceCategoryName(service?.categoryId) }}
+                                {{ service?.code }} · {{ service?.name }} ·
+                                {{ getServiceCategoryName(service?.categoryId) }}
                               </ng-template>
                               <ng-template ng-option-tmp let-service="item">
-                                {{ service?.code }} · {{ service?.name }} · {{ getServiceCategoryName(service?.categoryId) }}
+                                {{ service?.code }} · {{ service?.name }} ·
+                                {{ getServiceCategoryName(service?.categoryId) }}
                               </ng-template>
                             </ng-select>
                           </div>
@@ -1226,14 +1618,22 @@
                         <div class="quote-item-row">
                           <div class="item-input full-width">
                             <label>Notas</label>
-                            <input type="text" placeholder="Observaciones" [(ngModel)]="item.notes" [ngModelOptions]="{ standalone: true }">
+                            <input
+                              type="text"
+                              placeholder="Observaciones"
+                              [(ngModel)]="item.notes"
+                              [ngModelOptions]="{ standalone: true }"
+                            />
                           </div>
                         </div>
                       }
 
                       <div class="quote-item-footer">
                         <span class="muted">Subtotal</span>
-                        <strong>{{ calculateItemSubtotal(item) | number: '1.2-2' }} {{ createServiceOrderQuoteForm.get('currency')?.value }}</strong>
+                        <strong
+                          >{{ calculateItemSubtotal(item) | number: '1.2-2' }}
+                          {{ createServiceOrderAgreementForm.get('currency')?.value }}</strong
+                        >
                       </div>
                     </div>
                   }
@@ -1246,17 +1646,23 @@
                 <h5>Datos generales</h5>
                 <div class="info-tile">
                   <p class="muted small">
-                    {{ selectedServiceOrderItem?.serviceType === serviceTypeEnum.STANDARD_SERVICE ? 'Detalle del servicio' : 'Problema inicial' }}
+                    {{
+                      selectedServiceOrder?.serviceType === serviceTypeEnum.STANDARD_SERVICE
+                        ? 'Detalle del servicio'
+                        : 'Problema inicial'
+                    }}
                   </p>
                   <p class="strong">
-                    {{ selectedServiceOrderItem?.initialIssue || 'Sin detalle registrado' }}
+                    {{ selectedServiceOrder?.initialIssue || 'Sin detalle registrado' }}
                   </p>
                 </div>
-                @if (selectedServiceOrderItem?.serviceType === serviceTypeEnum.DIAGNOSIS) {
+                @if (selectedServiceOrder?.serviceType === serviceTypeEnum.DIAGNOSIS) {
                   <div class="info-tile">
                     <p class="muted small">Diagnóstico del técnico</p>
                     @if (isLoadingDiagnosis) {
-                      <p class="strong"><i class="fas fa-spinner fa-spin"></i> Cargando diagnóstico...</p>
+                      <p class="strong">
+                        <i class="fas fa-spinner fa-spin"></i> Cargando diagnóstico...
+                      </p>
                     } @else if (currentDiagnosis) {
                       <p class="strong">{{ currentDiagnosis.summary }}</p>
                       @if (currentDiagnosis.details) {
@@ -1268,10 +1674,10 @@
                   </div>
                 }
                 <div class="field">
-                  <label>Equipo a cotizar *</label>
-                  @if (selectedServiceOrderItem) {
+                  <label>Equipo del acuerdo *</label>
+                  @if (selectedServiceOrder) {
                     <div class="selected-item highlight">
-                      {{ getServiceOrderItemLabel(selectedServiceOrderItem) }}
+                      {{ getServiceOrderLabel(selectedServiceOrder) }}
                     </div>
                   } @else {
                     <div class="selected-item empty">
@@ -1296,15 +1702,35 @@
                 </div>
                 <div class="summary-row">
                   <span>Total</span>
-                  <strong class="highlight-total">{{ calculateServiceOrderQuoteTotal() | number: '1.2-2' }} {{ createServiceOrderQuoteForm.get('currency')?.value }}</strong>
+                  <strong class="highlight-total"
+                    >{{ calculateServiceOrderAgreementTotal() | number: '1.2-2' }}
+                    {{ createServiceOrderAgreementForm.get('currency')?.value }}</strong
+                  >
                 </div>
               </div>
 
-              <div class="summary-actions">
-                <button class="btn btn-secondary" type="button" (click)="closeCreateServiceOrderQuoteModal()">Cancelar</button>
-                <button class="btn btn-primary" type="button" (click)="submitCreateServiceOrderQuote()" [disabled]="quoteItems.length === 0 || isCreatingServiceOrderQuote">
+              <div class="summary-actions pb-4">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  (click)="closeCreateServiceOrderAgreementModal()"
+                >
+                  Cancelar
+                </button>
+                <button
+                  class="btn btn-primary"
+                  type="button"
+                  (click)="submitCreateServiceOrderAgreement()"
+                  [disabled]="quoteItems.length === 0 || isCreatingServiceOrderAgreement"
+                >
                   <i class="fas fa-check"></i>
-                  {{ isResubmittingServiceOrderQuote ? 'Reenviar Cotización' : 'Crear Cotización' }}
+                  {{
+                    isEditingDraftServiceOrderAgreement
+                      ? 'Guardar borrador'
+                      : isResubmittingServiceOrderAgreement
+                        ? 'Actualizar acuerdo'
+                        : 'Crear acuerdo'
+                  }}
                 </button>
               </div>
             </div>
@@ -1314,59 +1740,63 @@
     </div>
   }
 
-  @if (showServiceOrderQuotesModal && serviceOrderQuotesServiceOrder && serviceOrderQuotesServiceOrderItem) {
-    <div class="modal-overlay" (click)="closeServiceOrderQuotesModal()">
-      <div class="serviceOrderQuotes-modal" (click)="$event.stopPropagation()">
-        <div class="serviceOrderQuotes-modal-header">
+  @if (showServiceOrderAgreementsModal && serviceOrderAgreementsServiceOrder) {
+    <div class="modal-overlay" (click)="closeServiceOrderAgreementsModal()">
+      <div class="serviceOrderAgreements-modal" (click)="$event.stopPropagation()">
+        <div class="serviceOrderAgreements-modal-header">
           <div>
-            <p class="modal-eyebrow">Cotizaciones</p>
-            <h2>{{ serviceOrderQuotesServiceOrder.code }} · Equipo #{{ serviceOrderQuotesServiceOrderItem.itemNumber }}</h2>
-            <p class="muted">Estado del equipo: {{ getServiceOrderItemStatusLabel(serviceOrderQuotesServiceOrderItem.status) }}</p>
+            <p class="modal-eyebrow">Acuerdos</p>
+            <h2>{{ serviceOrderAgreementsServiceOrder.code }} · {{ getServiceOrderLabel(serviceOrderAgreementsServiceOrder) }}</h2>
+            <p class="muted">
+              Estado del flujo:
+              {{ getServiceOrderWorkflowStatusLabel(serviceOrderAgreementsServiceOrder.workflowStatus) }}
+            </p>
           </div>
-          <button class="btn-close" type="button" (click)="closeServiceOrderQuotesModal()">
+          <button class="btn-close" type="button" (click)="closeServiceOrderAgreementsModal()">
             <i class="fas fa-times"></i>
           </button>
         </div>
 
-        <div class="serviceOrderQuotes-modal-body">
-          <div class="serviceOrderQuotes-list-pane">
-            <div class="serviceOrderQuotes-meta">
+        <div class="serviceOrderAgreements-modal-body">
+          <div class="serviceOrderAgreements-list-pane">
+            <div class="serviceOrderAgreements-meta">
               <div class="meta-box">
                 <span>Registradas</span>
                 <strong>{{ serviceOrderItemQuotes.length }}</strong>
               </div>
               <div class="meta-box">
                 <span>Enviadas</span>
-                <strong>{{ sentServiceOrderQuotesCount }}</strong>
+                <strong>{{ sentServiceOrderAgreementsCount }}</strong>
               </div>
               <div class="meta-box">
                 <span>Aprobadas</span>
-                <strong>{{ approvedServiceOrderQuotesCount }}</strong>
+                <strong>{{ approvedServiceOrderAgreementsCount }}</strong>
               </div>
             </div>
 
-            @if (isLoadingServiceOrderQuotes) {
+            @if (isLoadingServiceOrderAgreements) {
               <div class="empty-state-small">
-                <p><i class="fas fa-spinner fa-spin"></i> Cargando cotizaciones...</p>
+                <p><i class="fas fa-spinner fa-spin"></i> Cargando acuerdos...</p>
               </div>
-            } @else if (serviceOrderQuotesError) {
+            } @else if (serviceOrderAgreementsError) {
               <div class="empty-state-small">
-                <p>{{ serviceOrderQuotesError }}</p>
+                <p>{{ serviceOrderAgreementsError }}</p>
               </div>
             } @else if (!serviceOrderItemQuotes.length) {
               <div class="empty-state-small">
-                <p>Este equipo aún no tiene cotizaciones registradas.</p>
+                <p>Esta orden aún no tiene acuerdos registrados.</p>
               </div>
             } @else {
               <div class="quote-cards-grid">
                 @for (quote of serviceOrderItemQuotes; track quote.id) {
                   <div
                     class="quote-card-modern"
-                    [class.active]="selectedServiceOrderQuoteDetail?.id === quote.id"
-                    (click)="viewServiceOrderQuoteDetail(quote)">
+                    [class.active]="selectedServiceOrderAgreementDetail?.id === quote.id"
+                    (click)="viewServiceOrderAgreementDetail(quote)"
+                  >
                     <div class="quote-card-top">
                       <div>
-                        <p class="quote-label">Cotización</p>
+                        <p class="quote-label">Acuerdo</p>
                         <h4>#{{ quote.sequenceNumber }}</h4>
                         <p class="quote-subline">
                           <i class="fas fa-calendar-alt"></i>
@@ -1374,15 +1804,18 @@
                         </p>
                         <p class="quote-subline">
                           <i class="fas fa-laptop"></i>
-                          {{ serviceOrderQuotesServiceOrderItem?.itemNumber ? ('Equipo #' + serviceOrderQuotesServiceOrderItem?.itemNumber) : 'Equipo sin código' }}
+                          {{ getServiceOrderLabel(serviceOrderAgreementsServiceOrder) }}
                         </p>
                         <p class="quote-subline">
                           <i class="fas fa-money-bill-wave"></i>
                           {{ quote.totalAmount | number: '1.2-2' }} {{ quote.currency }}
                         </p>
                       </div>
-                      <span class="service-quote-status" [ngClass]="getServiceOrderQuoteStatusClass(quote.status)">
-                        {{ getServiceOrderQuoteStatusLabel(quote.status) }}
+                      <span
+                        class="service-quote-status"
+                        [ngClass]="getServiceOrderAgreementStatusClass(quote.status)"
+                      >
+                        {{ getServiceOrderAgreementStatusLabel(quote.status) }}
                       </span>
                     </div>
                     <div class="quote-card-body">
@@ -1393,14 +1826,7 @@
                         </div>
                       }
                     </div>
-                    <div class="quote-card-actions">
-                      @if (quote.status === 'CLIENT_REJECTED') {
-                        <button class="btn btn-sm btn-warning" type="button" (click)="resubmitServiceOrderQuote(quote); $event.stopPropagation()">
-                          <i class="fas fa-redo"></i>
-                          Reenviar
-                        </button>
-                      }
-                    </div>
+                    <div class="quote-card-actions"></div>
                   </div>
                 }
               </div>
@@ -1408,7 +1834,7 @@
           </div>
 
           <div class="quote-detail-pane">
-            @if (isLoadingServiceOrderQuoteDetail) {
+            @if (isLoadingServiceOrderAgreementDetail) {
               <div class="empty-state-small">
                 <p><i class="fas fa-spinner fa-spin"></i> Cargando detalle...</p>
               </div>
@@ -1416,118 +1842,149 @@
               <div class="empty-state-small">
                 <p>{{ quoteDetailError }}</p>
               </div>
-            } @else if (!selectedServiceOrderQuoteDetail) {
+            } @else if (!selectedServiceOrderAgreementDetail) {
               <div class="empty-state-small">
-                <p>Selecciona una cotización para ver el detalle.</p>
+                <p>Selecciona un acuerdo para ver el detalle.</p>
               </div>
             } @else {
               <div class="quote-detail-card">
                 <div class="detail-header">
                   <div>
                     <p class="quote-label">Detalle</p>
-                    <h3>Cotización #{{ selectedServiceOrderQuoteDetail.sequenceNumber }}</h3>
+                    <h3>Acuerdo #{{ selectedServiceOrderAgreementDetail.sequenceNumber }}</h3>
                     <p class="quote-subline">
                       <i class="fas fa-calendar-alt"></i>
-                      {{ selectedServiceOrderQuoteDetail.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+                      {{ selectedServiceOrderAgreementDetail.createdAt | date: 'dd/MM/yyyy HH:mm' }}
                     </p>
                     <p class="quote-subline">
                       <i class="fas fa-money-bill-wave"></i>
-                      {{ selectedServiceOrderQuoteDetail.totalAmount | number: '1.2-2' }} {{ selectedServiceOrderQuoteDetail.currency }}
+                      {{ selectedServiceOrderAgreementDetail.totalAmount | number: '1.2-2' }}
+                      {{ selectedServiceOrderAgreementDetail.currency }}
                     </p>
                   </div>
-                  <span class="service-quote-status" [ngClass]="getServiceOrderQuoteStatusClass(selectedServiceOrderQuoteDetail.status)">
-                    {{ getServiceOrderQuoteStatusLabel(selectedServiceOrderQuoteDetail.status) }}
+                  <span
+                    class="service-quote-status"
+                    [ngClass]="
+                      getServiceOrderAgreementStatusClass(selectedServiceOrderAgreementDetail.status)
+                    "
+                  >
+                    {{ getServiceOrderAgreementStatusLabel(selectedServiceOrderAgreementDetail.status) }}
                   </span>
                 </div>
 
                 <div class="detail-grid">
-                  <div class="detail-tile" *ngIf="selectedServiceOrderQuoteDetail.sentToClientAt">
+                  <div class="detail-tile" *ngIf="selectedServiceOrderAgreementDetail.sentToClientAt">
                     <p class="muted">Enviada al cliente</p>
-                    <span>{{ selectedServiceOrderQuoteDetail.sentToClientAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    <span>{{
+                      selectedServiceOrderAgreementDetail.sentToClientAt | date: 'dd/MM/yyyy HH:mm'
+                    }}</span>
                   </div>
-                  <div class="detail-tile" *ngIf="selectedServiceOrderQuoteDetail.clientApprovedAt">
+                  <div class="detail-tile" *ngIf="selectedServiceOrderAgreementDetail.clientApprovedAt">
                     <p class="muted">Aprobada cliente</p>
-                    <span>{{ selectedServiceOrderQuoteDetail.clientApprovedAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    <span>{{
+                      selectedServiceOrderAgreementDetail.clientApprovedAt | date: 'dd/MM/yyyy HH:mm'
+                    }}</span>
                   </div>
-                  <div class="detail-tile" *ngIf="selectedServiceOrderQuoteDetail.clientRejectedAt">
+                  <div class="detail-tile" *ngIf="selectedServiceOrderAgreementDetail.clientRejectedAt">
                     <p class="muted">Rechazada cliente</p>
-                    <span>{{ selectedServiceOrderQuoteDetail.clientRejectedAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    <span>{{
+                      selectedServiceOrderAgreementDetail.clientRejectedAt | date: 'dd/MM/yyyy HH:mm'
+                    }}</span>
                   </div>
                 </div>
 
-                @if (isLatestServiceOrderQuote(selectedServiceOrderQuoteDetail)) {
+                @if (isLatestServiceOrderAgreement(selectedServiceOrderAgreementDetail)) {
                   <div class="detail-section">
                     <div class="quote-card-actions">
                       <button
-                        class="btn btn-sm btn-info"
+                        class="btn btn-sm btn-outline-success"
                         type="button"
-                        (click)="sendServiceOrderQuoteToClient(selectedServiceOrderQuoteDetail)"
-                        [disabled]="!canRespondToServiceOrderQuote(selectedServiceOrderQuoteDetail) || isLoadingServiceOrderQuoteDetail">
-                        <i class="fas fa-check-circle"></i>
-                        Aceptar cotización
-                      </button>
-                      <button
-                        class="btn btn-sm btn-danger"
-                        type="button"
-                        (click)="rejectServiceOrderQuoteByClient(selectedServiceOrderQuoteDetail)"
-                        [disabled]="!canRespondToServiceOrderQuote(selectedServiceOrderQuoteDetail) || isLoadingServiceOrderQuoteDetail">
-                        <i class="fas fa-times-circle"></i>
-                        Rechazar cotización
+                        (click)="openReceptionInbox(serviceOrderAgreementsServiceOrder!)"
+                        [disabled]="!serviceOrderAgreementsServiceOrder"
+                      >
+                        <i class="fab fa-whatsapp"></i>
+                        Ver coordinación
                       </button>
                     </div>
                   </div>
                 }
 
-                @if (selectedServiceOrderQuoteDetail.notes) {
+                @if (selectedServiceOrderAgreementDetail.notes) {
                   <div class="detail-section">
                     <h5><i class="fas fa-sticky-note"></i> Notas</h5>
-                    <p>{{ selectedServiceOrderQuoteDetail.notes }}</p>
+                    <p>{{ selectedServiceOrderAgreementDetail.notes }}</p>
                   </div>
                 }
-                @if (selectedServiceOrderQuoteDetail.clientNotes) {
+                @if (selectedServiceOrderAgreementDetail.clientNotes) {
                   <div class="detail-section">
                     <h5><i class="fas fa-user-friends"></i> Notas del cliente</h5>
-                    <p>{{ selectedServiceOrderQuoteDetail.clientNotes }}</p>
+                    <p>{{ selectedServiceOrderAgreementDetail.clientNotes }}</p>
                   </div>
                 }
 
-                <div class="detail-section" *ngIf="selectedServiceOrderQuoteDetail.productItems?.length">
+                <div
+                  class="detail-section"
+                  *ngIf="selectedServiceOrderAgreementDetail.productItems?.length"
+                >
                   <h5><i class="fas fa-box-open"></i> Productos</h5>
                   <div class="detail-list">
-                    @for (product of selectedServiceOrderQuoteDetail.productItems; track product.id) {
+                    @for (
+                      product of selectedServiceOrderAgreementDetail.productItems;
+                      track product.id
+                    ) {
                       <div class="detail-row">
                         <div>
                           <p class="detail-title">{{ getProductLabel(product.productId) }}</p>
                           <span class="muted">Cant: {{ product.quantity | number: '1.0-2' }}</span>
                         </div>
                         <div class="detail-amount">
-                          <span class="muted">Unit:</span> {{ product.unitPrice | number: '1.2-2' }} {{ selectedServiceOrderQuoteDetail.currency }}
-                          <div class="detail-total">{{ (product.quantity * product.unitPrice) | number: '1.2-2' }} {{ selectedServiceOrderQuoteDetail.currency }}</div>
+                          <span class="muted">Unit:</span> {{ product.unitPrice | number: '1.2-2' }}
+                          {{ selectedServiceOrderAgreementDetail.currency }}
+                          <div class="detail-total">
+                            {{ product.quantity * product.unitPrice | number: '1.2-2' }}
+                            {{ selectedServiceOrderAgreementDetail.currency }}
+                          </div>
                         </div>
                       </div>
                     }
                   </div>
                 </div>
 
-                <div class="detail-section" *ngIf="selectedServiceOrderQuoteDetail.serviceItems?.length">
+                <div
+                  class="detail-section"
+                  *ngIf="selectedServiceOrderAgreementDetail.serviceItems?.length"
+                >
                   <h5><i class="fas fa-tools"></i> Servicios</h5>
                   <div class="detail-list">
-                    @for (service of selectedServiceOrderQuoteDetail.serviceItems; track service.id) {
+                    @for (
+                      service of selectedServiceOrderAgreementDetail.serviceItems;
+                      track service.id
+                    ) {
                       <div class="detail-row">
                         <div>
                           <p class="detail-title">{{ getServiceLabel(service.serviceId) }}</p>
-                          <span class="muted">{{ formatEstimatedDuration(service.estimatedHours) }}</span>
+                          <span class="muted">{{
+                            formatEstimatedDuration(service.estimatedHours)
+                          }}</span>
                         </div>
                         <div class="detail-amount">
-                          <span class="muted">Importe:</span> {{ service.unitPrice | number: '1.2-2' }} {{ selectedServiceOrderQuoteDetail.currency }}
+                          <span class="muted">Importe:</span>
+                          {{ service.unitPrice | number: '1.2-2' }}
+                          {{ selectedServiceOrderAgreementDetail.currency }}
                         </div>
                       </div>
                     }
                   </div>
                 </div>
 
-                <div class="empty-state-small" *ngIf="!selectedServiceOrderQuoteDetail.productItems?.length && !selectedServiceOrderQuoteDetail.serviceItems?.length">
-                  <p>Esta cotización no tiene equipos registrados.</p>
+                <div
+                  class="empty-state-small"
+                  *ngIf="
+                    !selectedServiceOrderAgreementDetail.productItems?.length &&
+                    !selectedServiceOrderAgreementDetail.serviceItems?.length
+                  "
+                >
+                  <p>Este acuerdo no tiene líneas registradas.</p>
                 </div>
               </div>
             }
@@ -1537,13 +1994,13 @@
     </div>
   }
 
-  @if (showWarrantyActionModal && warrantySourceServiceOrder && warrantySourceItem) {
+  @if (showWarrantyActionModal && warrantySourceServiceOrder) {
     <div class="modal-overlay" (click)="closeWarrantyActionModal()">
       <div class="modal-content warranty-modal" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <div>
             <p class="modal-eyebrow">Garantía</p>
-            <h2>{{ warrantySourceServiceOrder.code }} · Equipo #{{ warrantySourceItem.itemNumber }}</h2>
+            <h2>{{ warrantySourceServiceOrder.code }} · {{ getServiceOrderLabel(warrantySourceServiceOrder) }}</h2>
             <p class="muted">Selecciona las líneas vigentes para crear la orden de garantía.</p>
           </div>
           <button class="btn-close" type="button" (click)="closeWarrantyActionModal()">
@@ -1584,14 +2041,17 @@
                   [class.selected]="isWarrantyCoverageSelected(line.id)"
                   [class.disabled]="!line.selectable"
                   [disabled]="!line.selectable"
-                  (click)="toggleWarrantyCoverageSelection(line)">
+                  (click)="toggleWarrantyCoverageSelection(line)"
+                >
                   <div class="warranty-line-main">
                     <div>
                       <p class="warranty-line-title">{{ line.label }}</p>
                       <p class="warranty-line-meta">
                         {{ line.kind === 'service' ? 'Servicio' : 'Producto' }}
                         · Vigencia: {{ formatCoverageUntil(line.coverageUntil) }}
-                        @if (line.warrantyDays > 0) { · {{ line.warrantyDays }} días }
+                        @if (line.warrantyDays > 0) {
+                          · {{ line.warrantyDays }} días
+                        }
                       </p>
                     </div>
                     @if (line.selectable) {
@@ -1610,15 +2070,80 @@
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" type="button" (click)="closeWarrantyActionModal()">Cancelar</button>
+          <button class="btn btn-secondary" type="button" (click)="closeWarrantyActionModal()">
+            Cancelar
+          </button>
           <button
             class="btn btn-primary"
             type="button"
             (click)="createWarrantyServiceOrderFromSelection()"
-            [disabled]="isCreatingWarrantyOrder || warrantySelectedLinesCount === 0">
+            [disabled]="isCreatingWarrantyOrder || warrantySelectedLinesCount === 0"
+          >
             <i class="fas fa-check"></i>
             {{ isCreatingWarrantyOrder ? 'Creando...' : 'Crear orden de garantía' }}
           </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showReceptionInboxModal) {
+    <div class="modal-overlay inbox-overlay" (click)="closeReceptionInboxModal()">
+      <div class="modal-content inbox-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header inbox-header">
+          <div>
+            <p class="modal-eyebrow">Recepción</p>
+            <h2>Coordinación con cliente</h2>
+          </div>
+          <button class="btn-close" type="button" (click)="closeReceptionInboxModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="inbox-layout inbox-layout-single">
+          <section class="inbox-main">
+            @if (receptionInboxActiveThread) {
+              <div class="inbox-thread-meta">
+                <div>
+                  <strong>{{ receptionInboxActiveThread.serviceOrderCode }} · {{ receptionInboxActiveThread.equipmentLabel }}</strong>
+                  <p>{{ receptionInboxActiveThread.clientAlias }} · {{ receptionInboxActiveThread.assignedTechnicianAlias }}</p>
+                </div>
+              </div>
+
+              <div class="inbox-messages">
+                @for (message of receptionInboxActiveThread.messages; track message.id) {
+                  <article
+                    class="message-bubble"
+                    [class.message-bubble-own]="message.author === 'RECEPTION'"
+                  >
+                    <header>
+                      <strong>{{ getReceptionInboxAuthorLabel(message.author) }}</strong>
+                      <span>{{ message.createdAt | date: 'dd/MM HH:mm' }}</span>
+                    </header>
+                    <p>{{ message.text }}</p>
+                  </article>
+                }
+              </div>
+
+              <div class="inbox-composer">
+                <textarea
+                  rows="3"
+                  [value]="receptionInboxDraftMessage"
+                  (input)="receptionInboxDraftMessage = $any($event.target).value"
+                  placeholder="Escribe el mensaje para coordinar con el cliente..."
+                ></textarea>
+                <div class="inbox-composer-actions">
+                  <button class="btn btn-outline-secondary" type="button" (click)="closeReceptionInboxModal()">
+                    Cerrar
+                  </button>
+                  <button class="btn btn-success" type="button" (click)="sendReceptionInboxMessage()">
+                    <i class="fab fa-whatsapp"></i>
+                    Enviar
+                  </button>
+                </div>
+              </div>
+            }
+          </section>
         </div>
       </div>
     </div>
@@ -1638,15 +2163,30 @@
           <div class="form-grid">
             <div class="form-group">
               <label for="edit-contactName">Nombre de contacto *</label>
-              <input id="edit-contactName" class="form-control" formControlName="contactName" type="text">
+              <input
+                id="edit-contactName"
+                class="form-control"
+                formControlName="contactName"
+                type="text"
+              />
             </div>
             <div class="form-group">
               <label for="edit-contactEmail">Correo electrónico</label>
-              <input id="edit-contactEmail" class="form-control" formControlName="contactEmail" type="email">
+              <input
+                id="edit-contactEmail"
+                class="form-control"
+                formControlName="contactEmail"
+                type="email"
+              />
             </div>
             <div class="form-group">
               <label for="edit-contactPhone">Teléfono *</label>
-              <input id="edit-contactPhone" class="form-control" formControlName="contactPhone" type="text">
+              <input
+                id="edit-contactPhone"
+                class="form-control"
+                formControlName="contactPhone"
+                type="text"
+              />
             </div>
             <div class="form-group">
               <label for="edit-priority">Prioridad *</label>
@@ -1682,12 +2222,16 @@
                   class="form-control"
                   formControlName="equipmentTypeOther"
                   type="text"
-                  [class.is-invalid]="editServiceOrderForm.get('equipmentTypeOther')?.invalid && editServiceOrderForm.get('equipmentTypeOther')?.touched"
-                >
-                @if (editServiceOrderForm.get('equipmentTypeOther')?.invalid && editServiceOrderForm.get('equipmentTypeOther')?.touched) {
-                  <div class="invalid-feedback">
-                    Especifica el tipo de equipo.
-                  </div>
+                  [class.is-invalid]="
+                    editServiceOrderForm.get('equipmentTypeOther')?.invalid &&
+                    editServiceOrderForm.get('equipmentTypeOther')?.touched
+                  "
+                />
+                @if (
+                  editServiceOrderForm.get('equipmentTypeOther')?.invalid &&
+                  editServiceOrderForm.get('equipmentTypeOther')?.touched
+                ) {
+                  <div class="invalid-feedback">Especifica el tipo de equipo.</div>
                 }
               </div>
             }
@@ -1703,33 +2247,60 @@
             </div>
             <div class="form-group">
               <label for="edit-brand">Marca</label>
-              <input id="edit-brand" class="form-control" formControlName="brand" type="text">
+              <input id="edit-brand" class="form-control" formControlName="brand" type="text" />
             </div>
             <div class="form-group">
               <label for="edit-model">Modelo</label>
-              <input id="edit-model" class="form-control" formControlName="model" type="text">
+              <input id="edit-model" class="form-control" formControlName="model" type="text" />
             </div>
             <div class="form-group">
               <label for="edit-serialNumber">Número de serie</label>
-              <input id="edit-serialNumber" class="form-control" formControlName="serialNumber" type="text">
+              <input
+                id="edit-serialNumber"
+                class="form-control"
+                formControlName="serialNumber"
+                type="text"
+              />
             </div>
             <div class="form-group full-width">
               <label for="edit-initialIssue">Problema inicial o detalle del servicio *</label>
-              <textarea id="edit-initialIssue" class="form-control" formControlName="initialIssue" rows="3"></textarea>
+              <textarea
+                id="edit-initialIssue"
+                class="form-control"
+                formControlName="initialIssue"
+                rows="3"
+              ></textarea>
             </div>
             <div class="form-group full-width">
               <label for="edit-accessories">Accesorios</label>
-              <textarea id="edit-accessories" class="form-control" formControlName="accessories" rows="2"></textarea>
+              <textarea
+                id="edit-accessories"
+                class="form-control"
+                formControlName="accessories"
+                rows="2"
+              ></textarea>
             </div>
             <div class="form-group full-width">
               <label for="edit-notes">Notas</label>
-              <textarea id="edit-notes" class="form-control" formControlName="notes" rows="3"></textarea>
+              <textarea
+                id="edit-notes"
+                class="form-control"
+                formControlName="notes"
+                rows="3"
+              ></textarea>
             </div>
           </div>
         </form>
         <div class="modal-footer">
-          <button class="btn btn-secondary" type="button" (click)="closeEditServiceOrderModal()">Cancelar</button>
-          <button class="btn btn-primary" type="button" (click)="submitEditServiceOrder()" [disabled]="editServiceOrderForm.invalid || isSaving">
+          <button class="btn btn-secondary" type="button" (click)="closeEditServiceOrderModal()">
+            Cancelar
+          </button>
+          <button
+            class="btn btn-primary"
+            type="button"
+            (click)="submitEditServiceOrder()"
+            [disabled]="editServiceOrderForm.invalid || isSaving"
+          >
             <i class="fas fa-save"></i>
             Guardar cambios
           </button>
@@ -1743,7 +2314,7 @@
     <div class="modal-overlay" (click)="closeReassignTechnicianModal()">
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
-          <h2>Reasignar Técnico - Equipo #{{ reassigningItem?.itemNumber }}</h2>
+          <h2>Reasignar Técnico - {{ editingServiceOrder?.code }}</h2>
           <button class="btn-close" type="button" (click)="closeReassignTechnicianModal()">
             <i class="fas fa-times"></i>
           </button>
@@ -1759,12 +2330,20 @@
             </select>
           </div>
           <div class="info-box">
-            <i class="fas fa-info-circle"></i> Técnico actual: {{ reassigningItem?.assignedToTechnicianName || 'Sin asignar' }}
+            <i class="fas fa-info-circle"></i> Técnico actual:
+            {{ editingServiceOrder?.assignedToTechnicianName || 'Sin asignar' }}
           </div>
         </form>
         <div class="modal-footer">
-          <button class="btn btn-secondary" type="button" (click)="closeReassignTechnicianModal()">Cancelar</button>
-          <button class="btn btn-primary" type="button" (click)="submitReassignTechnician()" [disabled]="reassignTechnicianForm.invalid || isSaving">
+          <button class="btn btn-secondary" type="button" (click)="closeReassignTechnicianModal()">
+            Cancelar
+          </button>
+          <button
+            class="btn btn-primary"
+            type="button"
+            (click)="submitReassignTechnician()"
+            [disabled]="reassignTechnicianForm.invalid || isSaving"
+          >
             <i class="fas fa-user-check"></i>
             Reasignar
           </button>
@@ -1783,5 +2362,3 @@
     </div>
   </div>
 </div>
-
-

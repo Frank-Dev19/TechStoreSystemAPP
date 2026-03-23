@@ -1,11 +1,11 @@
-export const environment = {
+﻿export const environment = {
   production: true,
 };
 
 export const config = {
   // IMPORTANTE:
-  // - En producción (Docker + nginx) el navegador debe llamar a nginx (mismo host)
-  // - nginx reenvía a la API con /api -> http://api:3000
+  // - En producciÃ³n (Docker + nginx) el navegador debe llamar a nginx (mismo host)
+  // - nginx reenvÃ­a a la API con /api -> http://api:3000
   endpointServices: '/api',
 
   authMethod: '/auth/', // queda: /api/auth/...
@@ -65,7 +65,8 @@ export const config = {
   serviceOrders: {
     serviceOrders: '/service-orders',
     serviceOrderItems: '/service-order-items',
-    serviceOrderQuotes: '/service-order-quotes',
+    serviceOrderAgreements: '/service-order-agreements',
     serviceOrderDiagnoses: '/service-order-diagnoses',
   },
 };
+

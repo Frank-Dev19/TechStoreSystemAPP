@@ -1,12 +1,12 @@
 import { Component, OnInit } from "@angular/core"
 import { finalize } from "rxjs/operators"
-import { ServiceOrderQuote, ServiceOrderQuoteStatus } from "../../models/service-orders/service-quote"
+import { ServiceOrderAgreement, ServiceOrderAgreementStatus } from "../../models/service-orders/service-agreement"
 import {
-  ServiceOrderQuoteService,
+  ServiceOrderAgreementService,
   TechnicianRevenueRanking,
-} from "../../services/service-orders/service-quote.service"
-import { EquipmentType, ServiceOrderItem } from "../../models/service-orders/service-order-item"
-import { ServiceOrderItemService } from "../../services/service-orders/service-order-item.service"
+} from "../../services/service-orders/service-agreement.service"
+import { EquipmentType, ServiceOrder, ServiceType } from "../../models/service-orders/service-order"
+import { ServiceOrderService } from "../../services/service-orders/service-order.service"
 import { ServiceOrderDiagnosisService } from "../../services/service-orders/service-order-diagnosis.service"
 import { ServiceOrderDiagnosis } from "../../models/service-orders/service-order-diagnosis"
 import { Product } from "../../models/catalog/product"
@@ -26,7 +26,7 @@ interface SupervisorInboxMessage {
 interface SupervisorInboxThread {
   id: number
   serviceOrderCode: string
-  serviceOrderItemLabel: string
+  equipmentLabel: string
   technicianAlias: string
   clientAlias: string
   riskLevel: "normal" | "review"
@@ -46,12 +46,12 @@ export class SupervisorPanel implements OnInit {
   currentPage = 1
   itemsPerPage = 6
 
-  openServiceOrderQuotes: ServiceOrderQuote[] = []
-  answeredServiceOrderQuotes: ServiceOrderQuote[] = []
-  allServiceOrderQuotes: ServiceOrderQuote[] = []
+  openServiceOrderAgreements: ServiceOrderAgreement[] = []
+  answeredServiceOrderAgreements: ServiceOrderAgreement[] = []
+  allServiceOrderAgreements: ServiceOrderAgreement[] = []
 
-  selectedServiceOrderQuote: ServiceOrderQuote | null = null
-  selectedServiceOrderItem: ServiceOrderItem | null = null
+  selectedServiceOrderAgreement: ServiceOrderAgreement | null = null
+  selectedServiceOrder: ServiceOrder | null = null
   currentDiagnosis: ServiceOrderDiagnosis | null = null
 
   products: Product[] = []
@@ -60,7 +60,7 @@ export class SupervisorPanel implements OnInit {
   selectedInboxThread: SupervisorInboxThread | null = null
   technicianRankings: TechnicianRevenueRanking[] = []
 
-  isLoadingServiceOrderQuotes = false
+  isLoadingServiceOrderAgreements = false
   isLoadingDiagnosis = false
   isLoadingTechnicianRankings = false
 
@@ -74,7 +74,7 @@ export class SupervisorPanel implements OnInit {
     [EquipmentType.DESKTOP_PC]: "PC de escritorio",
     [EquipmentType.ALL_IN_ONE]: "All in One",
     [EquipmentType.PRINTER]: "Impresora",
-    [EquipmentType.SCANNER]: "Escáner",
+    [EquipmentType.SCANNER]: "Escaner",
     [EquipmentType.PROJECTOR]: "Proyector",
     [EquipmentType.MONITOR]: "Monitor",
     [EquipmentType.SERVER]: "Servidor",
@@ -82,21 +82,24 @@ export class SupervisorPanel implements OnInit {
     [EquipmentType.OTHER]: "Otro",
   }
 
-  private readonly serviceTypeLabels = {
-    DIAGNOSIS: "Diagnóstico",
-    STANDARD_SERVICE: "Servicio estándar",
-  } as const
+  private readonly serviceTypeLabels: Record<string, string> = {
+    [ServiceType.DIAGNOSIS]: "Diagnostico",
+    [ServiceType.STANDARD_SERVICE]: "Servicio estandar",
+    [ServiceType.WARRANTY_SERVICE]: "Garantia",
+    [ServiceType.ASSEMBLY]: "Ensamblaje",
+    [ServiceType.CUSTOMER_SERVICE]: "Atencion al cliente",
+  }
 
   constructor(
-    private readonly quoteService: ServiceOrderQuoteService,
-    private readonly serviceOrderItemService: ServiceOrderItemService,
+    private readonly agreementService: ServiceOrderAgreementService,
+    private readonly serviceOrderService: ServiceOrderService,
     private readonly diagnosticService: ServiceOrderDiagnosisService,
     private readonly productsService: ProductsService,
     private readonly serviceService: ServiceService,
   ) {}
 
   ngOnInit(): void {
-    this.loadServiceOrderQuotes()
+    this.loadServiceOrderAgreements()
     this.loadCatalogData()
     this.initializeInboxThreads()
     this.loadTechnicianRankings()
@@ -118,28 +121,28 @@ export class SupervisorPanel implements OnInit {
       {
         id: 1,
         serviceOrderCode: "SO-240315-1042",
-        serviceOrderItemLabel: "Equipo #1",
+        equipmentLabel: "Laptop",
         technicianAlias: "Tecnico-03",
         clientAlias: "Cliente-A042",
         riskLevel: "normal",
         unreadCount: 1,
         messages: [
           { id: 1, author: "SYSTEM", text: "Canal auditado y anonimizado.", createdAt: now },
-          { id: 2, author: "CLIENT", text: "¿Ya tienen avance del diagnóstico?", createdAt: now },
-          { id: 3, author: "TECHNICIAN", text: "Estamos finalizando pruebas de energía y pantalla.", createdAt: now },
+          { id: 2, author: "CLIENT", text: "Ya tienen avance del diagnostico?", createdAt: now },
+          { id: 3, author: "TECHNICIAN", text: "Estamos finalizando pruebas de energia y pantalla.", createdAt: now },
         ],
       },
       {
         id: 2,
         serviceOrderCode: "SO-240316-0891",
-        serviceOrderItemLabel: "Equipo #2",
+        equipmentLabel: "PC de escritorio",
         technicianAlias: "Tecnico-07",
         clientAlias: "Cliente-B891",
         riskLevel: "review",
         unreadCount: 3,
         messages: [
-          { id: 4, author: "SYSTEM", text: "Mensaje marcado para revisión semántica.", createdAt: now },
-          { id: 5, author: "TECHNICIAN", text: "Tu equipo necesita cambio de placa, te confirmo la cotización.", createdAt: now },
+          { id: 4, author: "SYSTEM", text: "Mensaje marcado para revision semantica.", createdAt: now },
+          { id: 5, author: "TECHNICIAN", text: "Tu equipo necesita cambio de placa, te confirmo el acuerdo.", createdAt: now },
           { id: 6, author: "CLIENT", text: "Listo, quedo atento al presupuesto.", createdAt: now },
         ],
       },
@@ -155,7 +158,7 @@ export class SupervisorPanel implements OnInit {
   getInboxAuthorLabel(author: InboxAuthor): string {
     switch (author) {
       case "TECHNICIAN":
-        return "Técnico"
+        return "Tecnico"
       case "CLIENT":
         return this.selectedInboxThread?.clientAlias ?? "Cliente"
       default:
@@ -163,38 +166,36 @@ export class SupervisorPanel implements OnInit {
     }
   }
 
-  private loadServiceOrderQuotes(): void {
-    this.isLoadingServiceOrderQuotes = true
-    this.quoteService
+  private loadServiceOrderAgreements(): void {
+    this.isLoadingServiceOrderAgreements = true
+    this.agreementService
       .findAll({ page: 1, limit: 100 })
-      .pipe(finalize(() => (this.isLoadingServiceOrderQuotes = false)))
+      .pipe(finalize(() => (this.isLoadingServiceOrderAgreements = false)))
       .subscribe({
         next: ({ data }) => this.hydrateLists(data ?? []),
-        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar las cotizaciones."),
+        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar los acuerdos."),
       })
   }
 
-  private hydrateLists(serviceOrderQuotes: ServiceOrderQuote[]): void {
-    this.allServiceOrderQuotes = [...serviceOrderQuotes]
+  private hydrateLists(serviceOrderAgreements: ServiceOrderAgreement[]): void {
+    this.allServiceOrderAgreements = [...serviceOrderAgreements]
 
-    this.openServiceOrderQuotes = serviceOrderQuotes.filter((quote) =>
-      [
-        ServiceOrderQuoteStatus.CURRENT,
-        ServiceOrderQuoteStatus.SENT_TO_CLIENT,
-        ServiceOrderQuoteStatus.AWAITING_CLIENT_RESPONSE,
-      ].includes(quote.status),
+    this.openServiceOrderAgreements = serviceOrderAgreements.filter((quote) =>
+      [ServiceOrderAgreementStatus.DRAFT].includes(quote.status),
     )
 
-    this.answeredServiceOrderQuotes = serviceOrderQuotes.filter((quote) =>
-      [ServiceOrderQuoteStatus.CLIENT_APPROVED, ServiceOrderQuoteStatus.CLIENT_REJECTED].includes(quote.status),
+    this.answeredServiceOrderAgreements = serviceOrderAgreements.filter((quote) =>
+      [ServiceOrderAgreementStatus.CONFIRMED, ServiceOrderAgreementStatus.VOIDED, ServiceOrderAgreementStatus.SUPERSEDED].includes(
+        quote.status,
+      ),
     )
 
-    if (this.selectedServiceOrderQuote) {
-      const updated = serviceOrderQuotes.find((quote) => quote.id === this.selectedServiceOrderQuote?.id)
-      this.selectedServiceOrderQuote = updated ?? null
-      if (this.selectedServiceOrderQuote) {
-        this.loadServiceOrderItemDetail(this.selectedServiceOrderQuote.serviceOrderItemId)
-        this.loadCurrentDiagnosis(this.selectedServiceOrderQuote.serviceOrderItemId)
+    if (this.selectedServiceOrderAgreement) {
+      const updated = serviceOrderAgreements.find((quote) => quote.id === this.selectedServiceOrderAgreement?.id)
+      this.selectedServiceOrderAgreement = updated ?? null
+      if (this.selectedServiceOrderAgreement) {
+        this.loadServiceOrderDetail(this.selectedServiceOrderAgreement.serviceOrderId)
+        this.loadCurrentDiagnosis(this.selectedServiceOrderAgreement.serviceOrderId)
       }
     }
 
@@ -217,7 +218,7 @@ export class SupervisorPanel implements OnInit {
 
   private loadTechnicianRankings(): void {
     this.isLoadingTechnicianRankings = true
-    this.quoteService
+    this.agreementService
       .getTechnicianRevenueRankings()
       .pipe(finalize(() => (this.isLoadingTechnicianRankings = false)))
       .subscribe({
@@ -226,7 +227,7 @@ export class SupervisorPanel implements OnInit {
         },
         error: () => {
           this.technicianRankings = []
-          this.showMessage("warning", "fas fa-chart-line", "No pudimos cargar el ranking de técnicos.")
+          this.showMessage("warning", "fas fa-chart-line", "No pudimos cargar el ranking de tecnicos.")
         },
       })
   }
@@ -243,10 +244,6 @@ export class SupervisorPanel implements OnInit {
     return this.technicianRankings[2] ?? null
   }
 
-  get remainingTechnicians(): TechnicianRevenueRanking[] {
-    return this.technicianRankings.slice(3)
-  }
-
   get totalItems(): number {
     switch (this.activeSection) {
       case "ranking":
@@ -254,7 +251,7 @@ export class SupervisorPanel implements OnInit {
       case "inbox":
         return this.inboxThreads.length
       default:
-        return this.getVisibleQuotes().length
+        return this.getVisibleAgreements().length
     }
   }
 
@@ -272,8 +269,8 @@ export class SupervisorPanel implements OnInit {
     return this.inboxThreads.slice(start, start + this.itemsPerPage)
   }
 
-  get paginatedVisibleQuotes(): ServiceOrderQuote[] {
-    const visibleQuotes = this.getVisibleQuotes()
+  get paginatedVisibleAgreements(): ServiceOrderAgreement[] {
+    const visibleQuotes = this.getVisibleAgreements()
     const start = (this.currentPage - 1) * this.itemsPerPage
     return visibleQuotes.slice(start, start + this.itemsPerPage)
   }
@@ -300,32 +297,32 @@ export class SupervisorPanel implements OnInit {
     return Math.min(100, (Number(technician.totalRevenue || 0) / total) * 100)
   }
 
-  selectServiceOrderQuote(quote: ServiceOrderQuote): void {
-    this.selectedServiceOrderQuote = quote
-    this.loadServiceOrderItemDetail(quote.serviceOrderItemId)
-    this.loadCurrentDiagnosis(quote.serviceOrderItemId)
+  selectServiceOrderAgreement(quote: ServiceOrderAgreement): void {
+    this.selectedServiceOrderAgreement = quote
+    this.loadServiceOrderDetail(quote.serviceOrderId)
+    this.loadCurrentDiagnosis(quote.serviceOrderId)
   }
 
-  clearSelectedServiceOrderQuote(): void {
-    this.selectedServiceOrderQuote = null
-    this.selectedServiceOrderItem = null
+  clearSelectedServiceOrderAgreement(): void {
+    this.selectedServiceOrderAgreement = null
+    this.selectedServiceOrder = null
     this.currentDiagnosis = null
   }
 
-  private loadServiceOrderItemDetail(serviceOrderItemId: number): void {
-    this.serviceOrderItemService.findOne(serviceOrderItemId).subscribe({
-      next: (item) => (this.selectedServiceOrderItem = item),
+  private loadServiceOrderDetail(serviceOrderId: number): void {
+    this.serviceOrderService.findOne(serviceOrderId).subscribe({
+      next: (serviceOrder) => (this.selectedServiceOrder = serviceOrder),
       error: () => {
-        this.selectedServiceOrderItem = null
+        this.selectedServiceOrder = null
         this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el detalle del equipo.")
       },
     })
   }
 
-  private loadCurrentDiagnosis(serviceOrderItemId: number): void {
+  private loadCurrentDiagnosis(serviceOrderId: number): void {
     this.isLoadingDiagnosis = true
     this.diagnosticService
-      .findAll({ page: 1, limit: 1, serviceOrderItemId, status: "CURRENT" })
+      .findAll({ page: 1, limit: 1, serviceOrderId, status: "CURRENT" })
       .pipe(finalize(() => (this.isLoadingDiagnosis = false)))
       .subscribe({
         next: ({ data }) => {
@@ -337,68 +334,70 @@ export class SupervisorPanel implements OnInit {
       })
   }
 
-  getVisibleQuotes(): ServiceOrderQuote[] {
+  getVisibleAgreements(): ServiceOrderAgreement[] {
     switch (this.activeTab) {
       case "open":
-        return this.openServiceOrderQuotes
+        return this.openServiceOrderAgreements
       case "answered":
-        return this.answeredServiceOrderQuotes
+        return this.answeredServiceOrderAgreements
       default:
-        return this.allServiceOrderQuotes
+        return this.allServiceOrderAgreements
     }
   }
 
-  getEquipmentTypeLabel(type?: EquipmentType | null): string {
+  getEquipmentTypeLabel(type?: EquipmentType | null, equipmentTypeOther?: string | null): string {
     if (!type) return "Sin tipo"
+    if (type === EquipmentType.OTHER && equipmentTypeOther?.trim()) {
+      return equipmentTypeOther.trim()
+    }
     return this.equipmentTypeLabels[type] ?? String(type)
   }
 
   getServiceTypeLabel(serviceType?: string | null): string {
     if (!serviceType) return "Sin tipo"
-    return this.serviceTypeLabels[serviceType as keyof typeof this.serviceTypeLabels] ?? serviceType
+    return this.serviceTypeLabels[serviceType] ?? serviceType
   }
 
   getProductLabel(productId: number | null): string {
     if (!productId) return "Producto sin referencia"
     const product = this.products.find((item) => Number(item.id) === Number(productId))
-    return product ? `${product.sku} · ${product.name}` : `Producto #${productId}`
+    return product ? `${product.sku} . ${product.name}` : `Producto #${productId}`
   }
 
   getServiceLabel(serviceId: number | null): string {
     if (!serviceId) return "Servicio sin referencia"
     const service = this.services.find((item) => Number(item.id) === Number(serviceId))
-    return service ? `${service.code} · ${service.name}` : `Servicio #${serviceId}`
+    return service ? `${service.code} . ${service.name}` : `Servicio #${serviceId}`
   }
 
-  getServiceOrderQuoteHeaderLabel(quote: ServiceOrderQuote): string {
-    const serviceOrderCode = quote.serviceOrderItem?.serviceOrder?.code
-    const equipmentLabel = this.getEquipmentTypeLabel(quote.serviceOrderItem?.equipmentType)
+  getServiceOrderAgreementHeaderLabel(quote: ServiceOrderAgreement): string {
+    const serviceOrderCode = quote.serviceOrder?.code
+    const equipmentLabel = this.getEquipmentTypeLabel(
+      quote.serviceOrder?.equipmentType,
+      quote.serviceOrder?.equipmentTypeOther,
+    )
     if (serviceOrderCode) {
-      return `${serviceOrderCode} · ${equipmentLabel}`
+      return `${serviceOrderCode} . ${equipmentLabel}`
     }
     return equipmentLabel
   }
 
-  getServiceOrderQuoteStatusLabel(status: ServiceOrderQuoteStatus): string {
-    const statusMap: Record<ServiceOrderQuoteStatus, string> = {
-      [ServiceOrderQuoteStatus.SENT_TO_CLIENT]: "Enviada al cliente",
-      [ServiceOrderQuoteStatus.AWAITING_CLIENT_RESPONSE]: "Esperando respuesta del cliente",
-      [ServiceOrderQuoteStatus.CLIENT_APPROVED]: "Aprobada por cliente",
-      [ServiceOrderQuoteStatus.CLIENT_REJECTED]: "Rechazada por cliente",
-      [ServiceOrderQuoteStatus.CURRENT]: "Vigente",
-      [ServiceOrderQuoteStatus.ARCHIVED]: "Archivada",
+  getServiceOrderAgreementStatusLabel(status: ServiceOrderAgreementStatus): string {
+    const statusMap: Record<string, string> = {
+      [ServiceOrderAgreementStatus.DRAFT]: "Borrador",
+      [ServiceOrderAgreementStatus.CONFIRMED]: "Confirmado",
+      [ServiceOrderAgreementStatus.SUPERSEDED]: "Reemplazado",
+      [ServiceOrderAgreementStatus.VOIDED]: "Anulado",
     }
     return statusMap[status] || status
   }
 
-  getServiceOrderQuoteStatusClass(status: ServiceOrderQuoteStatus): string {
-    const statusClassMap: Record<ServiceOrderQuoteStatus, string> = {
-      [ServiceOrderQuoteStatus.SENT_TO_CLIENT]: "status-sent-client",
-      [ServiceOrderQuoteStatus.AWAITING_CLIENT_RESPONSE]: "status-awaiting-client",
-      [ServiceOrderQuoteStatus.CLIENT_APPROVED]: "status-client-approved",
-      [ServiceOrderQuoteStatus.CLIENT_REJECTED]: "status-client-rejected",
-      [ServiceOrderQuoteStatus.CURRENT]: "status-current",
-      [ServiceOrderQuoteStatus.ARCHIVED]: "status-archived",
+  getServiceOrderAgreementStatusClass(status: ServiceOrderAgreementStatus): string {
+    const statusClassMap: Record<string, string> = {
+      [ServiceOrderAgreementStatus.DRAFT]: "status-current",
+      [ServiceOrderAgreementStatus.CONFIRMED]: "status-client-approved",
+      [ServiceOrderAgreementStatus.VOIDED]: "status-client-rejected",
+      [ServiceOrderAgreementStatus.SUPERSEDED]: "status-archived",
     }
     return statusClassMap[status] || "status-default"
   }
@@ -414,3 +413,5 @@ export class SupervisorPanel implements OnInit {
     }, 4000)
   }
 }
+
+

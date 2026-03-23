@@ -19,6 +19,11 @@ export interface Movement {
     balance_qty_post: number;
     balance_total_cost_post: number;
     balance_avg_cost_post: number;
+
+    // Backend Joins (Optional)
+    product?: any;
+    supplier?: any;
+    lot?: any;
 }
 
 

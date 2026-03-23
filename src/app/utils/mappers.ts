@@ -32,6 +32,7 @@ export type ProductApi = {
     minStock?: number | string | null;
     maxStock?: number | string | null;
     reorderPoint?: number | string | null;
+    category?: { id: number; name: string; description?: string } | null;
 };
 
 export const mapProductFromApi = (api: ProductApi): Product => ({
@@ -46,6 +47,7 @@ export const mapProductFromApi = (api: ProductApi): Product => ({
     min_stock: api.minStock == null ? null : N(api.minStock),
     max_stock: api.maxStock == null ? null : N(api.maxStock),
     reorder_point: api.reorderPoint == null ? null : N(api.reorderPoint),
+    category: api.category ?? undefined,
 });
 
 export const mapProductToApi = (p: Partial<Product>) => ({
@@ -69,19 +71,23 @@ export const mapProductToApi = (p: Partial<Product>) => ({
 // Lo que realmente devuelve/espera TU backend
 export type LotApi = {
     id: number;
-    product_id: number;
-    lot_code: string;
-    expiration_date: string | null;
+    product_id?: number;
+    productId?: number;
+    lot_code?: string;
+    lotCode?: string;
+    expiration_date?: string | null;
+    expirationDate?: string | null;
     supplier_id?: number | null;
+    supplierId?: number | null;
 };
 
 // ← back  (API -> Front)
 export const mapLotFromApi = (api: LotApi): Lot => ({
     id: api.id,
-    product_id: api.product_id,
-    lot_code: api.lot_code,
-    expiration_date: api.expiration_date,
-    supplier_id: api.supplier_id,
+    product_id: api.product_id ?? api.productId!,
+    lot_code: api.lot_code ?? api.lotCode!,
+    expiration_date: api.expiration_date ?? api.expirationDate ?? null,
+    supplier_id: api.supplier_id ?? api.supplierId ?? null,
 });
 
 // → back  (Front -> API)  payload de creación
@@ -147,6 +153,9 @@ export type MovementApi = {
     balanceQtyPost?: number | string | null;
     balanceTotalCostPost?: number | string | null;
     balanceAvgCostPost?: number | string | null;
+    product?: Partial<ProductApi> | null;
+    lot?: Partial<LotApi> | null;
+    supplier?: any | null;
 };
 
 export const mapMovementFromApi = (api: MovementApi): Movement => ({
@@ -167,6 +176,9 @@ export const mapMovementFromApi = (api: MovementApi): Movement => ({
     balance_qty_post: N(api.balanceQtyPost),
     balance_total_cost_post: N(api.balanceTotalCostPost),
     balance_avg_cost_post: N(api.balanceAvgCostPost),
+    product: api.product ? mapProductFromApi(api.product as ProductApi) : undefined,
+    lot: api.lot ? mapLotFromApi(api.lot as LotApi) : undefined,
+    supplier: api.supplier || undefined,
 });
 
 /* =======================
