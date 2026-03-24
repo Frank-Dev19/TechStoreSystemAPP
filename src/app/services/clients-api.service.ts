@@ -2,6 +2,12 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { BaseService } from './base.service';
 import { ClientSaveRequest, ClientUpdateRequest } from '../models/clients-request';
+import {
+  ClientImportCommitRequest,
+  ClientImportCommitResponse,
+  ClientImportValidateRequest,
+  ClientImportValidateResponse,
+} from '../models/client-import.models';
 import { ClientResponse } from '../models/clients-response';
 
 export interface PaginatedResponse<T> {
@@ -49,5 +55,17 @@ export class ClientsApiService {
 
   bulkRestore(ids: number[]): Observable<{ ok: boolean; message: string }> {
     return this.baseService.patch<{ ok: boolean; message: string }>(`${this.resource}/bulk-restore`, { ids });
+  }
+
+  validateImport(payload: ClientImportValidateRequest): Observable<ClientImportValidateResponse> {
+    return this.baseService.post<ClientImportValidateResponse>(`${this.resource}/import/validate`, payload, {
+      withLoader: false,
+    });
+  }
+
+  commitImport(payload: ClientImportCommitRequest): Observable<ClientImportCommitResponse> {
+    return this.baseService.post<ClientImportCommitResponse>(`${this.resource}/import/commit`, payload, {
+      withLoader: false,
+    });
   }
 }

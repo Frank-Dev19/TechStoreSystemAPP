@@ -1,7 +1,14 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import * as XLSX from 'xlsx';
 import { config } from '../../../environments/environment';
 import { ClientsApiService, PaginatedResponse } from '../../services/clients-api.service';
+import {
+  ClientImportCommitResponse,
+  ClientImportSource,
+  ClientImportStatus,
+  ClientImportValidateResponse,
+} from '../../models/client-import.models';
 import { ClientResponse } from '../../models/clients-response';
 import {
   ClientSaveRequest,
@@ -9,6 +16,28 @@ import {
 } from '../../models/clients-request';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
+import { CurrentUserService } from '../../services/current-user.service';
+
+type ImportFilterStatus = 'all' | ClientImportStatus;
+
+type ClientImportPreviewRow = {
+  localId: number;
+  rowNumber: number;
+  documentTypeId: number | null;
+  documentNumber: string;
+  name: string;
+  tradeName: string;
+  phone: string;
+  address: string;
+  city: string;
+  country: string;
+  localErrors: string[];
+  serverErrors: string[];
+  duplicateExistingClientId?: number;
+  requiresServerValidation: boolean;
+  isOmitted: boolean;
+  status: ClientImportStatus;
+};
 
 @Component({
   selector: 'app-clients',
@@ -25,6 +54,7 @@ export class Clients implements OnInit {
 
   searchTerm = '';
   statusFilter: 'active' | 'deleted' = 'active';
+  documentTypeFilter: number | 'all' = 'all';
 
   currentPage = 1;
   itemsPerPage = 10;
@@ -53,6 +83,27 @@ export class Clients implements OnInit {
 
   documentDigitsHint: number | null = null;
 
+  showImportModal = false;
+  importStep: 1 | 2 | 3 = 1;
+  importSource: ClientImportSource = 'excel';
+  importFileName = '';
+  importRows: ClientImportPreviewRow[] = [];
+  visibleImportRows: ClientImportPreviewRow[] = [];
+  selectedImportRowIds: number[] = [];
+  importCurrentPage = 1;
+  importItemsPerPage = 25;
+  importTotalPages = 1;
+  importSearchTerm = '';
+  importStatusFilter: ImportFilterStatus = 'all';
+  importValidationInProgress = false;
+  importValidationProgress = 0;
+  importValidationSummary = '';
+  importCommitInProgress = false;
+  importCommitProgress = 0;
+  importCommitSummary: ClientImportCommitResponse | null = null;
+  importFileError = '';
+  private importUserPermissions = new Set<string>();
+
   Math = Math;
   readonly pageTitle = 'Clientes';
   readonly pageSubtitle = 'Administra clientes desde un solo lugar';
@@ -66,11 +117,13 @@ export class Clients implements OnInit {
     private readonly formBuilder: FormBuilder,
     private readonly clientsApi: ClientsApiService,
     private readonly documentTypesApi: DocumentTypesApiService,
+    private readonly currentUserService: CurrentUserService,
   ) {
     this.partnerForm = this.createForm();
   }
 
   ngOnInit(): void {
+    this.restorePermissions();
     this.loadDocumentTypes();
     this.observeDocumentTypeChanges();
     this.fetchPartners();
@@ -82,6 +135,42 @@ export class Clients implements OnInit {
 
   get isRestoreConfirm(): boolean {
     return this.confirmModalMode === 'restore';
+  }
+
+  get canImportClients(): boolean {
+    return this.importUserPermissions.has('clients.import');
+  }
+
+  get importReadyCount(): number {
+    return this.importRows.filter((row) => row.status === 'ready').length;
+  }
+
+  get importErrorCount(): number {
+    return this.importRows.filter((row) => row.status === 'error').length;
+  }
+
+  get importDuplicateCount(): number {
+    return this.importRows.filter((row) => row.status === 'duplicate').length;
+  }
+
+  get importOmittedCount(): number {
+    return this.importRows.filter((row) => row.status === 'omitted').length;
+  }
+
+  get importPendingCount(): number {
+    return this.importRows.filter((row) => row.status === 'pending').length;
+  }
+
+  get canStartImportCommit(): boolean {
+    return (
+      !!this.importRows.length &&
+      this.importReadyCount > 0 &&
+      this.importErrorCount === 0 &&
+      this.importDuplicateCount === 0 &&
+      this.importPendingCount === 0 &&
+      !this.importValidationInProgress &&
+      !this.importCommitInProgress
+    );
   }
 
   private createForm(): FormGroup {
@@ -184,6 +273,10 @@ export class Clients implements OnInit {
       params['search'] = this.searchTerm.trim();
     }
 
+    if (this.documentTypeFilter !== 'all') {
+      params['documentTypeId'] = Number(this.documentTypeFilter);
+    }
+
     this.clientsApi.findAll(params).subscribe({
       next: (response: PaginatedResponse<ClientResponse>) => {
         this.partners = (response.data ?? []).map((partner) => ({
@@ -224,6 +317,12 @@ export class Clients implements OnInit {
   }
 
   onStatusFilterChange(): void {
+    this.currentPage = 1;
+    this.selectedPartnerIds = [];
+    this.fetchPartners();
+  }
+
+  onDocumentTypeFilterChange(): void {
     this.currentPage = 1;
     this.selectedPartnerIds = [];
     this.fetchPartners();
@@ -556,6 +655,616 @@ export class Clients implements OnInit {
 
   getRoleLabels(_partner?: ClientResponse): string {
     return 'Cliente';
+  }
+
+  openImportModal(): void {
+    this.resetImportState();
+    this.showImportModal = true;
+  }
+
+  closeImportModal(): void {
+    this.showImportModal = false;
+    this.resetImportState();
+  }
+
+  private resetImportState(): void {
+    this.importStep = 1;
+    this.importFileName = '';
+    this.importRows = [];
+    this.visibleImportRows = [];
+    this.selectedImportRowIds = [];
+    this.importCurrentPage = 1;
+    this.importTotalPages = 1;
+    this.importSearchTerm = '';
+    this.importStatusFilter = 'all';
+    this.importValidationInProgress = false;
+    this.importValidationProgress = 0;
+    this.importValidationSummary = '';
+    this.importCommitInProgress = false;
+    this.importCommitProgress = 0;
+    this.importCommitSummary = null;
+    this.importFileError = '';
+  }
+
+  onImportFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    this.importFileError = '';
+    this.importFileName = file.name;
+    const reader = new FileReader();
+
+    reader.onload = async () => {
+      try {
+        const workbook = XLSX.read(reader.result, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const firstSheet = workbook.Sheets[firstSheetName];
+        const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(firstSheet, {
+          header: 1,
+          defval: '',
+          blankrows: false,
+          raw: false,
+        });
+
+        const previewRows = this.buildImportRowsFromSheet(rows);
+        if (!previewRows.length) {
+          this.importFileError = 'No encontramos filas de datos válidas en el archivo.';
+          return;
+        }
+
+        this.importRows = previewRows;
+        this.recomputeImportRows();
+        this.refreshImportView();
+        this.importStep = 2;
+        await this.validatePendingImportRows();
+      } catch (error) {
+        console.error('Error parsing import file', error);
+        this.importFileError = 'No pudimos leer el archivo Excel. Revisa el formato e inténtalo de nuevo.';
+      } finally {
+        if (input) {
+          input.value = '';
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      this.importFileError = 'No pudimos leer el archivo seleccionado.';
+      if (input) {
+        input.value = '';
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  }
+
+  onImportSearch(): void {
+    this.importCurrentPage = 1;
+    this.refreshImportView();
+  }
+
+  onImportStatusFilterChange(): void {
+    this.importCurrentPage = 1;
+    this.selectedImportRowIds = [];
+    this.refreshImportView();
+  }
+
+  previousImportPage(): void {
+    if (this.importCurrentPage > 1) {
+      this.importCurrentPage--;
+      this.refreshImportView();
+    }
+  }
+
+  nextImportPage(): void {
+    if (this.importCurrentPage < this.importTotalPages) {
+      this.importCurrentPage++;
+      this.refreshImportView();
+    }
+  }
+
+  toggleImportRowSelection(localId: number): void {
+    const index = this.selectedImportRowIds.indexOf(localId);
+    if (index > -1) {
+      this.selectedImportRowIds.splice(index, 1);
+    } else {
+      this.selectedImportRowIds.push(localId);
+    }
+  }
+
+  toggleSelectAllImportRows(): void {
+    const visibleIds = this.visibleImportRows.map((row) => row.localId);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => this.selectedImportRowIds.includes(id));
+
+    if (allSelected) {
+      this.selectedImportRowIds = this.selectedImportRowIds.filter((id) => !visibleIds.includes(id));
+      return;
+    }
+
+    const nextSelection = new Set([...this.selectedImportRowIds, ...visibleIds]);
+    this.selectedImportRowIds = Array.from(nextSelection);
+  }
+
+  isImportRowSelected(localId: number): boolean {
+    return this.selectedImportRowIds.includes(localId);
+  }
+
+  areAllVisibleImportRowsSelected(): boolean {
+    return (
+      this.visibleImportRows.length > 0 &&
+      this.visibleImportRows.every((row) => this.selectedImportRowIds.includes(row.localId))
+    );
+  }
+
+  onImportRowFieldChanged(row: ClientImportPreviewRow, field: keyof ClientImportPreviewRow, value: string | number | null): void {
+    if (!['documentTypeId', 'documentNumber', 'name', 'tradeName', 'phone', 'address', 'city', 'country'].includes(String(field))) {
+      return;
+    }
+
+    if (field === 'documentTypeId') {
+      row.documentTypeId = value != null && value !== '' ? Number(value) : null;
+    } else {
+      (row as Record<string, unknown>)[field] = this.normalizeImportText(String(value ?? ''));
+    }
+
+    row.requiresServerValidation = true;
+    row.duplicateExistingClientId = undefined;
+    row.serverErrors = [];
+    if (field === 'documentNumber' && !row.documentTypeId) {
+      row.documentTypeId = this.inferDocumentTypeId(row.documentNumber);
+    }
+    this.recomputeImportRows();
+    this.refreshImportView();
+  }
+
+  omitImportRow(row: ClientImportPreviewRow): void {
+    row.isOmitted = true;
+    this.recomputeImportRows();
+    this.refreshImportView();
+  }
+
+  restoreImportRow(row: ClientImportPreviewRow): void {
+    row.isOmitted = false;
+    row.requiresServerValidation = row.localErrors.length === 0;
+    this.recomputeImportRows();
+    this.refreshImportView();
+  }
+
+  omitSelectedImportRows(): void {
+    const selected = new Set(this.selectedImportRowIds);
+    this.importRows.forEach((row) => {
+      if (selected.has(row.localId)) {
+        row.isOmitted = true;
+      }
+    });
+    this.selectedImportRowIds = [];
+    this.recomputeImportRows();
+    this.refreshImportView();
+  }
+
+  restoreSelectedImportRows(): void {
+    const selected = new Set(this.selectedImportRowIds);
+    this.importRows.forEach((row) => {
+      if (selected.has(row.localId)) {
+        row.isOmitted = false;
+        row.requiresServerValidation = row.localErrors.length === 0;
+      }
+    });
+    this.selectedImportRowIds = [];
+    this.recomputeImportRows();
+    this.refreshImportView();
+  }
+
+  omitImportRowsByStatus(status: 'error' | 'duplicate' | 'pending'): void {
+    this.importRows.forEach((row) => {
+      if (row.status === status) {
+        row.isOmitted = true;
+      }
+    });
+    this.recomputeImportRows();
+    this.refreshImportView();
+  }
+
+  restoreAllOmittedImportRows(): void {
+    this.importRows.forEach((row) => {
+      if (row.isOmitted) {
+        row.isOmitted = false;
+        row.requiresServerValidation = row.localErrors.length === 0;
+      }
+    });
+    this.recomputeImportRows();
+    this.refreshImportView();
+  }
+
+  async revalidateImportRows(): Promise<void> {
+    await this.validatePendingImportRows();
+  }
+
+  async commitImportRows(): Promise<void> {
+    if (!this.canStartImportCommit) {
+      return;
+    }
+
+    const rowsToImport = this.importRows
+      .filter((row) => row.status === 'ready')
+      .map((row) => this.toImportPayloadRow(row));
+
+    const chunkSize = 500;
+    const chunks = this.chunkArray(rowsToImport, chunkSize);
+    let createdCount = 0;
+    let skippedCount = 0;
+    const skippedRows: ClientImportCommitResponse['skippedRows'] = [];
+    const failedRows: ClientImportCommitResponse['failedRows'] = [];
+
+    this.importStep = 3;
+    this.importCommitInProgress = true;
+    this.importCommitProgress = 0;
+
+    try {
+      for (let index = 0; index < chunks.length; index++) {
+        const response = await this.clientsApi
+          .commitImport({
+            companyId: this.companyId,
+            rows: chunks[index],
+          })
+          .toPromise();
+
+        if (response) {
+          createdCount += Number(response.createdCount ?? 0);
+          skippedCount += Number(response.skippedCount ?? 0);
+          skippedRows.push(...(response.skippedRows ?? []));
+          failedRows.push(...(response.failedRows ?? []));
+        }
+
+        this.importCommitProgress = Math.round(((index + 1) / chunks.length) * 100);
+      }
+
+      this.importCommitSummary = {
+        createdCount,
+        skippedCount,
+        summary: {
+          totalRows: rowsToImport.length,
+          createdRows: createdCount,
+          skippedRows: skippedRows.length,
+          failedRows: failedRows.length,
+        },
+        skippedRows,
+        failedRows,
+      };
+
+      this.showMessage(
+        'success',
+        'fas fa-check-circle',
+        `Importación completada. Se registraron ${createdCount} cliente(s).`,
+      );
+      this.fetchPartners();
+    } catch (error) {
+      console.error('Error committing client import', error);
+      this.showMessage('error', 'fas fa-exclamation-circle', 'No pudimos completar la importación.');
+    } finally {
+      this.importCommitInProgress = false;
+    }
+  }
+
+  private restorePermissions(): void {
+    this.currentUserService.restoreFromStorage();
+    const user = this.currentUserService.value;
+    const codes = (user?.roles ?? []).flatMap((role) => role.permissions ?? []);
+    this.importUserPermissions = new Set(codes);
+  }
+
+  private buildImportRowsFromSheet(rawRows: (string | number | null)[][]): ClientImportPreviewRow[] {
+    if (!rawRows.length) {
+      return [];
+    }
+
+    const headerInfo = this.findImportHeaderRow(rawRows);
+    if (!headerInfo) {
+      throw new Error('Missing required Excel headers');
+    }
+
+    const { headerRowIndex, indexes } = headerInfo;
+    const rucIndex = indexes.ruc;
+    const legalNameIndex = indexes.legalName;
+    const tradeNameIndex = indexes.tradeName;
+    const phoneIndex = indexes.phone;
+    const addressIndex = indexes.address;
+
+    return rawRows
+      .slice(headerRowIndex + 1)
+      .map((columns, index) => {
+        const documentNumber = this.normalizeDocumentNumber(String(columns[rucIndex] ?? ''));
+        const inferredDocumentTypeId = this.inferDocumentTypeId(documentNumber);
+        return {
+          localId: index + 1,
+          rowNumber: headerRowIndex + index + 2,
+          documentTypeId: inferredDocumentTypeId,
+          documentNumber,
+          name: this.normalizeImportName(String(columns[legalNameIndex] ?? '')),
+          tradeName: this.normalizeImportText(String(columns[tradeNameIndex] ?? '')),
+          phone: this.normalizeImportText(String(columns[phoneIndex] ?? '')),
+          address: this.normalizeImportText(String(columns[addressIndex] ?? '')),
+          city: '',
+          country: '',
+          localErrors: [],
+          serverErrors: [],
+          requiresServerValidation: true,
+          isOmitted: false,
+          status: 'pending',
+        } satisfies ClientImportPreviewRow;
+      })
+      .filter((row) =>
+        [row.documentNumber, row.name, row.tradeName, row.phone, row.address].some((value) => !!String(value ?? '').trim()),
+      );
+  }
+
+  private findImportHeaderRow(rawRows: (string | number | null)[][]): {
+    headerRowIndex: number;
+    indexes: {
+      ruc: number;
+      legalName: number;
+      tradeName: number;
+      phone: number;
+      address: number;
+    };
+  } | null {
+    const aliasGroups = {
+      ruc: ['ruc', 'numero de ruc', 'nro ruc', 'nro de ruc', 'num ruc'],
+      legalName: ['razon social', 'razon_social', 'nombre', 'cliente', 'nombre o razon social'],
+      tradeName: ['razon comercial', 'nombre comercial', 'trade name', 'razon_comercial'],
+      phone: ['celular', 'telefono', 'telefono celular', 'movil', 'mobile'],
+      address: ['direccion', 'direccion fiscal', 'domicilio', 'address'],
+    } as const;
+
+    for (let rowIndex = 0; rowIndex < Math.min(rawRows.length, 10); rowIndex++) {
+      const headers = (rawRows[rowIndex] ?? []).map((value) => this.normalizeHeader(String(value ?? '')));
+      const phoneIndex =
+        headers.findIndex((header) => header === 'celular') >= 0
+          ? headers.findIndex((header) => header === 'celular')
+          : headers.findIndex((header) => aliasGroups.phone.includes(header as never));
+      const indexes = {
+        ruc: headers.findIndex((header) => aliasGroups.ruc.includes(header as never)),
+        legalName: headers.findIndex((header) => aliasGroups.legalName.includes(header as never)),
+        tradeName: headers.findIndex((header) => aliasGroups.tradeName.includes(header as never)),
+        phone: phoneIndex,
+        address: headers.findIndex((header) => aliasGroups.address.includes(header as never)),
+      };
+
+      if (indexes.ruc >= 0 && indexes.legalName >= 0) {
+        return { headerRowIndex: rowIndex, indexes };
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeHeader(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/[.:/\\|]+/g, ' ')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  private normalizeImportText(value: string): string {
+    return value.replace(/\s+/g, ' ').trim();
+  }
+
+  private normalizeDocumentNumber(value: string): string {
+    return value.replace(/\s+/g, '').trim();
+  }
+
+  private normalizeImportName(value: string): string {
+    const normalized = this.normalizeImportText(value);
+    if (!normalized) {
+      return '';
+    }
+
+    const lowerCased = normalized.toLocaleLowerCase('es-PE');
+    return lowerCased.replace(/\b\p{L}/gu, (match) => match.toLocaleUpperCase('es-PE'));
+  }
+
+  private inferDocumentTypeId(documentNumber: string): number | null {
+    if (!/^\d+$/.test(documentNumber)) {
+      return null;
+    }
+
+    if (documentNumber.length === 8) {
+      return this.getDocumentTypeIdByDigits(8);
+    }
+
+    if (documentNumber.length === 11) {
+      return this.getDocumentTypeIdByDigits(11);
+    }
+
+    return null;
+  }
+
+  private getDocumentTypeIdByDigits(digits: number): number | null {
+    const docType = this.documentTypes.find((item) => Number(item.digits) === digits);
+    return docType ? Number(docType.id) : null;
+  }
+
+  private recomputeImportRows(): void {
+    const duplicateMap = new Map<string, number>();
+
+    for (const row of this.importRows) {
+      const docTypeId = row.documentTypeId ? Number(row.documentTypeId) : null;
+      row.localErrors = [];
+
+      if (!row.documentTypeId && row.documentNumber) {
+        row.documentTypeId = this.inferDocumentTypeId(row.documentNumber);
+      }
+
+      if (!row.documentNumber) {
+        row.localErrors.push('Completa el número de documento.');
+      } else if (!/^\d+$/.test(row.documentNumber)) {
+        row.localErrors.push('El documento solo puede contener dígitos.');
+      } else if (![8, 11].includes(row.documentNumber.length)) {
+        row.localErrors.push('El documento debe tener exactamente 8 u 11 dígitos.');
+      }
+
+      if (!row.documentTypeId) {
+        row.localErrors.push('Selecciona un tipo de documento.');
+      } else {
+        const docType = this.documentTypes.find((item) => Number(item.id) === docTypeId);
+        if (!docType) {
+          row.localErrors.push('El tipo de documento no existe.');
+        } else if (row.documentNumber && row.documentNumber.length !== Number(docType.digits)) {
+          row.localErrors.push(`El documento debe tener ${docType.digits} dígitos.`);
+        }
+      }
+
+      if (!row.name) {
+        row.localErrors.push('Completa la razón social o nombre del cliente.');
+      }
+
+      const key =
+        row.documentTypeId && row.documentNumber && /^\d+$/.test(row.documentNumber)
+          ? `${row.documentTypeId}:${row.documentNumber}`
+          : '';
+
+      if (key) {
+        duplicateMap.set(key, (duplicateMap.get(key) ?? 0) + 1);
+      }
+    }
+
+    for (const row of this.importRows) {
+      const key =
+        row.documentTypeId && row.documentNumber && /^\d+$/.test(row.documentNumber)
+          ? `${row.documentTypeId}:${row.documentNumber}`
+          : '';
+
+      if (key && (duplicateMap.get(key) ?? 0) > 1) {
+        row.localErrors.push('El documento está duplicado dentro del mismo archivo.');
+      }
+
+      if (row.localErrors.length > 0) {
+        row.serverErrors = [];
+        row.duplicateExistingClientId = undefined;
+        row.requiresServerValidation = false;
+      }
+
+      if (row.isOmitted) {
+        row.status = 'omitted';
+      } else if (row.localErrors.length > 0) {
+        row.status = 'error';
+      } else if (row.serverErrors.length > 0) {
+        row.status = row.serverErrors.some((error) => error.includes('base de datos')) ? 'duplicate' : 'error';
+      } else if (row.requiresServerValidation) {
+        row.status = 'pending';
+      } else {
+        row.status = 'ready';
+      }
+    }
+  }
+
+  private async validatePendingImportRows(): Promise<void> {
+    const rowsToValidate = this.importRows.filter(
+      (row) => !row.isOmitted && row.localErrors.length === 0 && row.requiresServerValidation,
+    );
+
+    if (!rowsToValidate.length) {
+      this.importValidationSummary = 'No hay filas pendientes de revalidación.';
+      return;
+    }
+
+    this.importValidationInProgress = true;
+    this.importValidationProgress = 0;
+    const chunkSize = 500;
+    const chunks = this.chunkArray(rowsToValidate, chunkSize);
+    const resultMap = new Map<number, ClientImportValidateResponse['rows'][number]>();
+
+    try {
+      for (let index = 0; index < chunks.length; index++) {
+        const chunk = chunks[index];
+        const response = await this.clientsApi
+          .validateImport({
+            companyId: this.companyId,
+            rows: chunk.map((row) => this.toImportPayloadRow(row)),
+          })
+          .toPromise();
+
+        (response?.rows ?? []).forEach((row) => resultMap.set(Number(row.rowNumber), row));
+        this.importValidationProgress = Math.round(((index + 1) / chunks.length) * 100);
+      }
+
+      for (const row of this.importRows) {
+        if (!row.requiresServerValidation || row.isOmitted || row.localErrors.length > 0) {
+          continue;
+        }
+
+        const validated = resultMap.get(row.rowNumber);
+        row.serverErrors = [...(validated?.errors ?? [])];
+        row.duplicateExistingClientId = validated?.duplicateExistingClientId;
+        row.requiresServerValidation = false;
+      }
+
+      this.importValidationSummary = `Validación completada para ${rowsToValidate.length} fila(s).`;
+    } catch (error) {
+      console.error('Error validating import rows', error);
+      this.importValidationSummary = 'No pudimos validar las filas contra la base de datos.';
+      this.showMessage('error', 'fas fa-exclamation-circle', 'No pudimos validar las filas del archivo.');
+    } finally {
+      this.importValidationInProgress = false;
+      this.recomputeImportRows();
+      this.refreshImportView();
+    }
+  }
+
+  private toImportPayloadRow(row: ClientImportPreviewRow) {
+    return {
+      rowNumber: row.rowNumber,
+      documentTypeId: row.documentTypeId ? Number(row.documentTypeId) : undefined,
+      documentNumber: row.documentNumber || undefined,
+      name: row.name || undefined,
+      tradeName: row.tradeName || undefined,
+      phone: row.phone || undefined,
+      address: row.address || undefined,
+      city: row.city || undefined,
+      country: row.country || undefined,
+    };
+  }
+
+  private refreshImportView(): void {
+    const filteredRows = this.importRows.filter((row) => {
+      if (this.importStatusFilter !== 'all' && row.status !== this.importStatusFilter) {
+        return false;
+      }
+
+      const term = this.importSearchTerm.trim().toLocaleLowerCase('es-PE');
+      if (!term) {
+        return true;
+      }
+
+      return [row.documentNumber, row.name, row.tradeName, row.phone, row.address]
+        .join(' ')
+        .toLocaleLowerCase('es-PE')
+        .includes(term);
+    });
+
+    this.importTotalPages = Math.max(1, Math.ceil(filteredRows.length / this.importItemsPerPage));
+    if (this.importCurrentPage > this.importTotalPages) {
+      this.importCurrentPage = this.importTotalPages;
+    }
+
+    const start = (this.importCurrentPage - 1) * this.importItemsPerPage;
+    this.visibleImportRows = filteredRows.slice(start, start + this.importItemsPerPage);
+  }
+
+  private chunkArray<T>(items: T[], chunkSize: number): T[][] {
+    const chunks: T[][] = [];
+    for (let index = 0; index < items.length; index += chunkSize) {
+      chunks.push(items.slice(index, index + chunkSize));
+    }
+    return chunks;
   }
 
   openRestoreSuggestion(data: ClientResponse): void {

@@ -22,8 +22,24 @@
                         <option value="deleted">Eliminados</option>
                     </select>
                 </div>
+                <div class="filter-control">
+                    <label for="document-type-filter">Tipo Doc.</label>
+                    <select
+                        id="document-type-filter"
+                        class="select-control"
+                        [(ngModel)]="documentTypeFilter"
+                        (change)="onDocumentTypeFilterChange()"
+                    >
+                        <option [ngValue]="'all'">Todos los documentos</option>
+                        <option *ngFor="let tipo of documentTypes" [ngValue]="tipo.id">{{ tipo.name }}</option>
+                    </select>
+                </div>
             </div>
             <div class="actions-wrapper">
+                <button class="btn btn-outline" *ngIf="canImportClients" (click)="openImportModal()">
+                    <i class="fas fa-file-excel"></i>
+                    Importar desde Excel
+                </button>
                 <button class="btn btn-primary" (click)="openCreateModal()">
                     <i class="fas fa-plus"></i>
                     Nuevo cliente
@@ -146,6 +162,302 @@
         </div>
     </div>
 }
+</div>
+
+<div class="modal-overlay" *ngIf="showImportModal" (click)="closeImportModal()">
+    <div class="modal-container import-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>Importar clientes</h2>
+            <button class="btn-close" (click)="closeImportModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="modal-body import-modal-body">
+            <div class="import-steps">
+                <div class="step-pill" [class.active]="importStep === 1" [class.done]="importStep > 1">1. Archivo</div>
+                <div class="step-pill" [class.active]="importStep === 2" [class.done]="importStep > 2">2. Previsualización</div>
+                <div class="step-pill" [class.active]="importStep === 3">3. Importación</div>
+            </div>
+
+            <section *ngIf="importStep === 1" class="import-step-panel">
+                <div class="import-source-card">
+                    <label for="import-source">Fuente de datos</label>
+                    <select id="import-source" class="form-select" [(ngModel)]="importSource">
+                        <option value="excel">Excel</option>
+                    </select>
+                    <p class="helper-text">Formato v1 soportado: Ruc, Razón Social, Razón Comercial, Celular y Dirección.</p>
+                </div>
+
+                <label class="file-dropzone" for="clients-import-file">
+                    <input
+                        id="clients-import-file"
+                        type="file"
+                        accept=".xlsx,.xls"
+                        (change)="onImportFileSelected($event)"
+                    >
+                    <i class="fas fa-file-excel"></i>
+                    <div>
+                        <strong>Selecciona tu archivo Excel</strong>
+                        <p>Procesaremos el archivo localmente y luego validaremos las filas contra la base de datos.</p>
+                    </div>
+                </label>
+
+                <div class="import-file-error" *ngIf="importFileError">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>{{ importFileError }}</span>
+                </div>
+
+                <div class="import-file-meta" *ngIf="importFileName">
+                    <span><i class="fas fa-paperclip"></i> {{ importFileName }}</span>
+                </div>
+            </section>
+
+            <section *ngIf="importStep === 2" class="import-step-panel">
+                <div class="import-summary-grid">
+                    <article class="summary-card ready">
+                        <span>Listas</span>
+                        <strong>{{ importReadyCount }}</strong>
+                    </article>
+                    <article class="summary-card pending">
+                        <span>Pendientes</span>
+                        <strong>{{ importPendingCount }}</strong>
+                    </article>
+                    <article class="summary-card error">
+                        <span>Con error</span>
+                        <strong>{{ importErrorCount }}</strong>
+                    </article>
+                    <article class="summary-card duplicate">
+                        <span>Duplicadas</span>
+                        <strong>{{ importDuplicateCount }}</strong>
+                    </article>
+                    <article class="summary-card omitted">
+                        <span>Omitidas</span>
+                        <strong>{{ importOmittedCount }}</strong>
+                    </article>
+                </div>
+
+                <div class="import-toolbar">
+                    <div class="search-box import-search-box">
+                        <i class="fas fa-search"></i>
+                        <input
+                            type="text"
+                            placeholder="Buscar por documento, razón social o dirección..."
+                            [(ngModel)]="importSearchTerm"
+                            (input)="onImportSearch()"
+                        >
+                    </div>
+
+                    <div class="filter-control">
+                        <label for="import-status-filter">Estado</label>
+                        <select
+                            id="import-status-filter"
+                            class="select-control"
+                            [(ngModel)]="importStatusFilter"
+                            (change)="onImportStatusFilterChange()"
+                        >
+                            <option value="all">Todos</option>
+                            <option value="ready">Listos</option>
+                            <option value="pending">Pendientes</option>
+                            <option value="error">Con error</option>
+                            <option value="duplicate">Duplicadas</option>
+                            <option value="omitted">Omitidas</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="import-bulk-bar">
+                    <div class="bulk-selection">
+                        <button type="button" class="btn btn-outline btn-sm" (click)="toggleSelectAllImportRows()">
+                            <i class="fas" [ngClass]="areAllVisibleImportRowsSelected() ? 'fa-square' : 'fa-check-square'"></i>
+                            {{ areAllVisibleImportRowsSelected() ? 'Limpiar visibles' : 'Seleccionar visibles' }}
+                        </button>
+                        <span *ngIf="selectedImportRowIds.length > 0">{{ selectedImportRowIds.length }} fila(s) seleccionada(s)</span>
+                    </div>
+
+                    <div class="bulk-actions">
+                        <button type="button" class="btn btn-outline btn-sm" [disabled]="selectedImportRowIds.length === 0" (click)="omitSelectedImportRows()">
+                            <i class="fas fa-eye-slash"></i>
+                            Omitir seleccionadas
+                        </button>
+                        <button type="button" class="btn btn-outline btn-sm" [disabled]="selectedImportRowIds.length === 0" (click)="restoreSelectedImportRows()">
+                            <i class="fas fa-undo"></i>
+                            Restaurar seleccionadas
+                        </button>
+                        <button type="button" class="btn btn-outline btn-sm" [disabled]="importErrorCount === 0" (click)="omitImportRowsByStatus('error')">
+                            <i class="fas fa-times-circle"></i>
+                            Omitir con error
+                        </button>
+                        <button type="button" class="btn btn-outline btn-sm" [disabled]="importDuplicateCount === 0" (click)="omitImportRowsByStatus('duplicate')">
+                            <i class="fas fa-copy"></i>
+                            Omitir duplicadas
+                        </button>
+                        <button type="button" class="btn btn-outline btn-sm" [disabled]="importOmittedCount === 0" (click)="restoreAllOmittedImportRows()">
+                            <i class="fas fa-history"></i>
+                            Restaurar omitidas
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm" [disabled]="importValidationInProgress || importPendingCount === 0" (click)="revalidateImportRows()">
+                            <i class="fas fa-sync-alt" [class.fa-spin]="importValidationInProgress"></i>
+                            Revalidar cambios
+                        </button>
+                    </div>
+                </div>
+
+                <div class="import-progress" *ngIf="importValidationInProgress || importValidationSummary">
+                    <div class="progress-meta">
+                        <span>{{ importValidationInProgress ? 'Validando filas...' : importValidationSummary }}</span>
+                        <strong *ngIf="importValidationInProgress">{{ importValidationProgress }}%</strong>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-bar" [style.width.%]="importValidationProgress"></div>
+                    </div>
+                </div>
+
+                <div class="import-table-shell">
+                    <div class="import-table-container">
+                        <table class="data-table import-table">
+                            <thead>
+                                <tr>
+                                    <th class="checkbox-column"></th>
+                                    <th>Fila</th>
+                                    <th>Tipo Doc.</th>
+                                    <th>Número</th>
+                                    <th>Razón Social</th>
+                                    <th>Razón Comercial</th>
+                                    <th>Celular</th>
+                                    <th>Dirección</th>
+                                    <th>Estado</th>
+                                    <th>Errores</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let row of visibleImportRows" [class.selected]="isImportRowSelected(row.localId)">
+                                    <td class="checkbox-column">
+                                        <input type="checkbox" class="checkbox-input" [checked]="isImportRowSelected(row.localId)" (change)="toggleImportRowSelection(row.localId)">
+                                    </td>
+                                    <td>#{{ row.rowNumber }}</td>
+                                    <td>
+                                        <select class="form-select compact-select" [ngModel]="row.documentTypeId" (ngModelChange)="onImportRowFieldChanged(row, 'documentTypeId', $event)">
+                                            <option [ngValue]="null">Seleccionar</option>
+                                            <option *ngFor="let tipo of documentTypes" [ngValue]="tipo.id">{{ tipo.name }}</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input class="form-input compact-input" [ngModel]="row.documentNumber" (ngModelChange)="onImportRowFieldChanged(row, 'documentNumber', $event)">
+                                    </td>
+                                    <td>
+                                        <input class="form-input compact-input" [ngModel]="row.name" (ngModelChange)="onImportRowFieldChanged(row, 'name', $event)">
+                                    </td>
+                                    <td>
+                                        <input class="form-input compact-input" [ngModel]="row.tradeName" (ngModelChange)="onImportRowFieldChanged(row, 'tradeName', $event)">
+                                    </td>
+                                    <td>
+                                        <input class="form-input compact-input" [ngModel]="row.phone" (ngModelChange)="onImportRowFieldChanged(row, 'phone', $event)">
+                                    </td>
+                                    <td>
+                                        <input class="form-input compact-input" [ngModel]="row.address" (ngModelChange)="onImportRowFieldChanged(row, 'address', $event)">
+                                    </td>
+                                    <td>
+                                        <span class="import-status-badge" [ngClass]="row.status">{{ row.status }}</span>
+                                    </td>
+                                    <td>
+                                        <ul class="import-error-list" *ngIf="row.localErrors.length || row.serverErrors.length; else noErrorsBlock">
+                                            <li *ngFor="let error of row.localErrors">{{ error }}</li>
+                                            <li *ngFor="let error of row.serverErrors">{{ error }}</li>
+                                        </ul>
+                                        <ng-template #noErrorsBlock>
+                                            <span class="muted-inline">Sin errores</span>
+                                        </ng-template>
+                                    </td>
+                                    <td>
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline btn-sm"
+                                            *ngIf="!row.isOmitted"
+                                            (click)="omitImportRow(row)"
+                                        >
+                                            Omitir
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline btn-sm"
+                                            *ngIf="row.isOmitted"
+                                            (click)="restoreImportRow(row)"
+                                        >
+                                            Restaurar
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="pagination-container import-pagination" *ngIf="importRows.length > 0">
+                    <div class="pagination-info">
+                        Mostrando
+                        {{ (importCurrentPage - 1) * importItemsPerPage + 1 }}
+                        -
+                        {{ Math.min(importCurrentPage * importItemsPerPage, importRows.length) }}
+                        de {{ importRows.length }} filas
+                    </div>
+                    <div class="pagination-controls">
+                        <button class="btn-pagination" [disabled]="importCurrentPage === 1" (click)="previousImportPage()">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="page-info">{{ importCurrentPage }} / {{ importTotalPages }}</span>
+                        <button class="btn-pagination" [disabled]="importCurrentPage === importTotalPages" (click)="nextImportPage()">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section *ngIf="importStep === 3" class="import-step-panel">
+                <div class="import-progress" *ngIf="importCommitInProgress">
+                    <div class="progress-meta">
+                        <span>Importando clientes por lotes...</span>
+                        <strong>{{ importCommitProgress }}%</strong>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-bar success" [style.width.%]="importCommitProgress"></div>
+                    </div>
+                </div>
+
+                <div class="import-result" *ngIf="importCommitSummary">
+                    <article class="summary-card ready">
+                        <span>Importados</span>
+                        <strong>{{ importCommitSummary.summary.createdRows }}</strong>
+                    </article>
+                    <article class="summary-card omitted">
+                        <span>Saltados</span>
+                        <strong>{{ importCommitSummary.summary.skippedRows + importCommitSummary.summary.failedRows }}</strong>
+                    </article>
+                    <article class="summary-card error">
+                        <span>Fallidos</span>
+                        <strong>{{ importCommitSummary.summary.failedRows }}</strong>
+                    </article>
+                </div>
+            </section>
+        </div>
+
+        <div class="modal-footer" *ngIf="importStep === 1">
+            <button type="button" class="btn btn-secondary" (click)="closeImportModal()">Cancelar</button>
+        </div>
+
+        <div class="modal-footer" *ngIf="importStep === 2">
+            <button type="button" class="btn btn-secondary" (click)="closeImportModal()">Cancelar</button>
+            <button type="button" class="btn btn-primary" [disabled]="!canStartImportCommit" (click)="commitImportRows()">
+                <i class="fas fa-file-import"></i>
+                Importar clientes
+            </button>
+        </div>
+
+        <div class="modal-footer" *ngIf="importStep === 3">
+            <button type="button" class="btn btn-secondary" (click)="closeImportModal()" [disabled]="importCommitInProgress">Cerrar</button>
+        </div>
+    </div>
 </div>
 
 <div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
