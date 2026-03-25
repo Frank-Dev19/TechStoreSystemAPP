@@ -1,4 +1,4 @@
-import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
+﻿import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
 import { SalesApiService } from '../../services/sales/sales-api.service';
 import { DocumentSeriesApiService } from '../../services/sales/document-series-api.service';
 import { ProductsApiService } from '../../services/products-api.service';
@@ -18,6 +18,8 @@ import { DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from
 import { DocumentType } from '../../models/sales/enums';
 import { ClientSaveRequest } from '../../models/clients-request';
 import { ClientResponse } from '../../models/clients-response';
+import { ServiceService } from '../../services/service-catalog/service.service';
+import { Service as CatalogService } from '../../models/service-catalog/service';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 // ============================================
@@ -78,25 +80,37 @@ export const bankOptions = [
 
 // Card type options
 export const cardTypeOptions = [
-  { value: 'CREDITO', label: 'Crédito' },
-  { value: 'DEBITO', label: 'Débito' }
+  { value: 'CREDITO', label: 'Credito' },
+  { value: 'DEBITO', label: 'Debito' }
 ]
 export type SaleStatus = 'PENDIENTE' | 'EMITIDO' | 'ANULADO'
 
 export interface SaleLine {
-  productId: number
-  productSku: string
+  itemType: 'PRODUCT' | 'SERVICE'
+  productId?: number | null
+  serviceId?: number | null
+  productSku?: string
   productName: string
   quantity: number
   unitPrice: number
   lineTotal: number
-  // Información de lote y seriales
+  // Informacion de lote y seriales
   hasLot?: boolean
   hasSerial?: boolean
   lotId?: number | null
   lotCode?: string
   expirationDate?: string
   serials?: Array<{ serialId: number; serialCode: string }>
+}
+
+interface SaleCatalogSearchResult {
+  itemType: 'PRODUCT' | 'SERVICE'
+  name: string
+  code: string
+  price: number
+  stock?: number
+  product?: Product
+  service?: CatalogService
 }
 
 export interface Sale {
@@ -306,7 +320,8 @@ export class Ventas implements OnInit {
     private stockService: StockService,
     private documentTypesApi: DocumentTypesApiService,
     private pricingQueryApi: PricingQueryApiService,
-    private currentUser: CurrentUserService
+    private currentUser: CurrentUserService,
+    private serviceCatalogApi: ServiceService,
   ) { }
 
   @ViewChild('productSearchInput') productSearchInput!: ElementRef<HTMLInputElement>
@@ -319,14 +334,14 @@ export class Ventas implements OnInit {
   selectedSale: Sale | null = null
   isLoading = false
 
-  // Cache para precios y stock de productos con información completa
+  // Cache para precios y stock de productos con informacion completa
   productPriceStockMap: {
     [productId: number]: {
       stock: number;
       options: any[]; // Lista de precios disponibles
       applied: any;    // Precio actualmente aplicado
       discounts: any[]; // Descuentos activos
-      stockByLot?: Array<{  // 👈 AÑADE ESTO
+      stockByLot?: Array<{  // ANADE ESTO
         lotId: number;
         lotCode: string;
         quantity: number;
@@ -335,8 +350,9 @@ export class Ventas implements OnInit {
     }
   } = {}
 
-  // Búsqueda de productos (separado de currentSaleItem)
+  // Busqueda de productos (separado de currentSaleItem)
   productSearchText = ''
+  serviceSearchText = ''
 
   // Tipos de documento para nuevo cliente
   documentTypesB: DocumentTypeResponse[] = []
@@ -375,13 +391,13 @@ export class Ventas implements OnInit {
   foundCustomer: ClientResponse | null = null
   selectedPaymentMethods: PaymentType[] = []
 
-  // Control de líneas expandidas para mostrar lote/seriales
+  // Control de lineas expandidas para mostrar lote/seriales
   expandedLines: Set<number> = new Set()
 
   // PAYMENT ADDITIONAL FIELDS
   paymentReference = ''           // Para Yape, Plin, Transferencia, Tarjeta
   paymentBankName = ''           // Para Transferencia y Tarjeta
-  paymentCardType = ''           // Para Tarjeta (CRÉDITO o DÉBITO)
+  paymentCardType = ''           // Para Tarjeta (CREDITO o DEBITO)
 
   //SELECTS PARA PAGOS
   cardTypeOptions = cardTypeOptions;
@@ -395,6 +411,9 @@ export class Ventas implements OnInit {
   //PRODUCTS
   products: Product[] = []
   filteredProducts: Product[] = []
+  servicesCatalog: CatalogService[] = []
+  filteredServices: CatalogService[] = []
+  filteredSaleItems: SaleCatalogSearchResult[] = []
 
   //PAGOS
   paymentOperationNumber = ''
@@ -450,10 +469,10 @@ export class Ventas implements OnInit {
     'TRANSFER': 'Transferencia',
     'YAPE': 'Yape',
     'PLIN': 'Plin',
-    'CREDIT': 'Crédito'
+    'CREDIT': 'Credito'
   }
 
-  // UI helpers for caja (fase 1: mock, más adelante conectaremos a backend)
+  // UI helpers for caja (fase 1: mock, mas adelante conectaremos a backend)
   cashBoxCode: string = ''
   openingBalanceTemp: number = 0
   currentCashRegister: any = null
@@ -476,6 +495,7 @@ export class Ventas implements OnInit {
   ngOnInit(): void {
     this.loadSales()
     this.productsApiGet()
+    this.loadServicesCatalog()
     this.loadProductsPriceAndStock()
     this.loadDocumentTypes()
     this.loadOpenRegister()
@@ -489,6 +509,17 @@ export class Ventas implements OnInit {
 
   private productsApiGet(): void {
     this.productsApi.getProducts().then(p => this.products = p as any)
+  }
+
+  private loadServicesCatalog(): void {
+    this.serviceCatalogApi.findAll({ page: 1, limit: 300 }).subscribe({
+      next: ({ data }) => {
+        this.servicesCatalog = data ?? []
+      },
+      error: () => {
+        this.showToast('error', 'Error cargando servicios')
+      },
+    })
   }
 
   private loadDocumentTypes(): void {
@@ -520,7 +551,7 @@ export class Ventas implements OnInit {
     const docType = this.documentTypesB.find((item) => Number(item.id) === docTypeId);
     this.documentDigitsHint = docType?.digits ?? null;
 
-    // Validar el número de documento actual si ya hay uno
+    // Validar el numero de documento actual si ya hay uno
     if (this.newCustomerForm?.documentNumber && this.documentDigitsHint) {
       this.validateDocumentNumber();
     }
@@ -580,8 +611,8 @@ export class Ventas implements OnInit {
 
       console.log('Cache completo de pricing cargado:', this.productPriceStockMap);
     } catch (error) {
-      console.error('Error cargando información de productos:', error);
-      this.showToast('error', 'Error cargando información de productos');
+      console.error('Error cargando informacion de productos:', error);
+      this.showToast('error', 'Error cargando informacion de productos');
     }
   }
 
@@ -635,7 +666,7 @@ export class Ventas implements OnInit {
         this.openingBalanceTemp = 0
       },
       error: (err) => {
-        const msg = err?.error?.message || err?.message || 'Ya existe una caja abierta. Ciérrala primero.'
+      const msg = err?.error?.message || err?.message || 'Ya existe una caja abierta. Cierrala primero.'
         this.showToast('error', msg)
       }
     })
@@ -924,38 +955,151 @@ export class Ventas implements OnInit {
   selectProductOrPrice(p: any): void {
     if (!p) return;
 
-    // Obtener precio según cantidad actual (usar best-price endpoint)
     const quantity = this.currentSaleItem.quantity || 1;
+    const priceState = this.productPriceStockMap[p.id];
+    const fallbackPrice =
+      priceState?.applied?.finalUnitPrice
+      ?? priceState?.options?.[0]?.finalUnitPrice
+      ?? p.salePrice
+      ?? 0;
+
+    this.currentSaleItem = {
+      itemType: 'PRODUCT',
+      productId: p.id,
+      productName: p.name,
+      productSku: p.sku,
+      quantity,
+      stock: priceState?.stock || 0,
+      unitPrice: Number(fallbackPrice),
+      appliedPriceListCode: priceState?.applied?.priceListCode,
+      appliedDiscounts: priceState?.applied?.autoAppliedDiscounts || []
+    } as any;
+
+    this.filteredProducts = [];
+    this.filteredServices = [];
+    this.filteredSaleItems = [];
+    this.productSearchText = '';
+    this.serviceSearchText = '';
+
+    if (this.productSearchInput) {
+      this.productSearchInput.nativeElement.value = '';
+    }
+
+    setTimeout(() => {
+      this.quantityInput?.nativeElement?.focus();
+    }, 100);
 
     this.pricingQueryApi.getBestPrice(p.id, quantity)
       .subscribe((bestPrice: BestPriceResponse) => {
-        if (!bestPrice) return;
+        if (!bestPrice?.applied) return;
 
         this.currentSaleItem = {
+          ...this.currentSaleItem,
+          itemType: 'PRODUCT',
           productId: p.id,
           productName: p.name,
           productSku: p.sku,
-          quantity: quantity,
+          quantity,
           stock: this.productPriceStockMap[p.id]?.stock || 0,
           unitPrice: bestPrice.applied.finalUnitPrice,
           appliedPriceListCode: bestPrice.applied.priceListCode,
           appliedDiscounts: bestPrice.applied.autoAppliedDiscounts
         } as any;
-
-        // Limpiar dropdown y enfocar cantidad
-        this.filteredProducts = [];
-        this.productSearchText = '';
-
-        if (this.productSearchInput) {
-          this.productSearchInput.nativeElement.value = '';
-        }
-
-        setTimeout(() => {
-          this.quantityInput?.nativeElement?.focus();
-        }, 100);
-      }, (err) => {
-        this.showToast('error', 'Error obteniendo precio del producto');
+      }, () => {
+        this.showToast('warning', 'No se pudo calcular el mejor precio. Se uso el precio base del producto.');
       });
+  }
+
+  onServiceSearch(): void {
+    const query = (this.serviceSearchText || '').trim().toLowerCase()
+    if (!query || query.length < 2) {
+      this.filteredServices = []
+      return
+    }
+
+    this.filteredServices = this.servicesCatalog
+      .filter((service) =>
+        service.name?.toLowerCase().includes(query) ||
+        service.code?.toLowerCase().includes(query),
+      )
+      .slice(0, 8)
+  }
+
+  onSaleItemSearch(): void {
+    const query = (this.productSearchText || '').trim().toLowerCase()
+
+    if (!query) {
+      this.filteredProducts = []
+      this.filteredServices = []
+      this.filteredSaleItems = []
+      return
+    }
+
+    this.filteredProducts = this.products.filter((product) =>
+      product.name.toLowerCase().includes(query) || product.sku.toLowerCase().includes(query),
+    )
+
+    this.filteredServices = this.servicesCatalog.filter((service) =>
+      service.name?.toLowerCase().includes(query) || service.code?.toLowerCase().includes(query),
+    )
+
+    const productResults: SaleCatalogSearchResult[] = this.filteredProducts.slice(0, 8).map((product) => {
+      const priceState = this.productPriceStockMap[product.id]
+      const suggestedPrice =
+        priceState?.applied?.finalUnitPrice
+        ?? priceState?.options?.[0]?.finalUnitPrice
+        ?? product.salePrice
+        ?? 0
+
+      return {
+        itemType: 'PRODUCT',
+        name: product.name,
+        code: product.sku,
+        price: Number(suggestedPrice),
+        stock: priceState?.stock || 0,
+        product,
+      }
+    })
+
+    const serviceResults: SaleCatalogSearchResult[] = this.filteredServices.slice(0, 8).map((service) => ({
+      itemType: 'SERVICE',
+      name: service.name,
+      code: service.code,
+      price: Number(service.price || 0),
+      service,
+    }))
+
+    this.filteredSaleItems = [...productResults, ...serviceResults].slice(0, 12)
+  }
+
+  selectSaleCatalogItem(result: SaleCatalogSearchResult): void {
+    if (result.itemType === 'SERVICE' && result.service) {
+      this.selectService(result.service)
+      return
+    }
+
+    if (result.product) {
+      this.selectProductOrPrice(result.product)
+    }
+  }
+
+  selectService(service: CatalogService): void {
+    this.currentSaleItem = {
+      itemType: 'SERVICE',
+      serviceId: service.id,
+      productSku: service.code,
+      productName: service.name,
+      quantity: this.currentSaleItem.quantity || 1,
+      unitPrice: Number(service.price || 0),
+    }
+    this.productSearchText = ''
+    this.serviceSearchText = ''
+    this.filteredServices = []
+    this.filteredSaleItems = []
+
+    setTimeout(() => {
+      this.quantityInput?.nativeElement?.focus()
+    }, 100)
   }
 
   onCancelSaleForm(): void {
@@ -970,7 +1114,7 @@ export class Ventas implements OnInit {
 
   onConfirmSale(): void {
     if (!this.saleFormData || !this.saleFormData.lines || this.saleFormData.lines.length === 0) {
-      this.showToast('error', 'Agregue al menos un producto')
+      this.showToast('error', 'Agregue al menos un item')
       return
     }
     if (!this.foundCustomer) {
@@ -981,7 +1125,7 @@ export class Ventas implements OnInit {
     const paymentType = this.saleFormData.paymentType as PaymentType
     const backendMethod = paymentMethodMap[paymentType] || 'CASH'
 
-    // Construir el pago según el tipo
+    // Construir el pago segun el tipo
     const paymentData: any = {
       method: backendMethod,
       amount: this.saleFormData.total || 0,
@@ -990,7 +1134,7 @@ export class Ventas implements OnInit {
       cardType: null
     }
 
-    // Agregar campos específicos según el método de pago
+    // Agregar campos especificos segun el metodo de pago
     if (paymentType === 'TARJETA') {
       paymentData.reference = this.paymentReference || null
       paymentData.bankName = this.paymentBankName || null
@@ -1007,10 +1151,13 @@ export class Ventas implements OnInit {
     }
     // CASH: reference, bankName, cardType = null
 
+    const hasServiceLines = this.saleFormData.lines.some((line: SaleLine) => line.itemType === 'SERVICE')
+    const hasProductLines = this.saleFormData.lines.some((line: SaleLine) => line.itemType !== 'SERVICE')
+
     const createDto: any = {
       companyId: this.COMPANY_ID,
       customerId: Number(this.foundCustomer.id),
-      saleType: 'PRODUCT',
+      saleType: hasProductLines && hasServiceLines ? 'MIXED' : hasServiceLines ? 'SERVICE' : 'PRODUCT',
       documentType: this.saleFormData.documentType as any,
       series: null,
       number: null,
@@ -1018,11 +1165,15 @@ export class Ventas implements OnInit {
       dueDate: this.getToday(),
       payments: [paymentData],
       items: this.saleFormData.lines.map((line) => ({
-        productId: line.productId,
+        itemType: line.itemType || 'PRODUCT',
+        productId: line.itemType === 'SERVICE' ? null : line.productId,
+        serviceId: line.itemType === 'SERVICE' ? line.serviceId : null,
         quantity: line.quantity,
+        finalUnitPrice: line.unitPrice,
         lotId: null,
         serialIds: [],
-        comboId: null
+        comboId: null,
+        description: line.productName,
       })),
       applyAutoDiscounts: true
     }
@@ -1045,7 +1196,7 @@ export class Ventas implements OnInit {
   onSearchCustomer(): void {
     const document = this.customerSearchText.trim()
 
-    // 1. Validación: campo vacío
+    // 1. Validacion: campo vacio
     if (!document) {
       this.foundCustomer = null
       this.showToast('warning', 'Ingrese un DNI o RUC')
@@ -1090,65 +1241,91 @@ export class Ventas implements OnInit {
 
   onAddSaleItem(): void {
     if (!this.saleFormData) return
-    if (!this.currentSaleItem?.productId || !this.currentSaleItem?.quantity) {
-      this.showToast('error', 'Llene los datos del producto')
+    const itemType = this.currentSaleItem?.itemType || 'PRODUCT'
+    const hasRequiredEntity = itemType === 'SERVICE'
+      ? !!this.currentSaleItem?.serviceId
+      : !!this.currentSaleItem?.productId
+
+    if (!hasRequiredEntity || !this.currentSaleItem?.quantity) {
+      this.showToast('error', itemType === 'SERVICE' ? 'Completa los datos del servicio' : 'Completa los datos del producto')
       return
     }
 
-    // Convertir unitPrice a número (viene como string del backend)
+    // Convertir unitPrice a numero (viene como string del backend)
     const unitPrice = Number(this.currentSaleItem.unitPrice) || 0;
     const lineTotal = (this.currentSaleItem.quantity || 0) * unitPrice;
 
-    // Obtener información del producto
-    const product = this.products.find(p => p.id === this.currentSaleItem.productId)
-    if (!product) {
-      this.showToast('error', 'Producto inválido')
-      return
-    }
+    let newLine: SaleLine
 
-    // Verificar si el producto tiene lote o seriales
-    const productInfo = this.productPriceStockMap[this.currentSaleItem.productId!];
-    const hasLot = productInfo?.stockByLot && productInfo.stockByLot.length > 0;
-    const hasSerial = product.isSerialized || false;
+    if (itemType === 'SERVICE') {
+      const service = this.servicesCatalog.find((svc) => svc.id === this.currentSaleItem.serviceId)
+      if (!service) {
+        this.showToast('error', 'Servicio invalido')
+        return
+      }
 
-    const newLine: SaleLine = {
-      productId: this.currentSaleItem.productId as number,
-      productSku: this.currentSaleItem.productSku || '',
-      productName: this.currentSaleItem.productName || '',
-      quantity: this.currentSaleItem.quantity as number,
-      unitPrice: unitPrice,
-      lineTotal: lineTotal,
-      hasLot: hasLot,
-      hasSerial: hasSerial,
-      lotId: null,
-      lotCode: undefined,
-      expirationDate: undefined,
-      serials: []
-    }
+      newLine = {
+        itemType: 'SERVICE',
+        serviceId: service.id,
+        productSku: service.code,
+        productName: service.name,
+        quantity: this.currentSaleItem.quantity as number,
+        unitPrice,
+        lineTotal,
+      }
+    } else {
+      const product = this.products.find(p => p.id === this.currentSaleItem.productId)
+      if (!product) {
+        this.showToast('error', 'Producto invalido')
+        return
+      }
 
-    // Usar stock del cache para validación actualizada
-    const currentStock = this.productPriceStockMap[this.currentSaleItem.productId!]?.stock || 0;
-    if (currentStock < this.currentSaleItem.quantity!) {
-      this.showToast('error', `Stock insuficiente. Disponible: ${currentStock}`)
-      return
+      const productInfo = this.productPriceStockMap[this.currentSaleItem.productId!];
+      const hasLot = productInfo?.stockByLot && productInfo.stockByLot.length > 0;
+      const hasSerial = product.isSerialized || false;
+
+      newLine = {
+        itemType: 'PRODUCT',
+        productId: this.currentSaleItem.productId as number,
+        productSku: this.currentSaleItem.productSku || '',
+        productName: this.currentSaleItem.productName || '',
+        quantity: this.currentSaleItem.quantity as number,
+        unitPrice: unitPrice,
+        lineTotal: lineTotal,
+        hasLot: hasLot,
+        hasSerial: hasSerial,
+        lotId: null,
+        lotCode: undefined,
+        expirationDate: undefined,
+        serials: []
+      }
+
+      const currentStock = this.productPriceStockMap[this.currentSaleItem.productId!]?.stock || 0;
+      if (currentStock < this.currentSaleItem.quantity!) {
+        this.showToast('error', `Stock insuficiente. Disponible: ${currentStock}`)
+        return
+      }
     }
 
 
     if (!this.saleFormData.lines) this.saleFormData.lines = []
-    console.log('Agregando línea:', newLine);
-    console.log('Líneas antes:', this.saleFormData.lines.length);
+    console.log('Agregando linea:', newLine);
+    console.log('Lineas antes:', this.saleFormData.lines.length);
     this.saleFormData.lines.push(newLine)
-    console.log('Líneas después:', this.saleFormData.lines.length);
+    console.log('Lineas despues:', this.saleFormData.lines.length);
 
     // Limpiar completamente currentSaleItem
     this.currentSaleItem = {};
 
-    // Limpiar búsqueda
+    // Limpiar busqueda
     this.productSearchText = '';
     this.filteredProducts = [];
+    this.serviceSearchText = '';
+    this.filteredServices = [];
+    this.filteredSaleItems = [];
 
     this.calculateSaleTotals()
-    this.showToast('success', 'Producto agregado')
+    this.showToast('success', itemType === 'SERVICE' ? 'Servicio agregado' : 'Item agregado')
   }
 
   onRemoveSaleItem(index: number): void {
@@ -1158,7 +1335,7 @@ export class Ventas implements OnInit {
     this.showToast('success', 'Producto eliminado')
   }
 
-  // Alternar visibilidad de detalles de lote/seriales en línea de venta
+  // Alternar visibilidad de detalles de lote/seriales en linea de venta
   toggleLineDetails(index: number): void {
     if (this.expandedLines.has(index)) {
       this.expandedLines.delete(index);
@@ -1167,7 +1344,7 @@ export class Ventas implements OnInit {
     }
   }
 
-  // Verificar si una línea está expandida
+  // Verificar si una linea esta expandida
   isLineExpanded(index: number): boolean {
     return this.expandedLines.has(index);
   }
@@ -1186,7 +1363,7 @@ export class Ventas implements OnInit {
 
   onOpenCreditNoteModal(sale: Sale): void {
     if (sale.status !== 'EMITIDO') {
-      this.showToast('warning', 'Solo se pueden crear notas de crédito para ventas emitidas')
+      this.showToast('warning', 'Solo se pueden crear notas de Credito para ventas emitidas')
       return
     }
     this.creditNoteFormData = {
@@ -1203,7 +1380,7 @@ export class Ventas implements OnInit {
   }
 
   onConfirmCreditNote(): void {
-    this.showToast('success', 'Nota de crédito emitida')
+    this.showToast('success', 'Nota de Credito emitida')
     this.showCreditNoteModal = false
   }
 
@@ -1217,9 +1394,9 @@ export class Ventas implements OnInit {
       series: 'GR01',
       issueDate: new Date().toISOString().split('T')[0],
       senderName: 'Tu Empresa',
-      senderAddress: 'Dirección de tu empresa',
+      senderAddress: 'Direccion de tu empresa',
       arrivalAddress: '',
-      items: (sale.items || []).map((line: any) => ({
+      items: (sale.items || []).filter((line: any) => line.productId).map((line: any) => ({
         id: 0,
         shippingGuideId: 0,
         productId: line.productId,
@@ -1235,7 +1412,7 @@ export class Ventas implements OnInit {
   }
 
   onConfirmDispatchGuide(): void {
-    this.showToast('success', 'Guía de remisión emitida')
+    this.showToast('success', 'Guia de remision emitida')
     this.showDispatchGuideModal = false
   }
 
@@ -1253,25 +1430,25 @@ export class Ventas implements OnInit {
 
     const totalVenta = Number(this.saleToCancel.total)
 
-    // Primero intentamos crear la transacción de caja (RETURN)
+    // Primero intentamos crear la transaccion de caja (RETURN)
     const returnTransaction: any = {
       type: 'RETURN',
       subtype: 'CASH',
       amount: totalVenta,
-      description: `${this.cancelReason === 'RETURN' ? 'Devolución' : 'Anulación por error'} venta ${this.saleToCancel.series}-${this.saleToCancel.number}`,
+      description: `${this.cancelReason === 'RETURN' ? 'Devolucion' : 'Anulacion por error'} venta ${this.saleToCancel.series}-${this.saleToCancel.number}`,
       reference: ''
     }
 
     this.cashFlowApi.createTransaction(1, returnTransaction).subscribe({
       next: () => {
-        // Solo si la transacción de caja fue exitosa, cancelamos la venta
+        // Solo si la transaccion de caja fue exitosa, cancelamos la venta
         this.salesApi.cancel(this.saleToCancel!.id, { reason: 'ANULADA', observations: '' } as any).subscribe({
           next: () => {
             // Actualizar la venta en el array de sales
             const saleIndex = this.sales.findIndex(s => s.id === this.saleToCancel!.id)
             if (saleIndex >= 0) {
               this.sales[saleIndex].status = 'CANCELLED'
-              // Forzar detección de cambios
+              // Forzar deteccion de cambios
               this.sales = [...this.sales]
             }
 
@@ -1293,8 +1470,8 @@ export class Ventas implements OnInit {
         })
       },
       error: (err) => {
-        // Si falla la transacción de caja (ej: no hay efectivo), NO cancelamos la venta
-        const msg = err?.error?.message || 'No se pudo completar la anulación'
+        // Si falla la transaccion de caja (ej: no hay efectivo), NO cancelamos la venta
+        const msg = err?.error?.message || 'No se pudo completar la anulacion'
         this.showToast('error', msg)
       }
     })
@@ -1361,13 +1538,13 @@ export class Ventas implements OnInit {
     });
 
     const companyName = 'MACROCHIPS S.A.C';
-    const companyAddress = 'Calle Alfonso Gárden #493, Trujillo, La Libertad';
+    const companyAddress = 'Calle Alfonso Garden #493, Trujillo, La Libertad';
     const companyPhone = '924215320';
     const companyEmail = 'soporte@grupoSTS.com.pe';
     const companyRuc = '10123456789';
 
     const isFactura = sale.documentType === 'FACTURA';
-    const docTitle = isFactura ? 'FACTURA ELECTRÓNICA' : 'BOLETA ELECTRÓNICA';
+    const docTitle = isFactura ? 'FACTURA ELECTRONICA' : 'BOLETA ELECTRONICA';
     const docSerie = sale.series;
     const docNumber = sale.number;
 
@@ -1443,7 +1620,7 @@ export class Ventas implements OnInit {
       startY: y,
       head: [[
         {
-          content: 'Información General',
+          content: 'Informacion General',
           colSpan: 6,
           styles: {
             fillColor: [88, 88, 88] as [number, number, number],
@@ -1458,13 +1635,13 @@ export class Ventas implements OnInit {
         [
           { content: 'Cliente:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
           { content: clientName, styles: { fillColor: [255, 255, 255] } },
-          { content: 'Dirección:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
+          { content: 'Direccion:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
           { content: clientAddress, colSpan: 3, styles: { fillColor: [255, 255, 255] } }
         ],
         [
           { content: 'Documento:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
           { content: clientDoc, styles: { fillColor: [255, 255, 255] } },
-          { content: 'Fecha de Emisión:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
+          { content: 'Fecha de Emision:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
           { content: issueDate, colSpan: 3, styles: { fillColor: [255, 255, 255] } }
         ],
         [
@@ -1514,7 +1691,7 @@ export class Ventas implements OnInit {
     doc.setFont('helvetica', 'bold');
 
     doc.text('#', 17, y + 5.5);
-    doc.text('Descripción', 25, y + 5.5);
+    doc.text('Descripcion', 25, y + 5.5);
     doc.text('Und', 115, y + 5.5);
     doc.text('Cant', 135, y + 5.5);
     doc.text('P.Unit', 152, y + 5.5);
@@ -1535,8 +1712,8 @@ export class Ventas implements OnInit {
         y = 15;
       }
 
-      const productName = item.product?.name || 'Producto';
-      const unit = item.product?.baseUnit?.abbreviation || 'UND';
+      const productName = item.serviceNameSnapshot || item.descriptionSnapshot || item.product?.name || 'Item';
+      const unit = item.itemType === 'SERVICE' ? 'SERV' : (item.product?.baseUnit?.abbreviation || 'UND');
       const quantity = parseFloat(item.quantity) || 0;
       const unitPrice = parseFloat(item.finalUnitPrice) || 0;
       const lineTotal = parseFloat(item.lineTotal) || 0;
@@ -1607,8 +1784,8 @@ export class Ventas implements OnInit {
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
     doc.setFont('helvetica', 'normal');
-    doc.text('Este documento es una representación impresa de un comprobante de pago electrónico', 105, y, { align: 'center' });
-    doc.text('Generado por Macrochips - Sistema de Gestión', 105, y + 4, { align: 'center' });
+    doc.text('Este documento es una representacion impresa de un comprobante de pago electronico', 105, y, { align: 'center' });
+    doc.text('Generado por Macrochips - Sistema de Gestion', 105, y + 4, { align: 'center' });
 
     // Save
     const fileName = `${sale.series}-${sale.number}.pdf`;
@@ -1658,11 +1835,11 @@ export class Ventas implements OnInit {
       'TRANSFER': 'Transferencia',
       'YAPE': 'Yape',
       'PLIN': 'Plin',
-      'CREDIT': 'Crédito',
+      'CREDIT': 'Credito',
       'EFECTIVO': 'Efectivo',
       'TARJETA': 'Tarjeta',
       'TRANSFERENCIA': 'Transferencia',
-      'CREDITO': 'Crédito'
+      'CREDITO': 'Credito'
     }
     return labels[payment || ''] || payment || '-'
   }
@@ -1689,7 +1866,7 @@ export class Ventas implements OnInit {
       this.showToast('warning', 'No hay ventas para exportar')
       return
     }
-    let csv = 'Fecha,Tipo,Número,Cliente,Total,Estado\n'
+    let csv = 'Fecha,Tipo,Numero,Cliente,Total,Estado\n'
     this.sales.forEach((sale) => {
       csv += `"${sale.issueDate}","${sale.documentType}","${sale.series}-${sale.number}","${sale.customer?.name || ''}",${sale.total},"${this.getStatusLabel(sale.status)}"\n`
     })
@@ -1742,7 +1919,7 @@ export class Ventas implements OnInit {
   // MODAL DE CONFIRMACION
 
   onConfirmCreateCustomer(): void {
-    // Validaciones básicas
+    // Validaciones basicas
     if (!this.newCustomerForm.name?.trim()) {
       this.showToast('error', 'El nombre es requerido');
       return;
@@ -1754,7 +1931,7 @@ export class Ventas implements OnInit {
     }
 
     if (!this.validateDocumentNumber()) {
-      this.showToast('error', `El número de documento debe tener ${this.documentDigitsHint} dígitos`);
+      this.showToast('error', `El numero de documento debe tener ${this.documentDigitsHint} digitos`);
       return;
     }
 
@@ -1783,18 +1960,7 @@ export class Ventas implements OnInit {
 
   //PRODUCTOS
   filterProducts(): void {
-    const query = (this.productSearchText || '').trim().toLowerCase()
-
-    if (!query) {
-      // Si se borra el texto, cerramos el dropdown
-      this.filteredProducts = []
-      return
-    }
-
-    this.filteredProducts = this.products.filter(p =>
-      p.name.toLowerCase().includes(query) ||
-      p.sku.toLowerCase().includes(query)
-    )
+    this.onSaleItemSearch()
   }
 
 
@@ -1822,7 +1988,7 @@ export class Ventas implements OnInit {
   onQuantityEnter(): void {
     this.onAddSaleItem()
 
-    // Después de agregar, volvemos el foco al buscador
+    // Despues de agregar, volvemos el foco al buscador
     setTimeout(() => {
       if (this.productSearchInput) {
         this.productSearchInput.nativeElement.focus()
@@ -1883,7 +2049,7 @@ export class Ventas implements OnInit {
 
   confirmIncome(): void {
     if (!this.incomeForm.amount || this.incomeForm.amount <= 0) {
-      this.showToast('error', 'Ingrese un monto válido')
+      this.showToast('error', 'Ingrese un monto valido')
       return
     }
 
@@ -2037,7 +2203,7 @@ export class Ventas implements OnInit {
   }
 
 
-  // Métodos para obtener información del pricing
+  // Metodos para obtener informacion del pricing
   getPriceOption(productId: number, priceListCode: string): any {
     const productInfo = this.productPriceStockMap[productId];
     // console.log("aca esta el punto 0")
@@ -2049,7 +2215,7 @@ export class Ventas implements OnInit {
   }
 
   getPriceMinQty(productId: number, priceListCode: string): number {
-    // Esto debería venir del backend, por ahora es una suposición
+    // Esto deberia venir del backend, por ahora es una suposicion
     const option = this.getPriceOption(productId, priceListCode);
     return option?.minQty || 1;
   }
@@ -2084,16 +2250,16 @@ export class Ventas implements OnInit {
     }
   }
 
-  // Helper para calcular total por método de pago
+  // Helper para calcular total por metodo de pago
   getTotalForPaymentMethod(method: string): number {
-    // Por ahora, dividir equitativamente entre todos los métodos
-    // Esto podría mejorarse según los requerimientos
+    // Por ahora, dividir equitativamente entre todos los metodos
+    // Esto podria mejorarse segun los requerimientos
     const totalMethods = this.selectedPaymentMethods.length;
     const grandTotal = this.saleFormData?.total || 0;
 
     if (totalMethods === 0) return 0;
 
-    // Asignar el total completo al primer método o dividir equitativamente
+    // Asignar el total completo al primer metodo o dividir equitativamente
     if (totalMethods === 1) {
       return grandTotal;
     }
@@ -2105,9 +2271,9 @@ export class Ventas implements OnInit {
     return isLastMethod ? grandTotal - (perMethod * (totalMethods - 1)) : perMethod;
   }
 
-  // Helper para generar número de documento usando series activas
+  // Helper para generar numero de documento usando series activas
   private generateDocumentSeries(): string {
-    // Simular serie activa (en producción vendría del backend)
+    // Simular serie activa (en produccion vendria del backend)
     const documentType = this.saleFormData?.documentType;
     const activeSeries = this.documentSeries.find(s =>
       s.documentType === documentType && s.isActive
@@ -2115,9 +2281,9 @@ export class Ventas implements OnInit {
     return activeSeries?.code || (documentType === 'BOLETA' ? 'B001' : 'F001');
   }
 
-  // Helper para generar número de documento usando series activas
+  // Helper para generar numero de documento usando series activas
   private generateDocumentNumber(): string {
-    // Simular siguiente número (en producción vendría del backend)
+    // Simular siguiente numero (en produccion vendria del backend)
     const documentType = this.saleFormData?.documentType;
     const activeSeries = this.documentSeries.find(s =>
       s.documentType === documentType && s.isActive
@@ -2127,7 +2293,7 @@ export class Ventas implements OnInit {
       return activeSeries.currentNumber.toString().padStart(8, '0');
     }
 
-    // Fallback a número aleatorio
+    // Fallback a numero aleatorio
     const random = Math.floor(Math.random() * 999999) + 1;
     return random.toString().padStart(6, '0');
   }
@@ -2197,7 +2363,7 @@ export class Ventas implements OnInit {
       name: '',
       isActive: true,
       startingNumber: 1,
-      createdBy: 'system', // En producción, usar usuario actual
+      createdBy: 'system', // En produccion, usar usuario actual
     };
     this.showDocumentSeriesForm = true;
   }
@@ -2209,11 +2375,11 @@ export class Ventas implements OnInit {
     }
 
     if (this.documentSeriesEditMode && this.selectedDocumentSeries) {
-      // Modo edición
+      // Modo edicion
       const updateDto: UpdateDocumentSeriesDto = {
         name: this.documentSeriesForm.name,
         isActive: this.documentSeriesForm.isActive,
-        updatedBy: 'system', // En producción, usar usuario actual
+        updatedBy: 'system', // En produccion, usar usuario actual
       };
 
       this.documentSeriesApi.update(this.selectedDocumentSeries.id, updateDto).subscribe({
@@ -2228,7 +2394,7 @@ export class Ventas implements OnInit {
         },
       });
     } else {
-      // Modo creación
+      // Modo creacion
       const createDto: CreateDocumentSeriesDto = {
         companyId: this.COMPANY_ID,
         documentType: this.documentSeriesForm.documentType!,
@@ -2236,7 +2402,7 @@ export class Ventas implements OnInit {
         name: this.documentSeriesForm.name,
         isActive: this.documentSeriesForm.isActive!,
         startingNumber: this.documentSeriesForm.startingNumber,
-        createdBy: 'system', // En producción, usar usuario actual
+        createdBy: 'system', // En produccion, usar usuario actual
       };
       console.log("pruebita: " + createDto);
       console.log(createDto);
@@ -2256,7 +2422,7 @@ export class Ventas implements OnInit {
   }
 
   deleteDocumentSeries(id: number): void {
-    if (!confirm('¿Está seguro de que desea eliminar esta serie? Esta acción no se puede deshacer.')) {
+    if (!confirm('Esta seguro de que desea eliminar esta serie? Esta accion no se puede deshacer.')) {
       return;
     }
 
@@ -2275,7 +2441,7 @@ export class Ventas implements OnInit {
   toggleDocumentSeriesStatus(series: DocumentSeries): void {
     const updateDto: UpdateDocumentSeriesDto = {
       isActive: !series.isActive,
-      updatedBy: 'system', // En producción, usar usuario actual
+      updatedBy: 'system', // En produccion, usar usuario actual
     };
 
     this.documentSeriesApi.update(series.id, updateDto).subscribe({
@@ -2298,11 +2464,11 @@ export class Ventas implements OnInit {
   getNextNumberForDocumentType(documentType: DocumentType): void {
     this.documentSeriesApi.getNextNumberFormatted(this.COMPANY_ID, documentType).subscribe({
       next: (response) => {
-        this.showToast('info', `Próximo número para ${documentType}: ${response.formatted}`);
+        this.showToast('info', `Proximo numero para ${documentType}: ${response.formatted}`);
       },
       error: (err) => {
-        console.error('Error obteniendo siguiente número:', err);
-        this.showToast('error', 'Error obteniendo siguiente número');
+        console.error('Error obteniendo siguiente numero:', err);
+        this.showToast('error', 'Error obteniendo siguiente numero');
       },
     });
   }
@@ -2340,7 +2506,7 @@ export class Ventas implements OnInit {
   }
 
 
-  // Métodos en la clase Ventas
+  // Metodos en la clase Ventas
   countActiveSeries(): number {
     return this.documentSeries.filter(s => s.isActive).length;
   }
@@ -2349,7 +2515,7 @@ export class Ventas implements OnInit {
     return this.documentSeries.filter(s => s.documentType === type).length;
   }
 
-  // Método para formatear los seriales
+  // Metodo para formatear los seriales
   formatSerials(serials: Array<{ serialCode: string }>): string {
     return serials?.map(s => s.serialCode).join(', ') || '';
   }

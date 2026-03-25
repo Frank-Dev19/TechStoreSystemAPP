@@ -122,7 +122,7 @@
           (click)="openMockBoletaModal()"
         >
           <i class="fas fa-receipt"></i>
-          Crear boleta
+          Ligar documento
           @if (selectedMockBoletaOrdersCount > 0) {
             <span>({{ selectedMockBoletaOrdersCount }})</span>
           }
@@ -194,6 +194,11 @@
                       @if (serviceOrder.isPaid) {
                         <small class="paid-label">Pagada</small>
                       }
+                      @if (getActiveSaleLink(serviceOrder); as activeLink) {
+                        <small class="linked-sale-label">
+                          {{ activeLink.sale.documentType }} {{ activeLink.sale.series }}-{{ activeLink.sale.number }}
+                        </small>
+                      }
                     </td>
                     <td>
                       <div class="client-name">
@@ -250,10 +255,10 @@
                           <button
                             class="btn-icon"
                             type="button"
-                            (click)="openServiceOrderBoletaPreview(serviceOrder, $event)"
-                            title="Ver boleta"
+                            (click)="downloadLinkedSaleDocument(serviceOrder, $event)"
+                            title="Descargar documento ligado"
                           >
-                            <i class="fas fa-receipt"></i>
+                            <i class="fas fa-download"></i>
                           </button>
                         }
                         @if (serviceOrder.serviceType !== serviceTypeEnum.WARRANTY_SERVICE) {
@@ -318,6 +323,19 @@
                                 <i class="fas fa-money-check-alt"></i>
                                 <span>Marcar pagada</span>
                               </button>
+                              @if (
+                                !hasLinkedSaleDocument(serviceOrder) &&
+                                canCreateBoletaFromOrder(serviceOrder)
+                              ) {
+                                <button
+                                  type="button"
+                                  class="action-menu-item"
+                                  (click)="openLinkSaleModalForOrder(serviceOrder, $event)"
+                                >
+                                  <i class="fas fa-link"></i>
+                                  <span>Ligar documento</span>
+                                </button>
+                              }
                               @if (
                                 serviceOrder.serviceType !== serviceTypeEnum.WARRANTY_SERVICE &&
                                 canServiceOrderAgreement(serviceOrder)
@@ -410,7 +428,7 @@
         <div class="modal-header">
           <div>
             <p class="modal-eyebrow">Comprobante</p>
-            <h2>Boleta consolidada</h2>
+            <h2>{{ isViewingLinkedSaleDocument ? 'Documento ligado' : 'Ligar boleta o factura' }}</h2>
           </div>
           <button class="btn-close" type="button" (click)="closeMockBoletaModal()">
             <i class="fas fa-times"></i>
@@ -418,101 +436,173 @@
         </div>
 
         <div class="modal-body">
-          @if (isLoadingMockBoletaPreview) {
-            <div class="empty-state compact">
-              <div class="empty-icon">
-                <i class="fas fa-spinner fa-spin"></i>
+            <div class="mock-boleta-summary">
+              <div class="info-tile">
+                <span class="muted">Órdenes seleccionadas</span>
+                <strong>{{ selectedMockBoletaOrders.length }}</strong>
+                <small>{{ getSelectedMockBoletaOrderCodesLabel() }}</small>
               </div>
-              <p>Construyendo previsualización...</p>
+              <div class="info-tile">
+                <span class="muted">Cliente</span>
+                <strong>{{
+                selectedMockBoletaOrders.length
+                  ? getServiceOrderContactName(selectedMockBoletaOrders[0])
+                  : 'Sin cliente'
+              }}</strong>
+              <small>{{ getSelectedMockBoletaClientDocument() }}</small>
             </div>
-          } @else if (mockBoletaError) {
+          </div>
+
+          @if (mockBoletaError) {
             <div class="alert-inline danger">
               <i class="fas fa-exclamation-circle"></i>
               <span>{{ mockBoletaError }}</span>
             </div>
-          } @else if (mockBoletaPreview) {
-            <div class="mock-boleta-summary">
-              <div class="info-tile">
-                <span class="muted">Cliente</span>
-                <strong>{{ mockBoletaPreview.clientName }}</strong>
+          }
+
+          @if (!isViewingLinkedSaleDocument) {
+            <div class="sale-link-search-panel">
+              <div class="sale-link-search-grid">
+                <div class="search-box sale-link-search-box">
+                <i class="fas fa-search"></i>
+                <input
+                  type="text"
+                  placeholder="Buscar por serie, número o texto libre..."
+                  [(ngModel)]="saleSearchTerm"
+                  (keyup.enter)="searchSalesToLink()"
+                />
               </div>
-              <div class="info-tile">
-                <span class="muted">Documento</span>
-                <strong>{{ mockBoletaPreview.clientDocument || '-' }}</strong>
+              <div class="filter-control">
+                <label for="sale-search-document-type">Documento</label>
+                <select
+                  id="sale-search-document-type"
+                  class="select-control"
+                  [(ngModel)]="saleSearchDocumentType"
+                >
+                  <option value="all">Todos</option>
+                  <option value="BOLETA">Boleta</option>
+                  <option value="FACTURA">Factura</option>
+                </select>
               </div>
-              <div class="info-tile">
-                <span class="muted">Órdenes incluidas</span>
-                <strong>{{ mockBoletaPreview.orderCodes.join(', ') }}</strong>
               </div>
+              <button
+                class="btn btn-primary sale-link-search-button"
+                type="button"
+                (click)="searchSalesToLink()"
+                [disabled]="isSearchingSales"
+              >
+                <i class="fas" [ngClass]="isSearchingSales ? 'fa-spinner fa-spin' : 'fa-search'"></i>
+                Buscar documentos
+              </button>
             </div>
 
-            @if (mockBoletaPreview.lines.length) {
-              <div class="table-wrapper">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>Origen</th>
-                      <th>Tipo</th>
-                      <th>Descripción</th>
-                      <th>Cant.</th>
-                      <th>P. unitario</th>
-                      <th>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (line of mockBoletaPreview.lines; track $index) {
-                      <tr>
-                        <td>{{ line.sourceOrderCode }}</td>
-                        <td>{{ line.type === 'product' ? 'Producto' : 'Servicio' }}</td>
-                        <td>{{ line.description }}</td>
-                        <td>{{ line.quantity | number: '1.2-2' }}</td>
-                        <td>S/{{ line.unitPrice | number: '1.2-2' }}</td>
-                        <td>S/{{ line.total | number: '1.2-2' }}</td>
-                      </tr>
-                    }
-                  </tbody>
-                </table>
+            @if (saleSearchResults.length) {
+              <div class="sale-search-results">
+                @for (result of saleSearchResults; track result.sale.id) {
+                  <button
+                    type="button"
+                    class="sale-search-card"
+                    [class.selected]="selectedSaleSearchResult?.sale?.id === result.sale.id"
+                    (click)="selectSaleSearchResult(result)"
+                  >
+                    <div class="sale-search-card-header">
+                      <div>
+                        <strong>{{ result.sale.documentType }} {{ result.sale.series }}-{{ result.sale.number }}</strong>
+                        <small>{{ result.sale.issueDate | date: 'dd/MM/yyyy HH:mm' }}</small>
+                      </div>
+                      <span class="status-chip" [ngClass]="result.sale.status.toLowerCase()">
+                        {{ result.sale.status }}
+                      </span>
+                    </div>
+                    <p>{{ result.sale.customer?.name || 'Sin cliente' }}</p>
+                    <div class="sale-search-card-meta">
+                      <span>{{ result.totalProducts }} productos</span>
+                      <span>{{ result.totalServices }} servicios</span>
+                      <strong>S/{{ result.sale.total | number: '1.2-2' }}</strong>
+                    </div>
+                  </button>
+                }
               </div>
-            } @else {
+            } @else if (!isSearchingSales) {
               <div class="empty-state compact">
                 <div class="empty-icon">
-                  <i class="fas fa-file-invoice-dollar"></i>
+                  <i class="fas fa-file-invoice"></i>
                 </div>
-                <p>No se detectaron líneas facturables en las órdenes seleccionadas.</p>
+                <p>Busca una boleta o factura ya emitida para ligarla a las órdenes seleccionadas.</p>
               </div>
             }
+          }
 
-            @if (mockBoletaPreview.diagnosisOnlyOrderCodes.length) {
-              <div class="alert-inline info">
-                <i class="fas fa-info-circle"></i>
-                <span
-                  >Órdenes diagnóstico sin líneas facturables:
-                  {{ mockBoletaPreview.diagnosisOnlyOrderCodes.join(', ') }}</span
-                >
-              </div>
-            }
-
+          @if (selectedSaleSearchResult) {
             <div class="mock-boleta-totals">
               <div class="info-tile">
-                <span class="muted">Subtotal</span>
-                <strong>S/{{ mockBoletaPreview.subtotal | number: '1.2-2' }}</strong>
+                <span class="muted">Documento</span>
+                <strong>{{
+                  selectedSaleSearchResult.sale.documentType
+                }} {{ selectedSaleSearchResult.sale.series }}-{{ selectedSaleSearchResult.sale.number }}</strong>
               </div>
               <div class="info-tile">
-                <span class="muted">IGV</span>
-                <strong>S/{{ mockBoletaPreview.tax | number: '1.2-2' }}</strong>
+                <span class="muted">Cliente</span>
+                <strong>{{ selectedSaleSearchResult.sale.customer?.name || 'Sin cliente' }}</strong>
+              </div>
+              <div class="info-tile">
+                <span class="muted">Fecha</span>
+                <strong>{{ selectedSaleSearchResult.sale.issueDate | date: 'dd/MM/yyyy HH:mm' }}</strong>
               </div>
               <div class="info-tile total-emphasis">
                 <span class="muted">Total</span>
-                <strong>S/{{ mockBoletaPreview.total | number: '1.2-2' }}</strong>
+                <strong>S/{{ selectedSaleSearchResult.sale.total | number: '1.2-2' }}</strong>
               </div>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="data-table compact-table">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Descripción</th>
+                    <th>Cant.</th>
+                    <th>P. unitario</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (item of selectedSaleSearchResult.sale.items; track item.id) {
+                    <tr>
+                      <td>{{ item.itemType === 'SERVICE' ? 'Servicio' : 'Producto' }}</td>
+                      <td>{{
+                        item.serviceNameSnapshot ||
+                          item.descriptionSnapshot ||
+                          item.product?.name ||
+                          item.service?.name ||
+                          'Ítem'
+                      }}</td>
+                      <td>{{ item.quantity | number: '1.2-2' }}</td>
+                      <td>S/{{ item.finalUnitPrice | number: '1.2-2' }}</td>
+                      <td>S/{{ item.lineTotal | number: '1.2-2' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
             </div>
           }
         </div>
 
         <div class="modal-footer">
           <button class="btn btn-secondary" type="button" (click)="closeMockBoletaModal()">
-            Cerrar
+            {{ isViewingLinkedSaleDocument ? 'Cerrar' : 'Cancelar' }}
           </button>
+          @if (!isViewingLinkedSaleDocument) {
+            <button
+              class="btn btn-primary"
+              type="button"
+              (click)="confirmLinkSaleToOrders()"
+              [disabled]="!selectedSaleSearchResult || isLinkingSale"
+            >
+              <i class="fas" [ngClass]="isLinkingSale ? 'fa-spinner fa-spin' : 'fa-link'"></i>
+              Confirmar vínculo
+            </button>
+          }
         </div>
       </div>
     </div>

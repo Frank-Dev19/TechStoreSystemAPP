@@ -2,13 +2,16 @@
 import { DocumentType, PaymentMethod, SaleType, SaleStatus } from './enums'
 
 export interface CreateSaleItemDto {
-    productId: number
+    itemType: 'PRODUCT' | 'SERVICE'
+    productId?: number | null
+    serviceId?: number | null
     lotId?: number | null
     quantity: number
     baseUnitPrice?: number
     finalUnitPrice?: number
     serialIds?: number[]
     comboId?: number | null
+    description?: string
 }
 
 export interface CreateSalePaymentDto {

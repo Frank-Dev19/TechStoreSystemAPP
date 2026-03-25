@@ -11,13 +11,23 @@ export interface SaleCustomer {
 export interface SaleItem {
   id: number
   saleId: number
-  productId: number
+  itemType?: 'PRODUCT' | 'SERVICE'
+  productId?: number | null
+  serviceId?: number | null
 
-  product: {
+  product?: {
     id: number
     sku: string
     name: string
   }
+  service?: {
+    id: number
+    code: string
+    name: string
+  }
+  serviceCodeSnapshot?: string | null
+  serviceNameSnapshot?: string | null
+  descriptionSnapshot?: string | null
 
   lotId?: number | null
   lot?: any | null

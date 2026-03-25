@@ -67,6 +67,7 @@ export const config = {
     serviceOrderItems: '/service-order-items',
     serviceOrderAgreements: '/service-order-agreements',
     serviceOrderDiagnoses: '/service-order-diagnoses',
+    serviceOrderBillingLinks: '/service-orders/billing-links',
   },
 };
 

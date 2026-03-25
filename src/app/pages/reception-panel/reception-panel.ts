@@ -45,6 +45,12 @@ import { UserApi } from "../../models/rbac/user.model"
 import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
 import { PricingQueryApiService } from "../../services/pricing/pricing-query-api.service"
 import { ServiceOrderDocumentsService } from "../../services/service-orders/service-order-documents.service"
+import { ServiceOrderBillingLinkService } from "../../services/service-orders/service-order-billing-link.service"
+import { ServiceOrderBillingLink } from "../../models/service-orders/service-order-billing-link"
+import { Sale } from "../../models/sales/sale.model"
+import { SalesApiService } from "../../services/sales/sales-api.service"
+import { jsPDF } from "jspdf"
+import autoTable from "jspdf-autotable"
 
 interface ServiceOrderAgreementProductComposer {
   id: number
@@ -86,24 +92,10 @@ interface CreateServiceOrderStep {
   description: string
 }
 
-interface MockConsolidatedBoletaLine {
-  type: "product" | "service"
-  description: string
-  quantity: number
-  unitPrice: number
-  total: number
-  sourceOrderCode: string
-}
-
-interface MockConsolidatedBoletaPreview {
-  clientName: string
-  clientDocument: string
-  orderCodes: string[]
-  diagnosisOnlyOrderCodes: string[]
-  lines: MockConsolidatedBoletaLine[]
-  subtotal: number
-  tax: number
-  total: number
+interface SaleLinkSearchResult {
+  sale: Sale
+  totalServices: number
+  totalProducts: number
 }
 
 type ReceptionInboxAuthor = "RECEPTION" | "CLIENT" | "SYSTEM"
@@ -269,9 +261,15 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   isSaving = false
   selectedMockBoletaOrderIds = new Set<number>()
   showMockBoletaModal = false
-  mockBoletaPreview: MockConsolidatedBoletaPreview | null = null
   mockBoletaError = ""
-  isLoadingMockBoletaPreview = false
+  saleLinksByOrderId: Record<number, ServiceOrderBillingLink[]> = {}
+  saleSearchResults: SaleLinkSearchResult[] = []
+  selectedSaleSearchResult: SaleLinkSearchResult | null = null
+  saleSearchTerm = ""
+  saleSearchDocumentType: "all" | "BOLETA" | "FACTURA" = "all"
+  isSearchingSales = false
+  isLinkingSale = false
+  isViewingLinkedSaleDocument = false
   activeActionMenuOrderId: number | null = null
   actionMenuStyle: Record<string, string> | null = null
   showReceptionInboxModal = false
@@ -294,6 +292,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     private readonly usersApi: UsersApiService,
     private readonly pricingQuery: PricingQueryApiService,
     private readonly serviceOrderDocuments: ServiceOrderDocumentsService,
+    private readonly serviceOrderBillingLinks: ServiceOrderBillingLinkService,
+    private readonly salesApi: SalesApiService,
   ) {
     this.createServiceOrderForm = this.createServiceOrderFormGroup()
     this.createServiceOrderAgreementForm = this.createServiceOrderAgreementFormGroup()
@@ -395,6 +395,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       .subscribe({
         next: ({ data }) => {
           this.serviceOrders = data ?? []
+          this.loadBillingLinksForVisibleOrders()
           this.currentPage = 1
           this.applyFilters()
           this.pruneSelectedMockBoletaOrders()
@@ -402,9 +403,35 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         error: () => {
           this.serviceOrders = []
           this.filteredServiceOrders = []
+          this.saleLinksByOrderId = {}
           this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar las órdenes de servicio.")
         },
       })
+  }
+
+  private loadBillingLinksForVisibleOrders(): void {
+    const ids = this.serviceOrders.map((order) => Number(order.id)).filter((id) => id > 0)
+    if (!ids.length) {
+      this.saleLinksByOrderId = {}
+      return
+    }
+
+    this.serviceOrderBillingLinks.getLinksByOrders(ids).subscribe({
+      next: (links) => {
+        const grouped: Record<number, ServiceOrderBillingLink[]> = {}
+        ;(links ?? []).forEach((link) => {
+          const orderId = Number(link.serviceOrderId)
+          if (!grouped[orderId]) {
+            grouped[orderId] = []
+          }
+          grouped[orderId].push(link)
+        })
+        this.saleLinksByOrderId = grouped
+      },
+      error: () => {
+        this.saleLinksByOrderId = {}
+      },
+    })
   }
 
   private loadClients(): void {
@@ -421,11 +448,20 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   isSelectableForMockBoleta(serviceOrder: ServiceOrder): boolean {
-    return !serviceOrder.isPaid && this.canCreateBoletaFromOrder(serviceOrder) && this.isSameClientSelection(serviceOrder)
+    return !this.hasLinkedSaleDocument(serviceOrder) && this.canCreateBoletaFromOrder(serviceOrder) && this.isSameClientSelection(serviceOrder)
   }
 
   canViewServiceOrderBoleta(serviceOrder: ServiceOrder): boolean {
-    return this.canCreateBoletaFromOrder(serviceOrder)
+    return this.hasLinkedSaleDocument(serviceOrder)
+  }
+
+  getActiveSaleLink(serviceOrder: ServiceOrder): ServiceOrderBillingLink | null {
+    const links = this.saleLinksByOrderId[Number(serviceOrder.id)] ?? []
+    return links[0] ?? null
+  }
+
+  hasLinkedSaleDocument(serviceOrder: ServiceOrder): boolean {
+    return Boolean(this.getActiveSaleLink(serviceOrder))
   }
 
   isSelectedForMockBoleta(serviceOrderId: number): boolean {
@@ -466,22 +502,41 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   openMockBoletaModal(): void {
     if (!this.selectedMockBoletaOrderIds.size) {
-      this.showMessage("warning", "fas fa-info-circle", "Selecciona al menos una orden válida para la boleta.")
+      this.showMessage("warning", "fas fa-info-circle", "Selecciona al menos una orden válida para ligar un documento.")
       return
     }
 
-    this.openBoletaPreviewForOrderIds(Array.from(this.selectedMockBoletaOrderIds))
+    this.showMockBoletaModal = true
+    this.isViewingLinkedSaleDocument = false
+    this.mockBoletaError = ""
+    this.saleSearchResults = []
+    this.selectedSaleSearchResult = null
+    this.saleSearchTerm = ""
+    this.saleSearchDocumentType = "all"
   }
 
-  openServiceOrderBoletaPreview(serviceOrder: ServiceOrder, event?: Event): void {
+  downloadLinkedSaleDocument(serviceOrder: ServiceOrder, event?: Event): void {
     event?.stopPropagation()
 
     if (!this.canViewServiceOrderBoleta(serviceOrder)) {
-      this.showMessage("warning", "fas fa-file-invoice", "La orden aún no está lista para generar boleta.")
+      this.showMessage("warning", "fas fa-file-invoice", "La orden aún no tiene un documento ligado.")
       return
     }
 
-    this.openBoletaPreviewForOrderIds([Number(serviceOrder.id)])
+    const activeLink = this.getActiveSaleLink(serviceOrder)
+    if (!activeLink?.sale) {
+      this.showMessage("warning", "fas fa-file-invoice", "La orden aún no tiene un documento ligado.")
+      return
+    }
+
+    this.salesApi.get(Number(activeLink.sale.id)).subscribe({
+      next: (sale) => {
+        this.generateLinkedSalePdf(sale)
+      },
+      error: () => {
+        this.showMessage("danger", "fas fa-times-circle", "No pudimos descargar el documento ligado.")
+      },
+    })
   }
 
   toggleActionMenu(serviceOrderId: number, event?: Event): void {
@@ -537,101 +592,236 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.actionMenuStyle = null
   }
 
-  private openBoletaPreviewForOrderIds(orderIds: number[]): void {
-    if (!orderIds.length) {
+  closeMockBoletaModal(): void {
+    this.showMockBoletaModal = false
+    this.mockBoletaError = ""
+    this.saleSearchResults = []
+    this.selectedSaleSearchResult = null
+    this.saleSearchTerm = ""
+    this.isViewingLinkedSaleDocument = false
+  }
+
+  searchSalesToLink(): void {
+    if (this.isViewingLinkedSaleDocument) {
       return
     }
 
-    const requests = orderIds.map((orderId) =>
-      this.loadServiceOrderDocumentContext({ id: orderId } as ServiceOrder),
-    )
+    const orderIds = Array.from(this.selectedMockBoletaOrderIds)
+    if (!orderIds.length) {
+      this.mockBoletaError = "Selecciona al menos una orden."
+      return
+    }
 
-    this.showMockBoletaModal = true
-    this.mockBoletaPreview = null
+    const firstOrder = this.serviceOrders.find((order) => Number(order.id) === Number(orderIds[0]))
+    if (!firstOrder?.clientId) {
+      this.mockBoletaError = "Las órdenes seleccionadas deben tener cliente asociado."
+      return
+    }
+
+    this.isSearchingSales = true
     this.mockBoletaError = ""
-    this.isLoadingMockBoletaPreview = true
+    const searchParams: Record<string, string | number> = {
+      companyId: this.companyId,
+      customerId: Number(firstOrder.clientId),
+      page: 1,
+      limit: 20,
+    }
 
-    forkJoin(requests)
-      .pipe(finalize(() => (this.isLoadingMockBoletaPreview = false)))
+    const normalizedSearch = this.saleSearchTerm.trim()
+    if (normalizedSearch) {
+      searchParams["search"] = normalizedSearch
+    }
+    if (this.saleSearchDocumentType !== "all") {
+      searchParams["documentType"] = this.saleSearchDocumentType
+    }
+
+    this.serviceOrderBillingLinks
+      .searchSales(searchParams)
+      .pipe(finalize(() => (this.isSearchingSales = false)))
       .subscribe({
-        next: (entries) => {
-          const distinctClientKeys = new Set(
-            entries.map(({ fullOrder }) =>
-              String(fullOrder.clientId ?? fullOrder.clientSnapshotDocumentNumber ?? fullOrder.clientSnapshotName ?? ""),
-            ),
-          )
-
-          if (distinctClientKeys.size > 1) {
-            this.mockBoletaError = "Solo puedes consolidar órdenes del mismo cliente."
-            return
-          }
-
-          const lines: MockConsolidatedBoletaLine[] = []
-          const diagnosisOnlyOrderCodes: string[] = []
-
-          entries.forEach(({ fullOrder, quote }) => {
-            if (!quote) {
-              diagnosisOnlyOrderCodes.push(fullOrder.code)
-              return
-            }
-
-            if (fullOrder.serviceType === ServiceType.DIAGNOSIS && !this.canUseAgreementForBoleta(fullOrder, quote)) {
-              diagnosisOnlyOrderCodes.push(fullOrder.code)
-              return
-            }
-
-            quote.productItems.forEach((product) => {
-              lines.push({
-                type: "product",
-                description: product.productNameSnapshot || "Producto",
-                quantity: Number(product.quantity || 0),
-                unitPrice: Number(product.unitPrice || 0),
-                total: Number(product.lineTotal || 0),
-                sourceOrderCode: fullOrder.code,
-              })
-            })
-
-            quote.serviceItems.forEach((service) => {
-              lines.push({
-                type: "service",
-                description: service.serviceNameSnapshot || "Servicio",
-                quantity: 1,
-                unitPrice: Number(service.unitPrice || 0),
-                total: Number(service.lineTotal || 0),
-                sourceOrderCode: fullOrder.code,
-              })
-            })
-          })
-
-          const baseOrder = entries[0]?.fullOrder
-          const total = Number(lines.reduce((acc, line) => acc + line.total, 0).toFixed(2))
-          const tax = Number(((total * 18) / 118).toFixed(2))
-          const subtotal = Number((total - tax).toFixed(2))
-
-          this.mockBoletaPreview = {
-            clientName: baseOrder ? this.getServiceOrderContactName(baseOrder) : "Sin cliente",
-            clientDocument: baseOrder
-              ? [baseOrder.clientSnapshotDocumentTypeName, baseOrder.clientSnapshotDocumentNumber].filter(Boolean).join(": ")
-              : "-",
-            orderCodes: entries.map(({ fullOrder }) => fullOrder.code),
-            diagnosisOnlyOrderCodes,
-            lines,
-            subtotal,
-            tax,
-            total,
-          }
+        next: ({ data }) => {
+          this.saleSearchResults = (data ?? []).map((sale) => ({
+            sale,
+            totalProducts: (sale.items ?? []).filter((item) => item.itemType !== 'SERVICE').length,
+            totalServices: (sale.items ?? []).filter((item) => item.itemType === 'SERVICE').length,
+          }))
+          this.selectedSaleSearchResult = null
         },
         error: () => {
-          this.mockBoletaError = "No pudimos construir la previsualización de boleta."
+          this.saleSearchResults = []
+          this.mockBoletaError = "No pudimos buscar documentos emitidos."
         },
       })
   }
 
-  closeMockBoletaModal(): void {
-    this.showMockBoletaModal = false
-    this.mockBoletaPreview = null
-    this.mockBoletaError = ""
-    this.isLoadingMockBoletaPreview = false
+  selectSaleSearchResult(result: SaleLinkSearchResult): void {
+    this.selectedSaleSearchResult = result
+  }
+
+  get selectedMockBoletaOrders(): ServiceOrder[] {
+    const ids = this.selectedMockBoletaOrderIds
+    return this.serviceOrders.filter((order) => ids.has(Number(order.id)))
+  }
+
+  getSelectedMockBoletaOrderCodesLabel(): string {
+    return this.selectedMockBoletaOrders.map((order) => order.code).join(", ") || "Sin selección"
+  }
+
+  getSelectedMockBoletaClientDocument(): string {
+    const firstOrder = this.selectedMockBoletaOrders[0]
+    if (!firstOrder) {
+      return "-"
+    }
+
+    return [firstOrder.clientSnapshotDocumentTypeName, firstOrder.clientSnapshotDocumentNumber]
+      .filter((value) => Boolean(value))
+      .join(": ")
+  }
+
+  openLinkSaleModalForOrder(serviceOrder: ServiceOrder, event?: Event): void {
+    event?.stopPropagation()
+    this.selectedMockBoletaOrderIds = new Set([Number(serviceOrder.id)])
+    this.openMockBoletaModal()
+    this.closeActionMenu()
+  }
+
+  confirmLinkSaleToOrders(): void {
+    if (!this.selectedSaleSearchResult) {
+      this.mockBoletaError = "Selecciona un documento para ligar."
+      return
+    }
+
+    const orderIds = Array.from(this.selectedMockBoletaOrderIds)
+    if (!orderIds.length) {
+      this.mockBoletaError = "Selecciona al menos una orden."
+      return
+    }
+
+    this.isLinkingSale = true
+    this.serviceOrderBillingLinks
+      .linkSaleToOrders(Number(this.selectedSaleSearchResult.sale.id), orderIds)
+      .pipe(finalize(() => (this.isLinkingSale = false)))
+      .subscribe({
+        next: () => {
+          this.showMessage("success", "fas fa-check-circle", "Documento ligado correctamente.")
+          this.selectedMockBoletaOrderIds.clear()
+          this.closeMockBoletaModal()
+          this.loadServiceOrders()
+        },
+        error: (error) => {
+          this.mockBoletaError = error?.error?.message || "No pudimos ligar el documento."
+        },
+      })
+  }
+
+  private generateLinkedSalePdf(sale: Sale): void {
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const companyName = "MACROCHIPS S.A.C"
+    const companyAddress = "Calle Alfonso Garden #493, Trujillo, La Libertad"
+    const companyPhone = "924215320"
+    const companyEmail = "soporte@grupoSTS.com.pe"
+    const companyRuc = "10123456789"
+    const isFactura = sale.documentType === "FACTURA"
+    const documentTitle = isFactura ? "FACTURA ELECTRONICA" : "BOLETA ELECTRONICA"
+
+    let y = 13
+
+    doc.setFontSize(14)
+    doc.setFont("helvetica", "bold")
+    doc.text(companyName, 15, y)
+
+    doc.setFontSize(9)
+    y += 5
+    doc.setFont("helvetica", "bold")
+    doc.text("Direccion:", 15, y)
+    doc.setFont("helvetica", "normal")
+    doc.text(companyAddress, 31, y)
+    y += 4
+    doc.setFont("helvetica", "bold")
+    doc.text("Telefono:", 15, y)
+    doc.setFont("helvetica", "normal")
+    doc.text(companyPhone, 31, y)
+    y += 4
+    doc.setFont("helvetica", "bold")
+    doc.text("Correo:", 15, y)
+    doc.setFont("helvetica", "normal")
+    doc.text(companyEmail, 29, y)
+
+    const rightBoxX = 130
+    const rightBoxY = 10
+    const rightBoxW = 65
+    const rightBoxH = 28
+
+    doc.setDrawColor(0, 0, 0)
+    doc.setFillColor(255, 255, 255)
+    doc.rect(rightBoxX, rightBoxY, rightBoxW, rightBoxH, "FD")
+
+    let boxY = rightBoxY + 7
+    doc.setFont("helvetica", "bold")
+    doc.text("RUC:", rightBoxX + 18, boxY)
+    doc.text(companyRuc, rightBoxX + 28, boxY)
+    boxY += 7
+    doc.setFontSize(10)
+    doc.text(documentTitle, rightBoxX + 11, boxY)
+    boxY += 6
+    doc.setFontSize(11)
+    doc.text(`${sale.series}-${sale.number}`, rightBoxX + 20, boxY)
+
+    y = 50
+
+    const clientDoc = sale.customer?.documentNumber || "-"
+    const clientName = sale.customer?.name || "Cliente general"
+    const paymentMethod = sale.payments?.length ? sale.payments[0].method : "-"
+    const issueDate = sale.issueDate ? new Date(sale.issueDate).toLocaleDateString("es-PE") : "-"
+
+    autoTable(doc, {
+      startY: y,
+      head: [[{ content: "Informacion general", colSpan: 4, styles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontStyle: "bold" } }]],
+      body: [
+        [
+          { content: "Cliente:", styles: { fontStyle: "bold", fillColor: [226, 232, 240] } },
+          { content: clientName },
+          { content: "Documento:", styles: { fontStyle: "bold", fillColor: [226, 232, 240] } },
+          { content: clientDoc },
+        ],
+        [
+          { content: "Fecha:", styles: { fontStyle: "bold", fillColor: [226, 232, 240] } },
+          { content: issueDate },
+          { content: "Pago:", styles: { fontStyle: "bold", fillColor: [226, 232, 240] } },
+          { content: paymentMethod },
+        ],
+      ],
+      theme: "grid",
+      styles: { fontSize: 9, cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0] },
+      margin: { left: 15, right: 15 },
+    })
+
+    y = (doc as any).lastAutoTable.finalY + 8
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Tipo", "Descripcion", "Cant.", "P. unitario", "Total"]],
+      body: (sale.items ?? []).map((item) => [
+        item.itemType === "SERVICE" ? "Servicio" : "Producto",
+        item.serviceNameSnapshot || item.descriptionSnapshot || item.product?.name || item.service?.name || "Item",
+        Number(item.quantity || 0).toFixed(2),
+        `S/ ${Number(item.finalUnitPrice || 0).toFixed(2)}`,
+        `S/ ${Number(item.lineTotal || 0).toFixed(2)}`,
+      ]),
+      theme: "grid",
+      headStyles: { fillColor: [51, 102, 153] },
+      styles: { fontSize: 8, cellPadding: 2 },
+      margin: { left: 15, right: 15 },
+    })
+
+    y = (doc as any).lastAutoTable.finalY + 6
+    doc.setFontSize(10)
+    doc.setFont("helvetica", "bold")
+    doc.text(`Total: S/ ${Number(sale.total || 0).toFixed(2)}`, 195, y, { align: "right" })
+
+    const fileName = `${sale.series}-${sale.number}.pdf`
+    doc.save(fileName)
+    this.showMessage("success", "fas fa-check-circle", `Documento descargado: ${fileName}`)
   }
 
   markServiceOrderAsPaid(serviceOrder: ServiceOrder, event?: Event): void {
@@ -892,7 +1082,15 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   canDeliverItem(serviceOrder: ServiceOrder): boolean {
-    return serviceOrder.status === ServiceOrderStatus.READY_FOR_PICKUP
+    if (serviceOrder.status !== ServiceOrderStatus.READY_FOR_PICKUP) {
+      return false
+    }
+
+    if (!this.canCreateBoletaFromOrder(serviceOrder)) {
+      return true
+    }
+
+    return this.hasLinkedSaleDocument(serviceOrder)
   }
 
   canReassignTechnician(serviceOrder?: ServiceOrder | null): boolean {
@@ -2541,7 +2739,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return quotes[0] ?? null
   }
 
-  private canCreateBoletaFromOrder(serviceOrder: ServiceOrder): boolean {
+  canCreateBoletaFromOrder(serviceOrder: ServiceOrder): boolean {
     if (![ServiceType.STANDARD_SERVICE, ServiceType.DIAGNOSIS].includes(serviceOrder.serviceType)) {
       return false
     }
@@ -2576,7 +2774,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   canMarkServiceOrderAsPaid(serviceOrder: ServiceOrder): boolean {
-    return !serviceOrder.isPaid && this.canCreateBoletaFromOrder(serviceOrder)
+    return !serviceOrder.isPaid && this.canCreateBoletaFromOrder(serviceOrder) && !this.hasLinkedSaleDocument(serviceOrder)
   }
 
   private getServiceOrderBoletaClientKey(serviceOrder: ServiceOrder): string {
