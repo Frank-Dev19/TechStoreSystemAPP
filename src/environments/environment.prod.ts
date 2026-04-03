@@ -1,4 +1,4 @@
-﻿export const environment = {
+export const environment = {
   production: true,
 };
 
@@ -34,12 +34,10 @@ export const config = {
 
   pricing: {
     base: '/pricing',
-    priceLists: '/pricing/price-lists',
-    productPrices: '/pricing/product-prices',
-    discountRules: '/pricing/discount-rules',
-    combos: '/pricing/combos',
+    config: '/pricing/config',
+    taxes: '/pricing/taxes',
     queryProduct: '/pricing/query/product',
-    simulation: '/pricing/simulation',
+    queryBulk: '/pricing/query/bulk',
   },
 
   sales: {

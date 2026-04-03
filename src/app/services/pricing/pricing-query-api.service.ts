@@ -4,30 +4,33 @@ import { Observable } from 'rxjs';
 import { BaseService } from '../base.service';
 import { config } from '../../../environments/environment';
 import {
-    BestPriceResponse,
-    ProductPriceResult,
+    PriceCalculation,
+    DiscountValidation,
 } from '../../models/pricing/pricing.models';
 
 @Injectable({ providedIn: 'root' })
 export class PricingQueryApiService {
     private readonly baseUrl = config.pricing.queryProduct;
 
-    constructor(private base: BaseService) { }
+    constructor(private base: BaseService) {}
 
-    // GET /pricing/query/product/:productId?qty=...
-    getProductPrice(productId: number, qty: number, priceListCode?: string, date?: string): Observable<ProductPriceResult> {
-        const params: string[] = [`qty=${qty}`];
-        if (priceListCode) params.push(`price_list_code=${encodeURIComponent(priceListCode)}`);
-        if (date) params.push(`date=${encodeURIComponent(date)}`);
-        const qs = params.length ? `?${params.join('&')}` : '';
-        return this.base.get<ProductPriceResult>(`${this.baseUrl}/${productId}${qs}`);
+    // GET /pricing/query/product/:productId
+    calculatePrice(productId: number): Observable<PriceCalculation> {
+        return this.base.get<PriceCalculation>(`${this.baseUrl}/${productId}`);
     }
 
-    // GET /pricing/query/product/:productId/best?qty=...
-    getBestPrice(productId: number, qty: number, date?: string): Observable<BestPriceResponse> {
-        const params: string[] = [`qty=${qty}`];
-        if (date) params.push(`date=${encodeURIComponent(date)}`);
-        const qs = params.length ? `?${params.join('&')}` : '';
-        return this.base.get<BestPriceResponse>(`${this.baseUrl}/${productId}/best${qs}`);
+    // GET /pricing/query/product/:productId/validate-discount?pct=3.5
+    validateDiscount(productId: number, pct: number): Observable<DiscountValidation> {
+        return this.base.get<DiscountValidation>(
+            `${this.baseUrl}/${productId}/validate-discount?pct=${pct}`
+        );
+    }
+
+    // GET /pricing/query/bulk?ids=1,2,3
+    calculateBulk(productIds: number[]): Observable<PriceCalculation[]> {
+        const ids = productIds.join(',');
+        return this.base.get<PriceCalculation[]>(
+            `${config.pricing.queryBulk}?ids=${ids}`
+        );
     }
 }

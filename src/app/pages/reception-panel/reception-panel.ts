@@ -1,4 +1,4 @@
-﻿import { Component, HostListener, OnDestroy, OnInit } from "@angular/core"
+import { Component, HostListener, OnDestroy, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { Subscription } from "rxjs"
 import { catchError, finalize, map, switchMap, tap } from "rxjs/operators"
@@ -1680,14 +1680,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     if (!item.productId) {
       return
     }
-    const qty = Math.max(1, Number(item.quantity) || 1)
     this.productPriceLoading[item.id] = true
     this.pricingQuery
-      .getProductPrice(item.productId, qty)
+      .calculatePrice(item.productId)
       .pipe(finalize(() => (this.productPriceLoading[item.id] = false)))
       .subscribe({
         next: (res) => {
-          const unitPrice = res.finalUnitPrice ?? res.baseUnitPrice ?? 0
+          const unitPrice = res?.salePrice ?? 0
           item.unitPrice = unitPrice
         },
         error: () => {
@@ -2370,14 +2369,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     if (!item.productId) {
       return
     }
-    const qty = Math.max(1, Number(item.quantity) || 1)
     this.getCreateOrderItemPriceLoadingMap(index)[item.id] = true
     this.pricingQuery
-      .getProductPrice(item.productId, qty)
+      .calculatePrice(item.productId)
       .pipe(finalize(() => (this.getCreateOrderItemPriceLoadingMap(index)[item.id] = false)))
       .subscribe({
         next: (res) => {
-          const unitPrice = res.finalUnitPrice ?? res.baseUnitPrice ?? 0
+          const unitPrice = res?.salePrice ?? 0
           item.unitPrice = unitPrice
         },
         error: () => {

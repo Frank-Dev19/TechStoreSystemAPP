@@ -1,4 +1,4 @@
-﻿import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
+import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
 import { SalesApiService } from '../../services/sales/sales-api.service';
 import { DocumentSeriesApiService } from '../../services/sales/document-series-api.service';
 import { ProductsApiService } from '../../services/products-api.service';
@@ -13,7 +13,7 @@ import { DocumentTypesApiService } from '../../services/document-types-api.servi
 import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
 import { PricingQueryApiService } from '../../services/pricing/pricing-query-api.service';
 import { CurrentUserService } from '../../services/current-user.service';
-import { BestPriceResponse } from '../../models/pricing/pricing.models';
+import { PriceCalculation } from '../../models/pricing/pricing.models';
 import { DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../models/sales/document-series.model';
 import { DocumentType } from '../../models/sales/enums';
 import { ClientSaveRequest } from '../../models/clients-request';
@@ -341,7 +341,8 @@ export class Ventas implements OnInit {
       options: any[]; // Lista de precios disponibles
       applied: any;    // Precio actualmente aplicado
       discounts: any[]; // Descuentos activos
-      stockByLot?: Array<{  // ANADE ESTO
+      priceCalc?: any;  // Resultado del motor de porcentajes
+      stockByLot?: Array<{
         lotId: number;
         lotCode: string;
         quantity: number;
@@ -583,19 +584,26 @@ export class Ventas implements OnInit {
         stockMap[stock.product_id] += stock.qty_on_hand;
       });
 
-      // Para cada producto, obtener su pricing completo (qty=1)
+      // Para cada producto, obtener su precio calculado con el nuevo motor
       for (const product of products) {
         try {
-          const bestPriceInfo = await lastValueFrom(
-            this.pricingQueryApi.getBestPrice(product.id, 20)
+          const priceCalc = await lastValueFrom(
+            this.pricingQueryApi.calculatePrice(product.id)
           );
 
-          if (bestPriceInfo) {
+          if (priceCalc) {
             this.productPriceStockMap[product.id] = {
               stock: stockMap[product.id] || 0,
-              options: bestPriceInfo.options, // POR_MENOR, POR_MAYOR con sus precios
-              applied: bestPriceInfo.applied, // Precio seleccionado por defecto
-              discounts: bestPriceInfo.applied.autoAppliedDiscounts || []
+              options: [],
+              applied: {
+                priceListCode: '',
+                currency: 'PEN',
+                baseUnitPrice: priceCalc.salePrice,
+                finalUnitPrice: priceCalc.salePrice,
+                autoAppliedDiscounts: [],
+              },
+              discounts: [],
+              priceCalc, // Almacenar resultado completo
             };
           }
         } catch (err) {
@@ -989,9 +997,9 @@ export class Ventas implements OnInit {
       this.quantityInput?.nativeElement?.focus();
     }, 100);
 
-    this.pricingQueryApi.getBestPrice(p.id, quantity)
-      .subscribe((bestPrice: BestPriceResponse) => {
-        if (!bestPrice?.applied) return;
+    this.pricingQueryApi.calculatePrice(p.id)
+      .subscribe((priceCalc: PriceCalculation) => {
+        if (!priceCalc) return;
 
         this.currentSaleItem = {
           ...this.currentSaleItem,
@@ -1001,9 +1009,11 @@ export class Ventas implements OnInit {
           productSku: p.sku,
           quantity,
           stock: this.productPriceStockMap[p.id]?.stock || 0,
-          unitPrice: bestPrice.applied.finalUnitPrice,
-          appliedPriceListCode: bestPrice.applied.priceListCode,
-          appliedDiscounts: bestPrice.applied.autoAppliedDiscounts
+          unitPrice: priceCalc.salePrice,
+          appliedPriceListCode: '',
+          appliedDiscounts: [],
+          maxDiscountPct: priceCalc.maxDiscountPct,
+          cpp: priceCalc.cpp,
         } as any;
       }, () => {
         this.showToast('warning', 'No se pudo calcular el mejor precio. Se uso el precio base del producto.');

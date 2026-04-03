@@ -1,4 +1,4 @@
-﻿import { Component, OnInit } from "@angular/core"
+import { Component, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { forkJoin, of } from "rxjs"
 import { finalize, map, switchMap } from "rxjs/operators"
@@ -530,11 +530,11 @@ export class TechnicianPanel implements OnInit {
     if (!item.productId) return
     this.productPriceLoading[item.id] = true
     this.pricingQuery
-      .getProductPrice(item.productId, Math.max(1, Number(item.quantity) || 1))
+      .calculatePrice(item.productId)
       .pipe(finalize(() => (this.productPriceLoading[item.id] = false)))
       .subscribe({
         next: (res) => {
-          item.unitPrice = res.finalUnitPrice ?? res.baseUnitPrice ?? 0
+          item.unitPrice = res?.salePrice ?? 0
         },
         error: () => {
           this.showMessage("warning", "fas fa-info-circle", "No pudimos obtener el precio del producto.")
