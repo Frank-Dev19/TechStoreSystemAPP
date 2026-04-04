@@ -14,6 +14,9 @@ import { PricingConfigApiService } from '../../services/pricing/pricing-config-a
 import { TaxConfigApiService } from '../../services/pricing/tax-config-api.service';
 import { PricingQueryApiService } from '../../services/pricing/pricing-query-api.service';
 import { PricingProductsApiService } from '../../services/pricing/pricing-products-api.service';
+import { SalesApiService, IncomeTaxReport } from '../../services/sales/sales-api.service';
+import { CurrentUserService } from '../../services/current-user.service';
+import { config } from '../../../environments/environment';
 
 @Component({
   selector: 'app-pricing',
@@ -71,6 +74,13 @@ export class Pricing implements OnInit {
   simulatorResult: PriceCalculation | null = null;
 
   // ============================================
+  // REPORTE RENTA
+  // ============================================
+  taxReportYear = new Date().getFullYear();
+  incomeTaxReport: IncomeTaxReport | null = null;
+  isLoadingTaxReport = false;
+
+  // ============================================
   // TOASTS
   // ============================================
   toasts: Toast[] = [];
@@ -84,6 +94,8 @@ export class Pricing implements OnInit {
     private taxApi: TaxConfigApiService,
     private queryApi: PricingQueryApiService,
     private productsApi: PricingProductsApiService,
+    private salesApi: SalesApiService,
+    private currentUser: CurrentUserService,
   ) {}
 
   // ============================================
@@ -93,6 +105,7 @@ export class Pricing implements OnInit {
     this.loadConfigs();
     this.loadTaxes();
     this.loadProducts();
+    this.loadIncomeTaxReport();
   }
 
   // ============================================
@@ -134,6 +147,27 @@ export class Pricing implements OnInit {
       },
       error: () => this.showToast('error', 'Error al cargar productos'),
     });
+  }
+
+  loadIncomeTaxReport(): void {
+    const companyId = Number(config.defaultCompanyId ?? 1) || 1;
+
+    this.isLoadingTaxReport = true;
+    this.salesApi.getIncomeTaxReport(companyId, this.taxReportYear).subscribe({
+      next: (data) => {
+        this.incomeTaxReport = data;
+        this.isLoadingTaxReport = false;
+      },
+      error: () => {
+        this.showToast('error', 'Error al cargar el reporte de rentas');
+        this.isLoadingTaxReport = false;
+      }
+    });
+  }
+
+  changeTaxReportYear(change: number): void {
+    this.taxReportYear += change;
+    this.loadIncomeTaxReport();
   }
 
   // ============================================

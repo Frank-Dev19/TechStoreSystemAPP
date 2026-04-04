@@ -27,6 +27,10 @@
             <i class="fas fa-calculator"></i>
             Simulador
         </button>
+        <button class="tab-button" [class.active]="activeTab === 'rentaTab'" (click)="selectTab('rentaTab')">
+            <i class="fas fa-chart-line"></i>
+            Reporte Impuesto a la Renta
+        </button>
     </div>
 
     <!-- ============================================ -->
@@ -384,6 +388,88 @@
             </div>
         </div>
     </div>
+    <!-- ============================================ -->
+    <!-- TAB 5: REPORTE IMPUESTO A LA RENTA           -->
+    <!-- ============================================ -->
+    <div *ngIf="activeTab === 'rentaTab'" class="tab-content">
+        <div class="filters-card">
+            <div class="filters-header">
+                <h3><i class="fas fa-chart-line"></i> Reporte Anual de Impuesto a la Renta</h3>
+                <div class="year-selector">
+                    <button class="btn-icon" (click)="changeTaxReportYear(-1)"><i class="fas fa-chevron-left"></i></button>
+                    <span class="year-display">{{ taxReportYear }}</span>
+                    <button class="btn-icon" (click)="changeTaxReportYear(1)"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <div *ngIf="isLoadingTaxReport" style="text-align: center; padding: 2rem;">
+                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                <p>Cargando reporte...</p>
+            </div>
+
+            <div *ngIf="!isLoadingTaxReport && incomeTaxReport" class="report-container">
+                <!-- KPIs de Reporte -->
+                <div class="config-kpis">
+                    <div class="kpi-card">
+                        <div class="kpi-icon"><i class="fas fa-money-bill-wave"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-value">{{ incomeTaxReport.yearlyBaseTotal | currency:'PEN':'symbol' }}</span>
+                            <span class="kpi-label">Ingresos Anuales (Base)</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon"><i class="fas fa-percentage"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-value">{{ incomeTaxReport.rentaRatePct }}%</span>
+                            <span class="kpi-label">Tasa Aplicada</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card highlight-card">
+                        <div class="kpi-icon"><i class="fas fa-hand-holding-usd"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-value">{{ incomeTaxReport.yearlyTaxDue | currency:'PEN':'symbol' }}</span>
+                            <span class="kpi-label">Total Renta Estimada</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabla de Resumen Mensual -->
+                <div class="table-section">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Mes</th>
+                                    <th>Ventas Confirmadas (S/ IGV)</th>
+                                    <th>Impuesto Estimado ({{ incomeTaxReport.rentaRatePct }}%)</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let month of incomeTaxReport.breakdown">
+                                    <td>{{ month.month | number:'2.0-0' }}-{{ taxReportYear }}</td>
+                                    <td>{{ month.baseTotal | currency:'PEN':'symbol' }}</td>
+                                    <td class="tax-cell">{{ month.taxDue | currency:'PEN':'symbol' }}</td>
+                                    <td>
+                                        <span class="status-badge" [class.active]="month.baseTotal > 0">
+                                            {{ month.baseTotal > 0 ? 'Con Ingresos' : 'Sin Datos' }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <div *ngIf="!isLoadingTaxReport && !incomeTaxReport" class="empty-state">
+                <i class="fas fa-folder-open empty-icon"></i>
+                <h3>No hay datos disponibles</h3>
+                <p>No se encontró información de ventas para el año seleccionado.</p>
+            </div>
+        </div>
+    </div>
+
 
     <!-- ============================================ -->
     <!-- MODAL: CONFIGURACIÓN DE MÁRGENES             -->

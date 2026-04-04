@@ -15,6 +15,18 @@ import { SimulateSaleResponse } from '../../models/sales/simulate.response';
 
 import { toHttpParams } from './http-params.util';
 
+export interface IncomeTaxReport {
+    year: number;
+    rentaRatePct: number;
+    yearlyBaseTotal: number;
+    yearlyTaxDue: number;
+    breakdown: Array<{
+        month: number;
+        baseTotal: number;
+        taxDue: number;
+    }>;
+}
+
 export interface PaginatedResponse<T> {
     data: T[];
     total: number;
@@ -90,6 +102,13 @@ export class SalesApiService {
     byProduct(companyId: number, productId?: number, dateFrom?: string, dateTo?: string): Observable<SalesByProductRow[]> {
         return this.base.get<SalesByProductRow[]>(this.byProductUrl, {
             params: toHttpParams({ companyId, productId, dateFrom, dateTo }),
+        });
+    }
+
+    getIncomeTaxReport(companyId: number, year: number): Observable<IncomeTaxReport> {
+        // En tu environment 'config.sales.base' es '/sales'
+        return this.base.get<IncomeTaxReport>(`${this.baseUrl}/reports/income-tax`, {
+            params: toHttpParams({ companyId, year }),
         });
     }
 

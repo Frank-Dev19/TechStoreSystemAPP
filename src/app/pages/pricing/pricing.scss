@@ -4180,4 +4180,38 @@ body {
 .toast-success { background: rgba(56, 161, 105, 0.95); color: white; border-left: 4px solid var(--success); }
 .toast-error { background: rgba(229, 62, 62, 0.95); color: white; border-left: 4px solid var(--danger); }
 .toast-warning { background: rgba(221, 107, 32, 0.95); color: white; border-left: 4px solid var(--warning); }
-.toast-info { background: rgba(49, 130, 206, 0.95); color: white; border-left: 4px solid var(--info); }
+.toast-info { background: rgba(49, 130, 206, 0.95); color: white; border-left: 4px solid var(--info); }
+
+// ESTILO PARA LA SELECCIÓN DE AÑO
+.year-selector {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.25rem;
+    
+    .btn-icon {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 8px;
+        transition: all 0.2s;
+        
+        &:hover {
+            color: var(--primary);
+            background: rgba(44, 82, 130, 0.1);
+        }
+    }
+    
+    .year-display {
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: var(--text);
+        padding: 0 1rem;
+        min-width: 60px;
+        text-align: center;
+    }
+}
