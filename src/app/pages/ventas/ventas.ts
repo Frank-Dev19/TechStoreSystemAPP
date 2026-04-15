@@ -387,7 +387,7 @@ export class Ventas implements OnInit {
   saleFormData: any = null
   creditNoteFormData: Partial<CreditNote> | null = null
   dispatchGuideFormData: Partial<ShippingGuide> | null = null
-  currentSaleItem: Partial<SaleLine> = {}
+  currentSaleItem: any = {}
   customerSearchText = ''
   foundCustomer: ClientResponse | null = null
   selectedPaymentMethods: PaymentType[] = []
@@ -1010,6 +1010,8 @@ export class Ventas implements OnInit {
           quantity,
           stock: this.productPriceStockMap[p.id]?.stock || 0,
           unitPrice: priceCalc.salePrice,
+          originalUnitPrice: priceCalc.salePrice,
+          discountPct: 0,
           appliedPriceListCode: '',
           appliedDiscounts: [],
           maxDiscountPct: priceCalc.maxDiscountPct,
@@ -1017,7 +1019,31 @@ export class Ventas implements OnInit {
         } as any;
       }, () => {
         this.showToast('warning', 'No se pudo calcular el mejor precio. Se uso el precio base del producto.');
+        this.currentSaleItem.originalUnitPrice = this.currentSaleItem.unitPrice;
+        this.currentSaleItem.discountPct = 0;
+        this.currentSaleItem.maxDiscountPct = 0;
       });
+  }
+
+  isSaleItemDiscountOverLimit(): boolean {
+    return (this.currentSaleItem.discountPct || 0) > (this.currentSaleItem.maxDiscountPct || 0);
+  }
+
+  updateSaleItemDiscount(delta: number): void {
+    if (!this.currentSaleItem.productId || this.currentSaleItem.itemType === 'SERVICE') return;
+    
+    let currentPct = this.currentSaleItem.discountPct || 0;
+    currentPct += delta;
+    
+    if (currentPct < 0) currentPct = 0;
+    
+    this.currentSaleItem.discountPct = currentPct;
+    
+    // Calculate new unit price
+    if (!this.isSaleItemDiscountOverLimit()) {
+      const basePrice = this.currentSaleItem.originalUnitPrice || 0;
+      this.currentSaleItem.unitPrice = Number((basePrice * (1 - currentPct / 100)).toFixed(2));
+    }
   }
 
   onServiceSearch(): void {

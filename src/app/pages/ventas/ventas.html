@@ -1,4 +1,4 @@
-﻿<div class="ventas-container">
+<div class="ventas-container">
     <!-- HEADER -->
     <div class="ventas-header">
         <div class="header-content">
@@ -563,6 +563,25 @@
                                 class="form-control" readonly style="background-color: #f8f9fa;">
                         </div>
                     </div>
+
+                    <!-- DESCUENTO DEL VENDEDOR (Dinamico) -->
+                    <div class="discount-control-container" *ngIf="currentSaleItem.productId && currentSaleItem.itemType !== 'SERVICE' && currentSaleItem.maxDiscountPct > 0" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem; background: var(--bg); padding: 0.5rem; border-radius: var(--radius); border: 1px solid var(--border);">
+                        <label class="discount-label" style="font-weight: 600; color: var(--text);"><i class="fas fa-tag"></i> Descuento:</label>
+                        <div class="discount-control" style="display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;">
+                            <button class="btn-discount" (click)="updateSaleItemDiscount(-0.5)" [disabled]="(currentSaleItem.discountPct || 0) <= 0" style="padding: 0.25rem 0.6rem; border: none; background: transparent; cursor: pointer; color: var(--text-muted); transition: all 0.2s;">
+                                <i class="fas fa-minus"></i>
+                            </button>
+                            <span class="discount-value" [class.over-limit]="isSaleItemDiscountOverLimit()" style="font-weight: 700; color: var(--primary); padding: 0 0.5rem; min-width: 45px; text-align: center;">
+                                {{ currentSaleItem.discountPct || 0 | number:'1.1-1' }}%
+                            </span>
+                            <button class="btn-discount" (click)="updateSaleItemDiscount(0.5)" [disabled]="(currentSaleItem.discountPct || 0) >= (currentSaleItem.maxDiscountPct || 0)" style="padding: 0.25rem 0.6rem; border: none; background: transparent; cursor: pointer; color: var(--text-muted); transition: all 0.2s;">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <span class="discount-limit-hint" *ngIf="!isSaleItemDiscountOverLimit()" style="font-size: 0.85rem; color: var(--text-muted);">(Max. {{ currentSaleItem.maxDiscountPct }}%)</span>
+                        <span class="discount-warning-hint" *ngIf="isSaleItemDiscountOverLimit()" style="font-size: 0.85rem; color: var(--danger);"><i class="fas fa-exclamation-triangle"></i> Límte excedido</span>
+                    </div>
+
                     <button class="btn-primary btn-block" (click)="onAddSaleItem()">
                         <i class="fas fa-plus"></i>
                         Agregar item
