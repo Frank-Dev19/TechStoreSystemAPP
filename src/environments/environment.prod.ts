@@ -3,12 +3,11 @@ export const environment = {
 };
 
 export const config = {
-  // IMPORTANTE:
-  // - En producciÃ³n (Docker + nginx) el navegador debe llamar a nginx (mismo host)
-  // - nginx reenvÃ­a a la API con /api -> http://api:3000
+  // En produccion, el navegador llama a nginx en el mismo host.
+  // nginx reenvia /api hacia el contenedor api.
   endpointServices: '/api',
 
-  authMethod: '/auth/', // queda: /api/auth/...
+  authMethod: '/auth/',
   defaultCompanyId: 1,
 
   inventory: {
@@ -56,16 +55,13 @@ export const config = {
     dailyReport: '/cash-flow/reports/daily',
   },
 
-  serviceCatalog: {
-    categories: '/service-categories',
-    services: '/services',
-  },
   serviceOrders: {
     serviceOrders: '/service-orders',
     serviceOrderItems: '/service-order-items',
     serviceOrderAgreements: '/service-order-agreements',
     serviceOrderDiagnoses: '/service-order-diagnoses',
-    serviceOrderBillingLinks: '/service-orders/billing-links',
+    serviceOrderBillingLinks: '/service-orders/backoffice/billing-links',
+    serviceOrderInboxThreads: '/service-orders/inbox/threads',
+    serviceOrderInboxAttachments: '/service-orders/inbox/attachments',
   },
 };
-

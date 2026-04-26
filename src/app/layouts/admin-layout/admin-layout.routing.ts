@@ -12,7 +12,6 @@ import { Inventory } from '../../pages/inventory/inventory';
 import { Auditoria } from '../../pages/auditoria/auditoria';
 import { Ventas } from '../../pages/ventas/ventas';
 import { Pricing } from '../../pages/pricing/pricing';
-import { ServiceCatalog } from '../../pages/service-catalog/service-catalog';
 import { ReceptionPanel } from '../../pages/reception-panel/reception-panel';
 import { TechnicianPanel } from '../../pages/technician-panel/technician-panel';
 import { SupervisorPanel } from '../../pages/supervisor-panel/supervisor-panel';
@@ -32,7 +31,6 @@ export const AdminLayoutRoutes: Routes = [
     { path: 'auditoria', component: Auditoria },
     { path: 'ventas', component: Ventas },
     { path: 'pricing', component: Pricing },
-    { path: 'catalogo-servicios', component: ServiceCatalog },
     {
         path: 'reception-panel',
         component: ReceptionPanel,

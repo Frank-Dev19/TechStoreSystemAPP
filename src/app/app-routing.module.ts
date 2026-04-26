@@ -7,17 +7,17 @@ import { ForgotPassword } from './pages/forgot-password/forgot-password';
 import { ResetPassword } from './pages/reset-password/reset-password';
 const routes: Routes = [
 
-  // Ruta para el login, se debe cargar primero
-  { path: '', redirectTo: '/login', pathMatch: 'full' },  // Redirige a /login si la ruta está vacía
-  { path: 'login', component: Login }, // Ruta para el login
+  // Ruta inicial de autenticación
+  { path: '', redirectTo: '/login', pathMatch: 'full' },
+  { path: 'login', component: Login },
 
-  //Rutas publicas pe mi king
+  // Rutas públicas
 
   { path: 'forgot-password', component: ForgotPassword },
   { path: 'reset-password', component: ResetPassword },
 
 
-  //Areas Protegidaaaaaaas
+  // Áreas protegidas
   {
     path: "",
     component: AdminLayout,
@@ -29,7 +29,7 @@ const routes: Routes = [
     ],
     canActivate: [AuthGuard]
   },
-  { path: '**', redirectTo: '/login' }, // Redirige a login en caso de una ruta no válida
+  { path: '**', redirectTo: '/login' },
 ];
 
 @NgModule({

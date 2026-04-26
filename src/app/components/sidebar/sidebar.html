@@ -193,8 +193,8 @@
                                 </svg>
                             </div>
                             <div class="nav-content">
-                                <span class="nav-title">Servicios</span>
-                                <span class="nav-subtitle">Servicios técnicos</span>
+                                <span class="nav-title">Órdenes de servicio</span>
+                                <span class="nav-subtitle">Recepción, técnico y supervisor</span>
                             </div>
                             <svg class="nav-arrow" [class.rotated]="isSubMenuOpen('Modulo5')" width="16" height="16"
                                 viewBox="0 0 24 24" fill="currentColor">
@@ -202,9 +202,6 @@
                             </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo5')">
-                            <li><a class="nav-link submenu-link" routerLink="/catalogo-servicios">
-                                    <i class="submenu-dot"></i>Catálogo de servicios
-                                </a></li>
                             <li *ngIf="isSupervisor()"><a class="nav-link submenu-link" routerLink="/supervisor-panel">
                                 <i class="submenu-dot"></i>Panel de supervisor
                             </a></li>

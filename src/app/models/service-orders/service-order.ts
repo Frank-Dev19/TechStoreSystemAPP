@@ -3,9 +3,10 @@ import { ClientResponse } from '../clients-response';
 export interface ServiceOrder {
   id: number;
   code: string;
-  status: ServiceOrderStatus;
-  workflowStatus: ServiceOrderWorkflowStatus;
-  paymentStatus: ServiceOrderPaymentStatus;
+  operativeStatus: ServiceOrderOperativeStatus;
+  technicalStatus: ServiceOrderTechnicalStatus;
+  commercialStatus: ServiceOrderCommercialStatus;
+  economicStatus: ServiceOrderEconomicStatus;
   priority: ServiceOrderPriority;
   requestOrigin: RequestOrigin;
   clientId: number | null;
@@ -43,8 +44,6 @@ export interface ServiceOrder {
   deliveredAt: string | null;
   closedAt: string | null;
   cancelledAt: string | null;
-  isPaid: boolean;
-  paidAt: string | null;
   notes: string | null;
   discount: number;
   cancellationReason: string | null;
@@ -54,44 +53,52 @@ export interface ServiceOrder {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  montoComprometidoVigente: number;
+  montoReconciliado: number;
   totalServiceOrderAgreedAmount?: number;
 }
 
-export enum ServiceOrderStatus {
-  OPEN = 'OPEN',
-  ACTIVE = 'ACTIVE',
-  READY_FOR_PICKUP = 'READY_FOR_PICKUP',
-  DELIVERED = 'DELIVERED',
-  CANCELLED = 'CANCELLED',
-  CLOSED_NO_SOLUTION = 'CLOSED_NO_SOLUTION',
-  IN_PROGRESS = 'ACTIVE',
-  PARTIALLY_COMPLETED = 'READY_FOR_PICKUP',
-  COMPLETED = 'DELIVERED',
+export enum ServiceOrderOperativeStatus {
+  ABIERTA = 'ABIERTA',
+  EN_PROCESO = 'EN_PROCESO',
+  LISTA_PARA_ENTREGA = 'LISTA_PARA_ENTREGA',
+  ENTREGADA = 'ENTREGADA',
+  CANCELADA = 'CANCELADA',
+  CERRADA_SIN_SOLUCION = 'CERRADA_SIN_SOLUCION',
 }
 
-export enum ServiceOrderWorkflowStatus {
-  ASSIGNED = 'ASSIGNED',
-  UNDER_REVIEW = 'UNDER_REVIEW',
-  DIAGNOSIS_READY = 'DIAGNOSIS_READY',
-  UNDER_COORDINATION = 'UNDER_COORDINATION',
-  WAITING_QUOTE = 'UNDER_COORDINATION',
-  QUOTE_SENT = 'UNDER_COORDINATION',
-  WAITING_CLIENT_DECISION = 'UNDER_COORDINATION',
-  APPROVED_FOR_WORK = 'APPROVED_FOR_WORK',
-  IN_SERVICE = 'IN_SERVICE',
-  WAITING_PARTS = 'WAITING_PARTS',
-  SERVICE_DONE = 'SERVICE_DONE',
-  NO_SOLUTION = 'NO_SOLUTION',
-  READY_FOR_PICKUP = 'READY_FOR_PICKUP',
-  CANCELLED = 'CANCELLED',
+export enum ServiceOrderTechnicalStatus {
+  PENDIENTE_ASIGNACION = 'PENDIENTE_ASIGNACION',
+  ASIGNADA = 'ASIGNADA',
+  EN_DIAGNOSTICO = 'EN_DIAGNOSTICO',
+  DIAGNOSTICADA = 'DIAGNOSTICADA',
+  PENDIENTE_DEFINICION_COMERCIAL = 'PENDIENTE_DEFINICION_COMERCIAL',
+  AUTORIZADA_PARA_EJECUCION = 'AUTORIZADA_PARA_EJECUCION',
+  EN_EJECUCION = 'EN_EJECUCION',
+  BLOQUEADA = 'BLOQUEADA',
+  ESPERANDO_REPUESTOS_O_TERCERO = 'ESPERANDO_REPUESTOS_O_TERCERO',
+  RESUELTA = 'RESUELTA',
+  SIN_SOLUCION = 'SIN_SOLUCION',
 }
 
-export enum ServiceOrderPaymentStatus {
-  UNPAID = 'UNPAID',
-  PARTIALLY_PAID = 'PARTIALLY_PAID',
-  PAID = 'PAID',
-  REFUNDED = 'REFUNDED',
-  WAIVED = 'WAIVED',
+export enum ServiceOrderCommercialStatus {
+  NO_REQUIERE = 'NO_REQUIERE',
+  PENDIENTE_PROPUESTA = 'PENDIENTE_PROPUESTA',
+  PROPUESTA_EMITIDA = 'PROPUESTA_EMITIDA',
+  PENDIENTE_RESPUESTA_CLIENTE = 'PENDIENTE_RESPUESTA_CLIENTE',
+  AUTORIZADA = 'AUTORIZADA',
+  RECHAZADA = 'RECHAZADA',
+  EXPIRADA = 'EXPIRADA',
+  REEMPLAZADA = 'REEMPLAZADA',
+}
+
+export enum ServiceOrderEconomicStatus {
+  NO_APLICA = 'NO_APLICA',
+  PENDIENTE = 'PENDIENTE',
+  PARCIAL = 'PARCIAL',
+  TOTAL = 'TOTAL',
+  EXONERADO = 'EXONERADO',
+  REVERTIDO = 'REVERTIDO',
 }
 
 export enum ServiceOrderPriority {

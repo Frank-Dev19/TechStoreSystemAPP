@@ -1,15 +1,15 @@
 export const environment = {
-  production: false, // Este es el entorno de desarrollo. Cambiar a true para producciÃ³n.
+  production: false, // Este es el entorno de desarrollo. Cambiar a true para produccion.
 };
 
-// La configuraciÃ³n de las rutas de la API que se conectan al backend
+// La configuracion de las rutas de la API que se conectan al backend
 export const config = {
-  // â‡© apunta a tu API Nest (segÃºn tus logs corre en el 3000)
+  // Apunta a tu API Nest local
   endpointServices: 'http://localhost:3000',
-  authMethod: '/auth/', // queda: http://localhost:3000/auth/...
+  authMethod: '/auth/',
   defaultCompanyId: 1,
 
-  // mÃ³dulos API
+  // modulos API
   inventory: {
     base: '/inventory',
     stock: '/inventory/stock',
@@ -21,14 +21,14 @@ export const config = {
     products: '/inventory/catalogs/products',
     categories: '/inventory/catalogs/categories',
     units: '/inventory/catalogs/units',
-    lots: '/lots',               // si tu backend lo expone
+    lots: '/lots',
   },
 
   audit: {
     base: '/audit',
-    search: '/audit/search',   // GET con SearchAuditDto
-    stream: '/audit/stream',   // SSE
-    byId: '/audit',            // GET /audit/:id
+    search: '/audit/search',
+    stream: '/audit/stream',
+    byId: '/audit',
   },
 
   pricing: {
@@ -55,17 +55,13 @@ export const config = {
     dailyReport: '/cash-flow/reports/daily',
   },
 
-
-  serviceCatalog: {
-    categories: '/service-categories',
-    services: '/services',
-  },
   serviceOrders: {
     serviceOrders: '/service-orders',
     serviceOrderItems: '/service-order-items',
     serviceOrderAgreements: '/service-order-agreements',
     serviceOrderDiagnoses: '/service-order-diagnoses',
-    serviceOrderBillingLinks: '/service-orders/billing-links',
+    serviceOrderBillingLinks: '/service-orders/backoffice/billing-links',
+    serviceOrderInboxThreads: '/service-orders/inbox/threads',
+    serviceOrderInboxAttachments: '/service-orders/inbox/attachments',
   },
 };
-

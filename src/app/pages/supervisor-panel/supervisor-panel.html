@@ -2,7 +2,7 @@
   <div class="panel-header">
     <div class="title-section">
       <h1 class="page-title">Panel del Supervisor</h1>
-      <p class="page-subtitle">Monitorea acuerdos, diagnosticos y equipos de todas las ordenes de servicio.</p>
+      <p class="page-subtitle">Monitorea acuerdos, diagnósticos y equipos de todas las órdenes de servicio.</p>
     </div>
   </div>
 
@@ -24,7 +24,7 @@
       <div class="stat-content">
         <span class="stat-label">Respondidas</span>
         <h3 class="stat-value">{{ answeredServiceOrderAgreements.length }}</h3>
-        <p class="stat-meta">Con aprobacion o rechazo del cliente</p>
+        <p class="stat-meta">Con aprobación o rechazo del cliente</p>
       </div>
     </div>
     <div class="stat-card">
@@ -58,8 +58,8 @@
   <section class="ranking-panel">
     <header class="ranking-header">
       <div>
-        <h2>Ranking economico de tecnicos</h2>
-        <p>Basado en el aporte monetario de ordenes de tipo diagnostico y estandar, separado por productos y servicios.</p>
+        <h2>Ranking económico de técnicos</h2>
+        <p>Basado en el aporte monetario de órdenes de tipo diagnóstico y estándar, separado por productos y servicios.</p>
       </div>
       <span class="ranking-pill"><i class="fas fa-trophy"></i> Ranking actual</span>
     </header>
@@ -72,7 +72,7 @@
     } @else if (!technicianRankings.length) {
       <div class="empty-state">
         <i class="fas fa-chart-line"></i>
-        <p>Aun no hay informacion suficiente para construir el ranking.</p>
+        <p>Aún no hay información suficiente para construir el ranking.</p>
       </div>
     } @else {
       <div class="ranking-podium">
@@ -109,7 +109,7 @@
               <div class="ranking-rank">#{{ technician.rank }}</div>
               <div>
                 <h3>{{ technician.technicianName }}</h3>
-                <p>{{ technician.itemsCount }} ordenes . {{ technician.diagnosisItemsCount }} diagnostico . {{ technician.standardItemsCount }} estandar</p>
+                <p>{{ technician.itemsCount }} órdenes . {{ technician.diagnosisItemsCount }} diagnóstico . {{ technician.standardItemsCount }} estándar</p>
               </div>
             </div>
             <div class="ranking-metrics">
@@ -126,7 +126,7 @@
                 <strong>{{ formatMoney(technician.serviceRevenue) }}</strong>
               </div>
               <div class="metric-chip">
-                <span>Diagnostico</span>
+                <span>Diagnóstico</span>
                 <strong>{{ formatMoney(technician.diagnosisRevenue) }}</strong>
               </div>
               <div class="metric-chip">
@@ -163,13 +163,24 @@
     <header class="inbox-monitor-header">
       <div>
         <h2>Monitoreo de conversaciones</h2>
-        <p>Canal publico interno para supervisar trato y prevenir desvio de clientes.</p>
+        <p>Supervisa conversaciones y asegura continuidad en la atención al cliente.</p>
       </div>
       <span class="monitored-pill"><i class="fas fa-user-shield"></i> Supervision total</span>
     </header>
 
     <div class="inbox-monitor-layout">
       <aside class="inbox-monitor-list">
+        @if (isLoadingInboxThreads) {
+          <div class="empty-state compact">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Cargando conversaciones...</p>
+          </div>
+        } @else if (!paginatedInboxThreads.length) {
+          <div class="empty-state compact">
+            <i class="fas fa-comments"></i>
+            <p>No hay conversaciones para mostrar.</p>
+          </div>
+        } @else {
         @for (thread of paginatedInboxThreads; track thread.id) {
           <button
             class="thread-item"
@@ -178,17 +189,18 @@
           >
             <div>
               <strong>{{ thread.serviceOrderCode }} . {{ thread.equipmentLabel }}</strong>
-              <small>{{ thread.technicianAlias }} . {{ thread.clientAlias }}</small>
+                <small>{{ thread.assignedTechnicianAlias }} . {{ thread.clientAlias }}</small>
             </div>
             <div class="thread-metrics">
               @if (thread.unreadCount > 0) {
                 <span class="counter">{{ thread.unreadCount }}</span>
               }
-              <span class="risk" [class.review]="thread.riskLevel === 'review'">
-                {{ thread.riskLevel === 'review' ? 'Revisar' : 'Normal' }}
+              <span class="risk" [class.review]="thread.unreadCount > 0">
+                {{ getInboxThreadOperativeStatusLabel(thread.operativeStatus) }}
               </span>
             </div>
           </button>
+        }
         }
       </aside>
 
@@ -196,18 +208,115 @@
         @if (selectedInboxThread) {
           <div class="thread-title">
             <h3>{{ selectedInboxThread.serviceOrderCode }} . {{ selectedInboxThread.equipmentLabel }}</h3>
-            <p>{{ selectedInboxThread.technicianAlias }} . {{ selectedInboxThread.clientAlias }}</p>
+            <p>{{ selectedInboxThread.assignedTechnicianAlias }} . {{ selectedInboxThread.clientAlias }}</p>
           </div>
           <div class="thread-messages">
-            @for (message of selectedInboxThread.messages; track message.id) {
-              <article class="thread-message" [class.tech]="message.author === 'TECHNICIAN'" [class.system]="message.author === 'SYSTEM'">
+            @if (isLoadingInboxMessages) {
+              <div class="empty-text">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Cargando mensajes...</span>
+              </div>
+            } @else if (!selectedInboxMessages.length) {
+              <p class="empty-text">Aún no hay mensajes en esta conversación.</p>
+            } @else {
+            @for (message of selectedInboxMessages; track message.id) {
+              <article
+                class="thread-message"
+                [class.tech]="message.authorRole === 'TECHNICIAN' || message.authorRole === 'SUPERVISOR'"
+                [class.system]="message.authorRole === 'SYSTEM'"
+              >
                 <header>
-                  <strong>{{ getInboxAuthorLabel(message.author) }}</strong>
+                  <strong>{{ getInboxAuthorLabel(message) }}</strong>
                   <small>{{ message.createdAt | date: 'dd/MM HH:mm' }}</small>
                 </header>
-                <p>{{ message.text }}</p>
+                @if (message.text) {
+                  <p>{{ message.text }}</p>
+                }
+                @if (message.attachments.length) {
+                  <div class="message-attachments">
+                    @for (attachment of message.attachments; track attachment.id) {
+                      <div class="message-attachment-card">
+                        @if (attachment.previewable && getSupervisorInboxAttachmentPreviewUrl(attachment.id); as previewUrl) {
+                          <img class="message-attachment-image" [src]="previewUrl" [alt]="attachment.fileName" />
+                        } @else {
+                          <div class="message-attachment-icon">
+                            <i
+                              class="fas"
+                              [ngClass]="{
+                                'fa-file-pdf': attachment.attachmentType === 'pdf',
+                                'fa-file-audio': attachment.attachmentType === 'audio',
+                                'fa-file-alt': attachment.attachmentType === 'document'
+                              }"
+                            ></i>
+                          </div>
+                        }
+                        <div class="message-attachment-meta">
+                          <strong>{{ attachment.fileName }}</strong>
+                          <small>{{ attachment.mimeType }}</small>
+                          <button type="button" class="message-attachment-action" (click)="downloadSupervisorInboxAttachment(attachment)">
+                            <i class="fas fa-download"></i>
+                            Descargar
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
               </article>
             }
+            }
+          </div>
+          <div class="thread-composer">
+            <textarea
+              class="thread-input"
+              placeholder="Escribe una respuesta para el cliente..."
+              [(ngModel)]="supervisorInboxDraft"
+              rows="3"
+            ></textarea>
+            @if (supervisorInboxDraftAttachments.length) {
+              <div class="draft-attachments">
+                @for (attachment of supervisorInboxDraftAttachments; track attachment.file.name + attachment.file.size + $index) {
+                  <div class="draft-attachment-chip">
+                    @if (attachment.previewUrl) {
+                      <img [src]="attachment.previewUrl" [alt]="attachment.file.name" />
+                    } @else {
+                      <i class="fas fa-paperclip"></i>
+                    }
+                    <span>{{ attachment.file.name }}</span>
+                    <button type="button" (click)="removeSupervisorInboxDraftAttachment($index)">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                }
+              </div>
+            }
+            <div class="thread-actions">
+              <input
+                #supervisorInboxFileInput
+                type="file"
+                hidden
+                multiple
+                accept="image/*,application/pdf,audio/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                (change)="onSupervisorInboxFilesSelected($event)"
+              />
+              <button type="button" class="btn-secondary" (click)="triggerSupervisorInboxAttachmentPicker(supervisorInboxFileInput)">
+                <i class="fas fa-paperclip"></i>
+                Adjuntar
+              </button>
+              <button
+                type="button"
+                class="btn-primary"
+                [disabled]="isSendingInboxMessage || (!supervisorInboxDraft.trim() && !supervisorInboxDraftAttachments.length)"
+                (click)="sendSupervisorInboxMessage()"
+              >
+                @if (isSendingInboxMessage) {
+                  <i class="fas fa-spinner fa-spin"></i>
+                } @else {
+                  <i class="fab fa-whatsapp"></i>
+                }
+                Enviar
+              </button>
+            </div>
           </div>
         } @else {
           <p class="empty-text">Sin conversaciones para mostrar.</p>

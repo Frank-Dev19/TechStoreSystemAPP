@@ -22,7 +22,7 @@ export class ServiceOrderDocumentsService {
     let cursorY = 30
     cursorY = this.drawInfoGrid(doc, cursorY, [
       ["Fecha y hora", this.formatDateTime(serviceOrder.createdAt)],
-      ["Estado", this.getOrderStatusLabel(serviceOrder.status)],
+      ["Estado", this.getOrderStatusLabel(serviceOrder.operativeStatus)],
       ["Tipo de servicio", this.getServiceTypeLabel(serviceOrder.serviceType)],
       ["Cliente", this.getClientName(serviceOrder)],
       ["Documento", this.getClientDocument(serviceOrder)],
@@ -129,9 +129,8 @@ export class ServiceOrderDocumentsService {
       ["Marca", serviceOrder.brand || "-"],
       ["Modelo", serviceOrder.model || "-"],
       ["Serie", serviceOrder.serialNumber || "-"],
-      ["Accesorios", serviceOrder.accessories || "-"],
       ["Ingreso", this.formatDateTime(serviceOrder.createdAt)],
-      ["Estado", this.getOrderStatusLabel(serviceOrder.status)],
+      ["Accesorios", serviceOrder.accessories || "-"],
       ["Notas", serviceOrder.notes || "-"],
     ]
 
@@ -301,12 +300,12 @@ export class ServiceOrderDocumentsService {
 
   private getOrderStatusLabel(status: string): string {
     const labels: Record<string, string> = {
-      OPEN: "Abierto",
-      ACTIVE: "En progreso",
-      READY_FOR_PICKUP: "Listo para entrega",
-      DELIVERED: "Entregado",
-      CANCELLED: "Cancelado",
-      CLOSED_NO_SOLUTION: "Sin solucion",
+      ABIERTA: "Abierto",
+      EN_PROCESO: "En progreso",
+      LISTA_PARA_ENTREGA: "Listo para entrega",
+      ENTREGADA: "Entregado",
+      CANCELADA: "Cancelado",
+      CERRADA_SIN_SOLUCION: "Sin solucion",
     }
     return labels[status] || status
   }

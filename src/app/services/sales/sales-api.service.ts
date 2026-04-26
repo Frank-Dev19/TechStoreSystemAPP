@@ -84,6 +84,24 @@ export class SalesApiService {
         return this.base.post<Sale>(this.baseUrl, payload);
     }
 
+    createFromServiceOrder(payload: {
+        serviceOrderId: number;
+        companyId: number;
+        documentType: string;
+        issueDate: string;
+        observations?: string;
+        payments: Array<{
+            method: string;
+            amount: number;
+            reference?: string;
+            bankName?: string;
+            cardType?: string;
+            paymentDate?: string;
+        }>;
+    }): Observable<Sale> {
+        return this.base.post<Sale>(`${this.baseUrl}/from-service-order`, payload);
+    }
+
     cancel(id: number, payload: CancelSaleDto): Observable<Sale> {
         // backend: PATCH /sales/:id/cancel
         return this.base.patch<Sale>(`${this.baseUrl}/${id}/cancel`, payload);

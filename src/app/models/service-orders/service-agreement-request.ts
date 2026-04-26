@@ -8,7 +8,7 @@ export interface ServiceOrderAgreementRequest {
   source?: ServiceOrderAgreementSource;
   notes?: string;
   products?: ServiceOrderAgreementProductRequest[];
-  services?: ServiceOrderAgreementServiceRequest[];
+  technicalServiceAmount?: number;
 }
 
 export interface ServiceOrderAgreementProductRequest {
@@ -16,11 +16,6 @@ export interface ServiceOrderAgreementProductRequest {
   quantity?: number;
   unitPrice?: number;
   requiresPurchase?: boolean;
-  notes?: string;
-}
-
-export interface ServiceOrderAgreementServiceRequest {
-  serviceId?: number;
   notes?: string;
 }
 

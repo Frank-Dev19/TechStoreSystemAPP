@@ -1,8 +1,8 @@
 ﻿<div class="technician-panel">
   <div class="panel-header">
     <div class="title-section">
-      <h1 class="page-title">Panel del Tecnico</h1>
-      <p class="page-subtitle">Gestiona las ordenes asignadas y sus diagnosticos</p>
+      <h1 class="page-title">Panel del Técnico</h1>
+      <p class="page-subtitle">Gestiona las órdenes asignadas y sus diagnósticos</p>
     </div>
   </div>
 
@@ -14,11 +14,11 @@
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'diagnosis'" (click)="setActiveTab('diagnosis')">
         <i class="fas fa-stethoscope"></i>
-        En diagnostico ({{ diagnosisOrders.length }})
+        En diagnóstico ({{ diagnosisOrders.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'pending_approval'" (click)="setActiveTab('pending_approval')">
         <i class="fas fa-hourglass-half"></i>
-        Pendientes de coordinacion o acuerdo ({{ pendingApprovalOrders.length }})
+        Pendientes de coordinación o acuerdo ({{ pendingApprovalOrders.length }})
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'repair'" (click)="setActiveTab('repair')">
         <i class="fas fa-wrench"></i>
@@ -39,7 +39,7 @@
         @if (todoOrders.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay ordenes por atender</p>
+            <p>No hay órdenes por atender</p>
           </div>
         } @else {
           @for (order of paginatedVisibleOrders; track order.id) {
@@ -51,7 +51,7 @@
               <div class="card-body">
                 <p class="equipment-type"><i class="fas fa-desktop"></i> {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</p>
                 <p class="issue-text"><i class="fas fa-screwdriver-wrench"></i> {{ order.initialIssue || 'Sin detalle del problema' }}</p>
-                @if (order.workflowStatus === 'ASSIGNED' && order.serviceType === 'STANDARD_SERVICE') {
+                @if (order.technicalStatus === 'ASIGNADA' && order.serviceType === 'STANDARD_SERVICE') {
                   <p class="info-text pending-quote">
                     <i class="fas fa-hourglass-half"></i>
                     Esperando inicio de servicio
@@ -73,7 +73,7 @@
                   *ngIf="canStartDiagnosis(order)"
                   (click)="selectServiceOrder(order); startDiagnosis(order); $event.stopPropagation()"
                 >
-                  <i class="fas fa-play"></i> {{ isWarrantyService(order) ? 'Iniciar revision' : 'Iniciar diagnostico' }}
+                    <i class="fas fa-play"></i> {{ isWarrantyService(order) ? 'Iniciar revisión' : 'Iniciar diagnóstico' }}
                 </button>
                 <button
                   class="btn btn-sm btn-primary"
@@ -99,12 +99,12 @@
         @if (diagnosisOrders.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay ordenes en diagnostico</p>
+            <p>No hay órdenes en diagnóstico</p>
           </div>
         } @else {
           @for (order of paginatedVisibleOrders; track order.id) {
             <div class="item-card active-item" (click)="selectServiceOrder(order)">
-              <div class="active-indicator">EN DIAGNOSTICO</div>
+              <div class="active-indicator">EN DIAGNÓSTICO</div>
               <div class="card-header">
                 <h3>{{ order.code || 'SIN-CODIGO' }}</h3>
                 <span class="badge badge-warning">{{ getWorkflowLabel(order) }}</span>
@@ -128,23 +128,23 @@
                   *ngIf="isDiagnosisService(order)"
                   (click)="selectServiceOrder(order); openDiagnosisModal(); $event.stopPropagation()"
                 >
-                  <i class="fas fa-plus"></i> Registrar diagnostico
+                  <i class="fas fa-plus"></i> Registrar diagnóstico
                 </button>
                 <button
                   class="btn btn-sm btn-success"
                   *ngIf="canAcceptWarrantyReview(order)"
                   (click)="selectServiceOrder(order); acceptWarrantyReview(order); $event.stopPropagation()"
                 >
-                  <i class="fas fa-check-circle"></i> Aceptar garantia
+                  <i class="fas fa-check-circle"></i> Aceptar garantía
                 </button>
                 <button
                   class="btn btn-sm btn-outline-danger"
                   *ngIf="canRejectWarrantyReview(order)"
                   (click)="selectServiceOrder(order); rejectWarrantyReview(order); $event.stopPropagation()"
                 >
-                  <i class="fas fa-ban"></i> Rechazar garantia
+                  <i class="fas fa-ban"></i> Rechazar garantía
                 </button>
-                <span class="muted" *ngIf="!isDiagnosisService(order) && !isWarrantyService(order)">Servicio estandar: sin diagnosticos adicionales</span>
+                <span class="muted" *ngIf="!isDiagnosisService(order) && !isWarrantyService(order)">Servicio estándar: sin diagnósticos adicionales</span>
               </div>
             </div>
           }
@@ -155,7 +155,7 @@
         @if (pendingApprovalOrders.length === 0) {
           <div class="empty-state">
             <i class="fas fa-inbox"></i>
-            <p>No hay ordenes pendientes de coordinacion o acuerdo</p>
+            <p>No hay órdenes pendientes de coordinación o acuerdo</p>
           </div>
         } @else {
           @for (order of paginatedVisibleOrders; track order.id) {
@@ -167,10 +167,10 @@
               <div class="card-body">
                 <p class="equipment-type"><i class="fas fa-desktop"></i> {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</p>
                 <p class="issue-text"><i class="fas fa-screwdriver-wrench"></i> {{ order.initialIssue || 'Sin detalle del problema' }}</p>
-                @if (order.workflowStatus === 'DIAGNOSIS_READY') {
+                @if (order.technicalStatus === 'DIAGNOSTICADA') {
                   <p class="info-text pending-quote">
                     <i class="fas fa-hourglass-half"></i>
-                    Esperando coordinacion
+                    Esperando coordinación
                   </p>
                 } @else {
                   <p class="info-text pending-quote">
@@ -235,7 +235,7 @@
                   *ngIf="canOpenRediagnosis(order)"
                   (click)="selectServiceOrder(order); openDiagnosisModal(order, $event); $event.stopPropagation()"
                 >
-                  <i class="fas fa-stethoscope"></i> Nuevo diagnostico
+                  <i class="fas fa-stethoscope"></i> Nuevo diagnóstico
                 </button>
                 <button
                   class="btn btn-sm btn-warning"
@@ -384,7 +384,7 @@
                 </div>
               }
 
-              @if (selectedServiceOrder.workflowStatus === 'UNDER_REVIEW' && isDiagnosisService(selectedServiceOrder) && diagnosticHistory.length === 0) {
+              @if (selectedServiceOrder.technicalStatus === 'EN_DIAGNOSTICO' && isDiagnosisService(selectedServiceOrder) && diagnosticHistory.length === 0) {
                 <p class="empty-text">Registra un diagnostico antes de completarlo.</p>
               }
             </section>
@@ -430,124 +430,199 @@
 
   @if (showAgreementModal && selectedServiceOrder) {
     <div class="modal-overlay" (click)="closeAgreementModal()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-content agreement-modal" role="dialog" aria-modal="true" aria-labelledby="agreement-modal-title" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <div>
-            <h2>Gestionar acuerdo</h2>
-            <p class="muted">{{ selectedServiceOrder.code }} · {{ getEquipmentTypeLabel(selectedServiceOrder.equipmentType, selectedServiceOrder.equipmentTypeOther) }}</p>
+            <h2 id="agreement-modal-title">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M9 12l2 2 4-4"></path>
+                <path d="M20.618 5.984A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016Z"></path>
+              </svg>
+              <span>Gestionar acuerdo</span>
+            </h2>
           </div>
-          <button class="btn-close" (click)="closeAgreementModal()">
-            <i class="fas fa-times"></i>
-          </button>
+          <button class="btn-close" type="button" aria-label="Cerrar" (click)="closeAgreementModal()">×</button>
         </div>
 
         <form [formGroup]="agreementForm" class="modal-body">
+          <section class="agreement-hero">
+            <div class="agreement-hero-copy">
+              <span class="agreement-kicker">Servicio activo</span>
+              <h3>{{ getTechnicalServiceLabel() }}</h3>
+              <p>{{ getEquipmentTypeLabel(selectedServiceOrder.equipmentType, selectedServiceOrder.equipmentTypeOther) }}</p>
+            </div>
+            <div class="agreement-status-chip" [class.readonly]="!isAgreementEditable()">
+              {{ selectedServiceOrder.code || 'Sin código' }}
+            </div>
+          </section>
+
           @if (getAgreementModalMessage(); as agreementModalMessage) {
-            <p class="empty-text">{{ agreementModalMessage }}</p>
-          }
-          <div class="card-actions mb-3">
-            <button type="button" class="btn btn-sm btn-info" [disabled]="!isAgreementEditable()" (click)="addAgreementProduct()">
-              <i class="fas fa-box"></i> Producto
-            </button>
-            <button type="button" class="btn btn-sm btn-info" [disabled]="!isAgreementEditable()" (click)="addAgreementService()">
-              <i class="fas fa-tools"></i> Servicio
-            </button>
-          </div>
-
-          @if (!agreementItems.length) {
-            <p class="empty-text">Agrega productos o servicios para registrar el acuerdo.</p>
-          } @else {
-            <div class="quote-items">
-              @for (item of agreementItems; let i = $index; track item.id) {
-                <div class="history-card mb-3">
-                  <div class="history-header">
-                    <span class="history-number">{{ item.type === 'product' ? 'Producto' : 'Servicio' }} #{{ i + 1 }}</span>
-                    <button type="button" class="btn-icon" [disabled]="!isAgreementEditable()" (click)="removeAgreementItem(i)">
-                      <i class="fas fa-trash"></i>
-                    </button>
-                  </div>
-
-                  @if (item.type === 'product') {
-                    <label>Producto</label>
-                    <ng-select
-                      [items]="products"
-                      bindValue="id"
-                      [searchFn]="productSearchFn"
-                      [clearable]="true"
-                      [readonly]="!isAgreementEditable()"
-                      placeholder="Selecciona"
-                      [(ngModel)]="item.productId"
-                      (ngModelChange)="onAgreementProductSelected(item, $event)"
-                      [ngModelOptions]="{ standalone: true }"
-                    >
-                      <ng-template ng-label-tmp let-product="item">
-                        {{ product?.sku }} · {{ product?.name }}
-                      </ng-template>
-                      <ng-template ng-option-tmp let-product="item">
-                        {{ product?.sku }} · {{ product?.name }}
-                      </ng-template>
-                    </ng-select>
-                    <div class="detail-grid mt-3 agreement-line-grid">
-                      <div>
-                        <label>Cantidad</label>
-                        <input type="number" min="1" [disabled]="!isAgreementEditable()" [(ngModel)]="item.quantity" (ngModelChange)="onAgreementProductQuantityChange(item, $event)" [ngModelOptions]="{ standalone: true }" />
-                      </div>
-                      <div>
-                        <label>Precio</label>
-                        <div class="selected-item price-readonly">{{ item.unitPrice | number: '1.2-2' }} PEN</div>
-                      </div>
-                    </div>
-                    <div class="detail-total mt-3">Subtotal: {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }} PEN</div>
-                  }
-
-                  @if (item.type === 'service') {
-                    <label>Servicio</label>
-                    <ng-select
-                      [items]="services"
-                      bindValue="id"
-                      [searchFn]="serviceSearchFn"
-                      [clearable]="true"
-                      [readonly]="!isAgreementEditable()"
-                      placeholder="Selecciona"
-                      [(ngModel)]="item.serviceId"
-                      [ngModelOptions]="{ standalone: true }"
-                    >
-                      <ng-template ng-label-tmp let-service="item">
-                        {{ service?.code }} · {{ service?.name }}
-                      </ng-template>
-                      <ng-template ng-option-tmp let-service="item">
-                        {{ service?.code }} · {{ service?.name }}
-                      </ng-template>
-                    </ng-select>
-                    <div class="detail-total mt-3">Subtotal: {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }} PEN</div>
-                  }
-                </div>
-              }
+            <div class="info-banner agreement-message-banner" aria-live="polite">
+              <span>{{ agreementModalMessage }}</span>
             </div>
           }
 
-          <div class="form-group">
-            <label>Notas del acuerdo</label>
-            <textarea formControlName="notes" rows="3" [readonly]="!isAgreementEditable()" placeholder="Resumen de lo coordinado con el cliente"></textarea>
-          </div>
+          @if (getTechnicalServiceItem(); as technicalServiceItem) {
+            <section class="history-card agreement-section agreement-service-card mb-3">
+              <div class="agreement-section-title">
+                <span>Servicio fijo</span>
+              </div>
+              <div class="agreement-table">
+                <div class="agreement-table-head agreement-line-grid">
+                  <span>Concepto</span>
+                  <span class="amount-column">Monto</span>
+                  <span class="currency-column"></span>
+                </div>
+                <div class="agreement-table-row agreement-line-grid">
+                  <div class="agreement-readonly-text">{{ getTechnicalServiceLabel() }}</div>
+                  <div class="agreement-field agreement-field-inline" [class.field-invalid]="!isTechnicalServiceAmountValid()">
+                    <input
+                      [class.input-error]="!isTechnicalServiceAmountValid()"
+                      type="number"
+                      min="20"
+                      step="0.01"
+                      [disabled]="!isAgreementEditable()"
+                      [ngModel]="technicalServiceItem.unitPrice"
+                      (ngModelChange)="updateTechnicalServiceAmount($event)"
+                      [ngModelOptions]="{ standalone: true }"
+                    />
+                    <div class="error-message" aria-live="polite">
+                      @if (!isTechnicalServiceAmountValid()) {
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <circle cx="12" cy="12" r="9"></circle>
+                          <path d="M12 8v5"></path>
+                          <path d="M12 16h.01"></path>
+                        </svg>
+                        <span>Mínimo S/20.</span>
+                      } @else {
+                        <span> </span>
+                      }
+                    </div>
+                  </div>
+                  <span class="agreement-currency">PEN</span>
+                </div>
+              </div>
+              <div class="detail-total mt-3 agreement-subtotal-row agreement-service-subtotal-row">
+                <span class="agreement-subtotal-label">Subtotal:</span>
+                <span class="agreement-subtotal-value">{{ calculateAgreementItemSubtotal(technicalServiceItem) | number: '1.2-2' }} PEN</span>
+              </div>
+            </section>
+          }
 
-          <div class="detail-total mb-3">Total: {{ calculateAgreementTotal() | number: '1.2-2' }} PEN</div>
+          <section class="agreement-section agreement-products-section">
+            <div class="agreement-section-header">
+              <div class="agreement-section-title">
+                <span>Productos adicionales</span>
+              </div>
+              <button type="button" class="btn btn-sm btn-info" [disabled]="!isAgreementEditable()" (click)="addAgreementProduct()">
+                + Agregar producto
+              </button>
+            </div>
 
-          <div class="card-actions">
-            <button type="button" class="btn btn-secondary" (click)="closeAgreementModal()">Cancelar</button>
+            @if (getAgreementProductItems().length === 0) {
+              <div class="agreement-empty-state">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"></path>
+                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                </svg>
+                <div>
+                  <strong>Sin repuestos adicionales</strong>
+                  <p>Puedes agregar productos si el servicio requiere componentes o accesorios extra.</p>
+                </div>
+              </div>
+            } @else {
+              <div class="quote-items">
+              @for (item of getAgreementProductItems(); let i = $index; track item.id) {
+                <div class="history-card agreement-item-card mb-3">
+                  <div class="history-header">
+                    <div>
+                      <span class="agreement-item-label">Producto #{{ i + 1 }}</span>
+                    </div>
+                    <button type="button" class="btn-icon" aria-label="Eliminar producto adicional {{ i + 1 }}" [disabled]="!isAgreementEditable() || !canRemoveAgreementItemById(item.id)" (click)="removeAgreementItem(agreementItems.indexOf(item))">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M3 6h18"></path>
+                        <path d="M8 6V4h8v2"></path>
+                        <path d="M19 6l-1 14H6L5 6"></path>
+                        <path d="M10 11v6"></path>
+                        <path d="M14 11v6"></path>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <label>Producto</label>
+                  <ng-select
+                    [items]="products"
+                    bindValue="id"
+                    [searchFn]="productSearchFn"
+                    [clearable]="true"
+                    [readonly]="!isAgreementEditable()"
+                    placeholder="Selecciona"
+                    [(ngModel)]="item.productId"
+                    (ngModelChange)="onAgreementProductSelected(item, $event)"
+                    [ngModelOptions]="{ standalone: true }"
+                  >
+                    <ng-template ng-label-tmp let-product="item">
+                      {{ product?.sku }} · {{ product?.name }}
+                    </ng-template>
+                    <ng-template ng-option-tmp let-product="item">
+                      {{ product?.sku }} · {{ product?.name }}
+                    </ng-template>
+                  </ng-select>
+                  <div class="detail-grid mt-3 agreement-line-grid">
+                    <div>
+                      <label>Cantidad</label>
+                      <input type="number" min="1" [disabled]="!isAgreementEditable()" [(ngModel)]="item.quantity" (ngModelChange)="onAgreementProductQuantityChange(item, $event)" [ngModelOptions]="{ standalone: true }" />
+                    </div>
+                    <div>
+                      <label>Precio</label>
+                      <div class="selected-item price-readonly agreement-price-chip">
+                        <span class="agreement-price-value">{{ item.unitPrice | number: '1.2-2' }}</span>
+                        <span class="agreement-price-currency">PEN</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="detail-total mt-3 agreement-subtotal-row">
+                    <span class="agreement-subtotal-label">Subtotal:</span>
+                    <span class="agreement-subtotal-value">{{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }} PEN</span>
+                  </div>
+                </div>
+              }
+              </div>
+            }
+          </section>
+
+          <section class="agreement-section agreement-notes-section">
+            <div class="agreement-section-title">
+              <span>Notas del acuerdo</span>
+            </div>
+            <div class="form-group">
+              <textarea formControlName="notes" rows="3" [readonly]="!isAgreementEditable()" placeholder="Resumen de lo coordinado con el cliente…"></textarea>
+            </div>
+          </section>
+
+          <section class="agreement-total-bar mb-3">
+            <span>Total del acuerdo</span>
+            <strong>{{ calculateAgreementTotal() | number: '1.2-2' }} PEN</strong>
+          </section>
+
+        </form>
+
+        <div class="modal-footer agreement-footer">
+          <button type="button" class="btn btn-link-danger" (click)="closeAgreementModal()">Cancelar</button>
+          <div class="agreement-footer-actions">
             @if (selectedServiceOrder && isDiagnosisService(selectedServiceOrder) && canManageAgreement(selectedServiceOrder) && isAgreementEditable()) {
-              <button type="button" class="btn btn-outline-danger" [disabled]="isSavingAgreement" (click)="markNoAgreement(selectedServiceOrder)">
-                <i class="fas fa-box-open"></i> Cerrar sin acuerdo
+              <button type="button" class="btn btn-secondary agreement-muted-action" [disabled]="isSavingAgreement" (click)="markNoAgreement(selectedServiceOrder)">
+                Cerrar sin acuerdo
               </button>
             }
             <button type="button" class="btn btn-outline-primary" [disabled]="!isAgreementEditable() || !agreementItems.length || isSavingAgreement" (click)="submitAgreement(false)">
               Guardar borrador
             </button>
-            <button type="button" class="btn btn-success" [disabled]="!isAgreementEditable() || !agreementItems.length || isSavingAgreement" (click)="submitAgreement(true)">
-              <i class="fas fa-check"></i> Confirmar acuerdo
+            <button type="button" class="btn btn-primary agreement-confirm-btn" [disabled]="!isAgreementEditable() || !agreementItems.length || isSavingAgreement" (click)="submitAgreement(true)">
+              Confirmar acuerdo
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   }
@@ -570,7 +645,9 @@
 
         <div class="inbox-layout">
           <section class="inbox-main">
-            @if (inboxActiveThread) {
+            @if (isLoadingInbox) {
+              <p class="empty-text">Cargando conversación...</p>
+            } @else if (inboxActiveThread) {
               <div class="inbox-thread-meta">
                 <div>
                   <strong>{{ inboxActiveThread.serviceOrderCode }} . {{ inboxActiveThread.equipmentLabel }}</strong>
@@ -579,13 +656,45 @@
               </div>
 
               <div class="inbox-messages">
-                @for (message of inboxActiveThread.messages; track message.id) {
-                  <article class="message-row" [class.tech]="message.author === 'TECHNICIAN'" [class.system]="message.author === 'SYSTEM'">
+                @for (message of inboxMessages; track message.id) {
+                  <article
+                    class="message-row"
+                    [class.tech]="message.authorRole === 'TECHNICIAN'"
+                    [class.system]="message.authorRole === 'SYSTEM'"
+                  >
                     <header>
-                      <strong>{{ getInboxAuthorLabel(message.author) }}</strong>
+                      <strong>{{ getInboxAuthorLabel(message) }}</strong>
                       <small>{{ message.createdAt | date: 'dd/MM HH:mm' }}</small>
                     </header>
-                    <p>{{ message.text }}</p>
+                    @if (message.text) {
+                      <p>{{ message.text }}</p>
+                    }
+                    @if (message.attachments.length) {
+                      <div class="message-attachments">
+                        @for (attachment of message.attachments; track attachment.id) {
+                          <div class="message-attachment-card">
+                            @if (attachment.previewable && getInboxAttachmentPreviewUrl(attachment.id)) {
+                              <img
+                                class="message-attachment-image"
+                                [src]="getInboxAttachmentPreviewUrl(attachment.id)"
+                                [alt]="attachment.fileName"
+                              />
+                            } @else {
+                              <span class="message-attachment-icon">
+                                <i class="fas" [class.fa-image]="attachment.attachmentType === 'image'" [class.fa-file-pdf]="attachment.attachmentType === 'pdf'" [class.fa-file-audio]="attachment.attachmentType === 'audio'" [class.fa-file-lines]="attachment.attachmentType === 'document'"></i>
+                              </span>
+                            }
+                            <div class="message-attachment-meta">
+                              <strong>{{ attachment.fileName }}</strong>
+                              <small>{{ attachment.mimeType }} . {{ attachment.sizeBytes / 1024 | number: '1.0-0' }} KB</small>
+                            </div>
+                            <button type="button" class="btn btn-light btn-sm" (click)="downloadInboxAttachment(attachment)">
+                              Descargar
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    }
                   </article>
                 }
               </div>
@@ -597,9 +706,30 @@
                   rows="3"
                   placeholder="Escribe un mensaje tecnico para el cliente (sin datos personales)"
                 ></textarea>
+                <input #inboxFileInput type="file" multiple hidden (change)="onInboxFilesSelected($event)" />
+                @if (inboxDraftAttachments.length) {
+                  <div class="draft-attachments">
+                    @for (attachment of inboxDraftAttachments; track attachment.file.name + attachment.file.size) {
+                      <div class="draft-attachment-chip">
+                        @if (attachment.previewUrl) {
+                          <img [src]="attachment.previewUrl" [alt]="attachment.file.name" />
+                        } @else {
+                          <i class="fas fa-paperclip"></i>
+                        }
+                        <span>{{ attachment.file.name }}</span>
+                        <button type="button" (click)="removeInboxDraftAttachment($index)">
+                          <i class="fas fa-times"></i>
+                        </button>
+                      </div>
+                    }
+                  </div>
+                }
                 <div class="inbox-composer-actions">
-                  <button type="button" class="btn btn-success" (click)="sendInboxMessage()">
-                    <i class="fab fa-whatsapp"></i> Enviar por canal
+                  <button type="button" class="btn btn-outline-secondary" (click)="triggerInboxAttachmentPicker(inboxFileInput)">
+                    <i class="fas fa-paperclip"></i> Adjuntar
+                  </button>
+                  <button type="button" class="btn btn-success" [disabled]="isSendingInboxMessage" (click)="sendInboxMessage()">
+                    <i class="fab fa-whatsapp"></i> {{ isSendingInboxMessage ? 'Enviando...' : 'Enviar' }}
                   </button>
                 </div>
               </div>

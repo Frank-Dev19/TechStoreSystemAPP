@@ -72,11 +72,12 @@
             (change)="onFilterChange()"
           >
             <option value="all">Todos</option>
-            <option value="OPEN">Abierto</option>
-            <option value="IN_PROGRESS">En progreso</option>
-            <option value="PARTIALLY_COMPLETED">Parcialmente completado</option>
-            <option value="COMPLETED">Completado</option>
-            <option value="CANCELLED">Cancelado</option>
+            <option value="ABIERTA">Abierto</option>
+            <option value="EN_PROCESO">En progreso</option>
+            <option value="LISTA_PARA_ENTREGA">Listo para entrega</option>
+            <option value="ENTREGADA">Entregado</option>
+            <option value="CANCELADA">Cancelado</option>
+            <option value="CERRADA_SIN_SOLUCION">Sin solución</option>
           </select>
         </div>
         <div class="filter-control">
@@ -191,8 +192,8 @@
                     <td class="code-cell">
                       <strong>{{ serviceOrder.code }}</strong>
                       <small>{{ serviceOrder.createdAt | date: 'dd/MM HH:mm' }}</small>
-                      @if (serviceOrder.isPaid) {
-                        <small class="paid-label">Pagada</small>
+                      @if (serviceOrder.economicStatus === 'TOTAL') {
+                        <small class="paid-label">Conciliada</small>
                       }
                       @if (getActiveSaleLink(serviceOrder); as activeLink) {
                         <small class="linked-sale-label">
@@ -217,8 +218,8 @@
                       </span>
                     </td>
                     <td>
-                      <span class="status-chip" [ngClass]="serviceOrder.status.toLowerCase()">
-                        {{ getServiceOrderStatusLabel(serviceOrder.status) }}
+                      <span class="status-chip" [ngClass]="serviceOrder.operativeStatus.toLowerCase()">
+                        {{ getOperativeStatusLabel(serviceOrder.operativeStatus) }}
                       </span>
                     </td>
                     <td>
@@ -313,15 +314,6 @@
                               >
                                 <i class="fas fa-tag"></i>
                                 <span>Sticker</span>
-                              </button>
-                              <button
-                                type="button"
-                                class="action-menu-item"
-                                [disabled]="!canMarkServiceOrderAsPaid(serviceOrder)"
-                                (click)="markServiceOrderAsPaid(serviceOrder, $event); closeActionMenu()"
-                              >
-                                <i class="fas fa-money-check-alt"></i>
-                                <span>Marcar pagada</span>
                               </button>
                               @if (
                                 !hasLinkedSaleDocument(serviceOrder) &&
@@ -1575,13 +1567,6 @@
                   >
                     <i class="fas fa-box"></i> Producto
                   </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-info"
-                    (click)="addServiceToServiceOrderAgreement()"
-                  >
-                    <i class="fas fa-tools"></i> Servicio
-                  </button>
                   <a
                     class="btn btn-sm btn-outline-secondary"
                     [routerLink]="['/inventory']"
@@ -1613,14 +1598,16 @@
                         </div>
                         <div class="item-actions">
                           <span class="muted small">Item #{{ i + 1 }}</span>
-                          <button
-                            type="button"
-                            class="btn-icon btn-delete"
-                            (click)="removeServiceOrderAgreementItem(i)"
-                            title="Eliminar"
-                          >
-                            <i class="fas fa-trash"></i>
-                          </button>
+                          @if (item.type === 'product') {
+                            <button
+                              type="button"
+                              class="btn-icon btn-delete"
+                              (click)="removeServiceOrderAgreementItem(i)"
+                              title="Eliminar"
+                            >
+                              <i class="fas fa-trash"></i>
+                            </button>
+                          }
                         </div>
                       </div>
 
@@ -1685,24 +1672,31 @@
                         <div class="quote-item-row">
                           <div class="item-input full-width">
                             <label>Servicio</label>
-                            <ng-select
-                              [items]="services"
-                              bindValue="id"
-                              [searchFn]="serviceSearchFn"
-                              [clearable]="true"
-                              placeholder="Selecciona"
-                              [(ngModel)]="item.serviceId"
+                            <div class="selected-item highlight">
+                              {{ technicalServiceOption.name }}
+                            </div>
+                          </div>
+                        </div>
+                        <div class="quote-item-row" *ngIf="!isNonBillableServiceContext()">
+                          <div class="item-input compact">
+                            <label>Monto</label>
+                            <input
+                              type="number"
+                              min="20"
+                              step="0.01"
+                              [ngModel]="item.unitPrice"
+                              (ngModelChange)="updateTechnicalServiceAmount(item, $event)"
                               [ngModelOptions]="{ standalone: true }"
-                            >
-                              <ng-template ng-label-tmp let-service="item">
-                                {{ service?.code }} · {{ service?.name }} ·
-                                {{ getServiceCategoryName(service?.categoryId) }}
-                              </ng-template>
-                              <ng-template ng-option-tmp let-service="item">
-                                {{ service?.code }} · {{ service?.name }} ·
-                                {{ getServiceCategoryName(service?.categoryId) }}
-                              </ng-template>
-                            </ng-select>
+                            />
+                          </div>
+                          <div class="item-input price">
+                            <label>Mínimo</label>
+                            <div class="price-display">
+                              <strong>
+                                {{ technicalServiceOption.price | number: '1.2-2' }}
+                                {{ createServiceOrderAgreementForm.get('currency')?.value }}
+                              </strong>
+                            </div>
                           </div>
                         </div>
                         <div class="quote-item-row">
@@ -1839,7 +1833,7 @@
             <h2>{{ serviceOrderAgreementsServiceOrder.code }} · {{ getServiceOrderLabel(serviceOrderAgreementsServiceOrder) }}</h2>
             <p class="muted">
               Estado del flujo:
-              {{ getServiceOrderWorkflowStatusLabel(serviceOrderAgreementsServiceOrder.workflowStatus) }}
+              {{ getServiceOrderTechnicalStatusLabel(serviceOrderAgreementsServiceOrder.technicalStatus) }}
             </p>
           </div>
           <button class="btn-close" type="button" (click)="closeServiceOrderAgreementsModal()">
@@ -2192,7 +2186,9 @@
 
         <div class="inbox-layout inbox-layout-single">
           <section class="inbox-main">
-            @if (receptionInboxActiveThread) {
+            @if (isLoadingReceptionInbox) {
+              <p class="empty-text">Cargando conversación...</p>
+            } @else if (receptionInboxActiveThread) {
               <div class="inbox-thread-meta">
                 <div>
                   <strong>{{ receptionInboxActiveThread.serviceOrderCode }} · {{ receptionInboxActiveThread.equipmentLabel }}</strong>
@@ -2201,16 +2197,44 @@
               </div>
 
               <div class="inbox-messages">
-                @for (message of receptionInboxActiveThread.messages; track message.id) {
+                @for (message of receptionInboxMessages; track message.id) {
                   <article
                     class="message-bubble"
-                    [class.message-bubble-own]="message.author === 'RECEPTION'"
+                    [class.message-bubble-own]="message.authorRole === 'RECEPTION'"
                   >
                     <header>
-                      <strong>{{ getReceptionInboxAuthorLabel(message.author) }}</strong>
+                      <strong>{{ getReceptionInboxAuthorLabel(message) }}</strong>
                       <span>{{ message.createdAt | date: 'dd/MM HH:mm' }}</span>
                     </header>
-                    <p>{{ message.text }}</p>
+                    @if (message.text) {
+                      <p>{{ message.text }}</p>
+                    }
+                    @if (message.attachments.length) {
+                      <div class="message-attachments">
+                        @for (attachment of message.attachments; track attachment.id) {
+                          <div class="message-attachment-card">
+                            @if (attachment.previewable && getReceptionInboxAttachmentPreviewUrl(attachment.id)) {
+                              <img
+                                class="message-attachment-image"
+                                [src]="getReceptionInboxAttachmentPreviewUrl(attachment.id)"
+                                [alt]="attachment.fileName"
+                              />
+                            } @else {
+                              <span class="message-attachment-icon">
+                                <i class="fas" [class.fa-image]="attachment.attachmentType === 'image'" [class.fa-file-pdf]="attachment.attachmentType === 'pdf'" [class.fa-file-audio]="attachment.attachmentType === 'audio'" [class.fa-file-lines]="attachment.attachmentType === 'document'"></i>
+                              </span>
+                            }
+                            <div class="message-attachment-meta">
+                              <strong>{{ attachment.fileName }}</strong>
+                              <small>{{ attachment.mimeType }} · {{ attachment.sizeBytes / 1024 | number: '1.0-0' }} KB</small>
+                            </div>
+                            <button class="btn btn-light btn-sm" type="button" (click)="downloadReceptionInboxAttachment(attachment)">
+                              Descargar
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    }
                   </article>
                 }
               </div>
@@ -2222,16 +2246,40 @@
                   (input)="receptionInboxDraftMessage = $any($event.target).value"
                   placeholder="Escribe el mensaje para coordinar con el cliente..."
                 ></textarea>
+                <input #receptionInboxFileInput type="file" multiple hidden (change)="onReceptionInboxFilesSelected($event)" />
+                @if (receptionInboxDraftAttachments.length) {
+                  <div class="draft-attachments">
+                    @for (attachment of receptionInboxDraftAttachments; track attachment.file.name + attachment.file.size) {
+                      <div class="draft-attachment-chip">
+                        @if (attachment.previewUrl) {
+                          <img [src]="attachment.previewUrl" [alt]="attachment.file.name" />
+                        } @else {
+                          <i class="fas fa-paperclip"></i>
+                        }
+                        <span>{{ attachment.file.name }}</span>
+                        <button type="button" (click)="removeReceptionInboxDraftAttachment($index)">
+                          <i class="fas fa-times"></i>
+                        </button>
+                      </div>
+                    }
+                  </div>
+                }
                 <div class="inbox-composer-actions">
                   <button class="btn btn-outline-secondary" type="button" (click)="closeReceptionInboxModal()">
                     Cerrar
                   </button>
-                  <button class="btn btn-success" type="button" (click)="sendReceptionInboxMessage()">
+                  <button class="btn btn-outline-secondary" type="button" (click)="triggerReceptionInboxAttachmentPicker(receptionInboxFileInput)">
+                    <i class="fas fa-paperclip"></i>
+                    Adjuntar
+                  </button>
+                  <button class="btn btn-success" type="button" [disabled]="isSendingReceptionInbox" (click)="sendReceptionInboxMessage()">
                     <i class="fab fa-whatsapp"></i>
-                    Enviar
+                    {{ isSendingReceptionInbox ? 'Enviando...' : 'Enviar' }}
                   </button>
                 </div>
               </div>
+            } @else {
+              <p class="empty-text">No hay conversación disponible para esta orden.</p>
             }
           </section>
         </div>

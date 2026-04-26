@@ -1,10 +1,7 @@
 import {
   EquipmentType,
   RequestOrigin,
-  ServiceOrderPaymentStatus,
   ServiceOrderPriority,
-  ServiceOrderStatus,
-  ServiceOrderWorkflowStatus,
   ServiceType,
 } from './service-order';
 
@@ -24,15 +21,27 @@ export interface ServiceOrderSaveRequest {
   estimatedRepairHours?: number | null;
   estimatedDeliveryDate?: string | null;
   notes?: string | null;
-}
-
-export interface ServiceOrderUpdateRequest extends Partial<ServiceOrderSaveRequest> {
   contactName?: string;
   contactEmail?: string | null;
   contactPhone?: string | null;
-  isPaid?: boolean;
-  status?: ServiceOrderStatus;
-  workflowStatus?: ServiceOrderWorkflowStatus;
-  paymentStatus?: ServiceOrderPaymentStatus;
+}
+
+export interface ServiceOrderUpdateRequest {
+  requestOrigin?: RequestOrigin;
+  clientId?: number | null;
+  priority?: ServiceOrderPriority;
+  equipmentType?: EquipmentType;
+  equipmentTypeOther?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  accessories?: string | null;
+  initialIssue?: string;
+  estimatedRepairHours?: number | null;
+  estimatedDeliveryDate?: string | null;
+  notes?: string | null;
+  contactName?: string;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
   cancellationReason?: string | null;
 }

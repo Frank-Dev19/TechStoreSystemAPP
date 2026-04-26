@@ -1,13 +1,12 @@
 import { Component, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { forkJoin, of } from "rxjs"
-import { finalize, map, switchMap } from "rxjs/operators"
+import { catchError, finalize, map, switchMap } from "rxjs/operators"
 import {
   EquipmentType,
   ServiceOrder,
-  ServiceOrderPaymentStatus,
-  ServiceOrderStatus,
-  ServiceOrderWorkflowStatus,
+  ServiceOrderOperativeStatus,
+  ServiceOrderTechnicalStatus,
   ServiceType,
 } from "../../models/service-orders/service-order"
 import { ServiceOrderService } from "../../services/service-orders/service-order.service"
@@ -27,32 +26,22 @@ import {
 import { ServiceOrderAgreementService } from "../../services/service-orders/service-agreement.service"
 import { ProductsService } from "../../services/inventory/products.service"
 import { Product } from "../../models/catalog/product"
-import { ServiceService } from "../../services/service-catalog/service.service"
-import { Service } from "../../models/service-catalog/service"
 import { PricingQueryApiService } from "../../services/pricing/pricing-query-api.service"
 import { UsersApiService } from "../../services/rbac/users-api.service"
 import { UserApi } from "../../models/rbac/user.model"
 import { CurrentUserService } from "../../services/current-user.service"
 import { User } from "../../models/user/user"
 import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
+import {
+  ServiceOrderInboxAttachment,
+  ServiceOrderInboxMessage,
+  ServiceOrderInboxThreadSummary,
+} from "../../models/service-orders/service-order-inbox"
+import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
 
-type InboxAuthor = "TECHNICIAN" | "CLIENT" | "SYSTEM"
-
-interface ServiceOrderInboxMessage {
-  id: number
-  author: InboxAuthor
-  text: string
-  createdAt: Date
-}
-
-interface ServiceOrderInboxThread {
-  serviceOrderId: number
-  serviceOrderCode: string
-  equipmentLabel: string
-  clientAlias: string
-  assignedTechnicianAlias: string
-  unreadForSupervisor: number
-  messages: ServiceOrderInboxMessage[]
+interface InboxDraftAttachment {
+  file: File
+  previewUrl: string | null
 }
 
 interface AgreementProductComposer {
@@ -69,10 +58,25 @@ interface AgreementServiceComposer {
   id: number
   type: "service"
   serviceId: number | null
+  unitPrice: number
   notes: string
 }
 
 type AgreementComposerItem = AgreementProductComposer | AgreementServiceComposer
+
+interface FixedTechnicalServiceOption {
+  id: number
+  code: string
+  name: string
+  price: number
+}
+
+const TECHNICAL_SERVICE_OPTION: FixedTechnicalServiceOption = {
+  id: 1,
+  code: "TECHNICAL_SERVICE",
+  name: "Servicio técnico",
+  price: 20,
+}
 
 @Component({
   selector: "app-technician-panel",
@@ -104,7 +108,6 @@ export class TechnicianPanel implements OnInit {
   isSavingAgreement = false
   agreementItems: AgreementComposerItem[] = []
   products: Product[] = []
-  services: Service[] = []
   productPriceLoading: Record<number, boolean> = {}
 
   orderInDiagnosis = false
@@ -119,8 +122,12 @@ export class TechnicianPanel implements OnInit {
   isSavingDiagnosis = false
   showInboxModal = false
   inboxDraftMessage = ""
-  inboxActiveThread: ServiceOrderInboxThread | null = null
-  inboxThreads: ServiceOrderInboxThread[] = []
+  inboxActiveThread: ServiceOrderInboxThreadSummary | null = null
+  inboxMessages: ServiceOrderInboxMessage[] = []
+  inboxDraftAttachments: InboxDraftAttachment[] = []
+  inboxAttachmentPreviewUrls: Record<number, string> = {}
+  isLoadingInbox = false
+  isSendingInboxMessage = false
 
   private currentUser: User | null = null
   private techniciansMap = new Map<number, string>()
@@ -130,7 +137,7 @@ export class TechnicianPanel implements OnInit {
     [EquipmentType.DESKTOP_PC]: "PC de escritorio",
     [EquipmentType.ALL_IN_ONE]: "All in One",
     [EquipmentType.PRINTER]: "Impresora",
-    [EquipmentType.SCANNER]: "Escaner",
+    [EquipmentType.SCANNER]: "Escáner",
     [EquipmentType.PROJECTOR]: "Proyector",
     [EquipmentType.MONITOR]: "Monitor",
     [EquipmentType.SERVER]: "Servidor",
@@ -144,10 +151,10 @@ export class TechnicianPanel implements OnInit {
     private readonly diagnosticService: ServiceOrderDiagnosisService,
     private readonly agreementService: ServiceOrderAgreementService,
     private readonly productsService: ProductsService,
-    private readonly serviceCatalog: ServiceService,
     private readonly pricingQuery: PricingQueryApiService,
     private readonly usersApi: UsersApiService,
     private readonly currentUserService: CurrentUserService,
+    private readonly serviceOrderInboxService: ServiceOrderInboxService,
   ) {
     this.diagnosisForm = this.createDiagnosisForm()
     this.agreementForm = this.createAgreementForm()
@@ -181,17 +188,12 @@ export class TechnicianPanel implements OnInit {
   }
 
   private loadAgreementCatalogs(): void {
-    forkJoin({
-      products: this.productsService.list(),
-      services: this.serviceCatalog.findAll({ page: 1, limit: 100 }),
-    }).subscribe({
-      next: ({ products, services }) => {
+    this.productsService.list().subscribe({
+      next: (products) => {
         this.products = products ?? []
-        this.services = services.data ?? []
       },
       error: () => {
         this.products = []
-        this.services = []
       },
     })
   }
@@ -214,7 +216,7 @@ export class TechnicianPanel implements OnInit {
       .pipe(finalize(() => (this.isLoadingOrders = false)))
       .subscribe({
         next: ({ data }) => this.hydrateLists(data ?? []),
-        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar tus ordenes asignadas."),
+        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar tus órdenes asignadas."),
       })
   }
 
@@ -223,27 +225,27 @@ export class TechnicianPanel implements OnInit {
 
     this.todoOrders = orders.filter((order) =>
       [
-        ServiceOrderWorkflowStatus.ASSIGNED,
-        ServiceOrderWorkflowStatus.APPROVED_FOR_WORK,
-      ].includes(order.workflowStatus),
+        ServiceOrderTechnicalStatus.ASIGNADA,
+        ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION,
+      ].includes(order.technicalStatus),
     )
 
-    this.diagnosisOrders = orders.filter((order) => order.workflowStatus === ServiceOrderWorkflowStatus.UNDER_REVIEW)
+    this.diagnosisOrders = orders.filter((order) => order.technicalStatus === ServiceOrderTechnicalStatus.EN_DIAGNOSTICO)
 
     this.pendingApprovalOrders = orders.filter((order) =>
       [
-        ServiceOrderWorkflowStatus.DIAGNOSIS_READY,
-        ServiceOrderWorkflowStatus.UNDER_COORDINATION,
-      ].includes(order.workflowStatus),
+        ServiceOrderTechnicalStatus.DIAGNOSTICADA,
+        ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL,
+      ].includes(order.technicalStatus),
     )
 
     this.repairOrders = orders.filter((order) =>
-      [ServiceOrderWorkflowStatus.IN_SERVICE, ServiceOrderWorkflowStatus.WAITING_PARTS].includes(order.workflowStatus),
+      [ServiceOrderTechnicalStatus.EN_EJECUCION, ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO].includes(order.technicalStatus),
     )
 
-    this.repairedOrders = orders.filter((order) => order.workflowStatus === ServiceOrderWorkflowStatus.SERVICE_DONE)
+    this.repairedOrders = orders.filter((order) => order.technicalStatus === ServiceOrderTechnicalStatus.RESUELTA)
 
-    const activeDiagnosis = this.diagnosisOrders.find((order) => order.workflowStatus === ServiceOrderWorkflowStatus.UNDER_REVIEW)
+    const activeDiagnosis = this.diagnosisOrders.find((order) => order.technicalStatus === ServiceOrderTechnicalStatus.EN_DIAGNOSTICO)
     this.orderInDiagnosis = !!activeDiagnosis
     this.currentOrderInDiagnosisId = activeDiagnosis?.id ? Number(activeDiagnosis.id) : null
 
@@ -319,67 +321,163 @@ export class TechnicianPanel implements OnInit {
   canOpenClientInbox(order: ServiceOrder | null): boolean {
     if (!order) return false
     return ![
-      ServiceOrderStatus.DELIVERED,
-      ServiceOrderStatus.CANCELLED,
-      ServiceOrderStatus.CLOSED_NO_SOLUTION,
-    ].includes(order.status)
+      ServiceOrderOperativeStatus.ENTREGADA,
+      ServiceOrderOperativeStatus.CANCELADA,
+      ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION,
+    ].includes(order.operativeStatus)
   }
 
   openWhatsAppInbox(order: ServiceOrder, event?: Event): void {
     event?.stopPropagation()
     if (!this.canOpenClientInbox(order)) return
-
-    const existing = this.inboxThreads.find((thread) => thread.serviceOrderId === Number(order.id))
-    if (existing) {
-      existing.unreadForSupervisor = 0
-      this.inboxActiveThread = existing
-      this.showInboxModal = true
-      return
-    }
-
-    const thread = this.buildInboxThread(order)
-    this.inboxThreads = [thread, ...this.inboxThreads]
-    this.inboxActiveThread = thread
     this.showInboxModal = true
+    this.isLoadingInbox = true
+    this.inboxDraftMessage = ""
+    this.clearInboxDraftAttachments()
+
+    this.serviceOrderInboxService
+      .ensureThreadByOrder(Number(order.id))
+      .pipe(
+        switchMap((thread) => {
+          if (!thread) {
+            return of(null)
+          }
+          return this.serviceOrderInboxService.getMessages(thread.id).pipe(
+            switchMap((response) =>
+              this.serviceOrderInboxService.markRead(thread.id).pipe(
+                catchError(() => of({ ok: false })),
+                map(() => response),
+              ),
+            ),
+          )
+        }),
+        finalize(() => (this.isLoadingInbox = false)),
+      )
+      .subscribe({
+        next: (response) => {
+          this.inboxActiveThread = response?.thread ?? null
+          this.inboxMessages = response?.messages ?? []
+          this.hydrateInboxAttachmentPreviews(this.inboxMessages)
+        },
+        error: () => {
+          this.inboxActiveThread = null
+          this.inboxMessages = []
+          this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar el inbox de la orden.")
+        },
+      })
   }
 
   closeInboxModal(): void {
     this.showInboxModal = false
     this.inboxDraftMessage = ""
+    this.isLoadingInbox = false
+    this.isSendingInboxMessage = false
     this.inboxActiveThread = null
+    this.inboxMessages = []
+    this.clearInboxAttachmentPreviews()
+    this.clearInboxDraftAttachments()
   }
 
   sendInboxMessage(): void {
     if (!this.inboxActiveThread) return
     const text = this.inboxDraftMessage.trim()
-    if (!text) return
+    if (!text && !this.inboxDraftAttachments.length) return
 
-    this.inboxActiveThread.messages.push({
-      id: Date.now(),
-      author: "TECHNICIAN",
-      text,
-      createdAt: new Date(),
-    })
-    this.inboxDraftMessage = ""
+    this.isSendingInboxMessage = true
+    const attachments = this.inboxDraftAttachments.map((entry) => entry.file)
 
-    this.inboxActiveThread.messages.push({
-      id: Date.now() + 1,
-      author: "CLIENT",
-      text: "Recibido. Gracias por la actualizacion tecnica.",
-      createdAt: new Date(),
-    })
-    this.inboxActiveThread.unreadForSupervisor += 1
+    this.serviceOrderInboxService
+      .sendMessage(this.inboxActiveThread.id, text, attachments)
+      .pipe(
+        switchMap((sendResult) =>
+          this.serviceOrderInboxService.getMessages(this.inboxActiveThread!.id).pipe(
+            map((response) => ({ response, sendResult })),
+          ),
+        ),
+        finalize(() => (this.isSendingInboxMessage = false)),
+      )
+      .subscribe({
+        next: ({ response, sendResult }) => {
+          this.inboxActiveThread = response.thread
+          this.inboxMessages = response.messages
+          this.inboxDraftMessage = ""
+          this.clearInboxDraftAttachments()
+          this.hydrateInboxAttachmentPreviews(this.inboxMessages)
+          const partialFailures = sendResult.partialFailures ?? []
+          if (partialFailures.length) {
+            this.showMessage("warning", "fas fa-exclamation-triangle", "El mensaje salió parcialmente: revisá los adjuntos fallidos antes de reenviar.")
+          }
+        },
+        error: () => {
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos enviar el mensaje al canal.")
+        },
+      })
   }
 
-  getInboxAuthorLabel(author: InboxAuthor): string {
-    switch (author) {
+  getInboxAuthorLabel(message: ServiceOrderInboxMessage): string {
+    if (message.authorDisplayName?.trim()) {
+      return message.authorDisplayName.trim()
+    }
+    switch (message.authorRole) {
       case "TECHNICIAN":
         return "Tecnico"
+      case "SUPERVISOR":
+        return "Supervisor"
+      case "RECEPTION":
+        return "Recepción"
       case "CLIENT":
-        return this.inboxActiveThread?.clientAlias ?? "Cliente anonimo"
+        return this.inboxActiveThread?.clientAlias ?? "Cliente"
       default:
         return "Sistema"
     }
+  }
+
+  triggerInboxAttachmentPicker(input: HTMLInputElement): void {
+    input.click()
+  }
+
+  onInboxFilesSelected(event: Event): void {
+    const target = event.target as HTMLInputElement
+    const files = Array.from(target.files ?? [])
+    if (!files.length) {
+      return
+    }
+
+    const nextAttachments = files.map((file) => ({
+      file,
+      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+    }))
+
+    this.inboxDraftAttachments = [...this.inboxDraftAttachments, ...nextAttachments]
+    target.value = ""
+  }
+
+  removeInboxDraftAttachment(index: number): void {
+    const attachment = this.inboxDraftAttachments[index]
+    if (attachment?.previewUrl) {
+      URL.revokeObjectURL(attachment.previewUrl)
+    }
+    this.inboxDraftAttachments.splice(index, 1)
+  }
+
+  getInboxAttachmentPreviewUrl(attachmentId: number): string | null {
+    return this.inboxAttachmentPreviewUrls[attachmentId] ?? null
+  }
+
+  downloadInboxAttachment(attachment: ServiceOrderInboxAttachment): void {
+    this.serviceOrderInboxService.downloadAttachmentBlob(attachment.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.download = attachment.fileName
+        anchor.click()
+        URL.revokeObjectURL(url)
+      },
+      error: () => {
+        this.showMessage("warning", "fas fa-paperclip", "No pudimos descargar el adjunto.")
+      },
+    })
   }
 
   startDiagnosis(order: ServiceOrder): void {
@@ -389,7 +487,7 @@ export class TechnicianPanel implements OnInit {
     }
     this.transitionWorkflow(
       order,
-      ServiceOrderWorkflowStatus.UNDER_REVIEW,
+      ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
       this.isWarrantyService(order) ? "Revision de garantia iniciada correctamente." : "Diagnostico iniciado correctamente.",
     )
   }
@@ -453,6 +551,8 @@ export class TechnicianPanel implements OnInit {
           })
           if (this.agreementSummary) {
             this.hydrateAgreementComposer(this.agreementSummary)
+          } else {
+            this.ensureTechnicalServiceItem()
           }
         },
         error: () => {
@@ -495,19 +595,16 @@ export class TechnicianPanel implements OnInit {
     })
   }
 
-  addAgreementService(): void {
-    if (!this.isAgreementEditable()) return
-    this.agreementItems.push({
-      id: Date.now() + Math.random(),
-      type: "service",
-      serviceId: null,
-      notes: "",
-    })
-  }
-
   removeAgreementItem(index: number): void {
     if (!this.isAgreementEditable()) return
+    if (this.agreementItems[index]?.type === "service") return
     this.agreementItems.splice(index, 1)
+  }
+
+  updateTechnicalServiceAmount(value: unknown): void {
+    const item = this.getTechnicalServiceItem()
+    if (!item) return
+    item.unitPrice = Number(value) || 0
   }
 
   onAgreementProductSelected(item: AgreementProductComposer, value: any): void {
@@ -546,8 +643,7 @@ export class TechnicianPanel implements OnInit {
     if (item.type === "product") {
       return Number(item.quantity ?? 0) * Number(item.unitPrice ?? 0)
     }
-    const service = this.services.find((entry) => Number(entry.id) === Number(item.serviceId))
-    return Number(service?.price ?? 0)
+    return Number(item.unitPrice ?? TECHNICAL_SERVICE_OPTION.price)
   }
 
   calculateAgreementTotal(): number {
@@ -565,6 +661,10 @@ export class TechnicianPanel implements OnInit {
       this.showMessage("warning", "fas fa-exclamation-circle", "Agrega al menos un producto o servicio al acuerdo.")
       return
     }
+    if (!this.isTechnicalServiceAmountValid()) {
+      this.showMessage("warning", "fas fa-exclamation-circle", "El servicio técnico debe ser de al menos S/20.")
+      return
+    }
 
     const currentDiagnosisId = this.toNumericId(
       this.diagnosticHistory.find((entry) => entry.status === ServiceOrderDiagnosisStatus.CURRENT)?.id,
@@ -574,6 +674,7 @@ export class TechnicianPanel implements OnInit {
       serviceOrderId: Number(order.id),
       ...(currentDiagnosisId ? { diagnosisId: currentDiagnosisId } : {}),
       notes: this.agreementForm.get("notes")?.value || undefined,
+      technicalServiceAmount: this.resolveTechnicalServiceAmount(),
       products: this.agreementItems.flatMap((entry) => {
         if (entry.type !== "product") return []
         const productId = this.toNumericId(entry.productId)
@@ -585,12 +686,6 @@ export class TechnicianPanel implements OnInit {
           requiresPurchase: entry.requiresPurchase,
           notes: entry.notes || undefined,
         }]
-      }),
-      services: this.agreementItems.flatMap((entry) => {
-        if (entry.type !== "service") return []
-        const serviceId = this.toNumericId(entry.serviceId)
-        if (!serviceId) return []
-        return [{ serviceId, notes: entry.notes || undefined }]
       }),
     }
 
@@ -659,7 +754,7 @@ export class TechnicianPanel implements OnInit {
       return
     }
 
-    const wasInService = this.selectedServiceOrder.workflowStatus === ServiceOrderWorkflowStatus.IN_SERVICE
+    const wasInService = this.selectedServiceOrder.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION
     const orderId = Number(this.selectedServiceOrder.id)
     const selectedOutcome =
       (this.diagnosisForm.get("outcome")?.value as ServiceOrderDiagnosisOutcome | null) ??
@@ -684,14 +779,7 @@ export class TechnicianPanel implements OnInit {
           }
 
           if (waivesCharge) {
-            return this.serviceOrderService
-              .update(orderId, { paymentStatus: ServiceOrderPaymentStatus.WAIVED })
-              .pipe(
-                switchMap(() =>
-                  this.serviceOrderService.changeWorkflowStatus(orderId, ServiceOrderWorkflowStatus.READY_FOR_PICKUP),
-                ),
-                map(() => "WAIVED"),
-              )
+            return of("WAIVED")
           }
 
           return of("NORMAL")
@@ -737,7 +825,7 @@ export class TechnicianPanel implements OnInit {
   }
 
   startRepair(order: ServiceOrder): void {
-    if (order.workflowStatus !== ServiceOrderWorkflowStatus.APPROVED_FOR_WORK) {
+    if (order.technicalStatus !== ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION) {
       this.showMessage(
         "warning",
         "fas fa-exclamation-circle",
@@ -745,37 +833,37 @@ export class TechnicianPanel implements OnInit {
       )
       return
     }
-    this.transitionWorkflow(order, ServiceOrderWorkflowStatus.IN_SERVICE, "Servicio iniciado.")
+    this.transitionWorkflow(order, ServiceOrderTechnicalStatus.EN_EJECUCION, "Servicio iniciado.")
   }
 
   markRepaired(order: ServiceOrder): void {
-    if (order.workflowStatus !== ServiceOrderWorkflowStatus.IN_SERVICE) {
+    if (order.technicalStatus !== ServiceOrderTechnicalStatus.EN_EJECUCION) {
       return
     }
-    this.transitionWorkflow(order, ServiceOrderWorkflowStatus.SERVICE_DONE, "Equipo marcado como reparado.")
+    this.transitionWorkflow(order, ServiceOrderTechnicalStatus.RESUELTA, "Equipo marcado como reparado.")
   }
 
   canFinishRepair(order?: ServiceOrder | null): boolean {
     if (!order) return false
-    return order.workflowStatus === ServiceOrderWorkflowStatus.IN_SERVICE
+    return order.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION
   }
 
   acceptWarrantyReview(order: ServiceOrder): void {
-    this.transitionWorkflow(order, ServiceOrderWorkflowStatus.APPROVED_FOR_WORK, "Garantia aceptada correctamente.")
+    this.transitionWorkflow(order, ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION, "Garantia aceptada correctamente.")
   }
 
   rejectWarrantyReview(order: ServiceOrder): void {
-    this.transitionWorkflow(order, ServiceOrderWorkflowStatus.CANCELLED, "Garantia rechazada correctamente.")
+    this.transitionWorkflow(order, ServiceOrderTechnicalStatus.SIN_SOLUCION, "Garantia rechazada correctamente.")
   }
 
-  private transitionWorkflow(order: ServiceOrder, status: ServiceOrderWorkflowStatus, successMessage: string): void {
+  private transitionWorkflow(order: ServiceOrder, status: ServiceOrderTechnicalStatus, successMessage: string): void {
     const orderId = Number(order.id)
     if (!orderId) {
       this.showMessage("danger", "fas fa-times-circle", "ID de orden invalido.")
       return
     }
 
-    this.serviceOrderService.changeWorkflowStatus(orderId, status).subscribe({
+    this.serviceOrderService.changeTechnicalStatus(orderId, status).subscribe({
       next: () => {
         this.showMessage("success", "fas fa-check-circle", successMessage)
         this.loadTechnicianOrders()
@@ -807,21 +895,21 @@ export class TechnicianPanel implements OnInit {
   }
 
   canStartDiagnosis(order: ServiceOrder): boolean {
-    return order.workflowStatus === ServiceOrderWorkflowStatus.ASSIGNED &&
+    return order.technicalStatus === ServiceOrderTechnicalStatus.ASIGNADA &&
       [ServiceType.DIAGNOSIS, ServiceType.WARRANTY_SERVICE].includes(order.serviceType)
   }
 
   canOpenRediagnosis(order: ServiceOrder | null): boolean {
     if (!order) return false
-    return order.workflowStatus === ServiceOrderWorkflowStatus.IN_SERVICE && order.serviceType === ServiceType.DIAGNOSIS
+    return order.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION && order.serviceType === ServiceType.DIAGNOSIS
   }
 
   canManageAgreement(order: ServiceOrder | null): boolean {
     if (!order || this.isWarrantyService(order)) return false
     return [
-      ServiceOrderWorkflowStatus.DIAGNOSIS_READY,
-      ServiceOrderWorkflowStatus.UNDER_COORDINATION,
-    ].includes(order.workflowStatus)
+      ServiceOrderTechnicalStatus.DIAGNOSTICADA,
+      ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL,
+    ].includes(order.technicalStatus)
   }
 
   isAgreementEditable(): boolean {
@@ -848,7 +936,7 @@ export class TechnicianPanel implements OnInit {
   }
 
   isAdditionalDiagnosisFlow(): boolean {
-    return this.selectedServiceOrder?.workflowStatus === ServiceOrderWorkflowStatus.IN_SERVICE
+    return this.selectedServiceOrder?.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION
   }
 
   getDiagnosisOutcomeOptions(): Array<{ value: ServiceOrderDiagnosisOutcome; label: string }> {
@@ -861,7 +949,7 @@ export class TechnicianPanel implements OnInit {
 
   canStartRepairDirectly(order: ServiceOrder): boolean {
     return (
-      order.workflowStatus === ServiceOrderWorkflowStatus.APPROVED_FOR_WORK &&
+      order.technicalStatus === ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION &&
       !this.isStandardService(order)
     )
   }
@@ -871,47 +959,51 @@ export class TechnicianPanel implements OnInit {
   }
 
   canAcceptWarrantyReview(order: ServiceOrder | null): boolean {
-    return !!order && this.isWarrantyService(order) && order.workflowStatus === ServiceOrderWorkflowStatus.UNDER_REVIEW
+    return !!order && this.isWarrantyService(order) && order.technicalStatus === ServiceOrderTechnicalStatus.EN_DIAGNOSTICO
   }
 
   canRejectWarrantyReview(order: ServiceOrder | null): boolean {
-    return !!order && this.isWarrantyService(order) && order.workflowStatus === ServiceOrderWorkflowStatus.UNDER_REVIEW
+    return !!order && this.isWarrantyService(order) && order.technicalStatus === ServiceOrderTechnicalStatus.EN_DIAGNOSTICO
   }
 
   canStartStandardService(order: ServiceOrder): boolean {
-    return this.isStandardService(order) && order.workflowStatus === ServiceOrderWorkflowStatus.APPROVED_FOR_WORK
+    return this.isStandardService(order) && order.technicalStatus === ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION
   }
 
-  private buildInboxThread(order: ServiceOrder): ServiceOrderInboxThread {
-    const serviceOrderCode = order.code ?? `SO-${order.id}`
-    const equipmentLabel = this.getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther)
-    const shortRef = String(serviceOrderCode).slice(-4)
-    const clientAlias = `Cliente-${shortRef || "XXXX"}`
-    const techRef = order.assignedToTechnicianId ? String(order.assignedToTechnicianId).padStart(2, "0") : "00"
-    const assignedTechnicianAlias = `Tecnico-${techRef}`
+  private hydrateInboxAttachmentPreviews(messages: ServiceOrderInboxMessage[]): void {
+    const imageAttachments = messages.flatMap((message) =>
+      (message.attachments ?? []).filter((attachment) => attachment.previewable),
+    )
 
-    return {
-      serviceOrderId: Number(order.id),
-      serviceOrderCode,
-      equipmentLabel,
-      clientAlias,
-      assignedTechnicianAlias,
-      unreadForSupervisor: 0,
-      messages: [
-        {
-          id: Date.now(),
-          author: "SYSTEM",
-          text: "Canal supervisado: no se muestran nombre ni datos de contacto del cliente.",
-          createdAt: new Date(),
+    imageAttachments.forEach((attachment) => {
+      if (this.inboxAttachmentPreviewUrls[attachment.id]) {
+        return
+      }
+
+      this.serviceOrderInboxService.downloadAttachmentBlob(attachment.id).subscribe({
+        next: (blob) => {
+          this.inboxAttachmentPreviewUrls[attachment.id] = URL.createObjectURL(blob)
         },
-        {
-          id: Date.now() + 1,
-          author: "CLIENT",
-          text: "Buenos dias, podrian indicarme el avance del equipo?",
-          createdAt: new Date(),
-        },
-      ],
-    }
+      })
+    })
+  }
+
+  private clearInboxAttachmentPreviews(): void {
+    Object.values(this.inboxAttachmentPreviewUrls).forEach((url) => {
+      if (url) {
+        URL.revokeObjectURL(url)
+      }
+    })
+    this.inboxAttachmentPreviewUrls = {}
+  }
+
+  private clearInboxDraftAttachments(): void {
+    this.inboxDraftAttachments.forEach((attachment) => {
+      if (attachment.previewUrl) {
+        URL.revokeObjectURL(attachment.previewUrl)
+      }
+    })
+    this.inboxDraftAttachments = []
   }
 
   private showMessage(type: string, icon: string, message: string): void {
@@ -1018,31 +1110,24 @@ export class TechnicianPanel implements OnInit {
   }
 
   getServiceName(service: ServiceOrderAgreementServiceItem): string {
-    if (service?.service?.name) {
-      const code = service.service.code ? `${service.service.code} | ` : ""
-      return `${code}${service.service.name}`
-    }
-    if (service?.serviceId) return `Servicio #${service.serviceId}`
-    return "Servicio sin referencia"
+    return service?.serviceNameSnapshot || TECHNICAL_SERVICE_OPTION.name
   }
 
-  getCatalogServiceName(serviceId: number | null): string {
-    const service = this.services.find((entry) => Number(entry.id) === Number(serviceId))
-    if (!service) return "Servicio"
-    return service.code ? `${service.code} | ${service.name}` : service.name
+  getTechnicalServiceLabel(): string {
+    return TECHNICAL_SERVICE_OPTION.name
   }
 
   private shouldLoadServiceOrderAgreement(order: ServiceOrder | null): boolean {
     if (!order) return false
     if (order.serviceType === ServiceType.WARRANTY_SERVICE) return false
     return [
-      ServiceOrderWorkflowStatus.DIAGNOSIS_READY,
-      ServiceOrderWorkflowStatus.UNDER_COORDINATION,
-      ServiceOrderWorkflowStatus.APPROVED_FOR_WORK,
-      ServiceOrderWorkflowStatus.IN_SERVICE,
-      ServiceOrderWorkflowStatus.WAITING_PARTS,
-      ServiceOrderWorkflowStatus.SERVICE_DONE,
-    ].includes(order.workflowStatus)
+      ServiceOrderTechnicalStatus.DIAGNOSTICADA,
+      ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL,
+      ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION,
+      ServiceOrderTechnicalStatus.EN_EJECUCION,
+      ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO,
+      ServiceOrderTechnicalStatus.RESUELTA,
+    ].includes(order.technicalStatus)
   }
 
   canShowServiceOrderAgreementSection(order: ServiceOrder | null): boolean {
@@ -1097,10 +1182,12 @@ export class TechnicianPanel implements OnInit {
       this.agreementItems.push({
         id: Date.now() + Math.random(),
         type: "service",
-        serviceId: service.serviceId,
+        serviceId: TECHNICAL_SERVICE_OPTION.id,
+        unitPrice: Number(service.unitPrice ?? TECHNICAL_SERVICE_OPTION.price),
         notes: service.notes || "",
       })
     })
+    this.ensureTechnicalServiceItem()
   }
 
   getAgreementStatusLabel(status?: ServiceOrderAgreementStatus | null): string {
@@ -1129,37 +1216,73 @@ export class TechnicianPanel implements OnInit {
     return !query || `${item?.sku ?? ""} ${item?.name ?? ""}`.toLowerCase().includes(query)
   }
 
-  serviceSearchFn = (term: string, item: Service): boolean => {
-    const query = term.toLowerCase().trim()
-    return !query || `${item?.code ?? ""} ${item?.name ?? ""}`.toLowerCase().includes(query)
+  private resolveTechnicalServiceAmount(): number {
+    return Number(this.getTechnicalServiceItem()?.unitPrice ?? 0)
+  }
+
+  getTechnicalServiceItem(): AgreementServiceComposer | null {
+    return this.agreementItems.find((entry): entry is AgreementServiceComposer => entry.type === "service") ?? null
+  }
+
+  getAgreementProductItems(): AgreementProductComposer[] {
+    return this.agreementItems.filter((entry): entry is AgreementProductComposer => entry.type === "product")
+  }
+
+  canRemoveAgreementItemById(itemId: number): boolean {
+    return this.agreementItems.find((entry) => entry.id === itemId)?.type === "product"
+  }
+
+  isTechnicalServiceAmountValid(): boolean {
+    return this.resolveTechnicalServiceAmount() >= TECHNICAL_SERVICE_OPTION.price
+  }
+
+  private ensureTechnicalServiceItem(): void {
+    const current = this.getTechnicalServiceItem()
+    if (current) {
+      current.serviceId = TECHNICAL_SERVICE_OPTION.id
+      current.notes = ""
+      if (!Number.isFinite(Number(current.unitPrice)) || Number(current.unitPrice) <= 0) {
+        current.unitPrice = TECHNICAL_SERVICE_OPTION.price
+      }
+      return
+    }
+
+    this.agreementItems.unshift({
+      id: Date.now() + Math.random(),
+      type: "service",
+      serviceId: TECHNICAL_SERVICE_OPTION.id,
+      unitPrice: TECHNICAL_SERVICE_OPTION.price,
+      notes: "",
+    })
   }
 
   getWorkflowLabel(order: ServiceOrder): string {
-    switch (order.workflowStatus) {
-      case ServiceOrderWorkflowStatus.ASSIGNED:
+    switch (order.technicalStatus) {
+      case ServiceOrderTechnicalStatus.PENDIENTE_ASIGNACION:
+        return "Pendiente de asignación"
+      case ServiceOrderTechnicalStatus.ASIGNADA:
         return "Asignado"
-      case ServiceOrderWorkflowStatus.UNDER_REVIEW:
-        return this.isWarrantyService(order) ? "En revision de garantia" : "En diagnostico"
-      case ServiceOrderWorkflowStatus.DIAGNOSIS_READY:
+      case ServiceOrderTechnicalStatus.EN_DIAGNOSTICO:
+        return this.isWarrantyService(order) ? "En revisión de garantía" : "En diagnóstico"
+      case ServiceOrderTechnicalStatus.DIAGNOSTICADA:
         return "Diagnosticado"
-      case ServiceOrderWorkflowStatus.UNDER_COORDINATION:
-        return "En coordinacion"
-      case ServiceOrderWorkflowStatus.APPROVED_FOR_WORK:
-        return this.isWarrantyService(order) ? "Garantia aceptada" : "Aprobado para servicio"
-      case ServiceOrderWorkflowStatus.IN_SERVICE:
+      case ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL:
+        return "En coordinación"
+      case ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION:
+        return this.isWarrantyService(order) ? "Garantía aceptada" : "Aprobado para servicio"
+      case ServiceOrderTechnicalStatus.EN_EJECUCION:
         return "En servicio"
-      case ServiceOrderWorkflowStatus.WAITING_PARTS:
+      case ServiceOrderTechnicalStatus.BLOQUEADA:
+        return "Bloqueada"
+      case ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO:
         return "Esperando repuestos"
-      case ServiceOrderWorkflowStatus.SERVICE_DONE:
+      case ServiceOrderTechnicalStatus.RESUELTA:
         return "Servicio finalizado"
-      case ServiceOrderWorkflowStatus.NO_SOLUTION:
-        return "Sin solucion"
-      case ServiceOrderWorkflowStatus.READY_FOR_PICKUP:
-        return "Pendiente de recojo"
-      case ServiceOrderWorkflowStatus.CANCELLED:
-        return this.isWarrantyService(order) ? "Garantia rechazada" : "Cancelado"
+      case ServiceOrderTechnicalStatus.SIN_SOLUCION:
+        return "Sin solución"
       default:
-        return order.workflowStatus
+        return order.technicalStatus
     }
   }
+
 }

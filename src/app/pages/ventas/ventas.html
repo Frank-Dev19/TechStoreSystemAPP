@@ -482,14 +482,43 @@
         <div class="sale-form-container">
             <div class="sale-form-left">
 
-                <!-- Seccion Productos -->
                 <div class="form-section">
+                    <h3 class="section-title"><i class="fas fa-random"></i> Flujo de venta</h3>
+                    <div class="form-group">
+                        <label>Modo</label>
+                        <select class="form-control" [ngModel]="saleCreationMode"
+                            (ngModelChange)="onSaleCreationModeChange($event)">
+                            <option value="MANUAL_PRODUCT">Venta manual de productos</option>
+                            <option value="SERVICE_ORDER">Venta desde orden/acuerdo</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" *ngIf="saleCreationMode === 'SERVICE_ORDER'">
+                        <label>Orden pendiente de pago</label>
+                        <select class="form-control" [ngModel]="selectedServiceOrderId"
+                            (ngModelChange)="onServiceOrderSelected($event)">
+                            <option [ngValue]="null">Seleccionar orden...</option>
+                            <option *ngFor="let order of eligibleServiceOrders" [ngValue]="order.id">
+                                {{ order.code }} · {{ order.clientSnapshotName || order.client?.name || 'Cliente' }} · S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="customer-card" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrder">
+                        <p class="customer-name">{{ getSelectedServiceOrderClientLabel() }}</p>
+                        <p class="customer-detail">Orden: {{ selectedServiceOrder.code }}</p>
+                        <p class="customer-detail">Pendiente: S/ {{ selectedServiceOrder.montoComprometidoVigente | number:'1.2-2' }}</p>
+                    </div>
+                </div>
+
+                <!-- Seccion Productos -->
+                <div class="form-section" *ngIf="saleCreationMode === 'MANUAL_PRODUCT'">
                     <h3 class="section-title"><i class="fas fa-box-open"></i> Items de la venta</h3>
                     <div class="form-group product-autocomplete">
-                        <label>Producto o servicio</label>
+                        <label>Producto</label>
                         <!-- BUSCADOR DE PRODUCTO -->
                         <input #productSearchInput type="text" [(ngModel)]="productSearchText"
-                            (input)="onSaleItemSearch()" class="form-control" placeholder="Buscar producto o servicio...">
+                            (input)="onSaleItemSearch()" class="form-control" placeholder="Buscar producto...">
 
 
                         <ul class="autocomplete-list" *ngIf="filteredSaleItems.length > 0">
@@ -497,14 +526,14 @@
                                 (click)="selectSaleCatalogItem(item)">
                                 <div class="item-main">
                                     <span class="item-name">{{ item.name }}</span>
-                                    <span class="item-type-badge" [class.service]="item.itemType === 'SERVICE'">
-                                        {{ item.itemType === 'SERVICE' ? 'Servicio' : 'Producto' }}
+                                    <span class="item-type-badge">
+                                        Producto
                                     </span>
                                 </div>
 
                                 <div class="item-pricing">
                                     <!-- Opcion de precio por menor -->
-                                    <div class="price-option" *ngIf="item.itemType !== 'SERVICE' && item.product && getPriceOption(item.product.id, 'POR-MENOR')">
+                                    <div class="price-option" *ngIf="item.product && getPriceOption(item.product.id, 'POR-MENOR')">
                                         <span class="price-label">Menor:</span>
                                         <span class="price-value">
                                             S/ {{ getPriceOption(item.product.id, 'POR-MENOR')?.finalUnitPrice | number:'1.2-2' }}
@@ -515,7 +544,7 @@
                                     </div>
 
                                     <!-- Opcion de precio por mayor -->
-                                    <div class="price-option major" *ngIf="item.itemType !== 'SERVICE' && item.product && getPriceOption(item.product.id, 'POR-MAYOR')">
+                                    <div class="price-option major" *ngIf="item.product && getPriceOption(item.product.id, 'POR-MAYOR')">
                                         <span class="price-label">Mayor ({{ getPriceMinQty(item.product.id, 'POR-MAYOR')
                                             }}+):</span>
                                         <span class="price-value">
@@ -525,18 +554,12 @@
                                             (-{{ getDiscountPercent(item.product.id, 'POR-MAYOR') }}%)
                                         </span>
                                     </div>
-                                    <div class="price-option" *ngIf="item.itemType === 'SERVICE'">
-                                        <span class="price-label">Servicio:</span>
-                                        <span class="price-value">
-                                            S/ {{ item.price | number:'1.2-2' }}
-                                        </span>
-                                    </div>
                                 </div>
 
                                 <div class="item-meta">
                                     <span class="item-sku">{{ item.code }}</span>
-                                    <span class="item-stock" *ngIf="item.itemType !== 'SERVICE'">Stock: {{ item.stock || 0 }}</span>
-                                    <span class="discount-notice" *ngIf="item.itemType !== 'SERVICE' && item.product && hasAnyDiscount(item.product.id)">
+                                    <span class="item-stock">Stock: {{ item.stock || 0 }}</span>
+                                    <span class="discount-notice" *ngIf="item.product && hasAnyDiscount(item.product.id)">
                                         {{ getMainDiscountName(item.product.id) }}
                                     </span>
                                 </div>
@@ -669,7 +692,7 @@
                 </div>
 
                 <!-- Seccion Cliente -->
-                <div class="form-section">
+                <div class="form-section" *ngIf="saleCreationMode === 'MANUAL_PRODUCT'">
                     <h3 class="section-title"><i class="fas fa-user"></i> Cliente</h3>
 
                     <div class="form-group">
@@ -812,9 +835,9 @@
                             Cancelar
                         </button>
                         <button class="btn-primary btn-block" (click)="onConfirmSale()"
-                            [disabled]="!saleFormData?.lines || saleFormData.lines.length === 0 || !foundCustomer">
+                            [disabled]="!saleFormData?.lines || saleFormData.lines.length === 0 || (saleCreationMode === 'MANUAL_PRODUCT' ? !foundCustomer : !selectedServiceOrderId)">
                             <i class="fas fa-check"></i>
-                            Registrar Venta
+                            {{ saleCreationMode === 'SERVICE_ORDER' ? 'Emitir venta desde orden' : 'Registrar Venta' }}
                         </button>
                     </div>
                 </div>

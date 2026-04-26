@@ -3110,6 +3110,60 @@ $bg-light: #f5f7fa;
     border-color: #bfdbfe;
   }
 
+  .message-attachments {
+    margin-top: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .message-attachment-card {
+    border: 1px solid rgba(59, 130, 246, 0.12);
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+
+    .message-attachment-image {
+      width: 58px;
+      height: 58px;
+      border-radius: 12px;
+      object-fit: cover;
+      border: 1px solid rgba(59, 130, 246, 0.16);
+    }
+
+    .message-attachment-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: #e2e8f0;
+      color: #1e3a8a;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .message-attachment-meta {
+      flex: 1;
+      min-width: 0;
+
+      strong,
+      small {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      small {
+        margin-top: 0.2rem;
+        color: #64748b;
+      }
+    }
+  }
+
   .inbox-composer {
     border-top: 1px solid #e5e7eb;
     background: #fff;
@@ -3123,6 +3177,47 @@ $bg-light: #f5f7fa;
       padding: 0.85rem 1rem;
       min-height: 96px;
       outline: none;
+    }
+  }
+
+  .draft-attachments {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  .draft-attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    border: 1px solid rgba(59, 130, 246, 0.18);
+    border-radius: 999px;
+    background: #f8fafc;
+    padding: 0.45rem 0.75rem;
+
+    img {
+      width: 28px;
+      height: 28px;
+      object-fit: cover;
+      border-radius: 999px;
+    }
+
+    span {
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.8rem;
+    }
+
+    button {
+      border: none;
+      background: transparent;
+      color: #64748b;
+      padding: 0;
+      display: inline-flex;
+      cursor: pointer;
     }
   }
 

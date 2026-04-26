@@ -1,7 +1,11 @@
 import { Injectable } from "@angular/core";
-import { Observable } from "rxjs";
+import { Observable, throwError } from "rxjs";
 import { BaseService } from "../base.service";
-import { ServiceOrder, ServiceOrderWorkflowStatus, ServiceType } from "../../models/service-orders/service-order";
+import {
+  ServiceOrder,
+  ServiceOrderTechnicalStatus,
+  ServiceType,
+} from "../../models/service-orders/service-order";
 import { ServiceOrderSaveRequest, ServiceOrderUpdateRequest } from "../../models/service-orders/service-order-request";
 import { config } from "../../../environments/environment";
 
@@ -63,8 +67,12 @@ export class ServiceOrderService {
     return this.base.patch<ServiceOrder>(`${config.serviceOrders.serviceOrders}/${id}`, payload);
   }
 
+  markAsDelivered(id: number): Observable<ServiceOrder> {
+    return this.base.patch<ServiceOrder>(`${config.serviceOrders.serviceOrders}/${id}/deliver`, {});
+  }
+
   markPaid(id: number): Observable<ServiceOrder> {
-    return this.base.patch<ServiceOrder>(`${config.serviceOrders.serviceOrders}/${id}`, { isPaid: true });
+    return throwError(() => new Error(`markPaid(${id}) fue eliminado: el estado económico depende solo de comprobantes vinculados.`));
   }
 
   assignTechnician(id: number, technicianId: number): Observable<ServiceOrder> {
@@ -74,13 +82,13 @@ export class ServiceOrderService {
     );
   }
 
-  changeWorkflowStatus(
+  changeTechnicalStatus(
     id: number,
-    status: ServiceOrderWorkflowStatus,
+    status: ServiceOrderTechnicalStatus,
     reason?: string,
   ): Observable<ServiceOrder> {
     return this.base.patch<ServiceOrder>(
-      `${config.serviceOrders.serviceOrders}/${id}/workflow/${status}`,
+      `${config.serviceOrders.serviceOrders}/${id}/technical/${status}`,
       reason ? { reason } : {},
     );
   }
