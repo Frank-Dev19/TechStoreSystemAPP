@@ -1,11 +1,11 @@
 import { Component, HostListener, OnDestroy, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
-import { Subscription } from "rxjs"
+import { Observable, Subscription } from "rxjs"
 import { catchError, finalize, map, switchMap, tap } from "rxjs/operators"
 import { forkJoin, of, throwError } from "rxjs"
 import { ClientsApiService } from "../../services/clients-api.service"
-import { ClientResponse } from "../../models/clients-response"
-import { ClientSaveRequest } from "../../models/clients-request"
+import { ClientContactResponse, ClientResponse } from "../../models/clients-response"
+import { ClientKind, ClientSaveRequest } from "../../models/clients-request"
 import {
   ServiceOrderService,
   TechnicianAssignmentSuggestion,
@@ -22,7 +22,7 @@ import {
   ServiceOrderTechnicalStatus,
   ServiceType,
 } from "../../models/service-orders/service-order"
-import { ServiceOrderSaveRequest, ServiceOrderUpdateRequest } from "../../models/service-orders/service-order-request"
+import { ServiceOrderSaveRequest, ServiceOrderBatchCreateRequest, ServiceOrderUpdateRequest } from "../../models/service-orders/service-order-request"
 import { ProductsService } from "../../services/inventory/products.service"
 import { Product } from "../../models/catalog/product"
 import { ServiceOrderAgreementService } from "../../services/service-orders/service-agreement.service"
@@ -123,6 +123,19 @@ interface InboxDraftAttachment {
   previewUrl: string | null
 }
 
+interface CreateServiceOrderCandidateDraft {
+  equipmentType: EquipmentType
+  equipmentTypeOther: string | null
+  brand: string | null
+  model: string | null
+  serialNumber: string | null
+  accessories: string | null
+  initialIssue: string
+  serviceType: ServiceType
+  notes: string | null
+  quoteItems: ServiceOrderAgreementComposerItem[]
+}
+
 const SERVICE_ORDER_OPERATIVE_STATUS_LABELS: Record<ServiceOrderOperativeStatus, string> = {
   [ServiceOrderOperativeStatus.ABIERTA]: "Abierto",
   [ServiceOrderOperativeStatus.EN_PROCESO]: "En progreso",
@@ -190,6 +203,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   readonly serviceTypeEnum = ServiceType
   readonly requestOriginEnum = RequestOrigin
   readonly serviceOrderAgreementStatusEnum = ServiceOrderAgreementStatus
+  readonly clientKindEnum = ClientKind
   expectedDocumentDigits: number | null = null
   private itemServiceOrderAgreementTotals: Record<number, number> = {}
   filterState: "all" | ServiceOrderOperativeStatus = "all"
@@ -253,6 +267,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   warrantyCoverageLines: WarrantyCoverageLine[] = []
   selectedWarrantyLineIds = new Set<string>()
   createServiceOrderStep = 0
+  createServiceOrderCandidates: CreateServiceOrderCandidateDraft[] = []
+  editingCreateServiceOrderCandidateIndex: number | null = null
   productPriceLoading: Record<number, boolean> = {}
   createOrderProductPriceLoadingByItemIndex: Record<number, Record<number, boolean>> = {}
 
@@ -342,8 +358,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       requestOrigin: [RequestOrigin.CLIENT, Validators.required],
       workflowServiceType: [ServiceType.DIAGNOSIS, Validators.required],
       clientId: [null],
+      clientKind: [ClientKind.PERSON, Validators.required],
+      clientContactId: [null],
       documentNumber: ["", [Validators.required, Validators.pattern(/^[0-9]*$/)]],
       documentTypeId: [null, Validators.required],
+      companyName: [""],
+      companyTradeName: [""],
       contactName: ["", Validators.required],
       contactPhone: ["", [Validators.required, Validators.pattern(/^[0-9+\-\s]*$/)]],
       contactEmail: ["", Validators.email],
@@ -842,6 +862,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.documentSearchError = ""
     this.createServiceOrderForm.get("documentNumber")?.setValue("")
     this.syncDocumentNumberAvailability()
+
+    // Infer clientKind from document type
+    const docType = this.documentTypes.find((t) => Number(t.id) === Number(typeId))
+    const inferredKind = docType?.['kind'] ?? (this.expectedDocumentDigits && this.expectedDocumentDigits >= 11 ? ClientKind.COMPANY : ClientKind.PERSON)
+    this.createServiceOrderForm.patchValue({ clientKind: inferredKind }, { emitEvent: false })
   }
 
   private syncDocumentNumberAvailability(): void {
@@ -1190,12 +1215,21 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   openCreateServiceOrderModal(): void {
     this.showCreateServiceOrderModal = true
     this.createServiceOrderStep = 0
+    this.createServiceOrderCandidates = []
+    this.editingCreateServiceOrderCandidateIndex = null
     this.createServiceOrderForm.reset({
       requestOrigin: RequestOrigin.CLIENT,
       workflowServiceType: ServiceType.DIAGNOSIS,
       clientId: null,
+      clientKind: ClientKind.PERSON,
+      clientContactId: null,
       documentNumber: "",
       documentTypeId: null,
+      companyName: "",
+      companyTradeName: "",
+      contactName: "",
+      contactEmail: "",
+      contactPhone: "",
       priority: ServiceOrderPriority.MEDIUM,
       assignedToTechnicianId: null,
       notes: "",
@@ -1222,6 +1256,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   closeCreateServiceOrderModal(): void {
     this.showCreateServiceOrderModal = false
     this.createServiceOrderStep = 0
+    this.createServiceOrderCandidates = []
+    this.editingCreateServiceOrderCandidateIndex = null
     this.createServiceOrderForm.reset()
     this.documentSearchMessage = ""
     this.documentSearchError = ""
@@ -1256,8 +1292,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   submitCreateServiceOrder(): void {
-    if (this.createServiceOrderForm.invalid) {
-      this.markFormGroupAsTouched(this.createServiceOrderForm)
+    // Validate shared context fields only (equipment is already captured in candidates)
+    const sharedContextFields = [
+      "requestOrigin", "workflowServiceType", "priority", "assignedToTechnicianId",
+      "contactName", "contactPhone", "contactEmail", "documentTypeId",
+    ]
+    if (!this.areControlsValid(sharedContextFields)) {
+      this.markControlsAsTouched(sharedContextFields)
       return
     }
 
@@ -1266,57 +1307,78 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
 
+    // Add current equipment to batch if not already added
+    if (this.editingCreateServiceOrderCandidateIndex === null || this.createServiceOrderCandidates.length === 0) {
+      if (this.areCurrentCreateOrderItemControlsValid() && this.validateCreateServiceOrderInitialAgreement()) {
+        this.addCurrentEquipmentToCreateOrderBatch()
+      }
+    }
+
+    if (!this.createServiceOrderCandidates.length) {
+      this.showMessage("warning", "fas fa-exclamation-circle", "Agrega al menos un equipo antes de confirmar.")
+      return
+    }
+
     this.isCreatingServiceOrder = true
     this.resolveClientId(formValue)
       .pipe(
-        switchMap((clientId) => {
-          const payload: ServiceOrderSaveRequest = {
-            requestOrigin: formValue.requestOrigin,
-            clientId,
-            priority: formValue.priority,
-            assignedToTechnicianId: this.toNumericId(formValue.assignedToTechnicianId) ?? undefined,
-            notes: formValue.notes ?? null,
-            equipmentType: formValue.equipmentType,
-            equipmentTypeOther:
-              formValue.equipmentType === EquipmentType.OTHER
-                ? this.normalizeOptionalText(formValue.equipmentTypeOther)
-                : null,
-            brand: this.normalizeOptionalText(formValue.brand),
-            model: this.normalizeOptionalText(formValue.model),
-            serialNumber: this.normalizeOptionalText(formValue.serialNumber),
-            accessories: this.normalizeOptionalText(formValue.accessories),
-            initialIssue: String(formValue.initialIssue ?? "").trim(),
-            serviceType: formValue.workflowServiceType,
-            contactName: String(formValue.contactName ?? '').trim(),
-            contactPhone: String(formValue.contactPhone ?? '').trim() || null,
-            contactEmail: String(formValue.contactEmail ?? '').trim() || null,
+        switchMap(({ clientId, clientContactId }) => {
+          // Build batch payload
+          const batchPayload: ServiceOrderBatchCreateRequest = {
+            sharedContext: {
+              requestOrigin: formValue.requestOrigin,
+              clientId: clientId || null,
+              clientContactId: clientContactId ?? null,
+              priority: formValue.priority,
+              assignedToTechnicianId: this.toNumericId(formValue.assignedToTechnicianId) ?? null,
+              contactName: String(formValue.contactName ?? '').trim(),
+              contactPhone: String(formValue.contactPhone ?? '').trim() || null,
+              contactEmail: String(formValue.contactEmail ?? '').trim() || null,
+            },
+            orders: this.createServiceOrderCandidates.map((candidate) => ({
+              equipmentType: candidate.equipmentType,
+              equipmentTypeOther: candidate.equipmentTypeOther,
+              brand: candidate.brand,
+              model: candidate.model,
+              serialNumber: candidate.serialNumber,
+              accessories: candidate.accessories,
+              initialIssue: candidate.initialIssue,
+              serviceType: candidate.serviceType,
+            })),
           }
-          return this.serviceOrderService.create(payload)
+          return this.serviceOrderService.createBatch(batchPayload)
         }),
-        switchMap((serviceOrder) => this.createInitialAgreementsForStandardService(serviceOrder)),
         finalize(() => (this.isCreatingServiceOrder = false)),
       )
       .subscribe({
-        next: () => {
-          this.showMessage("success", "fas fa-check-circle", "Orden de servicio creada correctamente.")
+        next: (response) => {
+          const ordersCount = response.createdOrders.length
+          this.showMessage(
+            "success",
+            "fas fa-check-circle",
+            ordersCount > 1
+              ? `${ordersCount} órdenes de servicio creadas correctamente.`
+              : "Orden de servicio creada correctamente.",
+          )
           this.closeCreateServiceOrderModal()
           this.loadServiceOrders()
         },
         error: () => {
-          this.showMessage("danger", "fas fa-times-circle", "No pudimos crear la orden.")
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos crear las órdenes.")
         },
       })
   }
 
-  private resolveClientId(formValue: Record<string, any>) {
+  private resolveClientId(formValue: Record<string, any>): Observable<{ clientId: number | null; clientContactId: number | null }> {
     if (formValue["requestOrigin"] === RequestOrigin.INTERNAL) {
-      return of(null)
+      return of({ clientId: null, clientContactId: null })
     }
 
     const workflowServiceType = this.getSelectedWorkflowServiceType()
     const existingPartnerId = Number(this.createServiceOrderForm.get("clientId")?.value)
     if (existingPartnerId) {
-      return of(existingPartnerId)
+      const existingContactId = this.toNumericId(this.createServiceOrderForm.get("clientContactId")?.value)
+      return of({ clientId: existingPartnerId, clientContactId: existingContactId })
     }
 
     const documentNumber = String(this.createServiceOrderForm.get("documentNumber")?.value ?? "").trim()
@@ -1344,8 +1406,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
     const payload: ClientSaveRequest = {
       companyId: this.companyId,
-      name: contactName,
-      tradeName: contactName,
+      name: formValue['clientKind'] === ClientKind.COMPANY
+        ? (String(formValue['companyName'] ?? "").trim() || contactName)
+        : contactName,
+      tradeName: formValue['clientKind'] === ClientKind.COMPANY
+        ? (String(formValue['companyTradeName'] ?? "").trim() || null)
+        : contactName,
+      kind: formValue['clientKind'] ?? ClientKind.PERSON,
       documentTypeId,
       documentNumber,
       email: String(this.createServiceOrderForm.get("contactEmail")?.value ?? "").trim() || null,
@@ -1353,6 +1420,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       address: null,
       city: null,
       country: null,
+      contacts: [{
+        name: contactName,
+        email: String(this.createServiceOrderForm.get("contactEmail")?.value ?? "").trim() || null,
+        phone: String(this.createServiceOrderForm.get("contactPhone")?.value ?? "").trim() || null,
+        isPrimary: true,
+      }],
     }
 
     return this.clientsService.create(payload).pipe(
@@ -1364,11 +1437,21 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       })),
       tap((partner) => {
         this.clients = [partner, ...this.clients]
-        this.createServiceOrderForm.patchValue({ clientId: Number(partner.id) })
+        const primaryContact = partner.contacts?.find((c) => c.isPrimary) ?? partner.contacts?.[0]
+        this.createServiceOrderForm.patchValue({
+          clientId: Number(partner.id),
+          clientContactId: primaryContact ? Number(primaryContact.id) : null,
+        })
         this.documentSearchMessage = "Cliente creado correctamente."
         this.documentSearchError = ""
       }),
-  map((partner) => Number(partner.id)),
+      map((partner) => {
+        const primaryContact = partner.contacts?.find((c) => c.isPrimary) ?? partner.contacts?.[0]
+        return {
+          clientId: Number(partner.id),
+          clientContactId: primaryContact ? Number(primaryContact.id) : null,
+        }
+      }),
     )
   }
 
@@ -1403,15 +1486,24 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private applyPartnerData(partner: ClientResponse): void {
     const documentTypeId = partner.documentTypeId ?? partner.documentType?.id ?? null
+    const kind = partner.kind ?? ClientKind.PERSON
+    const contacts = partner.contacts ?? []
+    const primaryContact = contacts.find((c) => c.isPrimary && c.isActive !== false) ?? contacts[0] ?? null
 
     this.createServiceOrderForm.patchValue(
       {
         clientId: Number(partner.id),
+        clientKind: kind,
+        clientContactId: primaryContact ? Number(primaryContact.id) : null,
         documentNumber: partner.documentNumber ?? "",
         documentTypeId: documentTypeId,
-        contactName: partner.name ?? partner.tradeName ?? partner.documentNumber ?? "",
-        contactEmail: partner.email ?? "",
-        contactPhone: partner.phone ?? "",
+        companyName: kind === ClientKind.COMPANY ? (partner.name ?? "") : "",
+        companyTradeName: kind === ClientKind.COMPANY ? (partner.tradeName ?? "") : "",
+        contactName: primaryContact
+          ? primaryContact.name
+          : (partner.name ?? partner.tradeName ?? partner.documentNumber ?? ""),
+        contactEmail: primaryContact?.email ?? partner.email ?? "",
+        contactPhone: primaryContact?.phone ?? partner.phone ?? "",
       },
       { emitEvent: false },
     )
@@ -1421,7 +1513,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.documentSearchError = ""
     this.setCustomerFieldsEnabled(false)
 
-    if (!partner.phone) {
+    if (!partner.phone && !primaryContact?.phone) {
       const phoneControl = this.createServiceOrderForm.get("contactPhone")
       phoneControl?.enable({ emitEvent: false })
     }
@@ -1455,6 +1547,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.createServiceOrderForm.patchValue(
       {
       clientId: null,
+        clientContactId: null,
         contactName: "",
         contactEmail: "",
         contactPhone: "",
@@ -1462,6 +1555,39 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       { emitEvent: false },
     )
     this.setCustomerFieldsEnabled(true)
+  }
+
+  getClientContactOptions(): ClientContactResponse[] {
+    const clientId = Number(this.createServiceOrderForm.get("clientId")?.value)
+    if (!clientId) return []
+    const client = this.clients.find((c) => Number(c.id) === clientId)
+    return client?.contacts?.filter((c) => c.isActive !== false) ?? []
+  }
+
+  onClientContactSelectionChange(): void {
+    const contactId = Number(this.createServiceOrderForm.get("clientContactId")?.value)
+    if (!contactId) {
+      // No contact selected: allow editing contact fields inline
+      this.createServiceOrderForm.patchValue({
+        contactName: "",
+        contactEmail: "",
+        contactPhone: "",
+      }, { emitEvent: false })
+      const controls = ["contactName", "contactEmail", "contactPhone"]
+      controls.forEach((name) => {
+        const ctrl = this.createServiceOrderForm.get(name)
+        if (ctrl && ctrl.disabled) ctrl.enable({ emitEvent: false })
+      })
+      return
+    }
+    const contact = this.getClientContactOptions().find((c) => Number(c.id) === contactId)
+    if (contact) {
+      this.createServiceOrderForm.patchValue({
+        contactName: contact.name,
+        contactEmail: contact.email ?? "",
+        contactPhone: contact.phone ?? "",
+      }, { emitEvent: false })
+    }
   }
 
   downloadServiceOrderSummaryPdf(serviceOrder: ServiceOrder, event?: Event): void {
@@ -2093,12 +2219,204 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return this.createServiceOrderStep === index
   }
 
+  beginAnotherCreateServiceOrderCandidate(): void {
+    // Validate current form before adding another
+    if (!this.validateCurrentCreateServiceOrderStep()) {
+      this.showMessage("warning", "fas fa-exclamation-circle", "Completa los campos obligatorios antes de agregar otro equipo.")
+      return
+    }
+    // Save current equipment
+    this.addCurrentEquipmentToCreateOrderBatch()
+    // Clear form for next equipment
+    this.resetCreateServiceOrderItemDraft()
+    this.createServiceOrderStep = 3
+  }
+
+  canAddAnotherCreateServiceOrderCandidate(): boolean {
+    return (
+      this.isCreateServiceOrderStepActive(3) &&
+      this.editingCreateServiceOrderCandidateIndex === null
+    )
+  }
+
+  private resetCreateServiceOrderItemDraft(): void {
+    this.editingCreateServiceOrderCandidateIndex = null
+    this.createServiceOrderForm.patchValue({
+      equipmentType: EquipmentType.LAPTOP,
+      equipmentTypeOther: "",
+      brand: "",
+      model: "",
+      serialNumber: "",
+      accessories: "",
+      initialIssue: "",
+    })
+    this.createOrderAgreementItemsByItemIndex[0] = []
+  }
+
+  private areCurrentCreateOrderItemControlsValid(): boolean {
+    this.markControlsAsTouched([
+      "equipmentType",
+      "equipmentTypeOther",
+      "brand",
+      "model",
+      "serialNumber",
+      "initialIssue",
+      "accessories",
+    ])
+    return this.areControlsValid([
+      "equipmentType",
+      "equipmentTypeOther",
+      "brand",
+      "model",
+      "serialNumber",
+      "initialIssue",
+      "accessories",
+    ])
+  }
+
+  addCurrentEquipmentToCreateOrderBatch(): void {
+    if (!this.areCurrentCreateOrderItemControlsValid()) {
+      return
+    }
+    const nextCandidate = this.buildCreateServiceOrderCandidateDraft()
+    if (this.editingCreateServiceOrderCandidateIndex !== null) {
+      this.createServiceOrderCandidates = this.createServiceOrderCandidates.map((entry, index) =>
+        index === this.editingCreateServiceOrderCandidateIndex ? nextCandidate : entry,
+      )
+    } else {
+      this.createServiceOrderCandidates = [...this.createServiceOrderCandidates, nextCandidate]
+    }
+    this.resetCreateServiceOrderItemDraft()
+  }
+
+  private buildCreateServiceOrderCandidateDraft(): CreateServiceOrderCandidateDraft {
+    const formValue = this.createServiceOrderForm.getRawValue()
+    return {
+      equipmentType: formValue.equipmentType,
+      equipmentTypeOther: formValue.equipmentTypeOther || null,
+      brand: formValue.brand || null,
+      model: formValue.model || null,
+      serialNumber: formValue.serialNumber || null,
+      accessories: formValue.accessories || null,
+      initialIssue: formValue.initialIssue,
+      serviceType: formValue.workflowServiceType,
+      notes: formValue.notes || null,
+      quoteItems: this.createOrderAgreementItemsByItemIndex[0] || [],
+    }
+  }
+
+  editCreateServiceOrderCandidate(index: number): void {
+    const candidate = this.createServiceOrderCandidates[index]
+    if (!candidate) return
+    this.editingCreateServiceOrderCandidateIndex = index
+    this.createServiceOrderForm.patchValue({
+      equipmentType: candidate.equipmentType,
+      equipmentTypeOther: candidate.equipmentTypeOther || "",
+      brand: candidate.brand || "",
+      model: candidate.model || "",
+      serialNumber: candidate.serialNumber || "",
+      accessories: candidate.accessories || "",
+      initialIssue: candidate.initialIssue,
+    })
+    this.createOrderAgreementItemsByItemIndex[0] = candidate.quoteItems.map(item => ({ ...item }))
+    this.createServiceOrderStep = 3
+  }
+
+  removeCreateServiceOrderCandidate(index: number): void {
+    this.createServiceOrderCandidates = this.createServiceOrderCandidates.filter((_, i) => i !== index)
+    if (this.editingCreateServiceOrderCandidateIndex !== null) {
+      if (this.editingCreateServiceOrderCandidateIndex === index) {
+        this.editingCreateServiceOrderCandidateIndex = null
+      } else if (this.editingCreateServiceOrderCandidateIndex > index) {
+        this.editingCreateServiceOrderCandidateIndex -= 1
+      }
+    }
+  }
+
+  getSavedEquipmentCards(): Array<{
+    index: number
+    typeLabel: string
+    brandModel: string
+    serialNumber: string | null
+  }> {
+    return this.createServiceOrderCandidates.map((candidate, index) => ({
+      index,
+      typeLabel: this.getEquipmentTypeLabel(candidate.equipmentType),
+      brandModel: [candidate.brand, candidate.model].filter(Boolean).join(" ") || "Sin marca/modelo",
+      serialNumber: candidate.serialNumber,
+    }))
+  }
+
+  deleteEquipmentCard(index: number, event: Event): void {
+    event.stopPropagation()
+    this.removeCreateServiceOrderCandidate(index)
+  }
+
+  isOnConfirmationStep(): boolean {
+    return this.isLastCreateServiceOrderStep()
+  }
+
+  getCreateOrderSummaryItems(): Array<{
+    index: number
+    equipmentTypeLabel: string
+    serviceTypeLabel: string
+    description: string
+    brand: string | null
+    model: string | null
+    serialNumber: string | null
+    accessories: string | null
+    quoteItems: ServiceOrderAgreementComposerItem[]
+    quoteItemsCount: number
+    quoteTotal: number
+  }> {
+    return this.createServiceOrderCandidates.map((candidate, index) => ({
+      index,
+      equipmentTypeLabel: this.getEquipmentTypeLabel(candidate.equipmentType),
+      serviceTypeLabel: this.getServiceTypeLabel(candidate.serviceType),
+      description: candidate.initialIssue,
+      brand: candidate.brand,
+      model: candidate.model,
+      serialNumber: candidate.serialNumber,
+      accessories: candidate.accessories,
+      quoteItems: candidate.quoteItems,
+      quoteItemsCount: candidate.quoteItems.length,
+      quoteTotal: this.calculateQuoteItemsTotal(candidate.quoteItems),
+    }))
+  }
+
+  getCreateOrderCandidateQuoteItems(index: number): ServiceOrderAgreementComposerItem[] {
+    return this.createServiceOrderCandidates[index]?.quoteItems || []
+  }
+
+  calculateQuoteItemsTotal(items: ServiceOrderAgreementComposerItem[]): number {
+    return items.reduce((total, item) => {
+      const qty = item.type === "product" ? (item as any).quantity || 1 : 1
+      return total + (item.unitPrice || 0) * qty
+    }, 0)
+  }
+
+  calculateCreateOrderGrandTotal(): number {
+    return this.createServiceOrderCandidates.reduce(
+      (total, candidate) => total + this.calculateQuoteItemsTotal(candidate.quoteItems),
+      0,
+    )
+  }
+
   nextCreateServiceOrderStep(): void {
     const steps = this.getCreateServiceOrderSteps()
     if (!this.validateCurrentCreateServiceOrderStep()) {
       return
     }
-    this.createServiceOrderStep = Math.min(this.createServiceOrderStep + 1, steps.length - 1)
+    const nextStep = Math.min(this.createServiceOrderStep + 1, steps.length - 1)
+
+    // Auto-add current equipment when moving to review step if no candidates yet
+    if (steps[nextStep]?.key === "review" && this.createServiceOrderCandidates.length === 0) {
+      if (this.areCurrentCreateOrderItemControlsValid() && this.validateCreateServiceOrderInitialAgreement()) {
+        this.addCurrentEquipmentToCreateOrderBatch()
+      }
+    }
+
+    this.createServiceOrderStep = nextStep
   }
 
   previousCreateServiceOrderStep(): void {
@@ -2293,34 +2611,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return this.getCreateOrderAgreementItems(index).reduce((total, item) => total + this.calculateItemSubtotal(item), 0)
   }
 
-  calculateCreateOrderGrandTotal(): number {
-    return this.calculateCreateOrderItemAgreementTotal(0)
-  }
-
-  getCreateOrderSummaryItems(): Array<{
-    index: number
-    equipmentTypeLabel: string
-    serviceTypeLabel: string
-    description: string
-    quoteItemsCount: number
-    quoteTotal: number
-  }> {
-    const quoteItems = this.getCreateOrderAgreementItems(0)
-    return [
-      {
-        index: 0,
-        equipmentTypeLabel: this.getEquipmentTypeLabel(
-          this.createServiceOrderForm.get("equipmentType")?.value,
-          this.createServiceOrderForm.get("equipmentTypeOther")?.value,
-        ),
-        serviceTypeLabel: this.getServiceTypeLabel(this.getSelectedWorkflowServiceType()),
-        description: String(this.createServiceOrderForm.get("initialIssue")?.value ?? "").trim(),
-        quoteItemsCount: quoteItems.length,
-        quoteTotal: this.calculateCreateOrderItemAgreementTotal(0),
-      },
-    ]
-  }
-
   private clearCreateClientData(): void {
     this.createServiceOrderForm.patchValue(
       {
@@ -2347,6 +2637,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private setCustomerFieldsEnabled(enabled: boolean): void {
     const controls = [
+      "companyName",
+      "companyTradeName",
       "contactName",
       "contactEmail",
       "contactPhone",

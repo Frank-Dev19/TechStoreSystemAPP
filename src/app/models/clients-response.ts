@@ -1,8 +1,23 @@
+import { ClientKind } from './clients-request';
+
+export interface ClientContactResponse {
+  id: number;
+  clientId: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  isPrimary: boolean;
+  isActive?: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
 export interface ClientResponse {
   id: number;
   companyId: number;
   name: string;
   tradeName?: string | null;
+  kind?: ClientKind;
   documentTypeId: number;
   documentNumber: string;
   email?: string | null;
@@ -13,6 +28,7 @@ export interface ClientResponse {
   isClient?: boolean;
   isSupplier?: boolean;
   documentType?: { id: number; name: string } | null;
+  contacts?: ClientContactResponse[] | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;
   deletedAt?: string | Date | null;

@@ -1,10 +1,11 @@
 import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { of, throwError } from 'rxjs';
 
-import { ClientSaveRequest } from '../../models/clients-request';
+import { ClientKind, ClientSaveRequest } from '../../models/clients-request';
+import { DocumentTypeKind } from '../../models/document-types/document-types-request';
 import {
   EquipmentType,
   RequestOrigin,
@@ -39,6 +40,7 @@ describe('ReceptionPanel', () => {
   const serviceOrderServiceStub = {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
     create: jasmine.createSpy('create').and.returnValue(of({ id: 1, serviceType: ServiceType.DIAGNOSIS })),
+    createBatch: jasmine.createSpy('createBatch').and.returnValue(of({ createdOrders: [{ id: 1, serviceType: ServiceType.DIAGNOSIS }] })),
     update: jasmine.createSpy('update').and.returnValue(of({})),
     markAsDelivered: jasmine.createSpy('markAsDelivered').and.returnValue(of({})),
     changeTechnicalStatus: jasmine.createSpy('changeTechnicalStatus').and.returnValue(of({})),
@@ -47,6 +49,7 @@ describe('ReceptionPanel', () => {
   const clientsServiceStub = {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
     create: jasmine.createSpy('create').and.returnValue(of({} as ClientSaveRequest)),
+    update: jasmine.createSpy('update').and.returnValue(of({ id: 2, contacts: [] })),
   };
 
   const productsServiceStub = {
@@ -249,9 +252,18 @@ describe('ReceptionPanel', () => {
     expect(component.canCreateBoletaFromOrder(warrantyOrder)).toBeFalse();
   });
 
-  it('sends contact data when creating a service order', () => {
+  it('sends contact data when creating a batch service order', fakeAsync(() => {
+    clientsServiceStub.create.and.returnValue(
+      of({
+        id: 1,
+        name: 'Cliente Test',
+        kind: ClientKind.PERSON,
+        contacts: [],
+      } as any),
+    );
+
     component.createServiceOrderForm.patchValue({
-      requestOrigin: RequestOrigin.INTERNAL,
+      requestOrigin: RequestOrigin.CLIENT,
       workflowServiceType: ServiceType.DIAGNOSIS,
       documentNumber: '12345678',
       documentTypeId: 1,
@@ -264,15 +276,205 @@ describe('ReceptionPanel', () => {
       initialIssue: 'No enciende',
     });
 
+    (component as any).addCurrentEquipmentToCreateOrderBatch()
     component.submitCreateServiceOrder();
+    tick();
 
-    expect(serviceOrderServiceStub.create).toHaveBeenCalledWith(
+    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
       jasmine.objectContaining({
-        contactName: 'Cliente Test',
-        contactPhone: '999999999',
-        contactEmail: 'cliente@test.com',
+        sharedContext: jasmine.objectContaining({
+          contactName: 'Cliente Test',
+          contactPhone: '999999999',
+          contactEmail: 'cliente@test.com',
+        }),
+        orders: [jasmine.objectContaining({
+          initialIssue: 'No enciende',
+        })],
       }),
     );
+  }));
+
+  it('crea empresa con razón social y contacto separados cuando el flujo es COMPANY', fakeAsync(() => {
+    clientsServiceStub.create.and.returnValue(
+      of({
+        id: 40,
+        companyId: 1,
+        kind: ClientKind.COMPANY,
+        name: 'Empresa SAC',
+        tradeName: 'Empresa',
+        documentTypeId: 2,
+        documentNumber: '12345678901',
+        contacts: [{ id: 55, clientId: 40, name: 'Ana Contacto', isPrimary: true, phone: '900111222' }],
+      } as any),
+    );
+
+    component.createServiceOrderForm.patchValue({
+      requestOrigin: RequestOrigin.CLIENT,
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      documentTypeId: 2,
+      documentNumber: '12345678901',
+      clientKind: ClientKind.COMPANY,
+      companyName: 'Empresa SAC',
+      companyTradeName: 'Empresa',
+      contactName: 'Ana Contacto',
+      contactPhone: '900111222',
+      contactEmail: 'ana@empresa.com',
+      priority: ServiceOrderPriority.MEDIUM,
+      assignedToTechnicianId: 10,
+      equipmentType: EquipmentType.LAPTOP,
+      initialIssue: 'No enciende',
+    });
+
+    (component as any).addCurrentEquipmentToCreateOrderBatch()
+    component.submitCreateServiceOrder();
+    tick();
+
+    expect(clientsServiceStub.create).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        kind: ClientKind.COMPANY,
+        name: 'Empresa SAC',
+        tradeName: 'Empresa',
+        contacts: [
+          jasmine.objectContaining({
+            name: 'Ana Contacto',
+            phone: '900111222',
+            isPrimary: true,
+          }),
+        ],
+      }),
+    );
+    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        sharedContext: jasmine.objectContaining({
+          clientContactId: 55,
+          contactName: 'Ana Contacto',
+        }),
+      }),
+    );
+  }));
+
+  it('permite acumular múltiples equipos candidatos antes del submit batch', () => {
+    component.createServiceOrderForm.patchValue({
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      equipmentType: EquipmentType.LAPTOP,
+      brand: 'Lenovo',
+      initialIssue: 'No enciende',
+    })
+
+    component.addCurrentEquipmentToCreateOrderBatch()
+
+    component.createServiceOrderForm.patchValue({
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      equipmentType: EquipmentType.PRINTER,
+      brand: 'Epson',
+      initialIssue: 'Atasco de papel',
+    })
+
+    component.addCurrentEquipmentToCreateOrderBatch()
+
+    expect(component.createServiceOrderCandidates.length).toBe(2)
+    expect(component.getCreateOrderSummaryItems().map((item) => item.equipmentTypeLabel)).toEqual([
+      'Laptop',
+      'Impresora',
+    ])
+  })
+
+  it('ofrece agregar otro equipo desde la etapa de equipos y no durante edición', () => {
+    component.createServiceOrderStep = 3
+    component.createServiceOrderCandidates = [
+      {
+        equipmentType: EquipmentType.LAPTOP,
+        equipmentTypeOther: null,
+        brand: 'Lenovo',
+        model: null,
+        serialNumber: null,
+        accessories: null,
+        initialIssue: 'No enciende',
+        serviceType: ServiceType.DIAGNOSIS,
+        quoteItems: [],
+      } as any,
+    ]
+
+    expect(component.canAddAnotherCreateServiceOrderCandidate()).toBeTrue()
+
+    component.editingCreateServiceOrderCandidateIndex = 0
+    expect(component.canAddAnotherCreateServiceOrderCandidate()).toBeFalse()
+  })
+
+  it('preselecciona el contacto primary al aplicar una empresa existente', () => {
+    component.clients = [
+      {
+        id: 77,
+        companyId: 1,
+        kind: ClientKind.COMPANY,
+        name: 'Cliente Empresa',
+        tradeName: 'CE',
+        documentTypeId: 2,
+        documentNumber: '12345678901',
+        contacts: [
+          { id: 91, clientId: 77, name: 'Secundario', isPrimary: false, phone: '900000001' },
+          { id: 92, clientId: 77, name: 'Principal', isPrimary: true, phone: '900000002' },
+        ],
+      } as any,
+    ];
+
+    (component as any).applyPartnerData(component.clients[0] as any);
+
+    expect(component.createServiceOrderForm.get('clientContactId')?.value).toBe(92);
+    expect(component.createServiceOrderForm.get('contactName')?.value).toBe('Principal');
+  });
+
+  it('mantiene los datos legales de empresa en solo lectura y permite crear un nuevo contacto inline', () => {
+    component.clients = [
+      {
+        id: 88,
+        companyId: 1,
+        kind: ClientKind.COMPANY,
+        name: 'Empresa SAC',
+        tradeName: 'Empresa',
+        documentTypeId: 2,
+        documentNumber: '12345678901',
+        contacts: [
+          { id: 101, clientId: 88, name: 'Principal', isPrimary: true, phone: '900000002' },
+        ],
+      } as any,
+    ];
+
+    (component as any).applyPartnerData(component.clients[0] as any);
+
+    expect(component.createServiceOrderForm.get('companyName')?.disabled).toBeTrue();
+    expect(component.createServiceOrderForm.get('companyTradeName')?.disabled).toBeTrue();
+    expect(component.createServiceOrderForm.get('contactName')?.disabled).toBeTrue();
+
+    component.createServiceOrderForm.patchValue({ clientContactId: null });
+    component.onClientContactSelectionChange();
+
+    expect(component.createServiceOrderForm.get('companyName')?.disabled).toBeTrue();
+    expect(component.createServiceOrderForm.get('companyTradeName')?.disabled).toBeTrue();
+    expect(component.createServiceOrderForm.get('contactName')?.enabled).toBeTrue();
+    expect(component.createServiceOrderForm.get('contactPhone')?.enabled).toBeTrue();
+  });
+
+  it('prefiere documentType.kind sobre la heurística legacy en recepción', () => {
+    component.documentTypes = [
+      { id: 3, name: 'DOC-11', digits: 11, description: 'doc', kind: DocumentTypeKind.PERSON } as any,
+    ];
+
+    component.createServiceOrderForm.patchValue({ documentTypeId: 3 });
+    component.onDocumentTypeChange();
+
+    expect(component.createServiceOrderForm.get('clientKind')?.value).toBe(ClientKind.PERSON);
+  });
+
+  it('mantiene fallback legacy en recepción cuando falta kind', () => {
+    component.documentTypes = [
+      { id: 4, name: 'RUC LEGACY', digits: 11, description: 'doc', kind: null } as any,
+    ];
+
+    component.createServiceOrderForm.patchValue({ documentTypeId: 4 });
+    component.onDocumentTypeChange();
+
+    expect(component.createServiceOrderForm.get('clientKind')?.value).toBe(ClientKind.COMPANY);
   });
 
   it('genera la tabla del PDF del documento ligado con columna N° en vez de Tipo', () => {

@@ -6,7 +6,12 @@ import {
   ServiceOrderTechnicalStatus,
   ServiceType,
 } from "../../models/service-orders/service-order";
-import { ServiceOrderSaveRequest, ServiceOrderUpdateRequest } from "../../models/service-orders/service-order-request";
+import {
+  ServiceOrderBatchCreateRequest,
+  ServiceOrderBatchCreateResponse,
+  ServiceOrderSaveRequest,
+  ServiceOrderUpdateRequest,
+} from "../../models/service-orders/service-order-request";
 import { config } from "../../../environments/environment";
 
 export interface PaginatedResponse<T> {
@@ -61,6 +66,10 @@ export class ServiceOrderService {
 
   create(payload: ServiceOrderSaveRequest): Observable<ServiceOrder> {
     return this.base.post<ServiceOrder>(config.serviceOrders.serviceOrders, payload);
+  }
+
+  createBatch(payload: ServiceOrderBatchCreateRequest): Observable<ServiceOrderBatchCreateResponse> {
+    return this.base.post<ServiceOrderBatchCreateResponse>(`${config.serviceOrders.serviceOrders}/batch`, payload);
   }
 
   update(id: number, payload: ServiceOrderUpdateRequest): Observable<ServiceOrder> {
