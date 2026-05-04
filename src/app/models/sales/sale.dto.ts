@@ -43,6 +43,16 @@ export interface CreateSaleDto {
     payments: CreateSalePaymentDto[]
 }
 
+export interface CreateSaleFromServiceAgreementsDto {
+    companyId: number
+    serviceOrderIds: number[]
+    taxpayerCustomerId: number
+    documentType: DocumentType
+    issueDate: string
+    observations?: string
+    payments: CreateSalePaymentDto[]
+}
+
 export interface CancelSaleDto {
     reason: string
     observations?: string

@@ -35,12 +35,6 @@ export class ProductsService {
     );
   }
 
-  listAll(): Observable<Product[]> {
-    return this.baseSvc.get<ProductApi[]>(`${this.base}/all`).pipe(
-      map(arr => (arr ?? []).map(mapProductFromApi))
-    );
-  }
-
   listWithFilter(filter: ProductFilter): Observable<PaginatedResponse<Product>> {
     const params: string[] = [];
     if (filter.search) params.push(`search=${encodeURIComponent(filter.search)}`);

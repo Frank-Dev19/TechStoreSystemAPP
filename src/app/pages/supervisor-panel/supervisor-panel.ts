@@ -5,7 +5,14 @@ import {
   ServiceOrderAgreementService,
   TechnicianRevenueRanking,
 } from "../../services/service-orders/service-agreement.service"
-import { EquipmentType, ServiceOrder, ServiceOrderOperativeStatus, ServiceType } from "../../models/service-orders/service-order"
+import {
+  EquipmentType,
+  ServiceOrder,
+  ServiceOrderDerivedMetric,
+  ServiceOrderOperativeStatus,
+  ServiceOrderSlaStage,
+  ServiceType,
+} from "../../models/service-orders/service-order"
 import { ServiceOrderService } from "../../services/service-orders/service-order.service"
 import { ServiceOrderDiagnosisService } from "../../services/service-orders/service-order-diagnosis.service"
 import { ServiceOrderDiagnosis } from "../../models/service-orders/service-order-diagnosis"
@@ -32,7 +39,7 @@ interface InboxDraftAttachment {
   styleUrls: ["./supervisor-panel.scss"],
 })
 export class SupervisorPanel implements OnInit {
-  activeSection: "ranking" | "inbox" | "quotes" = "ranking"
+  activeSection: "ranking" | "inbox" | "orders" = "orders"
   activeTab: "open" | "answered" | "all" = "open"
   currentPage = 1
   itemsPerPage = 6
@@ -40,10 +47,16 @@ export class SupervisorPanel implements OnInit {
   openServiceOrderAgreements: ServiceOrderAgreement[] = []
   answeredServiceOrderAgreements: ServiceOrderAgreement[] = []
   allServiceOrderAgreements: ServiceOrderAgreement[] = []
+  serviceOrders: ServiceOrder[] = []
 
   selectedServiceOrderAgreement: ServiceOrderAgreement | null = null
   selectedServiceOrder: ServiceOrder | null = null
   currentDiagnosis: ServiceOrderDiagnosis | null = null
+  selectedOrderAgreements: ServiceOrderAgreement[] = []
+  selectedInboxThreadByOrder: ServiceOrderInboxThreadSummary | null = null
+
+  orderSearchTerm = ""
+  orderOperativeStatusFilter: ServiceOrderOperativeStatus | "ALL" = "ALL"
 
   products: Product[] = []
   inboxThreads: ServiceOrderInboxThreadSummary[] = []
@@ -97,6 +110,14 @@ export class SupervisorPanel implements OnInit {
     [ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION]: "Sin solución",
   }
 
+  private readonly slaStageLabels: Record<ServiceOrderSlaStage, string> = {
+    assignment: "Asignación",
+    diagnosis: "Diagnóstico",
+    service: "Servicio",
+    pickup: "Recojo",
+    terminal: "Terminal",
+  }
+
   constructor(
     private readonly agreementService: ServiceOrderAgreementService,
     private readonly serviceOrderService: ServiceOrderService,
@@ -107,12 +128,13 @@ export class SupervisorPanel implements OnInit {
 
   ngOnInit(): void {
     this.loadServiceOrderAgreements()
+    this.loadServiceOrders()
     this.loadProducts()
     this.loadInboxThreads()
     this.loadTechnicianRankings()
   }
 
-  setActiveSection(section: "ranking" | "inbox" | "quotes"): void {
+  setActiveSection(section: "ranking" | "inbox" | "orders"): void {
     this.activeSection = section
     this.currentPage = 1
     if (section === "inbox") {
@@ -220,6 +242,37 @@ export class SupervisorPanel implements OnInit {
     return this.operativeStatusLabels[status] ?? status
   }
 
+  getServiceOrderSlaStageLabel(stage?: ServiceOrderSlaStage | null): string {
+    if (!stage) return "Sin etapa"
+    return this.slaStageLabels[stage] ?? stage
+  }
+
+  formatMinutes(value?: number | null): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return "—"
+    }
+    const totalMinutes = Math.max(0, Math.round(Number(value)))
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    if (!hours) return `${minutes} min`
+    if (!minutes) return `${hours} h`
+    return `${hours} h ${minutes} min`
+  }
+
+  getMetricDisplayValue(metric?: ServiceOrderDerivedMetric | null): string {
+    if (!metric?.isComputable) {
+      return "Pendiente"
+    }
+    return this.formatMinutes(metric.valueMinutes)
+  }
+
+  getMetricMissingLabel(metric?: ServiceOrderDerivedMetric | null): string {
+    if (metric?.isComputable || !metric?.missingTimestamps?.length) {
+      return ""
+    }
+    return `Falta: ${metric.missingTimestamps.join(", ")}`
+  }
+
   private loadServiceOrderAgreements(): void {
     this.isLoadingServiceOrderAgreements = true
     this.agreementService
@@ -229,6 +282,32 @@ export class SupervisorPanel implements OnInit {
         next: ({ data }) => this.hydrateLists(data ?? []),
         error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar los acuerdos."),
       })
+  }
+
+  private loadServiceOrders(): void {
+    this.serviceOrderService.findAll({ page: 1, limit: 100 }).subscribe({
+      next: ({ data }) => {
+        this.serviceOrders = data ?? []
+
+        if (this.selectedServiceOrder?.id) {
+          const updated = this.serviceOrders.find((order) => Number(order.id) === Number(this.selectedServiceOrder?.id)) ?? null
+          this.selectedServiceOrder = updated
+          if (updated) {
+            this.loadOrderContext(updated.id)
+          } else {
+            this.clearSelectedServiceOrder()
+          }
+        }
+
+        if (this.currentPage > this.totalPages) {
+          this.currentPage = this.totalPages
+        }
+      },
+      error: () => {
+        this.serviceOrders = []
+        this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar las órdenes del supervisor.")
+      },
+    })
   }
 
   private hydrateLists(serviceOrderAgreements: ServiceOrderAgreement[]): void {
@@ -299,6 +378,8 @@ export class SupervisorPanel implements OnInit {
         return this.technicianRankings.length
       case "inbox":
         return this.inboxTotalItems
+      case "orders":
+        return this.filteredServiceOrders.length
       default:
         return this.getVisibleAgreements().length
     }
@@ -321,6 +402,27 @@ export class SupervisorPanel implements OnInit {
     const visibleQuotes = this.getVisibleAgreements()
     const start = (this.currentPage - 1) * this.itemsPerPage
     return visibleQuotes.slice(start, start + this.itemsPerPage)
+  }
+
+  get filteredServiceOrders(): ServiceOrder[] {
+    const query = this.orderSearchTerm.trim().toLowerCase()
+
+    return this.serviceOrders.filter((order) => {
+      const matchesStatus =
+        this.orderOperativeStatusFilter === "ALL" || order.operativeStatus === this.orderOperativeStatusFilter
+      const matchesQuery =
+        !query ||
+        [order.code, order.brand, order.model, order.initialIssue, order.assignedToTechnicianName]
+          .map((value) => String(value ?? "").toLowerCase())
+          .some((value) => value.includes(query))
+
+      return matchesStatus && matchesQuery
+    })
+  }
+
+  get paginatedServiceOrders(): ServiceOrder[] {
+    const start = (this.currentPage - 1) * this.itemsPerPage
+    return this.filteredServiceOrders.slice(start, start + this.itemsPerPage)
   }
 
   prevPage(): void {
@@ -442,10 +544,31 @@ export class SupervisorPanel implements OnInit {
     this.loadCurrentDiagnosis(quote.serviceOrderId)
   }
 
+  selectServiceOrder(order: ServiceOrder): void {
+    this.selectedServiceOrder = order
+    this.selectedInboxThreadByOrder =
+      this.inboxThreads.find((thread) => Number(thread.serviceOrderId) === Number(order.id)) ?? null
+    this.loadOrderContext(order.id)
+  }
+
   clearSelectedServiceOrderAgreement(): void {
     this.selectedServiceOrderAgreement = null
     this.selectedServiceOrder = null
     this.currentDiagnosis = null
+  }
+
+  clearSelectedServiceOrder(): void {
+    this.selectedServiceOrder = null
+    this.selectedServiceOrderAgreement = null
+    this.selectedOrderAgreements = []
+    this.currentDiagnosis = null
+    this.selectedInboxThreadByOrder = null
+  }
+
+  private loadOrderContext(serviceOrderId: number): void {
+    this.loadServiceOrderDetail(serviceOrderId)
+    this.loadCurrentDiagnosis(serviceOrderId)
+    this.loadOrderAgreements(serviceOrderId)
   }
 
   private loadServiceOrderDetail(serviceOrderId: number): void {
@@ -454,6 +577,23 @@ export class SupervisorPanel implements OnInit {
       error: () => {
         this.selectedServiceOrder = null
         this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el detalle del equipo.")
+      },
+    })
+  }
+
+  private loadOrderAgreements(serviceOrderId: number): void {
+    this.agreementService.findAll({ page: 1, limit: 20, serviceOrderId }).subscribe({
+      next: ({ data }) => {
+        this.selectedOrderAgreements = data ?? []
+        this.selectedServiceOrderAgreement =
+          this.selectedOrderAgreements.find((agreement) => agreement.status === ServiceOrderAgreementStatus.DRAFT) ??
+          this.selectedOrderAgreements.find((agreement) => agreement.status === ServiceOrderAgreementStatus.CONFIRMED) ??
+          this.selectedOrderAgreements[0] ??
+          null
+      },
+      error: () => {
+        this.selectedOrderAgreements = []
+        this.selectedServiceOrderAgreement = null
       },
     })
   }
@@ -537,6 +677,29 @@ export class SupervisorPanel implements OnInit {
       [ServiceOrderAgreementStatus.SUPERSEDED]: "status-archived",
     }
     return statusClassMap[status] || "status-default"
+  }
+
+  getOrderOperativeStatusOptions(): ServiceOrderOperativeStatus[] {
+    return [
+      ServiceOrderOperativeStatus.ABIERTA,
+      ServiceOrderOperativeStatus.EN_PROCESO,
+      ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+      ServiceOrderOperativeStatus.ENTREGADA,
+      ServiceOrderOperativeStatus.CANCELADA,
+      ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION,
+    ]
+  }
+
+  openInboxShortcut(order: ServiceOrder): void {
+    this.selectedInboxThreadByOrder =
+      this.inboxThreads.find((thread) => Number(thread.serviceOrderId) === Number(order.id)) ?? null
+    this.activeSection = "inbox"
+    this.currentPage = 1
+    this.loadInboxThreads(this.selectedInboxThreadByOrder?.id ?? null)
+  }
+
+  hasActiveSlaBreach(order?: ServiceOrder | null): boolean {
+    return Boolean(order?.sla?.breached)
   }
 
   private showMessage(type: string, icon: string, message: string): void {

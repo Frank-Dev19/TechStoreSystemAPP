@@ -1,5 +1,34 @@
 import { ClientResponse } from '../clients-response';
 
+export type ServiceOrderSlaStage =
+  | 'assignment'
+  | 'diagnosis'
+  | 'service'
+  | 'pickup'
+  | 'terminal';
+
+export interface ServiceOrderSla {
+  stage: ServiceOrderSlaStage;
+  targetMinutes: number | null;
+  elapsedMinutes: number;
+  remainingMinutes: number | null;
+  breached: boolean;
+}
+
+export interface ServiceOrderDerivedMetric {
+  valueMinutes: number | null;
+  isComputable: boolean;
+  missingTimestamps: string[];
+}
+
+export interface ServiceOrderTimeMetrics {
+  timeToDiagnosis: ServiceOrderDerivedMetric;
+  timeToServiceStart: ServiceOrderDerivedMetric;
+  timeToService: ServiceOrderDerivedMetric;
+  timeToResolution: ServiceOrderDerivedMetric;
+  timeToDelivery: ServiceOrderDerivedMetric;
+}
+
 export interface ServiceOrder {
   id: number;
   code: string;
@@ -10,6 +39,7 @@ export interface ServiceOrder {
   priority: ServiceOrderPriority;
   requestOrigin: RequestOrigin;
   clientId: number | null;
+  clientContactId?: number | null;
   client?: ClientResponse | null;
   createdBy: number;
   closedBy: number | null;
@@ -56,6 +86,8 @@ export interface ServiceOrder {
   montoComprometidoVigente: number;
   montoReconciliado: number;
   totalServiceOrderAgreedAmount?: number;
+  sla?: ServiceOrderSla | null;
+  timeMetrics?: ServiceOrderTimeMetrics | null;
 }
 
 export enum ServiceOrderOperativeStatus {

@@ -100,6 +100,12 @@ export interface Sale {
 
   customerId: number
   customer: SaleCustomer
+  billingSnapshotName?: string | null
+  billingSnapshotTradeName?: string | null
+  billingSnapshotDocumentTypeName?: string | null
+  billingSnapshotDocumentNumber?: string | null
+  billingSnapshotAddress?: string | null
+  billingSnapshotEmail?: string | null
 
   cashRegisterId?: number | null
 

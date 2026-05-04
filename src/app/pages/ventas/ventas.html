@@ -494,20 +494,66 @@
                     </div>
 
                     <div class="form-group" *ngIf="saleCreationMode === 'SERVICE_ORDER'">
-                        <label>Orden pendiente de pago</label>
-                        <select class="form-control" [ngModel]="selectedServiceOrderId"
-                            (ngModelChange)="onServiceOrderSelected($event)">
-                            <option [ngValue]="null">Seleccionar orden...</option>
-                            <option *ngFor="let order of eligibleServiceOrders" [ngValue]="order.id">
+                        <label>Órdenes/acuerdos pendientes</label>
+                        <select class="form-control" multiple size="8" (change)="onServiceOrdersSelectionChange($event)">
+                            <option *ngFor="let order of eligibleServiceOrders" [value]="order.id"
+                                [selected]="selectedServiceOrderIds.includes(+order.id)">
                                 {{ order.code }} · {{ order.clientSnapshotName || order.client?.name || 'Cliente' }} · S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}
                             </option>
                         </select>
+                        <small style="color: var(--text-muted);">Podés seleccionar varias órdenes del mismo cliente.</small>
                     </div>
 
-                    <div class="customer-card" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrder">
-                        <p class="customer-name">{{ getSelectedServiceOrderClientLabel() }}</p>
-                        <p class="customer-detail">Orden: {{ selectedServiceOrder.code }}</p>
-                        <p class="customer-detail">Pendiente: S/ {{ selectedServiceOrder.montoComprometidoVigente | number:'1.2-2' }}</p>
+                    <div class="customer-card" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrders.length">
+                        <p class="customer-name">{{ getGroupedOperationalClientLabel() }}</p>
+                        <p class="customer-detail">Órdenes seleccionadas: {{ selectedServiceOrders.length }}</p>
+                        <p class="customer-detail">Total pendiente seleccionado: S/ {{ getGroupedOrdersPendingTotal() | number:'1.2-2' }}</p>
+                    </div>
+
+                    <div class="grouped-orders-clarity" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrders.length">
+                        <p class="grouped-orders-clarity__summary">{{ getGroupedOrderCoverageSummary() }}</p>
+
+                        <div class="grouped-orders-clarity__grid">
+                            <div class="grouped-orders-clarity__panel grouped-orders-clarity__panel--covered">
+                                <div class="grouped-orders-clarity__panel-header">
+                                    <h4>Se liberan con este comprobante</h4>
+                                    <span class="grouped-orders-clarity__badge grouped-orders-clarity__badge--covered">
+                                        {{ getOrdersCoveredByCurrentGroupedSale().length }}
+                                    </span>
+                                </div>
+                                <p class="grouped-orders-clarity__hint">Quedan cubiertas totalmente y podrán seguir su flujo de entrega.</p>
+
+                                <ul class="grouped-orders-clarity__list">
+                                    <li *ngFor="let order of getOrdersCoveredByCurrentGroupedSale()">
+                                        <span>{{ order.code }}</span>
+                                        <strong>S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}</strong>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div class="grouped-orders-clarity__panel grouped-orders-clarity__panel--pending">
+                                <div class="grouped-orders-clarity__panel-header">
+                                    <h4>Siguen pendientes</h4>
+                                    <span class="grouped-orders-clarity__badge grouped-orders-clarity__badge--pending">
+                                        {{ getOrdersStillPendingForGroupedClient().length }}
+                                    </span>
+                                </div>
+                                <p class="grouped-orders-clarity__hint">
+                                    {{
+                                      getOrdersStillPendingForGroupedClient().length
+                                        ? 'Estas órdenes del mismo cliente no quedan cubiertas en esta venta agrupada.'
+                                        : 'No quedan otras órdenes pendientes del mismo cliente fuera de esta selección.'
+                                    }}
+                                </p>
+
+                                <ul class="grouped-orders-clarity__list" *ngIf="getOrdersStillPendingForGroupedClient().length">
+                                    <li *ngFor="let order of getOrdersStillPendingForGroupedClient()">
+                                        <span>{{ order.code }}</span>
+                                        <strong>S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}</strong>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -721,6 +767,35 @@
                     </div>
                 </div>
 
+                <div class="form-section" *ngIf="saleCreationMode === 'SERVICE_ORDER'">
+                    <h3 class="section-title"><i class="fas fa-id-card"></i> Contribuyente fiscal</h3>
+
+                    <div class="form-group">
+                        <label>Documento del contribuyente</label>
+                        <div class="input-group">
+                            <input type="text" [(ngModel)]="customerSearchText" class="form-control"
+                                placeholder="Ingrese DNI o RUC" (keydown.enter)="onSearchCustomer()">
+                            <button class="btn-primary" type="button" (click)="onSearchCustomer()">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+
+                        <div class="client-extra-actions">
+                            <button type="button" class="btn-secondary btn-sm" (click)="onOpenNewCustomerModal()">
+                                <i class="fas fa-user-plus"></i>
+                                Registrar contribuyente
+                            </button>
+                        </div>
+                    </div>
+
+                    <div *ngIf="foundCustomer" class="customer-card">
+                        <p class="customer-name">{{ foundCustomer.name }}</p>
+                        <p class="customer-detail">{{ foundCustomer.documentNumber }}</p>
+                        <p class="customer-detail">{{ foundCustomer.kind === 'COMPANY' ? 'Empresa' : 'Persona natural' }}</p>
+                        <p class="customer-detail">{{ foundCustomer.address }}</p>
+                    </div>
+                </div>
+
 
             </div>
 
@@ -753,7 +828,7 @@
                     <div class="form-group">
                         <label>Tipo</label>
                         <select [(ngModel)]="saleFormData.documentType" class="form-control">
-                            <option value="NOTA_PEDIDO">Nota de Pedido</option>
+                            <option *ngIf="saleCreationMode === 'MANUAL_PRODUCT'" value="NOTA_PEDIDO">Nota de Pedido</option>
                             <option value="BOLETA">Boleta</option>
                             <option value="FACTURA">Factura</option>
                         </select>
@@ -835,9 +910,9 @@
                             Cancelar
                         </button>
                         <button class="btn-primary btn-block" (click)="onConfirmSale()"
-                            [disabled]="!saleFormData?.lines || saleFormData.lines.length === 0 || (saleCreationMode === 'MANUAL_PRODUCT' ? !foundCustomer : !selectedServiceOrderId)">
+                            [disabled]="!saleFormData?.lines || saleFormData.lines.length === 0 || (saleCreationMode === 'MANUAL_PRODUCT' ? !foundCustomer : selectedServiceOrderIds.length === 0 || !foundCustomer)">
                             <i class="fas fa-check"></i>
-                            {{ saleCreationMode === 'SERVICE_ORDER' ? 'Emitir venta desde orden' : 'Registrar Venta' }}
+                            {{ saleCreationMode === 'SERVICE_ORDER' ? 'Emitir venta agrupada' : 'Registrar Venta' }}
                         </button>
                     </div>
                 </div>

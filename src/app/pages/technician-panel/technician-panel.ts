@@ -4,8 +4,10 @@ import { forkJoin, of } from "rxjs"
 import { catchError, finalize, map, switchMap } from "rxjs/operators"
 import {
   EquipmentType,
+  ServiceOrderDerivedMetric,
   ServiceOrder,
   ServiceOrderOperativeStatus,
+  ServiceOrderSlaStage,
   ServiceOrderTechnicalStatus,
   ServiceType,
 } from "../../models/service-orders/service-order"
@@ -71,6 +73,9 @@ interface FixedTechnicalServiceOption {
   price: number
 }
 
+type TechnicianPanelTab = "todo" | "diagnosis" | "pending_approval" | "repair" | "repaired" | "all"
+type TechnicianDetailTab = "equipment" | "sla" | "history"
+
 const TECHNICAL_SERVICE_OPTION: FixedTechnicalServiceOption = {
   id: 1,
   code: "TECHNICAL_SERVICE",
@@ -85,7 +90,8 @@ const TECHNICAL_SERVICE_OPTION: FixedTechnicalServiceOption = {
   styleUrls: ["./technician-panel.scss"],
 })
 export class TechnicianPanel implements OnInit {
-  activeTab: "todo" | "diagnosis" | "pending_approval" | "repair" | "repaired" | "all" = "todo"
+  activeTab: TechnicianPanelTab = "todo"
+  activeDetailTab: TechnicianDetailTab = "equipment"
   currentPage = 1
   itemsPerPage = 6
 
@@ -109,9 +115,6 @@ export class TechnicianPanel implements OnInit {
   agreementItems: AgreementComposerItem[] = []
   products: Product[] = []
   productPriceLoading: Record<number, boolean> = {}
-
-  orderInDiagnosis = false
-  currentOrderInDiagnosisId: number | null = null
 
   showAlert = false
   alertType = ""
@@ -145,6 +148,14 @@ export class TechnicianPanel implements OnInit {
     [EquipmentType.OTHER]: "Otro",
   }
 
+  private readonly slaStageLabels: Record<ServiceOrderSlaStage, string> = {
+    assignment: "Asignación",
+    diagnosis: "Diagnóstico",
+    service: "Servicio",
+    pickup: "Recojo",
+    terminal: "Terminal",
+  }
+
   constructor(
     private readonly formBuilder: FormBuilder,
     private readonly serviceOrderService: ServiceOrderService,
@@ -167,9 +178,13 @@ export class TechnicianPanel implements OnInit {
     this.loadTechnicians()
   }
 
-  setActiveTab(tab: "todo" | "diagnosis" | "pending_approval" | "repair" | "repaired" | "all"): void {
+  setActiveTab(tab: TechnicianPanelTab): void {
     this.activeTab = tab
     this.currentPage = 1
+  }
+
+  setActiveDetailTab(tab: TechnicianDetailTab): void {
+    this.activeDetailTab = tab
   }
 
   private createDiagnosisForm(): FormGroup {
@@ -245,10 +260,6 @@ export class TechnicianPanel implements OnInit {
 
     this.repairedOrders = orders.filter((order) => order.technicalStatus === ServiceOrderTechnicalStatus.RESUELTA)
 
-    const activeDiagnosis = this.diagnosisOrders.find((order) => order.technicalStatus === ServiceOrderTechnicalStatus.EN_DIAGNOSTICO)
-    this.orderInDiagnosis = !!activeDiagnosis
-    this.currentOrderInDiagnosisId = activeDiagnosis?.id ? Number(activeDiagnosis.id) : null
-
     if (this.selectedServiceOrder) {
       const updated = orders.find((entry) => Number(entry.id) === Number(this.selectedServiceOrder?.id))
       this.selectedServiceOrder = updated ?? null
@@ -307,15 +318,162 @@ export class TechnicianPanel implements OnInit {
 
   selectServiceOrder(order: ServiceOrder): void {
     this.selectedServiceOrder = order
+    this.activeDetailTab = "equipment"
     this.loadServiceOrderDiagnosisHistory(Number(order.id))
     this.loadServiceOrderAgreementSummary(order)
   }
 
   clearSelectedServiceOrder(): void {
     this.selectedServiceOrder = null
+    this.activeDetailTab = "equipment"
     this.diagnosticHistory = []
     this.agreementSummary = null
     this.agreementHistory = []
+  }
+
+  isOrderSelected(order: ServiceOrder): boolean {
+    return Number(this.selectedServiceOrder?.id) === Number(order.id)
+  }
+
+  getTabLabel(tab: TechnicianPanelTab): string {
+    switch (tab) {
+      case "todo":
+        return "Por hacer"
+      case "diagnosis":
+        return "En diagnóstico"
+      case "pending_approval":
+        return "Pendientes de acuerdo"
+      case "repair":
+        return "En servicio"
+      case "repaired":
+        return "Finalizados"
+      case "all":
+      default:
+        return "Todos"
+    }
+  }
+
+  getTabIcon(tab: TechnicianPanelTab): string {
+    switch (tab) {
+      case "todo":
+        return "fas fa-tasks"
+      case "diagnosis":
+        return "fas fa-stethoscope"
+      case "pending_approval":
+        return "fas fa-hourglass-half"
+      case "repair":
+        return "fas fa-wrench"
+      case "repaired":
+        return "fas fa-check-circle"
+      case "all":
+      default:
+        return "fas fa-list"
+    }
+  }
+
+  getTabCount(tab: TechnicianPanelTab): number {
+    switch (tab) {
+      case "todo":
+        return this.todoOrders.length
+      case "diagnosis":
+        return this.diagnosisOrders.length
+      case "pending_approval":
+        return this.pendingApprovalOrders.length
+      case "repair":
+        return this.repairOrders.length
+      case "repaired":
+        return this.repairedOrders.length
+      case "all":
+      default:
+        return this.allOrders.length
+    }
+  }
+
+  getEmptyStateLabel(): string {
+    switch (this.activeTab) {
+      case "todo":
+        return "No hay órdenes por atender"
+      case "diagnosis":
+        return "No hay órdenes en diagnóstico"
+      case "pending_approval":
+        return "No hay órdenes pendientes de coordinación o acuerdo"
+      case "repair":
+        return "No hay órdenes en servicio"
+      case "repaired":
+        return "No hay órdenes finalizadas"
+      case "all":
+      default:
+        return "No hay órdenes registradas"
+    }
+  }
+
+  getOrderBadgeClass(order: ServiceOrder): string {
+    switch (order.technicalStatus) {
+      case ServiceOrderTechnicalStatus.DIAGNOSTICADA:
+        return "badge badge-warning-soft"
+      case ServiceOrderTechnicalStatus.EN_EJECUCION:
+      case ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO:
+      case ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION:
+        return "badge badge-primary-soft"
+      case ServiceOrderTechnicalStatus.RESUELTA:
+        return "badge badge-success-soft"
+      default:
+        return "badge badge-info-soft"
+    }
+  }
+
+  getOrderStatusPillLabel(order: ServiceOrder): string {
+    switch (order.technicalStatus) {
+      case ServiceOrderTechnicalStatus.DIAGNOSTICADA:
+        return "Diagnosticado"
+      case ServiceOrderTechnicalStatus.EN_EJECUCION:
+      case ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO:
+      case ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION:
+        return "En servicio"
+      case ServiceOrderTechnicalStatus.RESUELTA:
+        return "Finalizado"
+      case ServiceOrderTechnicalStatus.EN_DIAGNOSTICO:
+        return "En diagnóstico"
+      default:
+        return this.getWorkflowLabel(order)
+    }
+  }
+
+  getOrderStageIcon(order: ServiceOrder): string {
+    switch (order.technicalStatus) {
+      case ServiceOrderTechnicalStatus.DIAGNOSTICADA:
+      case ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL:
+        return "fas fa-hourglass-half"
+      case ServiceOrderTechnicalStatus.EN_EJECUCION:
+      case ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO:
+      case ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION:
+        return "fas fa-wrench"
+      case ServiceOrderTechnicalStatus.RESUELTA:
+        return "fas fa-circle-check"
+      default:
+        return "fas fa-hourglass-half"
+    }
+  }
+
+  getOrderStageLabel(order: ServiceOrder): string {
+    if (order.technicalStatus === ServiceOrderTechnicalStatus.DIAGNOSTICADA) {
+      return "Esperando coordinación"
+    }
+    if (order.technicalStatus === ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL) {
+      return "Esperando acuerdo"
+    }
+    if (order.technicalStatus === ServiceOrderTechnicalStatus.ASIGNADA && order.serviceType === ServiceType.STANDARD_SERVICE) {
+      return "Esperando inicio de servicio"
+    }
+    return this.getWorkflowLabel(order)
+  }
+
+  canShowAgreementShortcut(order: ServiceOrder): boolean {
+    return this.canManageAgreement(order)
+  }
+
+  shouldShowHistoryTab(order: ServiceOrder | null): boolean {
+    return !!order && (this.isDiagnosisService(order) || this.isWarrantyService(order))
   }
 
   canOpenClientInbox(order: ServiceOrder | null): boolean {
@@ -481,10 +639,6 @@ export class TechnicianPanel implements OnInit {
   }
 
   startDiagnosis(order: ServiceOrder): void {
-    if (this.orderInDiagnosis && this.currentOrderInDiagnosisId !== Number(order.id)) {
-      this.showMessage("warning", "fas fa-exclamation-circle", "Completa la revision activa antes de iniciar otra.")
-      return
-    }
     this.transitionWorkflow(
       order,
       ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
@@ -648,6 +802,10 @@ export class TechnicianPanel implements OnInit {
 
   calculateAgreementTotal(): number {
     return this.agreementItems.reduce((total, item) => total + this.calculateAgreementItemSubtotal(item), 0)
+  }
+
+  getAgreementProductsTotal(): number {
+    return this.getAgreementProductItems().reduce((total, item) => total + this.calculateAgreementItemSubtotal(item), 0)
   }
 
   submitAgreement(confirmImmediately = true): void {
@@ -1094,6 +1252,41 @@ export class TechnicianPanel implements OnInit {
     }
   }
 
+  getServiceOrderSlaStageLabel(stage?: ServiceOrderSlaStage | null): string {
+    if (!stage) return "Sin etapa"
+    return this.slaStageLabels[stage] ?? stage
+  }
+
+  formatMinutes(value?: number | null): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return "—"
+    }
+    const totalMinutes = Math.max(0, Math.round(Number(value)))
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    if (!hours) {
+      return `${minutes} min`
+    }
+    if (!minutes) {
+      return `${hours} h`
+    }
+    return `${hours} h ${minutes} min`
+  }
+
+  getMetricDisplayValue(metric?: ServiceOrderDerivedMetric | null): string {
+    if (!metric?.isComputable) {
+      return "No computable"
+    }
+    return this.formatMinutes(metric.valueMinutes)
+  }
+
+  getMetricMissingLabel(metric?: ServiceOrderDerivedMetric | null): string {
+    if (metric?.isComputable || !metric?.missingTimestamps?.length) {
+      return ""
+    }
+    return `Falta: ${metric.missingTimestamps.join(", ")}`
+  }
+
   getProductName(product: ServiceOrderAgreementProduct): string {
     if (product?.product?.name) {
       const sku = product.product.sku ? `${product.product.sku} | ` : ""
@@ -1115,6 +1308,21 @@ export class TechnicianPanel implements OnInit {
 
   getTechnicalServiceLabel(): string {
     return TECHNICAL_SERVICE_OPTION.name
+  }
+
+  getAgreementTechnicalServiceAmount(): number {
+    return this.resolveTechnicalServiceAmount()
+  }
+
+  getAgreementEquipmentName(order: ServiceOrder | null): string {
+    if (!order) return "Equipo sin referencia"
+    const parts = [order.brand, order.model].map((value) => String(value ?? "").trim()).filter(Boolean)
+    return parts.length ? parts.join(" ") : this.getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther)
+  }
+
+  getAgreementEquipmentDescription(order: ServiceOrder | null): string {
+    const issue = String(order?.initialIssue ?? "").trim()
+    return issue || "Sin detalle adicional del servicio."
   }
 
   private shouldLoadServiceOrderAgreement(order: ServiceOrder | null): boolean {
@@ -1286,3 +1494,6 @@ export class TechnicianPanel implements OnInit {
   }
 
 }
+
+
+

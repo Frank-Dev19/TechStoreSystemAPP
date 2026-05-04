@@ -7,6 +7,7 @@ import { config } from '../../../environments/environment';
 import { Sale } from '../../models/sales/sale.model';
 import {
     CreateSaleDto,
+    CreateSaleFromServiceAgreementsDto,
     CancelSaleDto,
     FilterSalesParams,
 } from '../../models/sales/sale.dto';
@@ -100,6 +101,10 @@ export class SalesApiService {
         }>;
     }): Observable<Sale> {
         return this.base.post<Sale>(`${this.baseUrl}/from-service-order`, payload);
+    }
+
+    createFromServiceAgreements(payload: CreateSaleFromServiceAgreementsDto): Observable<Sale> {
+        return this.base.post<Sale>(`${this.baseUrl}/from-service-agreements`, payload);
     }
 
     cancel(id: number, payload: CancelSaleDto): Observable<Sale> {

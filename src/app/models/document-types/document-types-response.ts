@@ -1,8 +1,11 @@
+import { DocumentTypeKind } from './document-types-request';
+
 export interface DocumentTypeResponse {
     id: number;
     name: string;
     digits: number;
     description: string;
+    kind?: DocumentTypeKind | null;
     createdAt?: string | Date;
     updatedAt?: string | Date;
     deletedAt?: string | Date | null;

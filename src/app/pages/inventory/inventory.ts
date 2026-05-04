@@ -1,4 +1,5 @@
-import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, ElementRef, ViewChild } from '@angular/core';
+import { Subscription, timer } from 'rxjs';
 
 // ===== Modelos (usamos los que ya creaste en /models) =====
 import { Product } from '../../models/catalog/product';
@@ -27,13 +28,13 @@ import { SerialsService } from '../../services/inventory/serials.service';
 //import { MovementsService } from '../../services/inventory/movements.service';
 
 //importaciones para el pdf y excel
-import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import autoTable from 'jspdf-autotable';
 
 // ===== Util =====
 type ToastType = 'success' | 'error' | 'warning' | 'info';
+type OperationProductSearchMode = 'entry' | 'exit' | 'adjustment';
 
 @Component({
   selector: 'app-inventory',
@@ -41,7 +42,7 @@ type ToastType = 'success' | 'error' | 'warning' | 'info';
   templateUrl: './inventory.html',
   styleUrl: './inventory.scss',
 })
-export class Inventory implements OnInit {
+export class Inventory implements OnInit, OnDestroy {
 
   public Math = Math;
   // -----------------------------
@@ -94,8 +95,16 @@ export class Inventory implements OnInit {
   filteredCategories: { id: number; name: string }[] = [];
   showCategoryDropdown = false;
 
-  // Todos los productos (sin paginación) para autocompletes de operaciones
-  allProducts: Product[] = [];
+  private readonly operationProductSearchMinChars = 2;
+  private readonly operationProductSearchLimit = 20;
+  private readonly operationProductSearchDebounceMs = 300;
+  private readonly operationProductSearchCache = new Map<string, Product[]>();
+  private readonly operationProductSearchSubscriptions: Partial<Record<OperationProductSearchMode, Subscription>> = {};
+  private readonly operationProductSearchRequestVersion: Record<OperationProductSearchMode, number> = {
+    entry: 0,
+    exit: 0,
+    adjustment: 0,
+  };
 
   // Buscadores para Stock
   stockFilters: StockFilters = {
@@ -325,7 +334,6 @@ export class Inventory implements OnInit {
   async ngOnInit(): Promise<void> {
     await Promise.all([
       this.loadProducts(),
-      this.loadAllProducts(),
       this.loadCategories(),
       this.loadUnits(),
       this.loadPagedCategories(),
@@ -336,6 +344,12 @@ export class Inventory implements OnInit {
       this.loadSuppliers(),
       this.loadDocumentTypes(),
     ]);
+  }
+
+  ngOnDestroy(): void {
+    this.cancelOperationProductSearch('entry');
+    this.cancelOperationProductSearch('exit');
+    this.cancelOperationProductSearch('adjustment');
   }
 
   //Usuario aCtual
@@ -380,15 +394,6 @@ export class Inventory implements OnInit {
       this.showToast('error', 'No se pudieron cargar productos');
     } finally {
       this.productLoading = false;
-    }
-  }
-
-  // Cargar todos los productos sin paginación (para autocompletes de operaciones)
-  private async loadAllProducts() {
-    try {
-      this.allProducts = await this.productsSvc.listAll().toPromise() ?? [];
-    } catch {
-      this.allProducts = [];
     }
   }
 
@@ -749,24 +754,24 @@ export class Inventory implements OnInit {
   entryProductSearchText: string = '';
   showEntryProductDropdown: boolean = false;
   filteredEntryProducts: any[] = [];
+  entryProductSearchLoading = false;
 
   onEntryProductSearch() {
     this.showEntryProductDropdown = true;
-    const search = this.entryProductSearchText.toLowerCase();
-    this.filteredEntryProducts = this.allProducts.filter(p =>
-      p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search)
-    );
+    this.scheduleOperationProductSearch('entry', this.entryProductSearchText);
   }
   onEntryProductFocus() {
     this.showEntryProductDropdown = true;
-    if (!this.entryProductSearchText) {
-      this.filteredEntryProducts = [...this.allProducts];
+    if (this.hasMinOperationProductSearchChars(this.entryProductSearchText)) {
+      this.scheduleOperationProductSearch('entry', this.entryProductSearchText);
     }
   }
   onEntryProductBlur() {
     setTimeout(() => { this.showEntryProductDropdown = false; }, 200);
   }
   async selectEntryProduct(product: any) {
+    this.cancelOperationProductSearch('entry');
+    this.setOperationProductSearchLoading('entry', false);
     this.entryProductSearchText = product.sku + ' - ' + product.name;
     this.entryForm.product_id = product.id;
     this.selectedProductEntry = product;
@@ -784,34 +789,36 @@ export class Inventory implements OnInit {
     this.onProductChangeEntry();
   }
   clearEntryProductSelection() {
+    this.cancelOperationProductSearch('entry');
     this.entryProductSearchText = '';
     this.entryForm.product_id = null;
     this.selectedProductEntry = null;
-    this.filteredEntryProducts = [...this.allProducts];
+    this.filteredEntryProducts = [];
+    this.showEntryProductDropdown = false;
   }
 
   // --- Autocomplete Producto para Salida ---
   exitProductSearchText: string = '';
   showExitProductDropdown: boolean = false;
   filteredExitProducts: any[] = [];
+  exitProductSearchLoading = false;
 
   onExitProductSearch() {
     this.showExitProductDropdown = true;
-    const search = this.exitProductSearchText.toLowerCase();
-    this.filteredExitProducts = this.allProducts.filter(p =>
-      p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search)
-    );
+    this.scheduleOperationProductSearch('exit', this.exitProductSearchText);
   }
   onExitProductFocus() {
     this.showExitProductDropdown = true;
-    if (!this.exitProductSearchText) {
-      this.filteredExitProducts = [...this.allProducts];
+    if (this.hasMinOperationProductSearchChars(this.exitProductSearchText)) {
+      this.scheduleOperationProductSearch('exit', this.exitProductSearchText);
     }
   }
   onExitProductBlur() {
     setTimeout(() => { this.showExitProductDropdown = false; }, 200);
   }
   async selectExitProduct(product: any) {
+    this.cancelOperationProductSearch('exit');
+    this.setOperationProductSearchLoading('exit', false);
     this.exitProductSearchText = product.sku + ' - ' + product.name;
     this.exitForm.product_id = product.id;
     this.selectedProductExit = product;
@@ -829,36 +836,38 @@ export class Inventory implements OnInit {
     this.onProductChangeExit();
   }
   clearExitProductSelection() {
+    this.cancelOperationProductSearch('exit');
     this.exitProductSearchText = '';
     this.exitForm.product_id = null;
     this.selectedProductExit = null;
     this.availableLotsForExit = [];
     this.availableSerialsForExit = [];
-    this.filteredExitProducts = [...this.allProducts];
+    this.filteredExitProducts = [];
+    this.showExitProductDropdown = false;
   }
 
   // --- Autocomplete Producto para Ajuste ---
   adjProductSearchText: string = '';
   showAdjProductDropdown: boolean = false;
   filteredAdjProducts: any[] = [];
+  adjProductSearchLoading = false;
 
   onAdjProductSearch() {
     this.showAdjProductDropdown = true;
-    const search = this.adjProductSearchText.toLowerCase();
-    this.filteredAdjProducts = this.allProducts.filter(p =>
-      p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search)
-    );
+    this.scheduleOperationProductSearch('adjustment', this.adjProductSearchText);
   }
   onAdjProductFocus(): void {
     this.showAdjProductDropdown = true;
-    if (!this.adjProductSearchText) {
-      this.filteredAdjProducts = [...this.allProducts];
+    if (this.hasMinOperationProductSearchChars(this.adjProductSearchText)) {
+      this.scheduleOperationProductSearch('adjustment', this.adjProductSearchText);
     }
   }
   onAdjProductBlur(): void {
     setTimeout(() => { this.showAdjProductDropdown = false; }, 200);
   }
   async selectAdjProduct(product: any) {
+    this.cancelOperationProductSearch('adjustment');
+    this.setOperationProductSearchLoading('adjustment', false);
     this.adjProductSearchText = product.sku + ' - ' + product.name;
     this.adjustmentForm.product_id = product.id;
     this.selectedProductAdjustment = product;
@@ -876,10 +885,91 @@ export class Inventory implements OnInit {
     this.onProductChangeAdjustment();
   }
   clearAdjProductSelection() {
+    this.cancelOperationProductSearch('adjustment');
     this.adjProductSearchText = '';
     this.adjustmentForm.product_id = null;
     this.selectedProductAdjustment = null;
-    this.filteredAdjProducts = [...this.allProducts];
+    this.filteredAdjProducts = [];
+    this.showAdjProductDropdown = false;
+  }
+
+  private scheduleOperationProductSearch(mode: OperationProductSearchMode, searchText: string): void {
+    const normalizedQuery = this.normalizeOperationProductSearchQuery(searchText);
+    this.cancelOperationProductSearch(mode);
+
+    if (!this.hasMinOperationProductSearchChars(normalizedQuery)) {
+      this.setOperationProductSearchLoading(mode, false);
+      this.setOperationFilteredProducts(mode, []);
+      return;
+    }
+
+    const cachedProducts = this.operationProductSearchCache.get(normalizedQuery);
+    if (cachedProducts) {
+      this.setOperationProductSearchLoading(mode, false);
+      this.setOperationFilteredProducts(mode, cachedProducts);
+      return;
+    }
+
+    this.setOperationProductSearchLoading(mode, true);
+    const requestVersion = ++this.operationProductSearchRequestVersion[mode];
+
+    this.operationProductSearchSubscriptions[mode] = timer(this.operationProductSearchDebounceMs).subscribe(async () => {
+      try {
+        const response = await this.productsSvc.listWithFilter({
+          search: normalizedQuery,
+          page: 1,
+          limit: this.operationProductSearchLimit,
+        }).toPromise();
+        const products = response?.data ?? [];
+
+        this.operationProductSearchCache.set(normalizedQuery, products);
+        this.storeProductsInMap(products);
+
+        if (this.operationProductSearchRequestVersion[mode] !== requestVersion) return;
+        this.setOperationFilteredProducts(mode, products);
+      } catch {
+        if (this.operationProductSearchRequestVersion[mode] !== requestVersion) return;
+        this.setOperationFilteredProducts(mode, []);
+        this.showToast('error', 'No se pudieron buscar productos');
+      } finally {
+        if (this.operationProductSearchRequestVersion[mode] === requestVersion) {
+          this.setOperationProductSearchLoading(mode, false);
+        }
+      }
+    });
+  }
+
+  private cancelOperationProductSearch(mode: OperationProductSearchMode): void {
+    this.operationProductSearchRequestVersion[mode]++;
+    this.operationProductSearchSubscriptions[mode]?.unsubscribe();
+    delete this.operationProductSearchSubscriptions[mode];
+    this.setOperationProductSearchLoading(mode, false);
+  }
+
+  private normalizeOperationProductSearchQuery(query: string): string {
+    return (query || '').trim().toLowerCase();
+  }
+
+  hasMinOperationProductSearchChars(searchText: string): boolean {
+    return this.normalizeOperationProductSearchQuery(searchText).length >= this.operationProductSearchMinChars;
+  }
+
+  private setOperationFilteredProducts(mode: OperationProductSearchMode, products: Product[]): void {
+    const nextProducts = [...products];
+
+    if (mode === 'entry') this.filteredEntryProducts = nextProducts;
+    if (mode === 'exit') this.filteredExitProducts = nextProducts;
+    if (mode === 'adjustment') this.filteredAdjProducts = nextProducts;
+  }
+
+  private setOperationProductSearchLoading(mode: OperationProductSearchMode, loading: boolean): void {
+    if (mode === 'entry') this.entryProductSearchLoading = loading;
+    if (mode === 'exit') this.exitProductSearchLoading = loading;
+    if (mode === 'adjustment') this.adjProductSearchLoading = loading;
+  }
+
+  private storeProductsInMap(products: Product[]): void {
+    products.forEach((product) => this.productMap.set(product.id, product));
   }
 
   // --- Contexto del producto seleccionado ---

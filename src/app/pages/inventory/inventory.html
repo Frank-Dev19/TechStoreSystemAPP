@@ -342,16 +342,28 @@
                                         (input)="onEntryProductSearch()" (focus)="onEntryProductFocus()"
                                         (blur)="onEntryProductBlur()" class="form-control"
                                         placeholder="Buscar por SKU o nombre..." [disabled]="isLocked">
-                                    <ul class="autocomplete-dropdown"
-                                        *ngIf="showEntryProductDropdown && filteredEntryProducts.length > 0">
-                                        <li *ngFor="let p of filteredEntryProducts" (mousedown)="selectEntryProduct(p)"
-                                            class="autocomplete-item">
-                                            <code>{{ p.sku }}</code> - {{ p.name }}
-                                        </li>
-                                    </ul>
-                                    <button *ngIf="entryForm.product_id" class="clear-btn"
-                                        (click)="clearEntryProductSelection()" title="Limpiar">
-                                        <i class="fas fa-times"></i>
+                                     <ul class="autocomplete-dropdown"
+                                         *ngIf="showEntryProductDropdown && filteredEntryProducts.length > 0">
+                                         <li *ngFor="let p of filteredEntryProducts" (mousedown)="selectEntryProduct(p)"
+                                             class="autocomplete-item">
+                                             <code>{{ p.sku }}</code> - {{ p.name }}
+                                         </li>
+                                     </ul>
+                                     <ul class="autocomplete-dropdown"
+                                         *ngIf="showEntryProductDropdown && !filteredEntryProducts.length">
+                                         <li class="autocomplete-item" *ngIf="entryProductSearchLoading">Buscando...</li>
+                                         <li class="autocomplete-item"
+                                             *ngIf="!entryProductSearchLoading && !hasMinOperationProductSearchChars(entryProductSearchText)">
+                                             Ingresa al menos 2 caracteres
+                                         </li>
+                                         <li class="autocomplete-item"
+                                             *ngIf="!entryProductSearchLoading && hasMinOperationProductSearchChars(entryProductSearchText)">
+                                             Sin resultados
+                                         </li>
+                                     </ul>
+                                     <button *ngIf="entryForm.product_id" class="clear-btn"
+                                         (click)="clearEntryProductSelection()" title="Limpiar">
+                                         <i class="fas fa-times"></i>
                                     </button>
                                 </div>
                             </div>
@@ -506,16 +518,28 @@
                                         (input)="onExitProductSearch()" (focus)="onExitProductFocus()"
                                         (blur)="onExitProductBlur()" class="form-control"
                                         placeholder="Buscar por SKU o nombre..." [disabled]="isLocked">
-                                    <ul class="autocomplete-dropdown"
-                                        *ngIf="showExitProductDropdown && filteredExitProducts.length > 0">
-                                        <li *ngFor="let p of filteredExitProducts" (mousedown)="selectExitProduct(p)"
-                                            class="autocomplete-item">
-                                            <code>{{ p.sku }}</code> - {{ p.name }}
-                                        </li>
-                                    </ul>
-                                    <button *ngIf="exitForm.product_id" class="clear-btn"
-                                        (click)="clearExitProductSelection()" title="Limpiar">
-                                        <i class="fas fa-times"></i>
+                                     <ul class="autocomplete-dropdown"
+                                         *ngIf="showExitProductDropdown && filteredExitProducts.length > 0">
+                                         <li *ngFor="let p of filteredExitProducts" (mousedown)="selectExitProduct(p)"
+                                             class="autocomplete-item">
+                                             <code>{{ p.sku }}</code> - {{ p.name }}
+                                         </li>
+                                     </ul>
+                                     <ul class="autocomplete-dropdown"
+                                         *ngIf="showExitProductDropdown && !filteredExitProducts.length">
+                                         <li class="autocomplete-item" *ngIf="exitProductSearchLoading">Buscando...</li>
+                                         <li class="autocomplete-item"
+                                             *ngIf="!exitProductSearchLoading && !hasMinOperationProductSearchChars(exitProductSearchText)">
+                                             Ingresa al menos 2 caracteres
+                                         </li>
+                                         <li class="autocomplete-item"
+                                             *ngIf="!exitProductSearchLoading && hasMinOperationProductSearchChars(exitProductSearchText)">
+                                             Sin resultados
+                                         </li>
+                                     </ul>
+                                     <button *ngIf="exitForm.product_id" class="clear-btn"
+                                         (click)="clearExitProductSelection()" title="Limpiar">
+                                         <i class="fas fa-times"></i>
                                     </button>
                                 </div>
                             </div>
@@ -659,16 +683,28 @@
                                     <input type="text" [(ngModel)]="adjProductSearchText" (input)="onAdjProductSearch()"
                                         (focus)="onAdjProductFocus()" (blur)="onAdjProductBlur()" class="form-control"
                                         placeholder="Buscar por SKU o nombre..." [disabled]="isLocked">
-                                    <ul class="autocomplete-dropdown"
-                                        *ngIf="showAdjProductDropdown && filteredAdjProducts.length > 0">
-                                        <li *ngFor="let p of filteredAdjProducts" (mousedown)="selectAdjProduct(p)"
-                                            class="autocomplete-item">
-                                            <code>{{ p.sku }}</code> - {{ p.name }}
-                                        </li>
-                                    </ul>
-                                    <button *ngIf="adjustmentForm.product_id" class="clear-btn"
-                                        (click)="clearAdjProductSelection()" title="Limpiar">
-                                        <i class="fas fa-times"></i>
+                                     <ul class="autocomplete-dropdown"
+                                         *ngIf="showAdjProductDropdown && filteredAdjProducts.length > 0">
+                                         <li *ngFor="let p of filteredAdjProducts" (mousedown)="selectAdjProduct(p)"
+                                             class="autocomplete-item">
+                                             <code>{{ p.sku }}</code> - {{ p.name }}
+                                         </li>
+                                     </ul>
+                                     <ul class="autocomplete-dropdown"
+                                         *ngIf="showAdjProductDropdown && !filteredAdjProducts.length">
+                                         <li class="autocomplete-item" *ngIf="adjProductSearchLoading">Buscando...</li>
+                                         <li class="autocomplete-item"
+                                             *ngIf="!adjProductSearchLoading && !hasMinOperationProductSearchChars(adjProductSearchText)">
+                                             Ingresa al menos 2 caracteres
+                                         </li>
+                                         <li class="autocomplete-item"
+                                             *ngIf="!adjProductSearchLoading && hasMinOperationProductSearchChars(adjProductSearchText)">
+                                             Sin resultados
+                                         </li>
+                                     </ul>
+                                     <button *ngIf="adjustmentForm.product_id" class="clear-btn"
+                                         (click)="clearAdjProductSelection()" title="Limpiar">
+                                         <i class="fas fa-times"></i>
                                     </button>
                                 </div>
                             </div>

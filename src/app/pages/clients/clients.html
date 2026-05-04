@@ -115,6 +115,14 @@
                                 <button class="btn-icon btn-edit" (click)="openEditModal(partner)" title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </button>
+                                <button
+                                    *ngIf="canManageContacts(partner)"
+                                    class="btn-icon btn-secondary"
+                                    (click)="openContactsDrawer(partner)"
+                                    title="Gestionar contactos"
+                                >
+                                    <i class="fas fa-address-book"></i>
+                                </button>
                                 <ng-container *ngIf="!isDeletedView; else restoreButton">
                                     <button class="btn-icon btn-delete" (click)="confirmDelete(partner)" title="Eliminar">
                                         <i class="fas fa-trash"></i>
@@ -472,11 +480,11 @@
             <form [formGroup]="partnerForm" (ngSubmit)="savePartner()">
                 <div class="form-grid">
                     <div class="form-group">
-                        <label for="nombre">Nombre *</label>
+                        <label for="nombre">{{ isCompanyClientFlow() ? 'Razón social *' : 'Nombre *' }}</label>
                         <input type="text" id="nombre" formControlName="name" class="form-input"
                             [class.error]="partnerForm.get('name')?.invalid && partnerForm.get('name')?.touched">
                         <div class="error-message" *ngIf="partnerForm.get('name')?.invalid && partnerForm.get('name')?.touched">
-                            El nombre es requerido
+                            {{ isCompanyClientFlow() ? 'La razón social es requerida' : 'El nombre es requerido' }}
                         </div>
                     </div>
 
@@ -515,7 +523,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" *ngIf="!isCompanyClientFlow()">
                         <label for="email">Correo electrónico</label>
                         <input type="email" id="email" formControlName="email" class="form-input"
                             [class.error]="partnerForm.get('email')?.invalid && partnerForm.get('email')?.touched">
@@ -525,7 +533,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" *ngIf="!isCompanyClientFlow()">
                         <label for="phone">Teléfono *</label>
                         <input type="tel" id="phone" formControlName="phone" class="form-input"
                             [class.error]="partnerForm.get('phone')?.invalid && partnerForm.get('phone')?.touched">
@@ -534,6 +542,35 @@
                             El teléfono es requerido
                         </div>
                     </div>
+
+                    <ng-container *ngIf="isCompanyClientFlow()">
+                        <div class="form-group">
+                            <label for="contactName">Nombre de contacto *</label>
+                            <input type="text" id="contactName" formControlName="contactName" class="form-input"
+                                [class.error]="partnerForm.get('contactName')?.invalid && partnerForm.get('contactName')?.touched">
+                            <div class="error-message" *ngIf="partnerForm.get('contactName')?.invalid && partnerForm.get('contactName')?.touched">
+                                El nombre de contacto es requerido
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="contactEmail">Correo del contacto</label>
+                            <input type="email" id="contactEmail" formControlName="contactEmail" class="form-input"
+                                [class.error]="partnerForm.get('contactEmail')?.invalid && partnerForm.get('contactEmail')?.touched">
+                            <div class="error-message" *ngIf="partnerForm.get('contactEmail')?.invalid && partnerForm.get('contactEmail')?.touched">
+                                Ingresa un correo válido
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="contactPhone">Teléfono del contacto *</label>
+                            <input type="tel" id="contactPhone" formControlName="contactPhone" class="form-input"
+                                [class.error]="partnerForm.get('contactPhone')?.invalid && partnerForm.get('contactPhone')?.touched">
+                            <div class="error-message" *ngIf="partnerForm.get('contactPhone')?.invalid && partnerForm.get('contactPhone')?.touched">
+                                El teléfono del contacto es requerido
+                            </div>
+                        </div>
+                    </ng-container>
 
                     <div class="form-group">
                         <label for="address">Dirección</label>
@@ -629,6 +666,146 @@
             </button>
         </div>
     </div>
+</div>
+
+<div class="contacts-drawer" *ngIf="showContactsDrawer">
+    <div class="contacts-drawer__overlay" (click)="closeContactsDrawer()"></div>
+
+    <aside class="contacts-drawer__panel" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="contactsDrawerTitle">
+        <header class="contacts-drawer__header">
+            <span class="contacts-drawer__accent"></span>
+            <button type="button" class="contacts-drawer__close" (click)="closeContactsDrawer()" aria-label="Cerrar">
+                <i class="fas fa-times"></i>
+            </button>
+            <p class="eyebrow">Gestión de contactos</p>
+            <h2 id="contactsDrawerTitle" class="contacts-drawer__title">Contactos de empresa</h2>
+            <p class="contacts-drawer__subtitle">{{ contactsDrawerClient?.name }}</p>
+        </header>
+
+        <div class="contacts-drawer__body">
+            <section class="drawer-card">
+                <div class="drawer-card__head">
+                    <div>
+                        <p class="eyebrow">Contactos registrados</p>
+                        <h3 class="drawer-card__title">Equipo de contacto</h3>
+                        <p class="drawer-card__desc">Visualizá los contactos disponibles y elegí quién queda como principal.</p>
+                    </div>
+                    <span class="drawer-counter">{{ getDrawerContacts().length }}</span>
+                </div>
+
+                <div class="drawer-card__list">
+                    <div class="drawer-empty" *ngIf="!getDrawerContacts().length">
+                        <div class="drawer-empty__icon">
+                            <i class="fas fa-address-card"></i>
+                        </div>
+                        <div>
+                            <p class="drawer-empty__title">Esta empresa todavía no tiene contactos registrados.</p>
+                            <p class="drawer-empty__desc">Agregá un primer contacto para centralizar la comunicación operativa.</p>
+                        </div>
+                    </div>
+
+                    <article class="drawer-contact" *ngFor="let contact of getDrawerContacts()">
+                        <div class="drawer-contact__head">
+                            <div class="drawer-contact__name-wrap">
+                                <span class="drawer-contact__name">{{ contact.name }}</span>
+                                <span class="drawer-badge-principal" *ngIf="contact.isPrimary">Principal</span>
+                            </div>
+                            <button
+                                type="button"
+                                class="drawer-icon-btn drawer-icon-btn--blue"
+                                *ngIf="!contact.isPrimary"
+                                [disabled]="isSavingContactsDrawer"
+                                (click)="setDrawerPrimaryContact(contact.id)"
+                                title="Marcar principal"
+                            >
+                                <i class="fas fa-star"></i>
+                            </button>
+                        </div>
+
+                        <div class="drawer-contact__line">
+                            <i class="fas fa-envelope"></i>
+                            <span>{{ contact.email || 'Sin correo' }}</span>
+                        </div>
+                        <div class="drawer-contact__line">
+                            <i class="fas fa-phone-alt"></i>
+                            <span>{{ contact.phone || 'Sin teléfono' }}</span>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="drawer-card">
+                <p class="eyebrow">Nuevo contacto</p>
+                <h3 class="drawer-card__title">Agregar contacto</h3>
+                <p class="drawer-card__desc">Completá los datos de la persona con la que se coordina la operación.</p>
+
+                <form [formGroup]="contactsDrawerForm" class="drawer-form">
+                    <div class="drawer-field">
+                        <label class="drawer-field__label" for="drawer-contact-name">Nombre completo *</label>
+                        <input
+                            id="drawer-contact-name"
+                            type="text"
+                            class="drawer-input"
+                            formControlName="name"
+                            [class.error]="contactsDrawerForm.get('name')?.invalid && contactsDrawerForm.get('name')?.touched"
+                        >
+                    </div>
+
+                    <div class="drawer-grid-2">
+                        <div class="drawer-field">
+                            <label class="drawer-field__label" for="drawer-contact-email">Correo</label>
+                            <input
+                                id="drawer-contact-email"
+                                type="email"
+                                class="drawer-input"
+                                formControlName="email"
+                                [class.error]="contactsDrawerForm.get('email')?.invalid && contactsDrawerForm.get('email')?.touched"
+                            >
+                        </div>
+
+                        <div class="drawer-field">
+                            <label class="drawer-field__label" for="drawer-contact-phone">Teléfono *</label>
+                            <input
+                                id="drawer-contact-phone"
+                                type="tel"
+                                class="drawer-input"
+                                formControlName="phone"
+                                [class.error]="contactsDrawerForm.get('phone')?.invalid && contactsDrawerForm.get('phone')?.touched"
+                            >
+                        </div>
+                    </div>
+
+                    <label class="drawer-check">
+                        <input type="checkbox" formControlName="isPrimary">
+                        <span>
+                            <span class="drawer-check__title">Guardar como contacto principal</span>
+                            <span class="drawer-check__desc">Se preseleccionará por defecto en nuevas órdenes.</span>
+                        </span>
+                    </label>
+                </form>
+            </section>
+        </div>
+
+        <footer class="contacts-drawer__footer">
+            <p class="drawer-footer-note">
+                Los cambios impactan el cliente maestro y quedan disponibles para futuras órdenes.
+            </p>
+            <div class="drawer-footer-actions">
+                <button type="button" class="drawer-btn drawer-btn--ghost" (click)="closeContactsDrawer()">
+                    Cerrar
+                </button>
+                <button
+                    type="button"
+                    class="drawer-btn drawer-btn--primary"
+                    [disabled]="contactsDrawerForm.invalid || isSavingContactsDrawer"
+                    (click)="saveDrawerContact()"
+                >
+                    <i class="fas" [ngClass]="isSavingContactsDrawer ? 'fa-spinner fa-spin' : 'fa-plus'"></i>
+                    {{ isSavingContactsDrawer ? 'Guardando...' : 'Agregar contacto' }}
+                </button>
+            </div>
+        </footer>
+    </aside>
 </div>
 
 <div class="alert-container" [class.show]="showAlert">

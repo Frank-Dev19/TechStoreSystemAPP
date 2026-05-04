@@ -17,10 +17,13 @@ import {
   RequestOrigin,
   ServiceOrder,
   ServiceOrderCommercialStatus,
+  ServiceOrderDerivedMetric,
   ServiceOrderEconomicStatus,
   ServiceOrderOperativeStatus,
   ServiceOrderPriority,
+  ServiceOrderSla,
   ServiceOrderTechnicalStatus,
+  ServiceOrderTimeMetrics,
   ServiceType,
 } from '../../models/service-orders/service-order';
 import { TechnicianPanel } from './technician-panel';
@@ -116,8 +119,6 @@ describe('TechnicianPanel', () => {
     expect(component.pendingApprovalOrders.map((order) => order.code)).toEqual(['SO-4', 'SO-5']);
     expect(component.repairOrders.map((order) => order.code)).toEqual(['SO-6', 'SO-7']);
     expect(component.repairedOrders.map((order) => order.code)).toEqual(['SO-8']);
-    expect(component.orderInDiagnosis).toBeTrue();
-    expect(component.currentOrderInDiagnosisId).toBe(3);
   });
 
   it('renders only the active tab orders', () => {
@@ -176,6 +177,34 @@ describe('TechnicianPanel', () => {
     expect(component.canOpenRediagnosis(authorizedDiagnosis)).toBeFalse();
   });
 
+  it('allows starting diagnosis on a second eligible order even if another one is already in diagnosis', () => {
+    const inDiagnosis = createServiceOrder({
+      id: 1,
+      technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+      serviceType: ServiceType.DIAGNOSIS,
+    });
+    const assignedDiagnosis = createServiceOrder({
+      id: 2,
+      technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+      serviceType: ServiceType.DIAGNOSIS,
+    });
+    const transitionWorkflowSpy = spyOn<any>(component, 'transitionWorkflow');
+    const showMessageSpy = spyOn<any>(component, 'showMessage');
+
+    component['hydrateLists']([inDiagnosis, assignedDiagnosis]);
+    component.startDiagnosis(assignedDiagnosis);
+
+    expect(transitionWorkflowSpy).toHaveBeenCalledWith(
+      assignedDiagnosis,
+      ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+      'Diagnostico iniciado correctamente.',
+    );
+    expect(showMessageSpy).not.toHaveBeenCalledWith(
+      'warning',
+      'fas fa-exclamation-circle',
+      'Completa la revision activa antes de iniciar otra.',
+    );
+  });
   it('enables warranty review actions only while warranty orders are in diagnosis', () => {
     const warrantyInDiagnosis = createServiceOrder({
       technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
@@ -256,6 +285,27 @@ describe('TechnicianPanel', () => {
     expect(agreementServiceStub.create).not.toHaveBeenCalled();
     expect(agreementServiceStub.update).not.toHaveBeenCalled();
   });
+
+  it('shows only the operational SLA summary in the sla tab', () => {
+    component.selectedServiceOrder = createServiceOrder({
+      sla: {
+        stage: 'diagnosis',
+        targetMinutes: 120,
+        elapsedMinutes: 30,
+        remainingMinutes: 90,
+        breached: false,
+      },
+      timeMetrics: createTimeMetrics(),
+    });
+    component.activeDetailTab = 'sla';
+
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.service-order-sla-summary')).not.toBeNull();
+    expect(compiled.querySelector('.service-order-derived-metrics-grid')).toBeNull();
+    expect(compiled.textContent).not.toContain('Tiempo a diagnóstico');
+  });
 });
 
 function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder {
@@ -311,3 +361,20 @@ function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder
     ...overrides,
   };
 }
+
+function createTimeMetrics(): ServiceOrderTimeMetrics {
+  const metric: ServiceOrderDerivedMetric = {
+    valueMinutes: 15,
+    isComputable: true,
+    missingTimestamps: [],
+  };
+
+  return {
+    timeToDiagnosis: { ...metric },
+    timeToServiceStart: { ...metric },
+    timeToService: { ...metric },
+    timeToResolution: { ...metric },
+    timeToDelivery: { ...metric },
+  };
+}
+

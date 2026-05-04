@@ -16,7 +16,7 @@ import { CurrentUserService } from '../../services/current-user.service';
 import { PriceCalculation } from '../../models/pricing/pricing.models';
 import { DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../models/sales/document-series.model';
 import { DocumentType } from '../../models/sales/enums';
-import { ClientSaveRequest } from '../../models/clients-request';
+import { ClientKind, ClientSaveRequest } from '../../models/clients-request';
 import { ClientResponse } from '../../models/clients-response';
 import { ServiceOrder, ServiceOrderEconomicStatus } from '../../models/service-orders/service-order';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
@@ -389,6 +389,8 @@ export class Ventas implements OnInit {
   eligibleServiceOrders: ServiceOrder[] = []
   selectedServiceOrderId: number | null = null
   selectedServiceOrder: ServiceOrder | null = null
+  selectedServiceOrderIds: number[] = []
+  selectedServiceOrders: ServiceOrder[] = []
   creditNoteFormData: Partial<CreditNote> | null = null
   dispatchGuideFormData: Partial<ShippingGuide> | null = null
   currentSaleItem: any = {}
@@ -973,6 +975,8 @@ export class Ventas implements OnInit {
     if (mode === 'MANUAL_PRODUCT') {
       this.selectedServiceOrderId = null
       this.selectedServiceOrder = null
+      this.selectedServiceOrderIds = []
+      this.selectedServiceOrders = []
       this.saleFormData.lines = []
       this.saleFormData.total = 0
       this.saleFormData.subtotal = 0
@@ -984,6 +988,10 @@ export class Ventas implements OnInit {
     this.saleFormData.total = 0
     this.saleFormData.subtotal = 0
     this.saleFormData.igv = 0
+    this.selectedServiceOrderId = null
+    this.selectedServiceOrder = null
+    this.selectedServiceOrderIds = []
+    this.selectedServiceOrders = []
   }
 
   onServiceOrderSelected(serviceOrderId: number | string | null): void {
@@ -1015,6 +1023,69 @@ export class Ventas implements OnInit {
     this.saleFormData.igv = 0
   }
 
+  onServiceOrdersSelectionChange(event: Event): void {
+    const select = event.target as HTMLSelectElement | null
+    if (!select || !this.saleFormData) return
+
+    const ids = Array.from(select.selectedOptions)
+      .map((option) => Number(option.value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+
+    const selectedOrders = this.eligibleServiceOrders.filter((order) => ids.includes(Number(order.id)))
+    if (!selectedOrders.length) {
+      this.selectedServiceOrderIds = []
+      this.selectedServiceOrders = []
+      this.selectedServiceOrderId = null
+      this.selectedServiceOrder = null
+      this.saleFormData.lines = []
+      this.saleFormData.total = 0
+      this.saleFormData.subtotal = 0
+      this.saleFormData.igv = 0
+      return
+    }
+
+    const firstClientId = Number(selectedOrders[0].clientId || 0)
+    const sameClientOrders = selectedOrders.filter((order) => Number(order.clientId || 0) === firstClientId)
+    if (sameClientOrders.length !== selectedOrders.length) {
+      this.showToast('warning', 'Solo podés agrupar órdenes del mismo cliente')
+    }
+
+    this.selectedServiceOrders = sameClientOrders
+    this.selectedServiceOrderIds = sameClientOrders.map((order) => Number(order.id))
+    this.selectedServiceOrder = sameClientOrders[0] ?? null
+    this.selectedServiceOrderId = this.selectedServiceOrder ? Number(this.selectedServiceOrder.id) : null
+    this.hydrateGroupedServiceOrderLines()
+  }
+
+  private hydrateGroupedServiceOrderLines(): void {
+    if (!this.saleFormData) return
+
+    if (!this.selectedServiceOrders.length) {
+      this.saleFormData.lines = []
+      this.saleFormData.total = 0
+      this.saleFormData.subtotal = 0
+      this.saleFormData.igv = 0
+      return
+    }
+
+    const lines = this.selectedServiceOrders.map((order) => {
+      const total = Number(order.montoComprometidoVigente ?? 0)
+      return {
+        itemType: 'SERVICE' as const,
+        productName: `Servicio técnico - Orden ${order.code}`,
+        quantity: 1,
+        unitPrice: total,
+        lineTotal: total,
+      }
+    })
+
+    const total = Number(lines.reduce((sum, line) => sum + Number(line.lineTotal ?? 0), 0).toFixed(2))
+    this.saleFormData.lines = lines
+    this.saleFormData.total = total
+    this.saleFormData.subtotal = total
+    this.saleFormData.igv = 0
+  }
+
   private loadEligibleServiceOrders(): void {
     this.serviceOrderService.findAll({ page: 1, limit: 100, economicStatus: ServiceOrderEconomicStatus.PENDIENTE }).subscribe({
       next: ({ data }) => {
@@ -1030,6 +1101,65 @@ export class Ventas implements OnInit {
   getSelectedServiceOrderClientLabel(): string {
     if (!this.selectedServiceOrder) return 'Seleccioná una orden pendiente'
     return this.selectedServiceOrder.clientSnapshotName || this.selectedServiceOrder.client?.name || 'Cliente de la orden'
+  }
+
+  getGroupedOperationalClientLabel(): string {
+    if (!this.selectedServiceOrders.length) return 'Seleccioná al menos una orden pendiente'
+    const firstOrder = this.selectedServiceOrders[0]
+    return firstOrder.clientSnapshotName || firstOrder.client?.name || 'Cliente operativo'
+  }
+
+  getGroupedOrdersPendingTotal(): number {
+    return Number(
+      this.selectedServiceOrders.reduce((sum, order) => sum + Number(order.montoComprometidoVigente ?? 0), 0).toFixed(2),
+    )
+  }
+
+  getOrdersCoveredByCurrentGroupedSale(): ServiceOrder[] {
+    return [...this.selectedServiceOrders]
+  }
+
+  getOrdersStillPendingForGroupedClient(): ServiceOrder[] {
+    if (!this.selectedServiceOrders.length) return []
+
+    const operationalClientId = Number(this.selectedServiceOrders[0]?.clientId ?? 0)
+    if (!operationalClientId) return []
+
+    const selectedIds = new Set(this.selectedServiceOrderIds.map((id) => Number(id)))
+    return this.eligibleServiceOrders.filter((order) => {
+      const sameClient = Number(order.clientId ?? 0) === operationalClientId
+      const notSelected = !selectedIds.has(Number(order.id))
+      return sameClient && notSelected
+    })
+  }
+
+  getGroupedOrderCoverageSummary(): string {
+    const coveredCount = this.getOrdersCoveredByCurrentGroupedSale().length
+    const pendingCount = this.getOrdersStillPendingForGroupedClient().length
+
+    if (!coveredCount) return 'Seleccioná al menos una orden para ver el alcance del comprobante.'
+    if (!pendingCount) return 'Este comprobante cubrirá todas las órdenes pendientes del cliente seleccionado.'
+    const coveredLabel = coveredCount === 1 ? 'orden' : 'órdenes'
+    return `Este comprobante liberará ${coveredCount} ${coveredLabel} y dejará ${pendingCount} pendiente${pendingCount === 1 ? '' : 's'} para otra venta.`
+  }
+
+  private validateTaxpayerForSelectedDocumentType(): boolean {
+    if (!this.foundCustomer) {
+      this.showToast('error', 'Seleccioná el contribuyente para emitir el comprobante')
+      return false
+    }
+
+    if (this.saleFormData?.documentType === 'FACTURA' && this.foundCustomer.kind !== ClientKind.COMPANY) {
+      this.showToast('error', 'La factura requiere un contribuyente empresa')
+      return false
+    }
+
+    if (this.saleFormData?.documentType === 'BOLETA' && this.foundCustomer.kind !== ClientKind.PERSON) {
+      this.showToast('error', 'La boleta requiere un contribuyente persona natural')
+      return false
+    }
+
+    return true
   }
 
   selectProductOrPrice(p: any): void {
@@ -1206,27 +1336,32 @@ export class Ventas implements OnInit {
     // CASH: reference, bankName, cardType = null
 
     if (this.saleCreationMode === 'SERVICE_ORDER') {
-      if (!this.selectedServiceOrderId) {
-        this.showToast('error', 'Seleccioná una orden pendiente para facturar')
+      if (!this.selectedServiceOrderIds.length) {
+        this.showToast('error', 'Seleccioná al menos una orden pendiente para facturar')
         return
       }
 
-      this.salesApi.createFromServiceOrder({
-        serviceOrderId: this.selectedServiceOrderId,
+      if (!this.validateTaxpayerForSelectedDocumentType()) {
+        return
+      }
+
+      this.salesApi.createFromServiceAgreements({
+        serviceOrderIds: this.selectedServiceOrderIds,
         companyId: this.COMPANY_ID,
+        taxpayerCustomerId: Number(this.foundCustomer!.id),
         documentType: this.saleFormData.documentType,
         issueDate: this.getToday(),
-        observations: `Venta generada desde orden ${this.selectedServiceOrder?.code ?? this.selectedServiceOrderId}`,
+        observations: `Venta agrupada desde órdenes ${this.selectedServiceOrders.map((order) => order.code).join(', ')}`,
         payments: [paymentData],
       }).subscribe({
         next: () => {
-          this.showToast('success', 'Venta desde orden registrada exitosamente')
+          this.showToast('success', 'Venta agrupada registrada exitosamente')
           this.onCancelSaleForm()
           this.loadSales()
           this.loadOpenRegister()
           this.loadEligibleServiceOrders()
         },
-        error: () => this.showToast('error', 'Error registrando venta desde orden'),
+        error: () => this.showToast('error', 'Error registrando venta agrupada'),
       })
       return
     }
@@ -1709,9 +1844,14 @@ export class Ventas implements OnInit {
       return;
     }
 
+    const selectedDocumentType = this.documentTypesB.find(
+      (item) => Number(item.id) === Number(this.newCustomerForm.documentTypeId),
+    )
+
     const payload: ClientSaveRequest = {
       companyId: 1,
       name: this.newCustomerForm.name!,
+      kind: selectedDocumentType?.kind === 'COMPANY' ? ClientKind.COMPANY : ClientKind.PERSON,
       documentNumber: this.newCustomerForm.documentNumber!,
       documentTypeId: Number(this.newCustomerForm.documentTypeId),
       address: this.newCustomerForm.address || '',
