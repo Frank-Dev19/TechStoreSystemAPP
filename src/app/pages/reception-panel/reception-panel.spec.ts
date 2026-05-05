@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+﻿import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
@@ -166,7 +166,7 @@ describe('ReceptionPanel', () => {
     expect(showMessageSpy).toHaveBeenCalledWith(
       'warning',
       'fas fa-info-circle',
-      'El marcado manual de pago fue eliminado. Vincula un comprobante para reflejar el estado económico de la orden.',
+      'El marcado manual de pago fue eliminado. Vincula un comprobante para reflejar el estado econÃ³mico de la orden.',
     );
   });
 
@@ -294,7 +294,7 @@ describe('ReceptionPanel', () => {
     );
   }));
 
-  it('crea empresa con razón social y contacto separados cuando el flujo es COMPANY', fakeAsync(() => {
+  it('crea empresa con razÃ³n social y contacto separados cuando el flujo es COMPANY', fakeAsync(() => {
     clientsServiceStub.create.and.returnValue(
       of({
         id: 40,
@@ -353,7 +353,7 @@ describe('ReceptionPanel', () => {
     );
   }));
 
-  it('permite acumular múltiples equipos candidatos antes del submit batch', () => {
+  it('permite acumular mÃºltiples equipos candidatos antes del submit batch', () => {
     component.createServiceOrderForm.patchValue({
       workflowServiceType: ServiceType.DIAGNOSIS,
       equipmentType: EquipmentType.LAPTOP,
@@ -379,7 +379,7 @@ describe('ReceptionPanel', () => {
     ])
   })
 
-  it('ofrece agregar otro equipo desde la etapa de equipos y no durante edición', () => {
+  it('ofrece agregar otro equipo desde la etapa de equipos y no durante ediciÃ³n', () => {
     component.createServiceOrderStep = 3
     component.createServiceOrderCandidates = [
       {
@@ -455,7 +455,7 @@ describe('ReceptionPanel', () => {
     expect(component.createServiceOrderForm.get('contactPhone')?.enabled).toBeTrue();
   });
 
-  it('prefiere documentType.kind sobre la heurística legacy en recepción', () => {
+  it('prefiere documentType.kind sobre la heurÃ­stica legacy en recepciÃ³n', () => {
     component.documentTypes = [
       { id: 3, name: 'DOC-11', digits: 11, description: 'doc', kind: DocumentTypeKind.PERSON } as any,
     ];
@@ -466,7 +466,7 @@ describe('ReceptionPanel', () => {
     expect(component.createServiceOrderForm.get('clientKind')?.value).toBe(ClientKind.PERSON);
   });
 
-  it('mantiene fallback legacy en recepción cuando falta kind', () => {
+  it('mantiene fallback legacy en recepciÃ³n cuando falta kind', () => {
     component.documentTypes = [
       { id: 4, name: 'RUC LEGACY', digits: 11, description: 'doc', kind: null } as any,
     ];
@@ -518,7 +518,7 @@ describe('ReceptionPanel', () => {
     expect(companyTradeNameInput).toBeTruthy();
   }));
 
-  it('genera la tabla del PDF del documento ligado con columna N° en vez de Tipo', () => {
+  it('genera la tabla del PDF del documento ligado con columna NÂ° en vez de Tipo', () => {
     const order = createServiceOrder({ id: 12 });
     component.saleLinksByOrderId[12] = [createBillingLink(12)];
     const showMessageSpy = spyOn<any>(component, 'showMessage');
@@ -560,7 +560,7 @@ describe('ReceptionPanel', () => {
           type: 'service',
           serviceId: 1,
           unitPrice: 45,
-          notes: 'Servicio técnico',
+          notes: 'Servicio tÃ©cnico',
         },
       ],
       'Notas',
@@ -570,7 +570,7 @@ describe('ReceptionPanel', () => {
     expect(payload.services).toBeUndefined();
   });
 
-  it('abre el modal de acuerdo con la línea fija de Servicio técnico ya creada', () => {
+  it('abre el modal de acuerdo con la lÃ­nea fija de Servicio tÃ©cnico ya creada', () => {
     const order = createServiceOrder({ id: 21, serviceType: ServiceType.DIAGNOSIS });
 
     component.openCreateServiceOrderAgreementModal(order);
@@ -585,7 +585,7 @@ describe('ReceptionPanel', () => {
     );
   });
 
-  it('permite editar el monto manual del servicio técnico y lo refleja en el payload', () => {
+  it('permite editar el monto manual del servicio tÃ©cnico y lo refleja en el payload', () => {
     const order = createServiceOrder({ id: 22, serviceType: ServiceType.STANDARD_SERVICE });
     component.openCreateServiceOrderAgreementModal(order);
 
@@ -702,3 +702,4 @@ function createBillingLink(serviceOrderId: number): ServiceOrderBillingLink {
     } as any,
   };
 }
+

@@ -1505,11 +1505,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const contacts = partner.contacts ?? []
     const primaryContact = contacts.find((c) => c.isPrimary && c.isActive !== false) ?? contacts[0] ?? null
 
+    // Primero: aplica todo excepto clientContactId
     this.createServiceOrderForm.patchValue(
       {
         clientId: Number(partner.id),
         clientKind: kind,
-        clientContactId: primaryContact ? Number(primaryContact.id) : null,
+        clientContactId: null,           // ← null primero
         documentNumber: partner.documentNumber ?? "",
         documentTypeId: documentTypeId,
         companyName: kind === ClientKind.COMPANY ? (partner.name ?? "") : "",
@@ -1529,12 +1530,22 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.setCustomerFieldsEnabled(false)
 
     if (!partner.phone && !primaryContact?.phone) {
-      const phoneControl = this.createServiceOrderForm.get("contactPhone")
-      phoneControl?.enable({ emitEvent: false })
+      this.createServiceOrderForm.get("contactPhone")?.enable({ emitEvent: false })
     }
 
-    // Force change detection so getClientContactOptions() refreshes
+    // Segundo: forzar render del *ngIf ANTES de asignar el contacto seleccionado
     this.cdr.detectChanges()
+
+    // Tercero: asignar el contactId DESPUÉS de que las <option> ya existen en el DOM
+    if (primaryContact) {
+      setTimeout(() => {
+        this.createServiceOrderForm.patchValue(
+          { clientContactId: String(primaryContact.id) },
+          { emitEvent: false }
+        )
+        this.cdr.detectChanges()
+      }, 0)
+    }
   }
 
   private updateExpectedDocumentDigits(documentTypeId: number | null): void {
@@ -1585,7 +1596,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   onClientContactSelectionChange(): void {
     const contactId = Number(this.createServiceOrderForm.get("clientContactId")?.value)
     if (!contactId) {
-      // No contact selected: allow editing contact fields inline
       this.createServiceOrderForm.patchValue({
         contactName: "",
         contactEmail: "",
@@ -3742,12 +3752,3 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     })
   }
 }
-
-
-
-
-
-
-
-
-

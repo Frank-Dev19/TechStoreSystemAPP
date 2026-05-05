@@ -894,8 +894,9 @@
                       formControlName="clientContactId"
                       (change)="onClientContactSelectionChange()"
                     >
+                      <option value="">Seleccionar contacto</option>
                       @for (contact of getClientContactOptions(); track contact.id) {
-                        <option [ngValue]="contact.id">
+                        <option [value]="contact.id">
                           {{ contact.name }}@if (contact.isPrimary) { (Principal) }@if (contact.phone) { — {{ contact.phone }} }
                         </option>
                       }
