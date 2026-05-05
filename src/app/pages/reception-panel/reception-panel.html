@@ -789,55 +789,6 @@
                   <p>{{ getCreateOrderClientDescription() }}</p>
                 </div>
 
-                <div class="form-group client-kind-toggle">
-                  <label>Tipo de cliente</label>
-                  <div class="toggle-group">
-                    <button
-                      type="button"
-                      class="toggle-btn"
-                      [class.active]="createServiceOrderForm.get('clientKind')?.value === clientKindEnum.PERSON"
-                      (click)="createServiceOrderForm.patchValue({ clientKind: clientKindEnum.PERSON })"
-                    >
-                      <i class="fas fa-user"></i>
-                      Persona
-                    </button>
-                    <button
-                      type="button"
-                      class="toggle-btn"
-                      [class.active]="createServiceOrderForm.get('clientKind')?.value === clientKindEnum.COMPANY"
-                      (click)="createServiceOrderForm.patchValue({ clientKind: clientKindEnum.COMPANY })"
-                    >
-                      <i class="fas fa-building"></i>
-                      Empresa
-                    </button>
-                  </div>
-                </div>
-
-                @if (createServiceOrderForm.get('clientKind')?.value === clientKindEnum.COMPANY) {
-                  <div class="form-grid form-grid--wide">
-                    <div class="form-group">
-                      <label for="companyName">Razón social *</label>
-                      <input
-                        type="text"
-                        id="companyName"
-                        class="form-control"
-                        formControlName="companyName"
-                        placeholder="Ej: TechStore SAC"
-                      />
-                    </div>
-                    <div class="form-group">
-                      <label for="companyTradeName">Nombre comercial</label>
-                      <input
-                        type="text"
-                        id="companyTradeName"
-                        class="form-control"
-                        formControlName="companyTradeName"
-                        placeholder="Ej: TechStore"
-                      />
-                    </div>
-                  </div>
-                }
-
                 <div class="form-grid form-grid--wide">
                   <div class="form-group">
                     <label for="documentTypeId">Tipo de documento *</label>
@@ -859,6 +810,15 @@
                       createServiceOrderForm.get('documentTypeId')?.touched
                     ) {
                       <div class="invalid-feedback">Selecciona un tipo de documento válido</div>
+                    }
+                    @if (createServiceOrderForm.get('clientKind')?.value) {
+                      <span class="badge client-kind-badge">
+                        @if (createServiceOrderForm.get('clientKind')?.value === clientKindEnum.COMPANY) {
+                          <i class="fas fa-building"></i> Empresa
+                        } @else {
+                          <i class="fas fa-user"></i> Persona
+                        }
+                      </span>
                     }
                   </div>
 
@@ -892,6 +852,31 @@
                     </div>
                   </div>
                 </div>
+
+                @if (createServiceOrderForm.get('clientKind')?.value === clientKindEnum.COMPANY) {
+                  <div class="form-grid form-grid--wide">
+                    <div class="form-group">
+                      <label for="companyName">Razón social *</label>
+                      <input
+                        type="text"
+                        id="companyName"
+                        class="form-control"
+                        formControlName="companyName"
+                        placeholder="Ej: TechStore SAC"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label for="companyTradeName">Nombre comercial</label>
+                      <input
+                        type="text"
+                        id="companyTradeName"
+                        class="form-control"
+                        formControlName="companyTradeName"
+                        placeholder="Ej: TechStore"
+                      />
+                    </div>
+                  </div>
+                }
               </div>
 
               <div class="form-section">

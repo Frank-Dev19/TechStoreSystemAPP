@@ -1,17 +1,24 @@
 const fs = require('node:fs');
 
 const browserCandidates = [
-  process.env.CHROME_BIN,
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-].filter(Boolean);
+  { env: 'CHROME_BIN', paths: [
+    process.env.CHROME_BIN,
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ]},
+  { env: 'EDGE_BIN', paths: [
+    process.env.EDGE_BIN,
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  ]},
+].flatMap(b => b.paths.map(p => ({ env: b.env, path: p }))).filter(b => b.path);
 
-const detectedBrowser = browserCandidates.find((browserPath) => fs.existsSync(browserPath));
+const detectedBrowser = browserCandidates.find((b) => fs.existsSync(b.path));
 
 if (detectedBrowser) {
-  process.env.CHROME_BIN = detectedBrowser;
+  // Set CHROME_BIN to whatever browser we found (Edge or Chrome)
+  // This way the ChromeHeadlessCI launcher will use the correct binary
+  process.env.CHROME_BIN = detectedBrowser.path;
 }
 
 module.exports = function (config) {

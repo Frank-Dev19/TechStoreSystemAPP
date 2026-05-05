@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit } from "@angular/core"
+import { Component, HostListener, OnDestroy, OnInit, ChangeDetectorRef } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { Observable, Subscription } from "rxjs"
 import { catchError, finalize, map, switchMap, tap } from "rxjs/operators"
@@ -310,7 +310,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     private readonly clientsService: ClientsApiService,
     private readonly productsService: ProductsService,
     private readonly agreementService: ServiceOrderAgreementService,
-    private readonly diagnosticService: ServiceOrderDiagnosisService,
+    private readonly diagnosisService: ServiceOrderDiagnosisService,
     private readonly documentTypesService: DocumentTypesApiService,
     private readonly usersApi: UsersApiService,
     private readonly pricingQuery: PricingQueryApiService,
@@ -318,6 +318,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     private readonly serviceOrderBillingLinks: ServiceOrderBillingLinkService,
     private readonly saleReceiptPdfService: SaleReceiptPdfService,
     private readonly serviceOrderInboxService: ServiceOrderInboxService,
+    private readonly cdr: ChangeDetectorRef,
   ) {
     this.createServiceOrderForm = this.createServiceOrderFormGroup()
     this.createServiceOrderAgreementForm = this.createServiceOrderAgreementFormGroup()
@@ -860,13 +861,27 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.updateExpectedDocumentDigits(typeId)
     this.documentSearchMessage = ""
     this.documentSearchError = ""
-    this.createServiceOrderForm.get("documentNumber")?.setValue("")
+    // Clear contact/company fields when document type changes (keep document number)
+    this.createServiceOrderForm.patchValue({
+      companyName: "",
+      companyTradeName: "",
+      contactName: "",
+      contactPhone: "",
+      contactEmail: "",
+      clientContactId: null,
+    }, { emitEvent: false })
     this.syncDocumentNumberAvailability()
 
     // Infer clientKind from document type
     const docType = this.documentTypes.find((t) => Number(t.id) === Number(typeId))
     const inferredKind = docType?.['kind'] ?? (this.expectedDocumentDigits && this.expectedDocumentDigits >= 11 ? ClientKind.COMPANY : ClientKind.PERSON)
     this.createServiceOrderForm.patchValue({ clientKind: inferredKind }, { emitEvent: false })
+
+    // Re-trigger search if document number has valid length for the new type
+    const currentDocNumber = this.createServiceOrderForm.get("documentNumber")?.value
+    if (currentDocNumber && currentDocNumber.toString().length === this.expectedDocumentDigits) {
+      this.onDocumentNumberInput()
+    }
   }
 
   private syncDocumentNumberAvailability(): void {
@@ -1517,6 +1532,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       const phoneControl = this.createServiceOrderForm.get("contactPhone")
       phoneControl?.enable({ emitEvent: false })
     }
+
+    // Force change detection so getClientContactOptions() refreshes
+    this.cdr.detectChanges()
   }
 
   private updateExpectedDocumentDigits(documentTypeId: number | null): void {
@@ -3023,7 +3041,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
     this.isLoadingDiagnosis = true
-    this.diagnosticService
+    this.diagnosisService
       .findAll({ page: 1, limit: 1, serviceOrderId, status: "CURRENT" })
       .pipe(finalize(() => (this.isLoadingDiagnosis = false)))
       .subscribe({

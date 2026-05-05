@@ -477,6 +477,47 @@ describe('ReceptionPanel', () => {
     expect(component.createServiceOrderForm.get('clientKind')?.value).toBe(ClientKind.COMPANY);
   });
 
+  // Task 3.4 & 3.5: Verify company fields show/hide based on clientKind
+  it('campos de empresa se ocultan cuando clientKind es PERSON', fakeAsync(() => {
+    // Setup: open modal and go to step 2 (client step)
+    component.showCreateServiceOrderModal = true;
+    component.createServiceOrderForm.patchValue({
+      requestOrigin: RequestOrigin.CLIENT,
+      documentTypeId: 1,
+      documentNumber: '12345678',
+      clientKind: ClientKind.PERSON,
+    });
+    component.createServiceOrderStep = 2;
+    fixture.detectChanges();
+    tick();
+
+    // Company fields should NOT be visible when clientKind is PERSON
+    const companyNameInput = fixture.nativeElement.querySelector('#companyName');
+    const companyTradeNameInput = fixture.nativeElement.querySelector('#companyTradeName');
+    expect(companyNameInput).toBeFalsy();
+    expect(companyTradeNameInput).toBeFalsy();
+  }));
+
+  it('campos de empresa se muestran cuando clientKind es COMPANY', fakeAsync(() => {
+    // Setup: open modal and go to step 2 (client step)
+    component.showCreateServiceOrderModal = true;
+    component.createServiceOrderForm.patchValue({
+      requestOrigin: RequestOrigin.CLIENT,
+      documentTypeId: 2,
+      documentNumber: '12345678901',
+      clientKind: ClientKind.COMPANY,
+    });
+    component.createServiceOrderStep = 2;
+    fixture.detectChanges();
+    tick();
+
+    // Company fields SHOULD be visible when clientKind is COMPANY
+    const companyNameInput = fixture.nativeElement.querySelector('#companyName');
+    const companyTradeNameInput = fixture.nativeElement.querySelector('#companyTradeName');
+    expect(companyNameInput).toBeTruthy();
+    expect(companyTradeNameInput).toBeTruthy();
+  }));
+
   it('genera la tabla del PDF del documento ligado con columna N° en vez de Tipo', () => {
     const order = createServiceOrder({ id: 12 });
     component.saleLinksByOrderId[12] = [createBillingLink(12)];
