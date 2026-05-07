@@ -9,8 +9,10 @@ import {
   ClientImportStatus,
   ClientImportValidateResponse,
 } from '../../models/client-import.models';
-import { ClientResponse } from '../../models/clients-response';
+import { ClientContactResponse, ClientResponse } from '../../models/clients-response';
 import {
+  ClientContactRequest,
+  ClientKind,
   ClientSaveRequest,
   ClientUpdateRequest,
 } from '../../models/clients-request';
@@ -69,6 +71,10 @@ export class Clients implements OnInit {
   isEditMode = false;
   partnerForm: FormGroup;
   currentPartner: ClientResponse | null = null;
+  showContactsDrawer = false;
+  contactsDrawerClient: ClientResponse | null = null;
+  contactsDrawerForm: FormGroup;
+  isSavingContactsDrawer = false;
 
   showAlert = false;
   AlertType = '';
@@ -120,6 +126,7 @@ export class Clients implements OnInit {
     private readonly currentUserService: CurrentUserService,
   ) {
     this.partnerForm = this.createForm();
+    this.contactsDrawerForm = this.createContactsDrawerForm();
   }
 
   ngOnInit(): void {
@@ -177,11 +184,15 @@ export class Clients implements OnInit {
     return this.formBuilder.group(
       {
         name: ['', [Validators.required, Validators.minLength(2)]],
+        kind: [ClientKind.PERSON, Validators.required],
         tradeName: [''],
         documentTypeId: [null, Validators.required],
         documentNumber: ['', [Validators.required, Validators.pattern(this.documentNumberPattern)]],
         email: ['', Validators.email],
         phone: ['', Validators.required],
+        contactName: [''],
+        contactEmail: ['', Validators.email],
+        contactPhone: [''],
         address: [''],
         city: [''],
         country: [''],
@@ -189,14 +200,78 @@ export class Clients implements OnInit {
     );
   }
 
+  private createContactsDrawerForm(): FormGroup {
+    return this.formBuilder.group({
+      name: ['', [Validators.required, Validators.minLength(2)]],
+      email: ['', Validators.email],
+      phone: ['', [Validators.required, Validators.pattern(/^[0-9+\-\s]*$/)]],
+      isPrimary: [false],
+    });
+  }
+
   private observeDocumentTypeChanges(): void {
     this.partnerForm.get('documentTypeId')?.valueChanges.subscribe((value) => {
       const docTypeId = Number(value);
       const docType = this.documentTypes.find((item) => Number(item.id) === docTypeId);
       this.documentDigitsHint = docType?.digits ?? null;
+      this.partnerForm.get('kind')?.setValue(this.inferClientKindFromDocumentTypeId(docTypeId), { emitEvent: false });
       this.updateDocumentNumberValidators(this.documentDigitsHint);
+      this.syncClientKindValidation();
       this.enforceDocumentNumberLength();
     });
+  }
+
+  private inferClientKindFromDocumentTypeId(documentTypeId: number | null | undefined): ClientKind {
+	    const docType = this.documentTypes.find((item) => Number(item.id) === Number(documentTypeId));
+	    if (docType?.kind === ClientKind.COMPANY) {
+	      return ClientKind.COMPANY;
+	    }
+	    if (docType?.kind === ClientKind.PERSON) {
+	      return ClientKind.PERSON;
+	    }
+	    const normalizedName = String(docType?.name ?? '').toUpperCase();
+	    if (normalizedName.includes('RUC') || Number(docType?.digits) === 11) {
+	      return ClientKind.COMPANY;
+	    }
+	    return ClientKind.PERSON;
+  }
+
+  isCompanyClientFlow(): boolean {
+    return this.partnerForm.get('kind')?.value === ClientKind.COMPANY;
+  }
+
+  canManageContacts(partner: ClientResponse): boolean {
+    const inferredKind = partner.kind ?? this.inferClientKindFromDocumentTypeId(partner.documentTypeId);
+    return inferredKind === ClientKind.COMPANY;
+  }
+
+  private syncClientKindValidation(): void {
+    const isCompany = this.isCompanyClientFlow();
+    const phoneControl = this.partnerForm.get('phone');
+    const contactNameControl = this.partnerForm.get('contactName');
+    const contactEmailControl = this.partnerForm.get('contactEmail');
+    const contactPhoneControl = this.partnerForm.get('contactPhone');
+
+    if (isCompany) {
+      phoneControl?.clearValidators();
+      phoneControl?.setValue('', { emitEvent: false });
+      contactNameControl?.setValidators([Validators.required]);
+      contactEmailControl?.setValidators([Validators.email]);
+      contactPhoneControl?.setValidators([Validators.required, Validators.pattern(/^[0-9+\-\s]*$/)]);
+    } else {
+      phoneControl?.setValidators([Validators.required]);
+      contactNameControl?.clearValidators();
+      contactEmailControl?.setValidators([Validators.email]);
+      contactPhoneControl?.clearValidators();
+      contactNameControl?.setValue('', { emitEvent: false });
+      contactEmailControl?.setValue('', { emitEvent: false });
+      contactPhoneControl?.setValue('', { emitEvent: false });
+    }
+
+    phoneControl?.updateValueAndValidity({ emitEvent: false });
+    contactNameControl?.updateValueAndValidity({ emitEvent: false });
+    contactEmailControl?.updateValueAndValidity({ emitEvent: false });
+    contactPhoneControl?.updateValueAndValidity({ emitEvent: false });
   }
 
   onDocumentNumberInput(): void {
@@ -280,10 +355,7 @@ export class Clients implements OnInit {
     this.clientsApi.findAll(params).subscribe({
       next: (response: PaginatedResponse<ClientResponse>) => {
         this.partners = (response.data ?? []).map((partner) => ({
-          ...partner,
-          id: Number(partner.id),
-          companyId: Number(partner.companyId),
-          documentTypeId: Number(partner.documentTypeId),
+          ...this.normalizeClientResponse(partner),
           isClient: !!partner.isClient,
           isSupplier: !!partner.isSupplier,
         }));
@@ -387,11 +459,15 @@ export class Clients implements OnInit {
     this.currentPartner = null;
     this.partnerForm.reset({
       name: '',
+      kind: ClientKind.PERSON,
       tradeName: '',
       documentTypeId: null,
       documentNumber: '',
       email: '',
       phone: '',
+      contactName: '',
+      contactEmail: '',
+      contactPhone: '',
       address: '',
       city: '',
       country: '',
@@ -405,11 +481,15 @@ export class Clients implements OnInit {
     this.currentPartner = partner;
     this.partnerForm.patchValue({
       name: partner.name,
+      kind: partner.kind ?? this.inferClientKindFromDocumentTypeId(Number(partner.documentTypeId)),
       tradeName: partner.tradeName ?? '',
       documentTypeId: Number(partner.documentTypeId),
       documentNumber: partner.documentNumber,
       email: partner.email ?? '',
       phone: partner.phone ?? '',
+      contactName: '',
+      contactEmail: '',
+      contactPhone: '',
       address: partner.address ?? '',
       city: partner.city ?? '',
       country: partner.country ?? '',
@@ -417,6 +497,7 @@ export class Clients implements OnInit {
     const docType = this.documentTypes.find((item) => Number(item.id) === Number(partner.documentTypeId));
     this.documentDigitsHint = docType?.digits ?? null;
     this.updateDocumentNumberValidators(this.documentDigitsHint);
+    this.syncClientKindValidation();
     this.showModal = true;
   }
 
@@ -427,19 +508,190 @@ export class Clients implements OnInit {
     this.documentDigitsHint = null;
   }
 
+  openContactsDrawer(partner: ClientResponse): void {
+    if (!this.canManageContacts(partner)) {
+      return;
+    }
+    this.contactsDrawerClient = this.normalizeClientResponse({
+      ...partner,
+      contacts: this.getSortedContacts(partner.contacts ?? []),
+    } as ClientResponse);
+    this.contactsDrawerForm.reset({
+      name: '',
+      email: '',
+      phone: '',
+      isPrimary: !this.getDrawerContacts().length,
+    });
+    this.showContactsDrawer = true;
+  }
+
+  closeContactsDrawer(): void {
+    this.showContactsDrawer = false;
+    this.contactsDrawerClient = null;
+    this.contactsDrawerForm.reset({
+      name: '',
+      email: '',
+      phone: '',
+      isPrimary: false,
+    });
+  }
+
+  getDrawerContacts(): ClientContactResponse[] {
+    return this.getSortedContacts(this.contactsDrawerClient?.contacts ?? []);
+  }
+
+  saveDrawerContact(): void {
+    if (!this.contactsDrawerClient) {
+      return;
+    }
+    if (this.contactsDrawerForm.invalid) {
+      this.contactsDrawerForm.markAllAsTouched();
+      return;
+    }
+
+    const formValue = this.contactsDrawerForm.getRawValue();
+    const existingContacts = this.getDrawerContacts().map((contact) => ({
+      id: Number(contact.id),
+      name: String(contact.name ?? '').trim(),
+      email: String(contact.email ?? '').trim() || null,
+      phone: String(contact.phone ?? '').trim() || null,
+      isPrimary: !!contact.isPrimary,
+      isActive: contact.isActive ?? true,
+    }));
+
+    const shouldBePrimary = !!formValue.isPrimary || existingContacts.length === 0;
+    const nextContacts: ClientContactRequest[] = [
+      ...existingContacts.map((contact) => ({
+        ...contact,
+        isPrimary: shouldBePrimary ? false : contact.isPrimary,
+      })),
+      {
+        name: String(formValue.name ?? '').trim(),
+        email: String(formValue.email ?? '').trim() || null,
+        phone: String(formValue.phone ?? '').trim() || null,
+        isPrimary: shouldBePrimary,
+        isActive: true,
+      },
+    ];
+
+    this.persistDrawerContacts(nextContacts, 'Contacto agregado correctamente.');
+  }
+
+  setDrawerPrimaryContact(contactId: number): void {
+    if (!this.contactsDrawerClient) {
+      return;
+    }
+
+    const nextContacts: ClientContactRequest[] = this.getDrawerContacts().map((contact) => ({
+      id: Number(contact.id),
+      name: String(contact.name ?? '').trim(),
+      email: String(contact.email ?? '').trim() || null,
+      phone: String(contact.phone ?? '').trim() || null,
+      isPrimary: Number(contact.id) === Number(contactId),
+      isActive: contact.isActive ?? true,
+    }));
+
+    this.persistDrawerContacts(nextContacts, 'Contacto principal actualizado correctamente.');
+  }
+
+  private persistDrawerContacts(contacts: ClientContactRequest[], successMessage: string): void {
+    const targetClient = this.contactsDrawerClient;
+    if (!targetClient) {
+      return;
+    }
+
+    this.isSavingContactsDrawer = true;
+    this.clientsApi.update(Number(targetClient.id), { contacts }).subscribe({
+      next: (updatedClient) => {
+        const normalized = this.normalizeClientResponse(updatedClient);
+        this.applyUpdatedClient(normalized);
+        this.contactsDrawerClient = normalized;
+        this.contactsDrawerForm.reset({
+          name: '',
+          email: '',
+          phone: '',
+          isPrimary: false,
+        });
+        this.showMessage('success', 'fas fa-check-circle', successMessage);
+      },
+      error: () => {
+        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron guardar los contactos.');
+      },
+      complete: () => {
+        this.isSavingContactsDrawer = false;
+      },
+    });
+  }
+
+  private applyUpdatedClient(updatedClient: ClientResponse): void {
+    this.partners = this.partners.map((partner) =>
+      Number(partner.id) === Number(updatedClient.id) ? updatedClient : partner,
+    );
+    this.visiblePartners = this.visiblePartners.map((partner) =>
+      Number(partner.id) === Number(updatedClient.id) ? updatedClient : partner,
+    );
+    if (this.currentPartner && Number(this.currentPartner.id) === Number(updatedClient.id)) {
+      this.currentPartner = updatedClient;
+    }
+  }
+
+  private getSortedContacts(contacts: ClientContactResponse[]): ClientContactResponse[] {
+    return [...contacts].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+  }
+
+  private normalizeClientResponse(partner: ClientResponse): ClientResponse {
+    return {
+      ...partner,
+      id: Number(partner.id),
+      companyId: Number(partner.companyId),
+      documentTypeId: Number(partner.documentTypeId),
+      contacts: this.getSortedContacts(
+        (partner.contacts ?? []).map((contact) => ({
+          ...contact,
+          id: Number(contact.id),
+          clientId: Number(contact.clientId),
+        })),
+      ),
+    };
+  }
+
   private buildSavePayload(): ClientSaveRequest {
     const formValue = this.partnerForm.value;
-    return {
+	    const kind = (formValue.kind as ClientKind | null | undefined) ?? this.inferClientKindFromDocumentTypeId(formValue.documentTypeId);
+    const basePayload: ClientSaveRequest = {
       companyId: this.companyId ?? undefined,
       name: String(formValue.name).trim(),
+      kind,
       tradeName: formValue.tradeName ? String(formValue.tradeName).trim() : undefined,
       documentTypeId: Number(formValue.documentTypeId),
       documentNumber: String(formValue.documentNumber).trim(),
-      email: formValue.email ? String(formValue.email).trim() : undefined,
-      phone: String(formValue.phone).trim(),
       address: formValue.address ? String(formValue.address).trim() : undefined,
       city: formValue.city ? String(formValue.city).trim() : undefined,
       country: formValue.country ? String(formValue.country).trim() : undefined,
+    };
+
+    if (kind === ClientKind.COMPANY) {
+      const firstContact: ClientContactRequest = {
+        name: String(formValue.contactName ?? '').trim(),
+        email: String(formValue.contactEmail ?? '').trim() || null,
+        phone: String(formValue.contactPhone ?? '').trim() || null,
+        isPrimary: true,
+        isActive: true,
+      };
+
+      return {
+        ...basePayload,
+        email: null,
+        phone: null,
+        contacts: [firstContact],
+      };
+    }
+
+    return {
+      ...basePayload,
+      email: formValue.email ? String(formValue.email).trim() : undefined,
+      phone: String(formValue.phone).trim(),
+      contacts: [],
     };
   }
 
@@ -447,6 +699,9 @@ export class Clients implements OnInit {
     const payload = this.buildSavePayload();
     if (this.currentPartner) {
       delete payload.companyId;
+      if (this.canManageContacts(this.currentPartner)) {
+        delete payload.contacts;
+      }
     }
     return payload;
   }

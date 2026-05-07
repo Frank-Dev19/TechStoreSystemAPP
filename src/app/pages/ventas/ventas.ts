@@ -16,12 +16,11 @@ import { CurrentUserService } from '../../services/current-user.service';
 import { PriceCalculation } from '../../models/pricing/pricing.models';
 import { DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../models/sales/document-series.model';
 import { DocumentType } from '../../models/sales/enums';
-import { ClientSaveRequest } from '../../models/clients-request';
+import { ClientKind, ClientSaveRequest } from '../../models/clients-request';
 import { ClientResponse } from '../../models/clients-response';
-import { ServiceService } from '../../services/service-catalog/service.service';
-import { Service as CatalogService } from '../../models/service-catalog/service';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { ServiceOrder, ServiceOrderEconomicStatus } from '../../models/service-orders/service-order';
+import { ServiceOrderService } from '../../services/service-orders/service-order.service';
+import { SaleReceiptPdfService } from '../../services/sales/sale-receipt-pdf.service';
 // ============================================
 // INTERFACES & TYPES (siguiendo exactamente el prompt)
 // ============================================
@@ -104,13 +103,12 @@ export interface SaleLine {
 }
 
 interface SaleCatalogSearchResult {
-  itemType: 'PRODUCT' | 'SERVICE'
+  itemType: 'PRODUCT'
   name: string
   code: string
   price: number
   stock?: number
   product?: Product
-  service?: CatalogService
 }
 
 export interface Sale {
@@ -148,6 +146,8 @@ export interface Sale {
   lineDiscounts: any[]
   comboItems: any[]
 }
+
+type SaleCreationMode = 'MANUAL_PRODUCT' | 'SERVICE_ORDER'
 
 // export interface CreateSaleDto {
 //   documentType: DocumentTypeCode
@@ -321,7 +321,8 @@ export class Ventas implements OnInit {
     private documentTypesApi: DocumentTypesApiService,
     private pricingQueryApi: PricingQueryApiService,
     private currentUser: CurrentUserService,
-    private serviceCatalogApi: ServiceService,
+    private serviceOrderService: ServiceOrderService,
+    private saleReceiptPdfService: SaleReceiptPdfService,
   ) { }
 
   @ViewChild('productSearchInput') productSearchInput!: ElementRef<HTMLInputElement>
@@ -353,7 +354,6 @@ export class Ventas implements OnInit {
 
   // Busqueda de productos (separado de currentSaleItem)
   productSearchText = ''
-  serviceSearchText = ''
 
   // Tipos de documento para nuevo cliente
   documentTypesB: DocumentTypeResponse[] = []
@@ -385,6 +385,12 @@ export class Ventas implements OnInit {
 
   //FORM DATA
   saleFormData: any = null
+  saleCreationMode: SaleCreationMode = 'MANUAL_PRODUCT'
+  eligibleServiceOrders: ServiceOrder[] = []
+  selectedServiceOrderId: number | null = null
+  selectedServiceOrder: ServiceOrder | null = null
+  selectedServiceOrderIds: number[] = []
+  selectedServiceOrders: ServiceOrder[] = []
   creditNoteFormData: Partial<CreditNote> | null = null
   dispatchGuideFormData: Partial<ShippingGuide> | null = null
   currentSaleItem: any = {}
@@ -412,8 +418,6 @@ export class Ventas implements OnInit {
   //PRODUCTS
   products: Product[] = []
   filteredProducts: Product[] = []
-  servicesCatalog: CatalogService[] = []
-  filteredServices: CatalogService[] = []
   filteredSaleItems: SaleCatalogSearchResult[] = []
 
   //PAGOS
@@ -473,6 +477,10 @@ export class Ventas implements OnInit {
     'CREDIT': 'Credito'
   }
 
+  getPaymentLabel(method?: string | null): string {
+    return this.paymentTypeLabels[method || ''] || method || '-'
+  }
+
   // UI helpers for caja (fase 1: mock, mas adelante conectaremos a backend)
   cashBoxCode: string = ''
   openingBalanceTemp: number = 0
@@ -496,7 +504,6 @@ export class Ventas implements OnInit {
   ngOnInit(): void {
     this.loadSales()
     this.productsApiGet()
-    this.loadServicesCatalog()
     this.loadProductsPriceAndStock()
     this.loadDocumentTypes()
     this.loadOpenRegister()
@@ -510,17 +517,6 @@ export class Ventas implements OnInit {
 
   private productsApiGet(): void {
     this.productsApi.getProducts().then(p => this.products = p as any)
-  }
-
-  private loadServicesCatalog(): void {
-    this.serviceCatalogApi.findAll({ page: 1, limit: 300 }).subscribe({
-      next: ({ data }) => {
-        this.servicesCatalog = data ?? []
-      },
-      error: () => {
-        this.showToast('error', 'Error cargando servicios')
-      },
-    })
   }
 
   private loadDocumentTypes(): void {
@@ -939,6 +935,11 @@ export class Ventas implements OnInit {
           return
         }
         this.currentOpenRegister = reg
+        this.saleCreationMode = 'MANUAL_PRODUCT'
+        this.selectedServiceOrderId = null
+        this.selectedServiceOrder = null
+        this.eligibleServiceOrders = []
+        this.foundCustomer = null
         this.saleFormData = {
           documentType: 'BOLETA',
           paymentType: 'EFECTIVO',
@@ -952,12 +953,213 @@ export class Ventas implements OnInit {
         this.paymentReference = ''
         this.paymentBankName = ''
         this.paymentCardType = ''
+        this.loadEligibleServiceOrders()
         this.activeTab = 'create'
       },
       error: () => {
         this.showNoOpenCashModal = true
       }
     })
+  }
+
+  onSaleCreationModeChange(mode: SaleCreationMode): void {
+    this.saleCreationMode = mode
+    this.currentSaleItem = {}
+    this.productSearchText = ''
+    this.filteredProducts = []
+    this.filteredSaleItems = []
+    this.foundCustomer = null
+
+    if (!this.saleFormData) return
+
+    if (mode === 'MANUAL_PRODUCT') {
+      this.selectedServiceOrderId = null
+      this.selectedServiceOrder = null
+      this.selectedServiceOrderIds = []
+      this.selectedServiceOrders = []
+      this.saleFormData.lines = []
+      this.saleFormData.total = 0
+      this.saleFormData.subtotal = 0
+      this.saleFormData.igv = 0
+      return
+    }
+
+    this.saleFormData.lines = []
+    this.saleFormData.total = 0
+    this.saleFormData.subtotal = 0
+    this.saleFormData.igv = 0
+    this.selectedServiceOrderId = null
+    this.selectedServiceOrder = null
+    this.selectedServiceOrderIds = []
+    this.selectedServiceOrders = []
+  }
+
+  onServiceOrderSelected(serviceOrderId: number | string | null): void {
+    const numericId = Number(serviceOrderId)
+    this.selectedServiceOrderId = Number.isFinite(numericId) && numericId > 0 ? numericId : null
+    this.selectedServiceOrder = this.eligibleServiceOrders.find((order) => Number(order.id) === this.selectedServiceOrderId) ?? null
+
+    if (!this.saleFormData) return
+    if (!this.selectedServiceOrder) {
+      this.saleFormData.lines = []
+      this.saleFormData.total = 0
+      this.saleFormData.subtotal = 0
+      this.saleFormData.igv = 0
+      return
+    }
+
+    const total = Number(this.selectedServiceOrder.montoComprometidoVigente ?? 0)
+    this.saleFormData.lines = [
+      {
+        itemType: 'SERVICE',
+        productName: `Orden ${this.selectedServiceOrder.code} · Servicio técnico`,
+        quantity: 1,
+        unitPrice: total,
+        lineTotal: total,
+      },
+    ]
+    this.saleFormData.total = total
+    this.saleFormData.subtotal = total
+    this.saleFormData.igv = 0
+  }
+
+  onServiceOrdersSelectionChange(event: Event): void {
+    const select = event.target as HTMLSelectElement | null
+    if (!select || !this.saleFormData) return
+
+    const ids = Array.from(select.selectedOptions)
+      .map((option) => Number(option.value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+
+    const selectedOrders = this.eligibleServiceOrders.filter((order) => ids.includes(Number(order.id)))
+    if (!selectedOrders.length) {
+      this.selectedServiceOrderIds = []
+      this.selectedServiceOrders = []
+      this.selectedServiceOrderId = null
+      this.selectedServiceOrder = null
+      this.saleFormData.lines = []
+      this.saleFormData.total = 0
+      this.saleFormData.subtotal = 0
+      this.saleFormData.igv = 0
+      return
+    }
+
+    const firstClientId = Number(selectedOrders[0].clientId || 0)
+    const sameClientOrders = selectedOrders.filter((order) => Number(order.clientId || 0) === firstClientId)
+    if (sameClientOrders.length !== selectedOrders.length) {
+      this.showToast('warning', 'Solo podés agrupar órdenes del mismo cliente')
+    }
+
+    this.selectedServiceOrders = sameClientOrders
+    this.selectedServiceOrderIds = sameClientOrders.map((order) => Number(order.id))
+    this.selectedServiceOrder = sameClientOrders[0] ?? null
+    this.selectedServiceOrderId = this.selectedServiceOrder ? Number(this.selectedServiceOrder.id) : null
+    this.hydrateGroupedServiceOrderLines()
+  }
+
+  private hydrateGroupedServiceOrderLines(): void {
+    if (!this.saleFormData) return
+
+    if (!this.selectedServiceOrders.length) {
+      this.saleFormData.lines = []
+      this.saleFormData.total = 0
+      this.saleFormData.subtotal = 0
+      this.saleFormData.igv = 0
+      return
+    }
+
+    const lines = this.selectedServiceOrders.map((order) => {
+      const total = Number(order.montoComprometidoVigente ?? 0)
+      return {
+        itemType: 'SERVICE' as const,
+        productName: `Servicio técnico - Orden ${order.code}`,
+        quantity: 1,
+        unitPrice: total,
+        lineTotal: total,
+      }
+    })
+
+    const total = Number(lines.reduce((sum, line) => sum + Number(line.lineTotal ?? 0), 0).toFixed(2))
+    this.saleFormData.lines = lines
+    this.saleFormData.total = total
+    this.saleFormData.subtotal = total
+    this.saleFormData.igv = 0
+  }
+
+  private loadEligibleServiceOrders(): void {
+    this.serviceOrderService.findAll({ page: 1, limit: 100, economicStatus: ServiceOrderEconomicStatus.PENDIENTE }).subscribe({
+      next: ({ data }) => {
+        this.eligibleServiceOrders = (data ?? []).filter((order) => Number(order.montoComprometidoVigente ?? 0) >= 20)
+      },
+      error: () => {
+        this.eligibleServiceOrders = []
+        this.showToast('warning', 'No pudimos cargar las órdenes pendientes para facturar')
+      },
+    })
+  }
+
+  getSelectedServiceOrderClientLabel(): string {
+    if (!this.selectedServiceOrder) return 'Seleccioná una orden pendiente'
+    return this.selectedServiceOrder.clientSnapshotName || this.selectedServiceOrder.client?.name || 'Cliente de la orden'
+  }
+
+  getGroupedOperationalClientLabel(): string {
+    if (!this.selectedServiceOrders.length) return 'Seleccioná al menos una orden pendiente'
+    const firstOrder = this.selectedServiceOrders[0]
+    return firstOrder.clientSnapshotName || firstOrder.client?.name || 'Cliente operativo'
+  }
+
+  getGroupedOrdersPendingTotal(): number {
+    return Number(
+      this.selectedServiceOrders.reduce((sum, order) => sum + Number(order.montoComprometidoVigente ?? 0), 0).toFixed(2),
+    )
+  }
+
+  getOrdersCoveredByCurrentGroupedSale(): ServiceOrder[] {
+    return [...this.selectedServiceOrders]
+  }
+
+  getOrdersStillPendingForGroupedClient(): ServiceOrder[] {
+    if (!this.selectedServiceOrders.length) return []
+
+    const operationalClientId = Number(this.selectedServiceOrders[0]?.clientId ?? 0)
+    if (!operationalClientId) return []
+
+    const selectedIds = new Set(this.selectedServiceOrderIds.map((id) => Number(id)))
+    return this.eligibleServiceOrders.filter((order) => {
+      const sameClient = Number(order.clientId ?? 0) === operationalClientId
+      const notSelected = !selectedIds.has(Number(order.id))
+      return sameClient && notSelected
+    })
+  }
+
+  getGroupedOrderCoverageSummary(): string {
+    const coveredCount = this.getOrdersCoveredByCurrentGroupedSale().length
+    const pendingCount = this.getOrdersStillPendingForGroupedClient().length
+
+    if (!coveredCount) return 'Seleccioná al menos una orden para ver el alcance del comprobante.'
+    if (!pendingCount) return 'Este comprobante cubrirá todas las órdenes pendientes del cliente seleccionado.'
+    const coveredLabel = coveredCount === 1 ? 'orden' : 'órdenes'
+    return `Este comprobante liberará ${coveredCount} ${coveredLabel} y dejará ${pendingCount} pendiente${pendingCount === 1 ? '' : 's'} para otra venta.`
+  }
+
+  private validateTaxpayerForSelectedDocumentType(): boolean {
+    if (!this.foundCustomer) {
+      this.showToast('error', 'Seleccioná el contribuyente para emitir el comprobante')
+      return false
+    }
+
+    if (this.saleFormData?.documentType === 'FACTURA' && this.foundCustomer.kind !== ClientKind.COMPANY) {
+      this.showToast('error', 'La factura requiere un contribuyente empresa')
+      return false
+    }
+
+    if (this.saleFormData?.documentType === 'BOLETA' && this.foundCustomer.kind !== ClientKind.PERSON) {
+      this.showToast('error', 'La boleta requiere un contribuyente persona natural')
+      return false
+    }
+
+    return true
   }
 
   selectProductOrPrice(p: any): void {
@@ -984,10 +1186,8 @@ export class Ventas implements OnInit {
     } as any;
 
     this.filteredProducts = [];
-    this.filteredServices = [];
     this.filteredSaleItems = [];
     this.productSearchText = '';
-    this.serviceSearchText = '';
 
     if (this.productSearchInput) {
       this.productSearchInput.nativeElement.value = '';
@@ -1046,37 +1246,17 @@ export class Ventas implements OnInit {
     }
   }
 
-  onServiceSearch(): void {
-    const query = (this.serviceSearchText || '').trim().toLowerCase()
-    if (!query || query.length < 2) {
-      this.filteredServices = []
-      return
-    }
-
-    this.filteredServices = this.servicesCatalog
-      .filter((service) =>
-        service.name?.toLowerCase().includes(query) ||
-        service.code?.toLowerCase().includes(query),
-      )
-      .slice(0, 8)
-  }
-
   onSaleItemSearch(): void {
     const query = (this.productSearchText || '').trim().toLowerCase()
 
     if (!query) {
       this.filteredProducts = []
-      this.filteredServices = []
       this.filteredSaleItems = []
       return
     }
 
     this.filteredProducts = this.products.filter((product) =>
       product.name.toLowerCase().includes(query) || product.sku.toLowerCase().includes(query),
-    )
-
-    this.filteredServices = this.servicesCatalog.filter((service) =>
-      service.name?.toLowerCase().includes(query) || service.code?.toLowerCase().includes(query),
     )
 
     const productResults: SaleCatalogSearchResult[] = this.filteredProducts.slice(0, 8).map((product) => {
@@ -1097,45 +1277,13 @@ export class Ventas implements OnInit {
       }
     })
 
-    const serviceResults: SaleCatalogSearchResult[] = this.filteredServices.slice(0, 8).map((service) => ({
-      itemType: 'SERVICE',
-      name: service.name,
-      code: service.code,
-      price: Number(service.price || 0),
-      service,
-    }))
-
-    this.filteredSaleItems = [...productResults, ...serviceResults].slice(0, 12)
+    this.filteredSaleItems = productResults.slice(0, 12)
   }
 
   selectSaleCatalogItem(result: SaleCatalogSearchResult): void {
-    if (result.itemType === 'SERVICE' && result.service) {
-      this.selectService(result.service)
-      return
-    }
-
     if (result.product) {
       this.selectProductOrPrice(result.product)
     }
-  }
-
-  selectService(service: CatalogService): void {
-    this.currentSaleItem = {
-      itemType: 'SERVICE',
-      serviceId: service.id,
-      productSku: service.code,
-      productName: service.name,
-      quantity: this.currentSaleItem.quantity || 1,
-      unitPrice: Number(service.price || 0),
-    }
-    this.productSearchText = ''
-    this.serviceSearchText = ''
-    this.filteredServices = []
-    this.filteredSaleItems = []
-
-    setTimeout(() => {
-      this.quantityInput?.nativeElement?.focus()
-    }, 100)
   }
 
   onCancelSaleForm(): void {
@@ -1153,7 +1301,7 @@ export class Ventas implements OnInit {
       this.showToast('error', 'Agregue al menos un item')
       return
     }
-    if (!this.foundCustomer) {
+    if (this.saleCreationMode === 'MANUAL_PRODUCT' && !this.foundCustomer) {
       this.showToast('error', 'Seleccione un cliente')
       return
     }
@@ -1187,13 +1335,41 @@ export class Ventas implements OnInit {
     }
     // CASH: reference, bankName, cardType = null
 
-    const hasServiceLines = this.saleFormData.lines.some((line: SaleLine) => line.itemType === 'SERVICE')
-    const hasProductLines = this.saleFormData.lines.some((line: SaleLine) => line.itemType !== 'SERVICE')
+    if (this.saleCreationMode === 'SERVICE_ORDER') {
+      if (!this.selectedServiceOrderIds.length) {
+        this.showToast('error', 'Seleccioná al menos una orden pendiente para facturar')
+        return
+      }
+
+      if (!this.validateTaxpayerForSelectedDocumentType()) {
+        return
+      }
+
+      this.salesApi.createFromServiceAgreements({
+        serviceOrderIds: this.selectedServiceOrderIds,
+        companyId: this.COMPANY_ID,
+        taxpayerCustomerId: Number(this.foundCustomer!.id),
+        documentType: this.saleFormData.documentType,
+        issueDate: this.getToday(),
+        observations: `Venta agrupada desde órdenes ${this.selectedServiceOrders.map((order) => order.code).join(', ')}`,
+        payments: [paymentData],
+      }).subscribe({
+        next: () => {
+          this.showToast('success', 'Venta agrupada registrada exitosamente')
+          this.onCancelSaleForm()
+          this.loadSales()
+          this.loadOpenRegister()
+          this.loadEligibleServiceOrders()
+        },
+        error: () => this.showToast('error', 'Error registrando venta agrupada'),
+      })
+      return
+    }
 
     const createDto: any = {
       companyId: this.COMPANY_ID,
       customerId: Number(this.foundCustomer.id),
-      saleType: hasProductLines && hasServiceLines ? 'MIXED' : hasServiceLines ? 'SERVICE' : 'PRODUCT',
+      saleType: 'PRODUCT',
       documentType: this.saleFormData.documentType as any,
       series: null,
       number: null,
@@ -1201,9 +1377,9 @@ export class Ventas implements OnInit {
       dueDate: this.getToday(),
       payments: [paymentData],
       items: this.saleFormData.lines.map((line) => ({
-        itemType: line.itemType || 'PRODUCT',
-        productId: line.itemType === 'SERVICE' ? null : line.productId,
-        serviceId: line.itemType === 'SERVICE' ? line.serviceId : null,
+        itemType: 'PRODUCT',
+        productId: line.productId,
+        serviceId: null,
         quantity: line.quantity,
         finalUnitPrice: line.unitPrice,
         lotId: null,
@@ -1278,12 +1454,10 @@ export class Ventas implements OnInit {
   onAddSaleItem(): void {
     if (!this.saleFormData) return
     const itemType = this.currentSaleItem?.itemType || 'PRODUCT'
-    const hasRequiredEntity = itemType === 'SERVICE'
-      ? !!this.currentSaleItem?.serviceId
-      : !!this.currentSaleItem?.productId
+    const hasRequiredEntity = !!this.currentSaleItem?.productId
 
     if (!hasRequiredEntity || !this.currentSaleItem?.quantity) {
-      this.showToast('error', itemType === 'SERVICE' ? 'Completa los datos del servicio' : 'Completa los datos del producto')
+      this.showToast('error', 'Completa los datos del producto')
       return
     }
 
@@ -1292,55 +1466,36 @@ export class Ventas implements OnInit {
     const lineTotal = (this.currentSaleItem.quantity || 0) * unitPrice;
 
     let newLine: SaleLine
+    const product = this.products.find(p => p.id === this.currentSaleItem.productId)
+    if (!product) {
+      this.showToast('error', 'Producto invalido')
+      return
+    }
 
-    if (itemType === 'SERVICE') {
-      const service = this.servicesCatalog.find((svc) => svc.id === this.currentSaleItem.serviceId)
-      if (!service) {
-        this.showToast('error', 'Servicio invalido')
-        return
-      }
+    const productInfo = this.productPriceStockMap[this.currentSaleItem.productId!];
+    const hasLot = productInfo?.stockByLot && productInfo.stockByLot.length > 0;
+    const hasSerial = product.isSerialized || false;
 
-      newLine = {
-        itemType: 'SERVICE',
-        serviceId: service.id,
-        productSku: service.code,
-        productName: service.name,
-        quantity: this.currentSaleItem.quantity as number,
-        unitPrice,
-        lineTotal,
-      }
-    } else {
-      const product = this.products.find(p => p.id === this.currentSaleItem.productId)
-      if (!product) {
-        this.showToast('error', 'Producto invalido')
-        return
-      }
+    newLine = {
+      itemType: 'PRODUCT',
+      productId: this.currentSaleItem.productId as number,
+      productSku: this.currentSaleItem.productSku || '',
+      productName: this.currentSaleItem.productName || '',
+      quantity: this.currentSaleItem.quantity as number,
+      unitPrice: unitPrice,
+      lineTotal: lineTotal,
+      hasLot: hasLot,
+      hasSerial: hasSerial,
+      lotId: null,
+      lotCode: undefined,
+      expirationDate: undefined,
+      serials: []
+    }
 
-      const productInfo = this.productPriceStockMap[this.currentSaleItem.productId!];
-      const hasLot = productInfo?.stockByLot && productInfo.stockByLot.length > 0;
-      const hasSerial = product.isSerialized || false;
-
-      newLine = {
-        itemType: 'PRODUCT',
-        productId: this.currentSaleItem.productId as number,
-        productSku: this.currentSaleItem.productSku || '',
-        productName: this.currentSaleItem.productName || '',
-        quantity: this.currentSaleItem.quantity as number,
-        unitPrice: unitPrice,
-        lineTotal: lineTotal,
-        hasLot: hasLot,
-        hasSerial: hasSerial,
-        lotId: null,
-        lotCode: undefined,
-        expirationDate: undefined,
-        serials: []
-      }
-
-      const currentStock = this.productPriceStockMap[this.currentSaleItem.productId!]?.stock || 0;
-      if (currentStock < this.currentSaleItem.quantity!) {
-        this.showToast('error', `Stock insuficiente. Disponible: ${currentStock}`)
-        return
-      }
+    const currentStock = this.productPriceStockMap[this.currentSaleItem.productId!]?.stock || 0;
+    if (currentStock < this.currentSaleItem.quantity!) {
+      this.showToast('error', `Stock insuficiente. Disponible: ${currentStock}`)
+      return
     }
 
 
@@ -1356,12 +1511,10 @@ export class Ventas implements OnInit {
     // Limpiar busqueda
     this.productSearchText = '';
     this.filteredProducts = [];
-    this.serviceSearchText = '';
-    this.filteredServices = [];
     this.filteredSaleItems = [];
 
     this.calculateSaleTotals()
-    this.showToast('success', itemType === 'SERVICE' ? 'Servicio agregado' : 'Item agregado')
+    this.showToast('success', 'Item agregado')
   }
 
   onRemoveSaleItem(index: number): void {
@@ -1555,278 +1708,14 @@ export class Ventas implements OnInit {
   }
 
   onDownloadSalePdf(sale: Sale): void {
-    // Fetch full sale details for PDF
-    this.salesApi.get(sale.id).subscribe({
-      next: (saleData) => {
-        this.generateSalePdf(saleData);
+    this.saleReceiptPdfService.downloadBySaleId(sale.id, 'full').subscribe({
+      next: (fileName) => {
+        this.showToast('success', `PDF descargado: ${fileName}`);
       },
       error: () => {
         this.showToast('error', 'Error al generar PDF');
       }
     });
-  }
-
-  private generateSalePdf(sale: any): void {
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    });
-
-    const companyName = 'MACROCHIPS S.A.C';
-    const companyAddress = 'Calle Alfonso Garden #493, Trujillo, La Libertad';
-    const companyPhone = '924215320';
-    const companyEmail = 'soporte@grupoSTS.com.pe';
-    const companyRuc = '10123456789';
-
-    const isFactura = sale.documentType === 'FACTURA';
-    const docTitle = isFactura ? 'FACTURA ELECTRONICA' : 'BOLETA ELECTRONICA';
-    const docSerie = sale.series;
-    const docNumber = sale.number;
-
-    let y = 13;
-
-    // ============================================
-    // ENCABEZADO - DATOS DE LA EMPRESA (Izquierda)
-    // ============================================
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(companyName, 15, y);
-
-    doc.setFontSize(9);
-
-    y += 5;
-    doc.setFont('helvetica', 'bold');
-    doc.text("Direccion:", 15, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(companyAddress, 31, y);
-    y += 4;
-    doc.setFont('helvetica', 'bold');
-    doc.text("Telefono:", 15, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(companyPhone, 31, y);
-    y += 4;
-    doc.setFont('helvetica', 'bold');
-    doc.text("Correo:", 15, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(companyEmail, 29, y);
-
-    // ============================================
-    // ENCABEZADO - DATOS DEL DOCUMENTO (Derecha)
-    // ============================================
-    const rightBoxX = 130;
-    const rightBoxY = 10;
-    const rightBoxW = 65;
-    const rightBoxH = 28;
-
-    doc.setDrawColor(0, 0, 0);
-    doc.setFillColor(255, 255, 255);
-    doc.rect(rightBoxX, rightBoxY, rightBoxW, rightBoxH, 'FD');
-
-    let boxY = rightBoxY + 7;
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('RUC:', rightBoxX + 18, boxY);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text(companyRuc, rightBoxX + 28, boxY);
-
-    boxY += 7;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text(docTitle, rightBoxX + 13, boxY);
-
-    boxY += 6;
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${docSerie}-${docNumber}`, rightBoxX + 20, boxY);
-
-    // ============================================
-    // DATOS DEL CLIENTE (Tabla estructurada)
-    // ============================================
-    y = 50;
-
-    const clientDoc = sale.customer?.documentNumber || '-';
-    const clientName = sale.customer?.name || 'Cliente General';
-    const clientAddress = sale.customer?.address || '-';
-    const paymentMethod = sale.payments && sale.payments.length > 0 ? this.getPaymentLabel(sale.payments[0].method) : '-';
-    const issueDate = sale.issueDate ? new Date(sale.issueDate).toLocaleDateString('es-PE') : '-';
-
-    autoTable(doc, {
-      startY: y,
-      head: [[
-        {
-          content: 'Informacion General',
-          colSpan: 6,
-          styles: {
-            fillColor: [88, 88, 88] as [number, number, number],
-            fontStyle: 'bold' as 'bold',
-            textColor: [255, 255, 255] as [number, number, number],
-            halign: 'left'
-          }
-        }
-      ]],
-      body: [
-
-        [
-          { content: 'Cliente:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
-          { content: clientName, styles: { fillColor: [255, 255, 255] } },
-          { content: 'Direccion:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
-          { content: clientAddress, colSpan: 3, styles: { fillColor: [255, 255, 255] } }
-        ],
-        [
-          { content: 'Documento:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
-          { content: clientDoc, styles: { fillColor: [255, 255, 255] } },
-          { content: 'Fecha de Emision:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
-          { content: issueDate, colSpan: 3, styles: { fillColor: [255, 255, 255] } }
-        ],
-        [
-          { content: 'Tipo de Pago:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
-          { content: paymentMethod, styles: { fillColor: [255, 255, 255] } },
-          { content: 'Moneda:', styles: { fontStyle: 'bold', fillColor: [189, 189, 189] } },
-          { content: 'SOLES', colSpan: 3, styles: { fillColor: [255, 255, 255] } }
-        ]
-      ],
-      theme: 'grid',
-      styles: {
-        fontSize: 9,
-        cellPadding: 2,
-        lineColor: [0, 0, 0],
-        lineWidth: 0.1,
-        valign: 'middle',
-        textColor: [0, 0, 0]
-      },
-      headStyles: {
-        fillColor: [60, 60, 60],
-        textColor: [255, 255, 255],
-        fontStyle: 'bold',
-        fontSize: 10,
-        halign: 'center'
-      },
-      columnStyles: {
-        0: { cellWidth: 25, fontStyle: 'bold' },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 30, fontStyle: 'bold' },
-        3: { cellWidth: 'auto' }
-      },
-      margin: { left: 15, right: 15 }
-    });
-
-    y = (doc as any).lastAutoTable.finalY + 8;
-
-    // ============================================
-    // TABLA DE PRODUCTOS
-    // ============================================
-    // y already set by autoTable above
-
-    // Table header
-    doc.setFillColor(88, 88, 88);
-    doc.rect(15, y, 180, 8, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-
-    doc.text('#', 17, y + 5.5);
-    doc.text('Descripcion', 25, y + 5.5);
-    doc.text('Und', 115, y + 5.5);
-    doc.text('Cant', 135, y + 5.5);
-    doc.text('P.Unit', 152, y + 5.5);
-    doc.text('Importe', 175, y + 5.5);
-
-    doc.setTextColor(0, 0, 0);
-    y += 8;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-
-    const items = sale.items || [];
-    let itemNum = 1;
-
-    for (const item of items) {
-      if (y > 260) {
-        doc.addPage();
-        y = 15;
-      }
-
-      const productName = item.serviceNameSnapshot || item.descriptionSnapshot || item.product?.name || 'Item';
-      const unit = item.itemType === 'SERVICE' ? 'SERV' : (item.product?.baseUnit?.abbreviation || 'UND');
-      const quantity = parseFloat(item.quantity) || 0;
-      const unitPrice = parseFloat(item.finalUnitPrice) || 0;
-      const lineTotal = parseFloat(item.lineTotal) || 0;
-
-      // Alternate row background
-      if (itemNum % 2 === 0) {
-        doc.setFillColor(250, 250, 250);
-        doc.rect(15, y, 180, 6, 'F');
-      }
-
-      doc.text(itemNum.toString(), 17, y + 4);
-
-      const truncatedName = productName.length > 45 ? productName.substring(0, 42) + '...' : productName;
-      doc.text(truncatedName, 25, y + 4);
-      doc.text(unit, 115, y + 4);
-      doc.text(quantity.toString(), 135, y + 4);
-      doc.text(unitPrice.toFixed(2), 152, y + 4);
-      doc.text(lineTotal.toFixed(2), 175, y + 4);
-
-      y += 6;
-      itemNum++;
-    }
-
-    // ============================================
-    // RESUMEN DE TOTALES
-    // ============================================
-    y += 3;
-    doc.setDrawColor(200, 200, 200);
-    doc.line(120, y, 195, y);
-    y += 5;
-
-    const subtotal = parseFloat(sale.subtotal) || 0;
-    const discount = parseFloat(sale.discountTotal) || 0;
-    const tax = parseFloat(sale.taxAmount) || 0;
-    const total = parseFloat(sale.total) || 0;
-
-    doc.setFontSize(9);
-    doc.text('Subtotal:', 145, y);
-    doc.text(`S/ ${subtotal.toFixed(2)}`, 180, y, { align: 'right' });
-    y += 4;
-
-    if (discount > 0) {
-      doc.text('Descuento:', 145, y);
-      doc.text(`S/ ${discount.toFixed(2)}`, 180, y, { align: 'right' });
-      y += 4;
-    }
-
-    if (tax > 0) {
-      doc.text('IGV (18%):', 145, y);
-      doc.text(`S/ ${tax.toFixed(2)}`, 180, y, { align: 'right' });
-      y += 4;
-    }
-
-    y += 1;
-    doc.setDrawColor(0, 0, 0);
-    doc.line(145, y, 195, y);
-    y += 4;
-
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TOTAL:', 145, y);
-    doc.text(`S/ ${total.toFixed(2)}`, 180, y, { align: 'right' });
-
-    // ============================================
-    // FOOTER
-    // ============================================
-    y = 275;
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Este documento es una representacion impresa de un comprobante de pago electronico', 105, y, { align: 'center' });
-    doc.text('Generado por Macrochips - Sistema de Gestion', 105, y + 4, { align: 'center' });
-
-    // Save
-    const fileName = `${sale.series}-${sale.number}.pdf`;
-    doc.save(fileName);
-    this.showToast('success', `PDF descargado: ${fileName}`);
   }
 
   closeDetailDrawer(): void {
@@ -1862,22 +1751,6 @@ export class Ventas implements OnInit {
       'DRAFT': 'Borrador'
     }
     return labels[status] || status
-  }
-
-  getPaymentLabel(payment: string): string {
-    const labels: { [key: string]: string } = {
-      'CASH': 'Efectivo',
-      'CARD': 'Tarjeta',
-      'TRANSFER': 'Transferencia',
-      'YAPE': 'Yape',
-      'PLIN': 'Plin',
-      'CREDIT': 'Credito',
-      'EFECTIVO': 'Efectivo',
-      'TARJETA': 'Tarjeta',
-      'TRANSFERENCIA': 'Transferencia',
-      'CREDITO': 'Credito'
-    }
-    return labels[payment || ''] || payment || '-'
   }
 
   getTransactionTypeLabel(type: string): string {
@@ -1971,9 +1844,14 @@ export class Ventas implements OnInit {
       return;
     }
 
+    const selectedDocumentType = this.documentTypesB.find(
+      (item) => Number(item.id) === Number(this.newCustomerForm.documentTypeId),
+    )
+
     const payload: ClientSaveRequest = {
       companyId: 1,
       name: this.newCustomerForm.name!,
+      kind: selectedDocumentType?.kind === 'COMPANY' ? ClientKind.COMPANY : ClientKind.PERSON,
       documentNumber: this.newCustomerForm.documentNumber!,
       documentTypeId: Number(this.newCustomerForm.documentTypeId),
       address: this.newCustomerForm.address || '',

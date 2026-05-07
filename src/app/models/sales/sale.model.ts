@@ -6,6 +6,7 @@ export interface SaleCustomer {
   name: string
   documentNumber: string
   documentTypeId: number
+  address?: string | null
 }
 
 export interface SaleItem {
@@ -19,6 +20,9 @@ export interface SaleItem {
     id: number
     sku: string
     name: string
+    baseUnit?: {
+      abbreviation?: string | null
+    } | null
   }
   service?: {
     id: number
@@ -96,6 +100,12 @@ export interface Sale {
 
   customerId: number
   customer: SaleCustomer
+  billingSnapshotName?: string | null
+  billingSnapshotTradeName?: string | null
+  billingSnapshotDocumentTypeName?: string | null
+  billingSnapshotDocumentNumber?: string | null
+  billingSnapshotAddress?: string | null
+  billingSnapshotEmail?: string | null
 
   cashRegisterId?: number | null
 

@@ -1,5 +1,4 @@
-﻿import type { Product } from '../catalog/product';
-import type { Service } from '../service-catalog/service';
+import type { Product } from '../catalog/product';
 import type { ServiceOrder } from './service-order';
 
 export interface ServiceOrderAgreement {
@@ -28,7 +27,7 @@ export interface ServiceOrderAgreement {
 
 export enum ServiceOrderAgreementSource {
   TECHNICIAN_COORDINATION = 'TECHNICIAN_COORDINATION',
-  DIAGNOSIS_FEE_AUTO = 'DIAGNOSIS_FEE_AUTO',
+  TECHNICAL_SERVICE_AUTO = 'TECHNICAL_SERVICE_AUTO',
   RECEPTION_DIRECT = 'RECEPTION_DIRECT',
 }
 
@@ -64,7 +63,7 @@ export interface ServiceOrderAgreementService {
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
-  service?: Service | null;
+  service?: { id?: number | null; name?: string | null; code?: string | null } | null;
 }
 
 export enum ServiceOrderAgreementStatus {

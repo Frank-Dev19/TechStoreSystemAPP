@@ -2,7 +2,7 @@
   <div class="panel-header">
     <div class="title-section">
       <h1 class="page-title">Panel del Supervisor</h1>
-      <p class="page-subtitle">Monitorea acuerdos, diagnosticos y equipos de todas las ordenes de servicio.</p>
+      <p class="page-subtitle">Monitorea acuerdos, diagnósticos y equipos de todas las órdenes de servicio.</p>
     </div>
   </div>
 
@@ -24,7 +24,7 @@
       <div class="stat-content">
         <span class="stat-label">Respondidas</span>
         <h3 class="stat-value">{{ answeredServiceOrderAgreements.length }}</h3>
-        <p class="stat-meta">Con aprobacion o rechazo del cliente</p>
+        <p class="stat-meta">Con aprobación o rechazo del cliente</p>
       </div>
     </div>
     <div class="stat-card">
@@ -40,6 +40,10 @@
   </div>
 
   <div class="tabs-navigation section-navigation">
+    <button class="tab-button" [class.active]="activeSection === 'orders'" (click)="setActiveSection('orders')">
+      <i class="fas fa-clipboard-list"></i>
+      Órdenes
+    </button>
     <button class="tab-button" [class.active]="activeSection === 'ranking'" (click)="setActiveSection('ranking')">
       <i class="fas fa-trophy"></i>
       Ranking
@@ -48,18 +52,14 @@
       <i class="fas fa-comments"></i>
       Conversaciones
     </button>
-    <button class="tab-button" [class.active]="activeSection === 'quotes'" (click)="setActiveSection('quotes')">
-      <i class="fas fa-file-invoice-dollar"></i>
-      Acuerdos
-    </button>
   </div>
 
   @if (activeSection === 'ranking') {
   <section class="ranking-panel">
     <header class="ranking-header">
       <div>
-        <h2>Ranking economico de tecnicos</h2>
-        <p>Basado en el aporte monetario de ordenes de tipo diagnostico y estandar, separado por productos y servicios.</p>
+        <h2>Ranking económico de técnicos</h2>
+        <p>Basado en el aporte monetario de órdenes de tipo diagnóstico y estándar, separado por productos y servicios.</p>
       </div>
       <span class="ranking-pill"><i class="fas fa-trophy"></i> Ranking actual</span>
     </header>
@@ -72,7 +72,7 @@
     } @else if (!technicianRankings.length) {
       <div class="empty-state">
         <i class="fas fa-chart-line"></i>
-        <p>Aun no hay informacion suficiente para construir el ranking.</p>
+        <p>Aún no hay información suficiente para construir el ranking.</p>
       </div>
     } @else {
       <div class="ranking-podium">
@@ -109,7 +109,7 @@
               <div class="ranking-rank">#{{ technician.rank }}</div>
               <div>
                 <h3>{{ technician.technicianName }}</h3>
-                <p>{{ technician.itemsCount }} ordenes . {{ technician.diagnosisItemsCount }} diagnostico . {{ technician.standardItemsCount }} estandar</p>
+                <p>{{ technician.itemsCount }} órdenes . {{ technician.diagnosisItemsCount }} diagnóstico . {{ technician.standardItemsCount }} estándar</p>
               </div>
             </div>
             <div class="ranking-metrics">
@@ -126,7 +126,7 @@
                 <strong>{{ formatMoney(technician.serviceRevenue) }}</strong>
               </div>
               <div class="metric-chip">
-                <span>Diagnostico</span>
+                <span>Diagnóstico</span>
                 <strong>{{ formatMoney(technician.diagnosisRevenue) }}</strong>
               </div>
               <div class="metric-chip">
@@ -163,13 +163,24 @@
     <header class="inbox-monitor-header">
       <div>
         <h2>Monitoreo de conversaciones</h2>
-        <p>Canal publico interno para supervisar trato y prevenir desvio de clientes.</p>
+        <p>Supervisa conversaciones y asegura continuidad en la atención al cliente.</p>
       </div>
       <span class="monitored-pill"><i class="fas fa-user-shield"></i> Supervision total</span>
     </header>
 
     <div class="inbox-monitor-layout">
       <aside class="inbox-monitor-list">
+        @if (isLoadingInboxThreads) {
+          <div class="empty-state compact">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Cargando conversaciones...</p>
+          </div>
+        } @else if (!paginatedInboxThreads.length) {
+          <div class="empty-state compact">
+            <i class="fas fa-comments"></i>
+            <p>No hay conversaciones para mostrar.</p>
+          </div>
+        } @else {
         @for (thread of paginatedInboxThreads; track thread.id) {
           <button
             class="thread-item"
@@ -178,17 +189,18 @@
           >
             <div>
               <strong>{{ thread.serviceOrderCode }} . {{ thread.equipmentLabel }}</strong>
-              <small>{{ thread.technicianAlias }} . {{ thread.clientAlias }}</small>
+                <small>{{ thread.assignedTechnicianAlias }} . {{ thread.clientAlias }}</small>
             </div>
             <div class="thread-metrics">
               @if (thread.unreadCount > 0) {
                 <span class="counter">{{ thread.unreadCount }}</span>
               }
-              <span class="risk" [class.review]="thread.riskLevel === 'review'">
-                {{ thread.riskLevel === 'review' ? 'Revisar' : 'Normal' }}
+              <span class="risk" [class.review]="thread.unreadCount > 0">
+                {{ getInboxThreadOperativeStatusLabel(thread.operativeStatus) }}
               </span>
             </div>
           </button>
+        }
         }
       </aside>
 
@@ -196,18 +208,115 @@
         @if (selectedInboxThread) {
           <div class="thread-title">
             <h3>{{ selectedInboxThread.serviceOrderCode }} . {{ selectedInboxThread.equipmentLabel }}</h3>
-            <p>{{ selectedInboxThread.technicianAlias }} . {{ selectedInboxThread.clientAlias }}</p>
+            <p>{{ selectedInboxThread.assignedTechnicianAlias }} . {{ selectedInboxThread.clientAlias }}</p>
           </div>
           <div class="thread-messages">
-            @for (message of selectedInboxThread.messages; track message.id) {
-              <article class="thread-message" [class.tech]="message.author === 'TECHNICIAN'" [class.system]="message.author === 'SYSTEM'">
+            @if (isLoadingInboxMessages) {
+              <div class="empty-text">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Cargando mensajes...</span>
+              </div>
+            } @else if (!selectedInboxMessages.length) {
+              <p class="empty-text">Aún no hay mensajes en esta conversación.</p>
+            } @else {
+            @for (message of selectedInboxMessages; track message.id) {
+              <article
+                class="thread-message"
+                [class.tech]="message.authorRole === 'TECHNICIAN' || message.authorRole === 'SUPERVISOR'"
+                [class.system]="message.authorRole === 'SYSTEM'"
+              >
                 <header>
-                  <strong>{{ getInboxAuthorLabel(message.author) }}</strong>
+                  <strong>{{ getInboxAuthorLabel(message) }}</strong>
                   <small>{{ message.createdAt | date: 'dd/MM HH:mm' }}</small>
                 </header>
-                <p>{{ message.text }}</p>
+                @if (message.text) {
+                  <p>{{ message.text }}</p>
+                }
+                @if (message.attachments.length) {
+                  <div class="message-attachments">
+                    @for (attachment of message.attachments; track attachment.id) {
+                      <div class="message-attachment-card">
+                        @if (attachment.previewable && getSupervisorInboxAttachmentPreviewUrl(attachment.id); as previewUrl) {
+                          <img class="message-attachment-image" [src]="previewUrl" [alt]="attachment.fileName" />
+                        } @else {
+                          <div class="message-attachment-icon">
+                            <i
+                              class="fas"
+                              [ngClass]="{
+                                'fa-file-pdf': attachment.attachmentType === 'pdf',
+                                'fa-file-audio': attachment.attachmentType === 'audio',
+                                'fa-file-alt': attachment.attachmentType === 'document'
+                              }"
+                            ></i>
+                          </div>
+                        }
+                        <div class="message-attachment-meta">
+                          <strong>{{ attachment.fileName }}</strong>
+                          <small>{{ attachment.mimeType }}</small>
+                          <button type="button" class="message-attachment-action" (click)="downloadSupervisorInboxAttachment(attachment)">
+                            <i class="fas fa-download"></i>
+                            Descargar
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
               </article>
             }
+            }
+          </div>
+          <div class="thread-composer">
+            <textarea
+              class="thread-input"
+              placeholder="Escribe una respuesta para el cliente..."
+              [(ngModel)]="supervisorInboxDraft"
+              rows="3"
+            ></textarea>
+            @if (supervisorInboxDraftAttachments.length) {
+              <div class="draft-attachments">
+                @for (attachment of supervisorInboxDraftAttachments; track attachment.file.name + attachment.file.size + $index) {
+                  <div class="draft-attachment-chip">
+                    @if (attachment.previewUrl) {
+                      <img [src]="attachment.previewUrl" [alt]="attachment.file.name" />
+                    } @else {
+                      <i class="fas fa-paperclip"></i>
+                    }
+                    <span>{{ attachment.file.name }}</span>
+                    <button type="button" (click)="removeSupervisorInboxDraftAttachment($index)">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                }
+              </div>
+            }
+            <div class="thread-actions">
+              <input
+                #supervisorInboxFileInput
+                type="file"
+                hidden
+                multiple
+                accept="image/*,application/pdf,audio/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                (change)="onSupervisorInboxFilesSelected($event)"
+              />
+              <button type="button" class="btn-secondary" (click)="triggerSupervisorInboxAttachmentPicker(supervisorInboxFileInput)">
+                <i class="fas fa-paperclip"></i>
+                Adjuntar
+              </button>
+              <button
+                type="button"
+                class="btn-primary"
+                [disabled]="isSendingInboxMessage || (!supervisorInboxDraft.trim() && !supervisorInboxDraftAttachments.length)"
+                (click)="sendSupervisorInboxMessage()"
+              >
+                @if (isSendingInboxMessage) {
+                  <i class="fas fa-spinner fa-spin"></i>
+                } @else {
+                  <i class="fab fa-whatsapp"></i>
+                }
+                Enviar
+              </button>
+            </div>
           </div>
         } @else {
           <p class="empty-text">Sin conversaciones para mostrar.</p>
@@ -228,62 +337,62 @@
   </section>
   }
 
-  @if (activeSection === 'quotes') {
+  @if (activeSection === 'orders') {
   <div class="panel-container">
-    <div class="tabs-navigation">
-      <button class="tab-btn" [class.active]="activeTab === 'open'" (click)="setActiveTab('open')">
-        <i class="fas fa-hourglass-half"></i>
-        Abiertas ({{ openServiceOrderAgreements.length }})
-      </button>
-      <button class="tab-btn" [class.active]="activeTab === 'answered'" (click)="setActiveTab('answered')">
-        <i class="fas fa-comments"></i>
-        Respondidas ({{ answeredServiceOrderAgreements.length }})
-      </button>
-      <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="setActiveTab('all')">
-        <i class="fas fa-list"></i>
-        Todas ({{ allServiceOrderAgreements.length }})
-      </button>
+    <div class="tabs-navigation order-filters">
+      <input
+        class="thread-input"
+        type="text"
+        placeholder="Buscar por código, técnico, marca o problema..."
+        [(ngModel)]="orderSearchTerm"
+      />
+      <select class="tab-btn" [(ngModel)]="orderOperativeStatusFilter">
+        <option value="ALL">Todos los estados</option>
+        @for (status of getOrderOperativeStatusOptions(); track status) {
+          <option [value]="status">{{ getInboxThreadOperativeStatusLabel(status) }}</option>
+        }
+      </select>
     </div>
 
     <div class="serviceOrderAgreements-grid">
-      @if (isLoadingServiceOrderAgreements) {
+      @if (!serviceOrders.length) {
         <div class="empty-state">
           <i class="fas fa-spinner fa-spin"></i>
-          <p>Cargando acuerdos...</p>
+          <p>Cargando órdenes...</p>
         </div>
-      } @else if (getVisibleAgreements().length === 0) {
+      } @else if (filteredServiceOrders.length === 0) {
         <div class="empty-state">
           <i class="fas fa-inbox"></i>
-          <p>No hay acuerdos para esta vista.</p>
+          <p>No hay órdenes para esta vista.</p>
         </div>
       } @else {
-        @for (quote of paginatedVisibleAgreements; track quote.id) {
-          <div class="quote-card" (click)="selectServiceOrderAgreement(quote)" [class.selected]="selectedServiceOrderAgreement?.id === quote.id">
+        @for (order of paginatedServiceOrders; track order.id) {
+          <div class="quote-card" (click)="selectServiceOrder(order)" [class.selected]="selectedServiceOrder?.id === order.id">
             <div class="card-header">
               <div class="quote-info">
-                <h3>{{ getServiceOrderAgreementHeaderLabel(quote) }}</h3>
-                <span class="quote-badge" [ngClass]="getServiceOrderAgreementStatusClass(quote.status)">
-                  {{ getServiceOrderAgreementStatusLabel(quote.status) }}
+                <h3>{{ order.code }} . {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</h3>
+                <span class="quote-badge status-current">
+                  {{ getInboxThreadOperativeStatusLabel(order.operativeStatus) }}
                 </span>
               </div>
             </div>
             <div class="card-body">
-              <p class="quote-total">
-                <i class="fas fa-money-bill-wave"></i>
-                <strong>{{ quote.totalAmount | number: '1.2-2' }} {{ quote.currency || 'PEN' }}</strong>
-              </p>
               <p class="quote-date">
                 <i class="fas fa-calendar-alt"></i>
-                {{ quote.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+                {{ order.receivedAt | date: 'dd/MM/yyyy HH:mm' }}
               </p>
               <p class="quote-date">
                 <i class="fas fa-tag"></i>
-                {{ getServiceTypeLabel(quote.serviceOrder?.serviceType) }}
+                {{ getServiceTypeLabel(order.serviceType) }}
               </p>
-              @if (quote.notes) {
+              <p class="quote-date">
+                <i class="fas fa-user-cog"></i>
+                {{ order.assignedToTechnicianName || 'Sin asignar' }}
+              </p>
+              @if (order.initialIssue) {
                 <p class="quote-notes">
                   <i class="fas fa-sticky-note"></i>
-                  {{ quote.notes }}
+                  {{ order.initialIssue }}
                 </p>
               }
             </div>
@@ -291,7 +400,7 @@
         }
       }
     </div>
-    @if (getVisibleAgreements().length > itemsPerPage) {
+    @if (filteredServiceOrders.length > itemsPerPage) {
       <div class="pagination">
         <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
           <i class="fas fa-chevron-left"></i> Anterior
@@ -303,162 +412,178 @@
       </div>
     }
 
-    @if (selectedServiceOrderAgreement) {
-      <div class="detail-view">
-        <div class="detail-header">
-          <h2>Detalle de Acuerdo #{{ selectedServiceOrderAgreement.sequenceNumber }}</h2>
-          <button class="btn-close" (click)="clearSelectedServiceOrderAgreement()">
+    @if (selectedServiceOrder) {
+      <aside class="detail-view">
+        <header class="detail-drawer-header">
+          <div>
+            <p class="detail-drawer-kicker">Detalle de orden</p>
+            <h2>{{ selectedServiceOrder.code || 'Sin código' }}</h2>
+          </div>
+          <button class="btn-close" type="button" aria-label="Cerrar detalle de orden" (click)="clearSelectedServiceOrder()">
             <i class="fas fa-times"></i>
           </button>
-        </div>
+        </header>
 
-        <div class="detail-content">
-          <section class="detail-section">
-            <h3><i class="fas fa-info-circle"></i> Informacion General</h3>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="info-label">Estado:</span>
-                <span class="quote-badge" [ngClass]="getServiceOrderAgreementStatusClass(selectedServiceOrderAgreement.status)">
-                  {{ getServiceOrderAgreementStatusLabel(selectedServiceOrderAgreement.status) }}
+        <div class="detail-content detail-drawer-scroll">
+          <section class="detail-reason-card">
+            <p class="detail-card-label">Motivo de ingreso</p>
+            <p class="detail-reason-value">{{ selectedServiceOrder.initialIssue || 'Sin motivo registrado' }}</p>
+          </section>
+
+          @if (selectedServiceOrder.sla; as operativeSla) {
+            <section class="detail-operational-grid" aria-label="SLA operativo">
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Etapa SLA</span>
+                <strong>{{ getServiceOrderSlaStageLabel(operativeSla.stage) }}</strong>
+              </article>
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Transcurrido</span>
+                <strong>{{ formatMinutes(operativeSla.elapsedMinutes) }}</strong>
+              </article>
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Restante</span>
+                <strong>{{ formatMinutes(operativeSla.remainingMinutes) }}</strong>
+              </article>
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Brecha</span>
+                <strong>{{ operativeSla.breached ? 'Sí' : 'No' }}</strong>
+              </article>
+            </section>
+          } @else {
+            <section class="detail-operational-grid" aria-label="Resumen operativo">
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Estado operativo</span>
+                <strong>{{ getInboxThreadOperativeStatusLabel(selectedServiceOrder.operativeStatus) }}</strong>
+              </article>
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Técnico</span>
+                <strong>{{ selectedServiceOrder.assignedToTechnicianName || 'Sin asignar' }}</strong>
+              </article>
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Servicio</span>
+                <strong>{{ getServiceTypeLabel(selectedServiceOrder.serviceType) }}</strong>
+              </article>
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Ingreso</span>
+                <strong>{{ selectedServiceOrder.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
+              </article>
+            </section>
+          }
+
+          <div class="detail-section-divider"></div>
+
+          <section class="detail-section-block">
+            <div class="detail-section-heading detail-section-heading--split">
+              <h3><i class="fas fa-desktop"></i> Equipo y comunicación</h3>
+              <button type="button" class="detail-whatsapp-btn" (click)="openInboxShortcut(selectedServiceOrder)">
+                <i class="fab fa-whatsapp"></i>
+                WhatsApp
+              </button>
+            </div>
+
+            <div class="detail-equipment-grid">
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Tipo</span>
+                <strong>{{ getEquipmentTypeLabel(selectedServiceOrder.equipmentType, selectedServiceOrder.equipmentTypeOther) }}</strong>
+              </article>
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Marca</span>
+                <strong>{{ selectedServiceOrder.brand || 'Sin marca' }}</strong>
+              </article>
+              <article class="detail-chip-card">
+                <span class="detail-card-label">Modelo</span>
+                <strong>{{ selectedServiceOrder.model || 'Sin modelo' }}</strong>
+              </article>
+            </div>
+          </section>
+
+          @if (selectedServiceOrder.sla; as sla) {
+            <section class="detail-sla-panel" [class.is-breached]="sla.breached" aria-label="SLA actual">
+              <div class="detail-sla-hero">
+                <div>
+                  <p class="detail-card-label">Etapa SLA actual</p>
+                  <h3>{{ getServiceOrderSlaStageLabel(sla.stage) }}</h3>
+                </div>
+                <span class="detail-sla-hero__icon">
+                  <i class="fas fa-shield-alt"></i>
                 </span>
               </div>
-              <div class="info-item">
-                <span class="info-label">Total:</span>
-                <span class="info-value">{{ selectedServiceOrderAgreement.totalAmount | number: '1.2-2' }} {{ selectedServiceOrderAgreement.currency || 'PEN' }}</span>
+
+              <div class="detail-sla-summary-grid">
+                <article class="detail-chip-card">
+                  <span class="detail-card-label">Transcurrido</span>
+                  <strong>{{ formatMinutes(sla.elapsedMinutes) }}</strong>
+                </article>
+                <article class="detail-chip-card">
+                  <span class="detail-card-label">Restante</span>
+                  <strong>{{ formatMinutes(sla.remainingMinutes) }}</strong>
+                </article>
+                <article class="detail-chip-card">
+                  <span class="detail-card-label">Brecha</span>
+                  <strong>{{ sla.breached ? 'Sí' : 'No' }}</strong>
+                </article>
               </div>
-              <div class="info-item">
-                <span class="info-label">Version:</span>
-                <span class="info-value">#{{ selectedServiceOrderAgreement.sequenceNumber }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Fecha de creacion:</span>
-                <span class="info-value">{{ selectedServiceOrderAgreement.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
-              </div>
-            </div>
-            @if (selectedServiceOrderAgreement.notes) {
-              <div class="notes-box">
-                <strong>Notas del acuerdo:</strong>
-                <p>{{ selectedServiceOrderAgreement.notes }}</p>
-              </div>
+            </section>
+          }
+
+          @if (selectedServiceOrder.timeMetrics; as timeMetrics) {
+            <section class="detail-metrics-grid" aria-label="Tiempos SLA">
+              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToDiagnosis.isComputable">
+                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo a diagnóstico</p>
+                <strong>{{ getMetricDisplayValue(timeMetrics.timeToDiagnosis) }}</strong>
+              </article>
+              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToServiceStart.isComputable">
+                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo a inicio de servicio</p>
+                <strong>{{ getMetricDisplayValue(timeMetrics.timeToServiceStart) }}</strong>
+              </article>
+              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToService.isComputable">
+                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo de servicio</p>
+                <strong>{{ getMetricDisplayValue(timeMetrics.timeToService) }}</strong>
+              </article>
+              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToResolution.isComputable">
+                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo a resolución</p>
+                <strong>{{ getMetricDisplayValue(timeMetrics.timeToResolution) }}</strong>
+              </article>
+              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToDelivery.isComputable">
+                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo a entrega</p>
+                <strong>{{ getMetricDisplayValue(timeMetrics.timeToDelivery) }}</strong>
+              </article>
+            </section>
+          }
+
+          <section class="detail-diagnosis-card" aria-label="Diagnóstico del técnico">
+            <p class="detail-diagnosis-title">Diagnóstico del técnico:</p>
+            @if (isLoadingDiagnosis) {
+              <p class="detail-diagnosis-loading"><i class="fas fa-spinner fa-spin"></i> Cargando diagnóstico...</p>
+            } @else if (currentDiagnosis) {
+              <p class="detail-diagnosis-summary">{{ currentDiagnosis.summary }}</p>
+              @if (currentDiagnosis.details) {
+                <p class="detail-diagnosis-body">{{ currentDiagnosis.details }}</p>
+              }
+            } @else {
+              <p class="detail-diagnosis-body">Sin diagnóstico registrado.</p>
             }
           </section>
 
-          @if (selectedServiceOrderAgreement.sentToClientAt || selectedServiceOrderAgreement.clientApprovedAt || selectedServiceOrderAgreement.clientRejectedAt) {
-            <section class="detail-section">
-              <h3><i class="fas fa-user"></i> Respuesta del Cliente</h3>
-              @if (selectedServiceOrderAgreement.sentToClientAt) {
-                <p class="info-text">
-                  <i class="fas fa-paper-plane"></i>
-                  Enviada al cliente el {{ selectedServiceOrderAgreement.sentToClientAt | date: 'dd/MM/yyyy HH:mm' }}
-                </p>
-              }
-              @if (selectedServiceOrderAgreement.clientApprovedAt) {
-                <p class="approval-info">
-                  <i class="fas fa-check-circle"></i>
-                  Aprobada por cliente el {{ selectedServiceOrderAgreement.clientApprovedAt | date: 'dd/MM/yyyy HH:mm' }}
-                </p>
-              }
-              @if (selectedServiceOrderAgreement.clientRejectedAt) {
-                <p class="rejection-info">
-                  <i class="fas fa-times-circle"></i>
-                  Rechazada por cliente el {{ selectedServiceOrderAgreement.clientRejectedAt | date: 'dd/MM/yyyy HH:mm' }}
-                </p>
-              }
-              @if (selectedServiceOrderAgreement.clientNotes) {
-                <div class="notes-box">
-                  <strong>Notas del cliente:</strong>
-                  <p>{{ selectedServiceOrderAgreement.clientNotes }}</p>
-                </div>
-              }
-            </section>
-          }
-
-          @if (selectedServiceOrderAgreement.productItems?.length) {
-            <section class="detail-section">
-              <h3><i class="fas fa-box"></i> Productos ({{ selectedServiceOrderAgreement.productItems.length }})</h3>
-              <div class="items-list">
-                @for (product of selectedServiceOrderAgreement.productItems; track product.id) {
-                  <div class="item-row">
-                    <div class="item-name">{{ getProductLabel(product.productId) }}</div>
-                    <div class="item-details">
-                      <span class="item-quantity">Cant: {{ product.quantity }}</span>
-                      <span class="item-price">P.U: {{ product.unitPrice | number: '1.2-2' }} {{ selectedServiceOrderAgreement.currency || 'PEN' }}</span>
-                      <span class="item-total">Total: {{ (product.quantity * product.unitPrice) | number: '1.2-2' }} {{ selectedServiceOrderAgreement.currency || 'PEN' }}</span>
-                    </div>
-                    @if (product.notes) {
-                      <p class="item-notes">{{ product.notes }}</p>
-                    }
-                  </div>
-                }
-              </div>
-            </section>
-          }
-
-          @if (selectedServiceOrderAgreement.serviceItems?.length) {
-            <section class="detail-section">
-              <h3><i class="fas fa-wrench"></i> Servicios ({{ selectedServiceOrderAgreement.serviceItems.length }})</h3>
-              <div class="items-list">
-                @for (service of selectedServiceOrderAgreement.serviceItems; track service.id) {
-                  <div class="item-row">
-                    <div class="item-name">{{ getServiceLabel(service.serviceId) }}</div>
-                    <div class="item-details">
-                      <span class="item-price">Precio: {{ service.unitPrice | number: '1.2-2' }} {{ selectedServiceOrderAgreement.currency || 'PEN' }}</span>
-                    </div>
-                    @if (service.notes) {
-                      <p class="item-notes">{{ service.notes }}</p>
-                    }
-                  </div>
-                }
-              </div>
-            </section>
-          }
-
-          @if (selectedServiceOrder) {
-            <section class="detail-section">
-              <h3><i class="fas fa-laptop"></i> Equipo Relacionado</h3>
-              <div class="info-grid">
-                <div class="info-item">
-                  <span class="info-label">Tipo:</span>
-                  <span class="info-value">{{ getEquipmentTypeLabel(selectedServiceOrder.equipmentType, selectedServiceOrder.equipmentTypeOther) }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">Marca:</span>
-                  <span class="info-value">{{ selectedServiceOrder.brand || 'Sin marca' }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">Modelo:</span>
-                  <span class="info-value">{{ selectedServiceOrder.model || 'Sin modelo' }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">Tecnico asignado:</span>
-                  <span class="info-value">{{ selectedServiceOrder.assignedToTechnicianName || 'Sin asignar' }}</span>
-                </div>
-              </div>
-              @if (selectedServiceOrder.initialIssue) {
-                <div class="notes-box">
-                  <strong>Problema inicial:</strong>
-                  <p>{{ selectedServiceOrder.initialIssue }}</p>
-                </div>
-              }
-              @if (selectedServiceOrder.serviceType === 'DIAGNOSIS') {
-                <div class="notes-box">
-                  <strong>Diagnostico del tecnico:</strong>
-                  @if (isLoadingDiagnosis) {
-                    <p><i class="fas fa-spinner fa-spin"></i> Cargando diagnostico...</p>
-                  } @else if (currentDiagnosis) {
-                    <p><strong>{{ currentDiagnosis.summary }}</strong></p>
-                    @if (currentDiagnosis.details) {
-                      <p>{{ currentDiagnosis.details }}</p>
-                    }
-                  } @else {
-                    <p>Sin diagnostico registrado.</p>
-                  }
-                </div>
-              }
-            </section>
-          }
+          <section class="detail-priority-banner" [class.is-breached]="hasActiveSlaBreach(selectedServiceOrder)">
+            <span class="detail-priority-banner__icon">
+              <i class="fas fa-laptop"></i>
+            </span>
+            <div>
+              <p class="detail-priority-banner__title">
+                {{ hasActiveSlaBreach(selectedServiceOrder) ? 'Servicio técnico priorizado' : 'Seguimiento operativo activo' }}
+              </p>
+              <p class="detail-priority-banner__copy">
+                {{
+                  hasActiveSlaBreach(selectedServiceOrder)
+                    ? 'La orden mantiene brecha activa y requiere seguimiento.'
+                    : 'La orden continúa en seguimiento y espera actualización del técnico.'
+                }}
+              </p>
+            </div>
+          </section>
         </div>
-      </div>
+      </aside>
     }
   </div>
   }

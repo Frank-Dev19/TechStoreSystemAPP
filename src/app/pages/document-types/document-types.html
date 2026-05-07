@@ -163,6 +163,22 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="kind">Tipo de cliente *</label>
+                        <select id="kind" formControlName="kind" class="form-input"
+                            [class.error]="documentTypeForm.get('kind')?.invalid && documentTypeForm.get('kind')?.touched">
+                            <option [ngValue]="null">Selecciona una clasificación</option>
+                            @for (kind of documentTypeKinds; track kind) {
+                                <option [value]="kind">{{kind === 'COMPANY' ? 'Empresa' : 'Persona natural'}}</option>
+                            }
+                        </select>
+                        @if (documentTypeForm.get('kind')?.invalid && documentTypeForm.get('kind')?.touched) {
+                            <div class="error-message">
+                                Debes seleccionar si el documento es para persona o empresa
+                            </div>
+                        }
+                    </div>
+
+                    <div class="form-group">
                         <label for="digits">Cantidad de dígitos *</label>
                         <input type="number" id="digits" formControlName="digits" class="form-input"
                             min="1" max="30"

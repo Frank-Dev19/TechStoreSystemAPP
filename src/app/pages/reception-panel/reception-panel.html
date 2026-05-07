@@ -72,11 +72,12 @@
             (change)="onFilterChange()"
           >
             <option value="all">Todos</option>
-            <option value="OPEN">Abierto</option>
-            <option value="IN_PROGRESS">En progreso</option>
-            <option value="PARTIALLY_COMPLETED">Parcialmente completado</option>
-            <option value="COMPLETED">Completado</option>
-            <option value="CANCELLED">Cancelado</option>
+            <option value="ABIERTA">Abierto</option>
+            <option value="EN_PROCESO">En progreso</option>
+            <option value="LISTA_PARA_ENTREGA">Listo para entrega</option>
+            <option value="ENTREGADA">Entregado</option>
+            <option value="CANCELADA">Cancelado</option>
+            <option value="CERRADA_SIN_SOLUCION">Sin solución</option>
           </select>
         </div>
         <div class="filter-control">
@@ -191,8 +192,8 @@
                     <td class="code-cell">
                       <strong>{{ serviceOrder.code }}</strong>
                       <small>{{ serviceOrder.createdAt | date: 'dd/MM HH:mm' }}</small>
-                      @if (serviceOrder.isPaid) {
-                        <small class="paid-label">Pagada</small>
+                      @if (serviceOrder.economicStatus === 'TOTAL') {
+                        <small class="paid-label">Conciliada</small>
                       }
                       @if (getActiveSaleLink(serviceOrder); as activeLink) {
                         <small class="linked-sale-label">
@@ -217,8 +218,8 @@
                       </span>
                     </td>
                     <td>
-                      <span class="status-chip" [ngClass]="serviceOrder.status.toLowerCase()">
-                        {{ getServiceOrderStatusLabel(serviceOrder.status) }}
+                      <span class="status-chip" [ngClass]="serviceOrder.operativeStatus.toLowerCase()">
+                        {{ getOperativeStatusLabel(serviceOrder.operativeStatus) }}
                       </span>
                     </td>
                     <td>
@@ -313,15 +314,6 @@
                               >
                                 <i class="fas fa-tag"></i>
                                 <span>Sticker</span>
-                              </button>
-                              <button
-                                type="button"
-                                class="action-menu-item"
-                                [disabled]="!canMarkServiceOrderAsPaid(serviceOrder)"
-                                (click)="markServiceOrderAsPaid(serviceOrder, $event); closeActionMenu()"
-                              >
-                                <i class="fas fa-money-check-alt"></i>
-                                <span>Marcar pagada</span>
                               </button>
                               @if (
                                 !hasLinkedSaleDocument(serviceOrder) &&
@@ -706,50 +698,6 @@
                   </select>
                 </div>
               </div>
-
-              <div class="summary-card">
-                <h5>Cómo se procesará esta orden</h5>
-                @switch (getSelectedWorkflowServiceType()) {
-                  @case (serviceTypeEnum.STANDARD_SERVICE) {
-                    <p>
-                      Registrarás los equipos y además un acuerdo inicial por cada uno. La
-                      aprobación del cliente será automática.
-                    </p>
-                  }
-                  @case (serviceTypeEnum.DIAGNOSIS) {
-                    <p>
-                      Registrarás el ingreso del equipo. El acuerdo se construirá después del
-                      diagnóstico técnico.
-                    </p>
-                  }
-                  @case (serviceTypeEnum.ASSEMBLY) {
-                    <p>
-                      Registrarás un trabajo de ensamblaje. Si el origen es interno, la orden
-                      quedará sin cliente asociado.
-                    </p>
-                  }
-                  @case (serviceTypeEnum.CUSTOMER_SERVICE) {
-                    <p>
-                      Seguirá el flujo de diagnóstico, pero los servicios no se cobrarán en la
-                      acuerdo; sólo los repuestos.
-                    </p>
-                    <div class="info-tile">
-                      <span class="muted">Regla comercial</span>
-                      <strong>Servicios sin cobro, repuestos cobrables</strong>
-                    </div>
-                  }
-                  @case (serviceTypeEnum.WARRANTY_SERVICE) {
-                    <p>
-                      Registrarás el ingreso para revisión de garantía. El técnico validará si el
-                      caso procede como garantía o si debe rechazarse por uso indebido u otra causal.
-                    </p>
-                    <div class="info-tile">
-                      <span class="muted">Regla comercial</span>
-                      <strong>Si procede, se atiende sin cobro; si no procede, el caso se rechaza o se deriva.</strong>
-                    </div>
-                  }
-                }
-              </div>
             </div>
           }
 
@@ -795,50 +743,32 @@
                         <div>
                           <p class="quote-label">Técnico</p>
                           <h4>{{ candidate.technicianName }}</h4>
-                          <p class="quote-subline">
-                            <i class="fas fa-clipboard-list"></i>
-                            Activos totales: {{ candidate.totalActiveCount }}
-                          </p>
-                          <p class="quote-subline">
-                            <i class="fas fa-stethoscope"></i>
-                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.DIAGNOSIS) > 0) {
-                              Diagnóstico: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.DIAGNOSIS) }}
-                            } @else {
-                              Sin diagnósticos activos
-                            }
-                          </p>
-                          <p class="quote-subline">
-                            <i class="fas fa-shield-alt"></i>
-                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.WARRANTY_SERVICE) > 0) {
-                              Garantías: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.WARRANTY_SERVICE) }}
-                            } @else {
-                              Sin garantías activas
-                            }
-                          </p>
-                          <p class="quote-subline">
-                            <i class="fas fa-concierge-bell"></i>
-                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.STANDARD_SERVICE) > 0) {
-                              Estándar: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.STANDARD_SERVICE) }}
-                            } @else {
-                              Sin servicios estándar activos
-                            }
-                          </p>
-                          <p class="quote-subline">
-                            <i class="fas fa-toolbox"></i>
-                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.ASSEMBLY) > 0) {
-                              Ensamblajes: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.ASSEMBLY) }}
-                            } @else {
-                              Sin ensamblajes activos
-                            }
-                          </p>
-                          <p class="quote-subline">
-                            <i class="fas fa-user-friends"></i>
-                            @if (getTechnicianActiveCountForType(candidate, serviceTypeEnum.CUSTOMER_SERVICE) > 0) {
-                              Atención al cliente: {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.CUSTOMER_SERVICE) }}
-                            } @else {
-                              Sin atenciones activas
-                            }
-                          </p>
+                          <div class="technician-badges">
+                            <span class="tech-badge total">
+                              <i class="fas fa-clipboard-list"></i>
+                              {{ candidate.totalActiveCount }} activos
+                            </span>
+                            <span class="tech-badge" [class.has-load]="getTechnicianActiveCountForType(candidate, serviceTypeEnum.DIAGNOSIS) > 0">
+                              <i class="fas fa-stethoscope"></i>
+                              {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.DIAGNOSIS) || 0 }} diagnóstico
+                            </span>
+                            <span class="tech-badge" [class.has-load]="getTechnicianActiveCountForType(candidate, serviceTypeEnum.WARRANTY_SERVICE) > 0">
+                              <i class="fas fa-shield-alt"></i>
+                              {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.WARRANTY_SERVICE) || 0 }} garantía
+                            </span>
+                            <span class="tech-badge" [class.has-load]="getTechnicianActiveCountForType(candidate, serviceTypeEnum.STANDARD_SERVICE) > 0">
+                              <i class="fas fa-concierge-bell"></i>
+                              {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.STANDARD_SERVICE) || 0 }} estándar
+                            </span>
+                            <span class="tech-badge" [class.has-load]="getTechnicianActiveCountForType(candidate, serviceTypeEnum.ASSEMBLY) > 0">
+                              <i class="fas fa-toolbox"></i>
+                              {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.ASSEMBLY) || 0 }} ensamblaje
+                            </span>
+                            <span class="tech-badge" [class.has-load]="getTechnicianActiveCountForType(candidate, serviceTypeEnum.CUSTOMER_SERVICE) > 0">
+                              <i class="fas fa-user-friends"></i>
+                              {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.CUSTOMER_SERVICE) || 0 }} atención
+                            </span>
+                          </div>
                         </div>
                         @if (candidate.isSuggested) {
                           <span class="service-quote-status status-approved">Sugerido</span>
@@ -858,6 +788,7 @@
                   <h4>{{ getCreateOrderClientTitle() }}</h4>
                   <p>{{ getCreateOrderClientDescription() }}</p>
                 </div>
+
                 <div class="form-grid form-grid--wide">
                   <div class="form-group">
                     <label for="documentTypeId">Tipo de documento *</label>
@@ -879,6 +810,15 @@
                       createServiceOrderForm.get('documentTypeId')?.touched
                     ) {
                       <div class="invalid-feedback">Selecciona un tipo de documento válido</div>
+                    }
+                    @if (createServiceOrderForm.get('clientKind')?.value) {
+                      <span class="badge client-kind-badge">
+                        @if (createServiceOrderForm.get('clientKind')?.value === clientKindEnum.COMPANY) {
+                          <i class="fas fa-building"></i> Empresa
+                        } @else {
+                          <i class="fas fa-user"></i> Persona
+                        }
+                      </span>
                     }
                   </div>
 
@@ -912,6 +852,31 @@
                     </div>
                   </div>
                 </div>
+
+                @if (createServiceOrderForm.get('clientKind')?.value === clientKindEnum.COMPANY) {
+                  <div class="form-grid form-grid--wide">
+                    <div class="form-group">
+                      <label for="companyName">Razón social *</label>
+                      <input
+                        type="text"
+                        id="companyName"
+                        class="form-control"
+                        formControlName="companyName"
+                        placeholder="Ej: TechStore SAC"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label for="companyTradeName">Nombre comercial</label>
+                      <input
+                        type="text"
+                        id="companyTradeName"
+                        class="form-control"
+                        formControlName="companyTradeName"
+                        placeholder="Ej: TechStore"
+                      />
+                    </div>
+                  </div>
+                }
               </div>
 
               <div class="form-section">
@@ -919,6 +884,25 @@
                   <h4>Contacto</h4>
                   <p>Datos de la persona responsable.</p>
                 </div>
+
+                @if (getClientContactOptions().length > 1) {
+                  <div class="form-group">
+                    <label for="clientContactId">Seleccionar contacto</label>
+                    <select
+                      id="clientContactId"
+                      class="form-control"
+                      formControlName="clientContactId"
+                      (change)="onClientContactSelectionChange()"
+                    >
+                      @for (contact of getClientContactOptions(); track contact.id) {
+                        <option [ngValue]="contact.id">
+                          {{ contact.name }}@if (contact.isPrimary) { (Principal) }@if (contact.phone) { — {{ contact.phone }} }
+                        </option>
+                      }
+                    </select>
+                  </div>
+                }
+
                 <div class="form-grid form-grid--wide">
                   <div class="form-group">
                     <label for="contactName">Nombre de contacto *</label>
@@ -1002,6 +986,31 @@
                   <p>{{ getCreateOrderItemsDescription() }}</p>
                 </div>
 
+                @if (createServiceOrderCandidates.length > 0) {
+                  <div class="equipment-cards-grid">
+                    @for (card of getSavedEquipmentCards(); track card.index) {
+                      <div class="saved-equipment-card">
+                        <button
+                          type="button"
+                          class="delete-card-btn"
+                          (click)="deleteEquipmentCard(card.index, $event)"
+                          title="Eliminar equipo"
+                        >
+                          <i class="fas fa-times"></i>
+                        </button>
+                        <div class="saved-equipment-type">
+                          <i class="fas fa-laptop"></i>
+                          {{ card.typeLabel }}
+                        </div>
+                        <div class="saved-equipment-detail">{{ card.brandModel }}</div>
+                        @if (card.serialNumber) {
+                          <div class="saved-equipment-serial">SN: {{ card.serialNumber }}</div>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+
                 <div class="service-order-item-card">
                   <div class="service-order-item-card-header">
                     <div class="item-title">
@@ -1012,13 +1021,26 @@
                   <div class="form-grid">
                     <div class="form-group">
                       <label>Tipo de equipo *</label>
-                      <select class="form-control" formControlName="equipmentType">
+                      <select 
+                        class="form-control" 
+                        formControlName="equipmentType"
+                        [class.is-invalid]="
+                          getCreateServiceOrderControl('equipmentType')?.invalid &&
+                          getCreateServiceOrderControl('equipmentType')?.touched
+                        "
+                      >
                         @for (equipment of equipmentTypeOptions; track equipment) {
                           <option [ngValue]="equipment">
                             {{ getEquipmentTypeLabel(equipment) }}
                           </option>
                         }
                       </select>
+                      @if (
+                        getCreateServiceOrderControl('equipmentType')?.invalid &&
+                        getCreateServiceOrderControl('equipmentType')?.touched
+                      ) {
+                        <div class="invalid-feedback">Selecciona el tipo de equipo.</div>
+                      }
                     </div>
                     @if (isOtherEquipmentType(getCreateServiceOrderControl('equipmentType')?.value)) {
                       <div class="form-group">
@@ -1087,7 +1109,7 @@
                       getCreateServiceOrderControl('initialIssue')?.invalid &&
                       getCreateServiceOrderControl('initialIssue')?.touched
                     ) {
-                      <div class="invalid-feedback">Describe el detalle principal</div>
+                      <div class="invalid-feedback">Este campo es obligatorio.</div>
                     }
                   </div>
                   <div class="form-group">
@@ -1351,7 +1373,7 @@
               </div>
 
               <div class="summary-card">
-                <h5>Equipo</h5>
+                <h5>{{ getCreateOrderSummaryItems().length > 1 ? 'Equipos' : 'Equipo' }}</h5>
                 @for (summaryItem of getCreateOrderSummaryItems(); track summaryItem.index) {
                   <div class="review-item-card">
                     <div class="review-item-header">
@@ -1373,37 +1395,33 @@
                         <strong>{{ summaryItem.description || 'Sin detalle adicional' }}</strong>
                       </div>
 
-                      @if (
-                        getCreateServiceOrderControl('brand')?.value ||
-                        getCreateServiceOrderControl('model')?.value ||
-                        getCreateServiceOrderControl('serialNumber')?.value
-                      ) {
+                      @if (summaryItem.brand || summaryItem.model || summaryItem.serialNumber) {
                         <div class="review-grid">
-                          @if (getCreateServiceOrderControl('brand')?.value) {
+                          @if (summaryItem.brand) {
                             <div class="info-tile">
                               <span class="muted">Marca</span>
-                              <strong>{{ getCreateServiceOrderControl('brand')?.value }}</strong>
+                              <strong>{{ summaryItem.brand }}</strong>
                             </div>
                           }
-                          @if (getCreateServiceOrderControl('model')?.value) {
+                          @if (summaryItem.model) {
                             <div class="info-tile">
                               <span class="muted">Modelo</span>
-                              <strong>{{ getCreateServiceOrderControl('model')?.value }}</strong>
+                              <strong>{{ summaryItem.model }}</strong>
                             </div>
                           }
-                          @if (getCreateServiceOrderControl('serialNumber')?.value) {
+                          @if (summaryItem.serialNumber) {
                             <div class="info-tile">
                               <span class="muted">Serie</span>
-                              <strong>{{ getCreateServiceOrderControl('serialNumber')?.value }}</strong>
+                              <strong>{{ summaryItem.serialNumber }}</strong>
                             </div>
                           }
                         </div>
                       }
 
-                      @if (getCreateServiceOrderControl('accessories')?.value) {
+                      @if (summaryItem.accessories) {
                         <div class="info-tile full-span">
                           <span class="muted">Accesorios</span>
-                          <strong>{{ getCreateServiceOrderControl('accessories')?.value }}</strong>
+                          <strong>{{ summaryItem.accessories }}</strong>
                         </div>
                       }
 
@@ -1413,7 +1431,7 @@
                             <strong>Líneas del acuerdo</strong>
                           </div>
                           @for (
-                            quoteItem of getCreateOrderAgreementItems(summaryItem.index);
+                            quoteItem of summaryItem.quoteItems;
                             track quoteItem.id
                           ) {
                             <div class="review-quote-line">
@@ -1484,6 +1502,12 @@
             >
               <i class="fas fa-arrow-left"></i>
               Anterior
+            </button>
+          }
+          @if (canAddAnotherCreateServiceOrderCandidate()) {
+            <button class="btn btn-outline" type="button" (click)="beginAnotherCreateServiceOrderCandidate()">
+              <i class="fas fa-plus"></i>
+              Agregar otro equipo
             </button>
           }
           @if (!isLastCreateServiceOrderStep()) {
@@ -1575,13 +1599,6 @@
                   >
                     <i class="fas fa-box"></i> Producto
                   </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-info"
-                    (click)="addServiceToServiceOrderAgreement()"
-                  >
-                    <i class="fas fa-tools"></i> Servicio
-                  </button>
                   <a
                     class="btn btn-sm btn-outline-secondary"
                     [routerLink]="['/inventory']"
@@ -1613,14 +1630,16 @@
                         </div>
                         <div class="item-actions">
                           <span class="muted small">Item #{{ i + 1 }}</span>
-                          <button
-                            type="button"
-                            class="btn-icon btn-delete"
-                            (click)="removeServiceOrderAgreementItem(i)"
-                            title="Eliminar"
-                          >
-                            <i class="fas fa-trash"></i>
-                          </button>
+                          @if (item.type === 'product') {
+                            <button
+                              type="button"
+                              class="btn-icon btn-delete"
+                              (click)="removeServiceOrderAgreementItem(i)"
+                              title="Eliminar"
+                            >
+                              <i class="fas fa-trash"></i>
+                            </button>
+                          }
                         </div>
                       </div>
 
@@ -1685,24 +1704,31 @@
                         <div class="quote-item-row">
                           <div class="item-input full-width">
                             <label>Servicio</label>
-                            <ng-select
-                              [items]="services"
-                              bindValue="id"
-                              [searchFn]="serviceSearchFn"
-                              [clearable]="true"
-                              placeholder="Selecciona"
-                              [(ngModel)]="item.serviceId"
+                            <div class="selected-item highlight">
+                              {{ technicalServiceOption.name }}
+                            </div>
+                          </div>
+                        </div>
+                        <div class="quote-item-row" *ngIf="!isNonBillableServiceContext()">
+                          <div class="item-input compact">
+                            <label>Monto</label>
+                            <input
+                              type="number"
+                              min="20"
+                              step="0.01"
+                              [ngModel]="item.unitPrice"
+                              (ngModelChange)="updateTechnicalServiceAmount(item, $event)"
                               [ngModelOptions]="{ standalone: true }"
-                            >
-                              <ng-template ng-label-tmp let-service="item">
-                                {{ service?.code }} · {{ service?.name }} ·
-                                {{ getServiceCategoryName(service?.categoryId) }}
-                              </ng-template>
-                              <ng-template ng-option-tmp let-service="item">
-                                {{ service?.code }} · {{ service?.name }} ·
-                                {{ getServiceCategoryName(service?.categoryId) }}
-                              </ng-template>
-                            </ng-select>
+                            />
+                          </div>
+                          <div class="item-input price">
+                            <label>Mínimo</label>
+                            <div class="price-display">
+                              <strong>
+                                {{ technicalServiceOption.price | number: '1.2-2' }}
+                                {{ createServiceOrderAgreementForm.get('currency')?.value }}
+                              </strong>
+                            </div>
                           </div>
                         </div>
                         <div class="quote-item-row">
@@ -1839,7 +1865,7 @@
             <h2>{{ serviceOrderAgreementsServiceOrder.code }} · {{ getServiceOrderLabel(serviceOrderAgreementsServiceOrder) }}</h2>
             <p class="muted">
               Estado del flujo:
-              {{ getServiceOrderWorkflowStatusLabel(serviceOrderAgreementsServiceOrder.workflowStatus) }}
+              {{ getServiceOrderTechnicalStatusLabel(serviceOrderAgreementsServiceOrder.technicalStatus) }}
             </p>
           </div>
           <button class="btn-close" type="button" (click)="closeServiceOrderAgreementsModal()">
@@ -2192,7 +2218,9 @@
 
         <div class="inbox-layout inbox-layout-single">
           <section class="inbox-main">
-            @if (receptionInboxActiveThread) {
+            @if (isLoadingReceptionInbox) {
+              <p class="empty-text">Cargando conversación...</p>
+            } @else if (receptionInboxActiveThread) {
               <div class="inbox-thread-meta">
                 <div>
                   <strong>{{ receptionInboxActiveThread.serviceOrderCode }} · {{ receptionInboxActiveThread.equipmentLabel }}</strong>
@@ -2201,16 +2229,44 @@
               </div>
 
               <div class="inbox-messages">
-                @for (message of receptionInboxActiveThread.messages; track message.id) {
+                @for (message of receptionInboxMessages; track message.id) {
                   <article
                     class="message-bubble"
-                    [class.message-bubble-own]="message.author === 'RECEPTION'"
+                    [class.message-bubble-own]="message.authorRole === 'RECEPTION'"
                   >
                     <header>
-                      <strong>{{ getReceptionInboxAuthorLabel(message.author) }}</strong>
+                      <strong>{{ getReceptionInboxAuthorLabel(message) }}</strong>
                       <span>{{ message.createdAt | date: 'dd/MM HH:mm' }}</span>
                     </header>
-                    <p>{{ message.text }}</p>
+                    @if (message.text) {
+                      <p>{{ message.text }}</p>
+                    }
+                    @if (message.attachments.length) {
+                      <div class="message-attachments">
+                        @for (attachment of message.attachments; track attachment.id) {
+                          <div class="message-attachment-card">
+                            @if (attachment.previewable && getReceptionInboxAttachmentPreviewUrl(attachment.id)) {
+                              <img
+                                class="message-attachment-image"
+                                [src]="getReceptionInboxAttachmentPreviewUrl(attachment.id)"
+                                [alt]="attachment.fileName"
+                              />
+                            } @else {
+                              <span class="message-attachment-icon">
+                                <i class="fas" [class.fa-image]="attachment.attachmentType === 'image'" [class.fa-file-pdf]="attachment.attachmentType === 'pdf'" [class.fa-file-audio]="attachment.attachmentType === 'audio'" [class.fa-file-lines]="attachment.attachmentType === 'document'"></i>
+                              </span>
+                            }
+                            <div class="message-attachment-meta">
+                              <strong>{{ attachment.fileName }}</strong>
+                              <small>{{ attachment.mimeType }} · {{ attachment.sizeBytes / 1024 | number: '1.0-0' }} KB</small>
+                            </div>
+                            <button class="btn btn-light btn-sm" type="button" (click)="downloadReceptionInboxAttachment(attachment)">
+                              Descargar
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    }
                   </article>
                 }
               </div>
@@ -2222,16 +2278,40 @@
                   (input)="receptionInboxDraftMessage = $any($event.target).value"
                   placeholder="Escribe el mensaje para coordinar con el cliente..."
                 ></textarea>
+                <input #receptionInboxFileInput type="file" multiple hidden (change)="onReceptionInboxFilesSelected($event)" />
+                @if (receptionInboxDraftAttachments.length) {
+                  <div class="draft-attachments">
+                    @for (attachment of receptionInboxDraftAttachments; track attachment.file.name + attachment.file.size) {
+                      <div class="draft-attachment-chip">
+                        @if (attachment.previewUrl) {
+                          <img [src]="attachment.previewUrl" [alt]="attachment.file.name" />
+                        } @else {
+                          <i class="fas fa-paperclip"></i>
+                        }
+                        <span>{{ attachment.file.name }}</span>
+                        <button type="button" (click)="removeReceptionInboxDraftAttachment($index)">
+                          <i class="fas fa-times"></i>
+                        </button>
+                      </div>
+                    }
+                  </div>
+                }
                 <div class="inbox-composer-actions">
                   <button class="btn btn-outline-secondary" type="button" (click)="closeReceptionInboxModal()">
                     Cerrar
                   </button>
-                  <button class="btn btn-success" type="button" (click)="sendReceptionInboxMessage()">
+                  <button class="btn btn-outline-secondary" type="button" (click)="triggerReceptionInboxAttachmentPicker(receptionInboxFileInput)">
+                    <i class="fas fa-paperclip"></i>
+                    Adjuntar
+                  </button>
+                  <button class="btn btn-success" type="button" [disabled]="isSendingReceptionInbox" (click)="sendReceptionInboxMessage()">
                     <i class="fab fa-whatsapp"></i>
-                    Enviar
+                    {{ isSendingReceptionInbox ? 'Enviando...' : 'Enviar' }}
                   </button>
                 </div>
               </div>
+            } @else {
+              <p class="empty-text">No hay conversación disponible para esta orden.</p>
             }
           </section>
         </div>

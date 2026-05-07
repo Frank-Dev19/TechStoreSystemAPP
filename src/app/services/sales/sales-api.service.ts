@@ -7,6 +7,7 @@ import { config } from '../../../environments/environment';
 import { Sale } from '../../models/sales/sale.model';
 import {
     CreateSaleDto,
+    CreateSaleFromServiceAgreementsDto,
     CancelSaleDto,
     FilterSalesParams,
 } from '../../models/sales/sale.dto';
@@ -82,6 +83,28 @@ export class SalesApiService {
 
     create(payload: CreateSaleDto): Observable<Sale> {
         return this.base.post<Sale>(this.baseUrl, payload);
+    }
+
+    createFromServiceOrder(payload: {
+        serviceOrderId: number;
+        companyId: number;
+        documentType: string;
+        issueDate: string;
+        observations?: string;
+        payments: Array<{
+            method: string;
+            amount: number;
+            reference?: string;
+            bankName?: string;
+            cardType?: string;
+            paymentDate?: string;
+        }>;
+    }): Observable<Sale> {
+        return this.base.post<Sale>(`${this.baseUrl}/from-service-order`, payload);
+    }
+
+    createFromServiceAgreements(payload: CreateSaleFromServiceAgreementsDto): Observable<Sale> {
+        return this.base.post<Sale>(`${this.baseUrl}/from-service-agreements`, payload);
     }
 
     cancel(id: number, payload: CancelSaleDto): Observable<Sale> {

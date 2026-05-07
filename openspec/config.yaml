@@ -1,0 +1,51 @@
+schema: spec-driven
+
+context: |
+  Frontend Angular 20 para gestión de tienda y paneles operativos.
+  Stack: Angular 20, TypeScript 5.9, SCSS, ng-bootstrap, ng-select.
+  Arquitectura: SPA Angular basada en pages/services/models con estado local por componente.
+  Testing: Karma + Jasmine mediante Angular CLI.
+  Calidad: type-check con TypeScript; sin linter configurado en esta app.
+
+strict_tdd: true
+
+rules:
+  proposal:
+    - Mantener artifacts breves y con rollback explícito.
+    - Contrastar siempre contra el estado implementado antes de escribir.
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group tasks by phase (infrastructure, implementation, testing)
+    - Use hierarchical numbering (1.1, 1.2, etc.)
+    - Keep tasks small enough to complete in one session
+  apply:
+    - Follow existing code patterns and conventions
+    - Load relevant coding skills for the project stack
+  verify:
+    - Run tests if test infrastructure exists
+    - Compare implementation against every spec scenario
+  archive:
+    - Warn before merging destructive deltas (large removals)
+
+testing:
+  strict_tdd: true
+  detected: 2026-04-27
+  runner:
+    command: ng test
+    framework: Karma + Jasmine
+  layers:
+    unit: Karma + Jasmine
+    integration: false
+    e2e: false
+  coverage:
+    available: true
+    command: ng test --code-coverage
+  quality:
+    linter: false
+    type_checker: tsc --noEmit
+    formatter: false
