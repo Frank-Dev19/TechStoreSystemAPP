@@ -1460,10 +1460,16 @@
                         </h3>
                         <span class="item-count">{{ productTotal }} productos</span>
                     </div>
-                    <button class="btn-primary btn-sm" (click)="openProductModal()">
-                        <i class="fas fa-plus"></i>
-                        Nuevo Producto
-                    </button>
+                    <div class="header-actions">
+                        <button class="btn-secondary btn-sm" (click)="openImportProductsModal()">
+                            <i class="fas fa-file-import"></i>
+                            Importar Productos
+                        </button>
+                        <button class="btn-primary btn-sm" (click)="openProductModal()">
+                            <i class="fas fa-plus"></i>
+                            Nuevo Producto
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Filtros estilo ventas -->
@@ -1522,6 +1528,7 @@
                             <tr>
                                 <th>SKU</th>
                                 <th>Nombre</th>
+                                <th>Marca</th>
                                 <th>Categoría</th>
                                 <th>Serial</th>
                                 <th>Venc.</th>
@@ -1532,6 +1539,7 @@
                             <tr *ngFor="let product of products">
                                 <td><code>{{ product.sku }}</code></td>
                                 <td><strong>{{ product.name }}</strong></td>
+                                <td>{{ product.brand || '-' }}</td>
                                 <td>{{ getCategoryName(product.category_id) }}</td>
                                 <td>
                                     <span class="badge-yes" *ngIf="product.is_serialized">Sí</span>
@@ -1869,6 +1877,10 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label>Marca</label>
+                    <input type="text" [(ngModel)]="productForm.brand" class="form-control">
+                </div>
+                <div class="form-group">
                     <label>Descripción</label>
                     <textarea [(ngModel)]="productForm.description" class="form-control" rows="2"></textarea>
                 </div>
@@ -1922,6 +1934,153 @@
                 <button class="btn-primary" (click)="saveProduct()">
                     <i class="fas fa-save"></i>
                     Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Products Modal -->
+    <div class="modal-overlay" *ngIf="showImportProductsModal" (click)="closeImportProductsModal()">
+        <div class="modal-content modal-large import-products-modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Importar Productos</h3>
+                <button class="close-button" (click)="closeImportProductsModal()" [disabled]="importProductsLoading">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="file-input-card">
+                    <div class="file-input-info">
+                        <i class="fas fa-file-excel"></i>
+                        <div>
+                            <strong>{{ importProductsFileName || 'Seleccionar archivo Excel' }}</strong>
+                            <span>Columnas esperadas: Código, Descripción, Marca y U.Medida</span>
+                        </div>
+                    </div>
+                    <label class="btn-secondary file-input-button">
+                        <i class="fas fa-folder-open"></i>
+                        Escoger Excel
+                        <input type="file" accept=".xlsx,.xls" (change)="onImportProductsFileSelected($event)">
+                    </label>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Categoría *</label>
+                        <select [(ngModel)]="importProductsForm.category_id" class="form-control">
+                            <option [ngValue]="null">Seleccionar</option>
+                            <option *ngFor="let cat of categories" [ngValue]="cat.id">{{ cat.name }}</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Unidad *</label>
+                        <select [(ngModel)]="importProductsForm.unit_id" class="form-control">
+                            <option [ngValue]="null">Seleccionar</option>
+                            <option *ngFor="let unit of units" [ngValue]="unit.id">{{ unit.name }}</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Duplicados</label>
+                        <select [(ngModel)]="importProductsForm.duplicateMode" class="form-control">
+                            <option value="skip">Omitir existentes</option>
+                            <option value="update">Actualizar existentes</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Stock Mínimo</label>
+                        <input type="number" [(ngModel)]="importProductsForm.min_stock" class="form-control" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Stock Máximo</label>
+                        <input type="number" [(ngModel)]="importProductsForm.max_stock" class="form-control" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Punto de Reorden</label>
+                        <input type="number" [(ngModel)]="importProductsForm.reorder_point" class="form-control" min="0">
+                    </div>
+                </div>
+
+                <div class="form-row import-options-row">
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" [(ngModel)]="importProductsForm.is_serialized">
+                            Maneja Seriales
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" [(ngModel)]="importProductsForm.manages_expiration">
+                            Maneja Vencimiento
+                        </label>
+                    </div>
+                </div>
+
+                <div class="import-alert import-alert-error" *ngIf="importProductsErrors.length">
+                    <strong>Revisar archivo</strong>
+                    <ul>
+                        <li *ngFor="let error of importProductsErrors.slice(0, 8)">{{ error }}</li>
+                    </ul>
+                    <span *ngIf="importProductsErrors.length > 8">
+                        {{ importProductsErrors.length - 8 }} errores adicionales.
+                    </span>
+                </div>
+
+                <div class="import-result" *ngIf="importProductsResult">
+                    <div>
+                        <strong>{{ importProductsResult.created }}</strong>
+                        <span>Creados</span>
+                    </div>
+                    <div>
+                        <strong>{{ importProductsResult.updated }}</strong>
+                        <span>Actualizados</span>
+                    </div>
+                    <div>
+                        <strong>{{ importProductsResult.skipped }}</strong>
+                        <span>Omitidos</span>
+                    </div>
+                    <div>
+                        <strong>{{ importProductsResult.errors.length }}</strong>
+                        <span>Errores</span>
+                    </div>
+                </div>
+
+                <div class="import-preview" *ngIf="importProductsRows.length">
+                    <div class="import-preview-header">
+                        <h4>Vista previa</h4>
+                        <span>{{ importProductsRows.length }} productos detectados</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Nombre</th>
+                                    <th>Marca</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let row of getImportPreviewRows()">
+                                    <td><code>{{ row.sku }}</code></td>
+                                    <td>{{ row.name }}</td>
+                                    <td>{{ row.brand || '-' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeImportProductsModal()" [disabled]="importProductsLoading">
+                    Cancelar
+                </button>
+                <button class="btn-primary" (click)="confirmImportProducts()"
+                    [disabled]="importProductsLoading || !importProductsRows.length">
+                    <i class="fas fa-spinner fa-spin" *ngIf="importProductsLoading"></i>
+                    <i class="fas fa-file-import" *ngIf="!importProductsLoading"></i>
+                    Importar
                 </button>
             </div>
         </div>

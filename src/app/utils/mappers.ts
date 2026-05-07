@@ -24,6 +24,7 @@ export type ProductApi = {
     sku: string;
     name: string;
     description?: string | null;
+    brand?: string | null;
     categoryId?: number | null;
     unitId?: number | null;         // puede venir como unitId
     baseUnitId?: number | null;     // o como baseUnitId (según tu backend)
@@ -40,6 +41,7 @@ export const mapProductFromApi = (api: ProductApi): Product => ({
     sku: api.sku,
     name: api.name,
     description: api.description ?? null,
+    brand: api.brand ?? null,
     category_id: api.categoryId ?? null,
     unit_id: api.unitId ?? api.baseUnitId ?? null,
     is_serialized: B(api.isSerialized),
@@ -54,6 +56,7 @@ export const mapProductToApi = (p: Partial<Product>) => ({
     sku: p.sku,
     name: p.name,
     description: p.description ?? null,
+    brand: p.brand ?? null,
     category_id: p.category_id ?? null,
     unit_id: p.unit_id ?? null,
     is_serialized: p.is_serialized ?? false,

@@ -3,6 +3,7 @@ export interface Product {
     sku: string;
     name: string;
     description: string | null;
+    brand?: string | null;
     category_id: number;
     unit_id: number;
     is_serialized: boolean;

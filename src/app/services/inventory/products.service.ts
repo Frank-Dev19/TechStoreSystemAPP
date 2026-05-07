@@ -20,6 +20,28 @@ export interface PaginatedResponse<T> {
   limit: number;
 }
 
+export interface ImportProductRow {
+  sku: string;
+  name: string;
+  description?: string | null;
+  brand?: string | null;
+  category_id: number;
+  unit_id: number;
+  is_serialized: boolean;
+  manages_expiration: boolean;
+  min_stock: number;
+  max_stock: number;
+  reorder_point: number;
+}
+
+export interface ImportProductsResult {
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{ row: number; sku?: string; message: string }>;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ProductsService {
   private base = config.catalogs.products;
@@ -71,5 +93,12 @@ export class ProductsService {
 
   delete(id: number): Observable<{ ok: true }> {
     return this.baseSvc.delete<{ ok: true }>(`${this.base}/${id}`);
+  }
+
+  importProducts(rows: ImportProductRow[], duplicateMode: 'skip' | 'update'): Observable<ImportProductsResult> {
+    return this.baseSvc.post<ImportProductsResult>(`${this.base}/import`, {
+      duplicateMode,
+      rows,
+    });
   }
 }

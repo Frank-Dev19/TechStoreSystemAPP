@@ -16,7 +16,7 @@ import { DocumentTypeResponse } from '../../models/document-types/document-types
 
 // ===== Servicios (los que ya construimos) =====
 import { CurrentUserService } from '../../services/current-user.service';
-import { ProductsService } from '../../services/inventory/products.service';
+import { ImportProductRow, ImportProductsResult, ProductsService } from '../../services/inventory/products.service';
 import { CatalogsService } from '../../services/inventory/catalogs.service';
 import { StockService, StockFilters } from '../../services/inventory/stock.service';
 import { KardexService, KardexFilters } from '../../services/inventory/kardex.service';
@@ -203,6 +203,7 @@ export class Inventory implements OnInit {
     sku: '',
     name: '',
     description: '',
+    brand: '',
     category_id: null as number | null,
     unit_id: null as number | null,
     is_serialized: false,
@@ -210,6 +211,23 @@ export class Inventory implements OnInit {
     min_stock: 0,
     max_stock: 0,
     reorder_point: 0,
+  };
+
+  showImportProductsModal = false;
+  importProductsFileName = '';
+  importProductsRows: ImportProductRow[] = [];
+  importProductsErrors: string[] = [];
+  importProductsResult: ImportProductsResult | null = null;
+  importProductsLoading = false;
+  importProductsForm = {
+    category_id: null as number | null,
+    unit_id: null as number | null,
+    is_serialized: true,
+    manages_expiration: false,
+    min_stock: 0,
+    max_stock: 0,
+    reorder_point: 0,
+    duplicateMode: 'skip' as 'skip' | 'update',
   };
 
   categoryForm = {
@@ -1791,6 +1809,7 @@ export class Inventory implements OnInit {
       sku: '',
       name: '',
       description: '',
+      brand: '',
       category_id: null,
       unit_id: null,
       is_serialized: false,
@@ -1808,6 +1827,7 @@ export class Inventory implements OnInit {
       sku: p.sku,
       name: p.name,
       description: p.description ?? '',
+      brand: p.brand ?? '',
       category_id: p.category_id ?? null,
       unit_id: p.unit_id ?? null,
       is_serialized: !!p.is_serialized,
@@ -1862,6 +1882,175 @@ export class Inventory implements OnInit {
   closeProductModal(): void {
     this.showProductModal = false;
     this.editingProduct = null;
+  }
+
+  openImportProductsModal(): void {
+    const defaultUnit = this.units.find((u) => (u.abbreviation || '').toUpperCase() === 'UND');
+    this.importProductsForm = {
+      category_id: null,
+      unit_id: defaultUnit?.id ?? null,
+      is_serialized: true,
+      manages_expiration: false,
+      min_stock: 0,
+      max_stock: 0,
+      reorder_point: 0,
+      duplicateMode: 'skip',
+    };
+    this.importProductsFileName = '';
+    this.importProductsRows = [];
+    this.importProductsErrors = [];
+    this.importProductsResult = null;
+    this.showImportProductsModal = true;
+  }
+
+  closeImportProductsModal(): void {
+    if (this.importProductsLoading) return;
+    this.showImportProductsModal = false;
+    this.importProductsFileName = '';
+    this.importProductsRows = [];
+    this.importProductsErrors = [];
+    this.importProductsResult = null;
+  }
+
+  onImportProductsFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    this.importProductsRows = [];
+    this.importProductsErrors = [];
+    this.importProductsResult = null;
+
+    if (!file) return;
+
+    this.importProductsFileName = file.name;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const workbook = XLSX.read(reader.result as ArrayBuffer, { type: 'array' });
+        this.parseImportProductsWorkbook(workbook);
+      } catch {
+        this.importProductsErrors = ['No se pudo leer el archivo Excel. Verifica que sea un .xlsx válido.'];
+      }
+    };
+    reader.onerror = () => {
+      this.importProductsErrors = ['No se pudo abrir el archivo seleccionado.'];
+    };
+    reader.readAsArrayBuffer(file);
+    input.value = '';
+  }
+
+  private parseImportProductsWorkbook(workbook: XLSX.WorkBook): void {
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheetName];
+    const matrix = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+
+    const headerIndex = matrix.findIndex((row) => {
+      const normalized = row.map((cell) => this.normalizeExcelHeader(cell));
+      return normalized.includes('codigo') && normalized.includes('descripcion');
+    });
+
+    if (headerIndex < 0) {
+      this.importProductsErrors = ['No se encontraron las columnas Código y Descripción.'];
+      return;
+    }
+
+    const headers = matrix[headerIndex].map((cell) => this.normalizeExcelHeader(cell));
+    const codeIndex = headers.indexOf('codigo');
+    const descriptionIndex = headers.indexOf('descripcion');
+    const brandIndex = headers.indexOf('marca');
+    const rows: ImportProductRow[] = [];
+    const errors: string[] = [];
+
+    for (let i = headerIndex + 1; i < matrix.length; i++) {
+      const row = matrix[i];
+      const sku = String(row[codeIndex] ?? '').trim();
+      const description = String(row[descriptionIndex] ?? '').trim();
+      const brand = brandIndex >= 0 ? this.cleanImportedBrand(String(row[brandIndex] ?? '')) : null;
+
+      if (!sku && !description) continue;
+      if (!sku || !description) {
+        errors.push(`Fila ${i + 1}: falta Código o Descripción.`);
+        continue;
+      }
+
+      rows.push({
+        sku,
+        name: description,
+        description,
+        brand,
+        category_id: 0,
+        unit_id: 0,
+        is_serialized: this.importProductsForm.is_serialized,
+        manages_expiration: this.importProductsForm.manages_expiration,
+        min_stock: Number(this.importProductsForm.min_stock || 0),
+        max_stock: Number(this.importProductsForm.max_stock || 0),
+        reorder_point: Number(this.importProductsForm.reorder_point || 0),
+      });
+    }
+
+    this.importProductsRows = rows;
+    this.importProductsErrors = errors;
+    if (!rows.length && !errors.length) {
+      this.importProductsErrors = ['El Excel no contiene productos para importar.'];
+    }
+  }
+
+  async confirmImportProducts(): Promise<void> {
+    if (!this.importProductsForm.category_id || !this.importProductsForm.unit_id) {
+      this.showToast('error', 'Seleccione una categoría y una unidad');
+      return;
+    }
+
+    if (!this.importProductsRows.length) {
+      this.showToast('error', 'Seleccione un Excel con productos válidos');
+      return;
+    }
+
+    const rows = this.importProductsRows.map((row) => ({
+      ...row,
+      category_id: this.importProductsForm.category_id!,
+      unit_id: this.importProductsForm.unit_id!,
+      is_serialized: this.importProductsForm.is_serialized,
+      manages_expiration: this.importProductsForm.manages_expiration,
+      min_stock: Number(this.importProductsForm.min_stock || 0),
+      max_stock: Number(this.importProductsForm.max_stock || 0),
+      reorder_point: Number(this.importProductsForm.reorder_point || 0),
+    }));
+
+    this.importProductsLoading = true;
+    try {
+      this.importProductsResult = await this.productsSvc
+        .importProducts(rows, this.importProductsForm.duplicateMode)
+        .toPromise() as ImportProductsResult;
+      this.showToast('success', 'Importación procesada');
+      await this.loadProducts();
+      await this.loadAllProducts();
+    } catch (error: any) {
+      this.showToast('error', error?.error?.message || 'No se pudo importar productos');
+    } finally {
+      this.importProductsLoading = false;
+    }
+  }
+
+  getImportPreviewRows(): ImportProductRow[] {
+    return this.importProductsRows.slice(0, 10);
+  }
+
+  private normalizeExcelHeader(value: any): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\./g, '')
+      .replace(/\s+/g, '');
+  }
+
+  private cleanImportedBrand(value: string): string | null {
+    const brand = value.trim();
+    if (!brand || brand === '-' || brand === '_' || brand === '__') return null;
+    const upper = brand.toUpperCase();
+    if (upper === 'N/A' || upper === 'NA' || upper === 'S/M') return null;
+    return brand;
   }
 
   openCategoryModal(): void {

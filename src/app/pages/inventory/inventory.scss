@@ -506,6 +506,142 @@
     gap: 10px;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.import-products-modal {
+    .file-input-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px;
+        margin-bottom: 18px;
+        border: 1px dashed #cbd5e0;
+        border-radius: 8px;
+        background: #f8fafc;
+    }
+
+    .file-input-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+
+        i {
+            color: #2b6cb0;
+            font-size: 28px;
+        }
+
+        strong,
+        span {
+            display: block;
+        }
+
+        strong {
+            color: #2d3748;
+            word-break: break-word;
+        }
+
+        span {
+            color: #718096;
+            font-size: 13px;
+            margin-top: 3px;
+        }
+    }
+
+    .file-input-button {
+        position: relative;
+        white-space: nowrap;
+        overflow: hidden;
+
+        input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+    }
+
+    .import-options-row {
+        align-items: center;
+    }
+
+    .import-alert {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+
+        ul {
+            margin: 8px 0 0;
+            padding-left: 18px;
+        }
+    }
+
+    .import-alert-error {
+        border: 1px solid #fed7d7;
+        background: #fff5f5;
+        color: #9b2c2c;
+    }
+
+    .import-result {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 10px;
+        margin-top: 16px;
+
+        div {
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #ffffff;
+        }
+
+        strong,
+        span {
+            display: block;
+        }
+
+        strong {
+            color: #2b6cb0;
+            font-size: 20px;
+        }
+
+        span {
+            color: #718096;
+            font-size: 12px;
+            margin-top: 2px;
+        }
+    }
+
+    .import-preview {
+        margin-top: 18px;
+    }
+
+    .import-preview-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+
+        h4 {
+            margin: 0;
+            color: #2d3748;
+        }
+
+        span {
+            color: #718096;
+            font-size: 13px;
+        }
+    }
+}
+
 .form-group {
     margin-bottom: 20px;
 
