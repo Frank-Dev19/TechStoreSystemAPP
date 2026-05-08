@@ -2113,7 +2113,7 @@ export class Inventory implements OnInit, OnDestroy {
         .toPromise() as ImportProductsResult;
       this.showToast('success', 'Importación procesada');
       await this.loadProducts();
-      await this.loadAllProducts();
+      this.operationProductSearchCache.clear();
     } catch (error: any) {
       this.showToast('error', error?.error?.message || 'No se pudo importar productos');
     } finally {
