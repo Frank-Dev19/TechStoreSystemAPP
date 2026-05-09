@@ -895,7 +895,8 @@
                     <!-- Campo de referencia para TARJETA y TRANSFERENCIA -->
                     <div class="form-group"
                         *ngIf="saleFormData?.paymentType && saleFormData.paymentType !== 'EFECTIVO' && saleFormData.paymentType !== 'YAPE' && saleFormData.paymentType !== 'PLIN' && saleFormData.paymentType !== 'CREDITO'">
-                        <label>{{ saleFormData?.paymentType === 'TARJETA' ? 'Nro de Voucher' : 'Nro de Operacion' }}</label>
+                        <label>{{ saleFormData?.paymentType === 'TARJETA' ? 'Nro de Voucher' : 'Nro de Operacion' }}</label>
+
                         <input type="text" class="form-control" [(ngModel)]="paymentReference"
                             [placeholder]="saleFormData?.paymentType === 'TARJETA' ? 'Ingrese el numero de voucher' : 'Ingrese el numero de operacion'">
                     </div>
@@ -912,7 +913,7 @@
                         <button class="btn-primary btn-block" (click)="onConfirmSale()"
                             [disabled]="!saleFormData?.lines || saleFormData.lines.length === 0 || (saleCreationMode === 'MANUAL_PRODUCT' ? !foundCustomer : selectedServiceOrderIds.length === 0 || !foundCustomer)">
                             <i class="fas fa-check"></i>
-                            {{ saleCreationMode === 'SERVICE_ORDER' ? 'Emitir venta agrupada' : 'Registrar Venta' }}
+                            {{ saleCreationMode === 'SERVICE_ORDER' ? 'Emitir venta' : 'Registrar Venta' }}
                         </button>
                     </div>
                 </div>

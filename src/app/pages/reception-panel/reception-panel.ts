@@ -2437,9 +2437,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
     const nextStep = Math.min(this.createServiceOrderStep + 1, steps.length - 1)
 
-    // Auto-add current equipment when moving to review step if no candidates yet
-    if (steps[nextStep]?.key === "review" && this.createServiceOrderCandidates.length === 0) {
-      if (this.areCurrentCreateOrderItemControlsValid() && this.validateCreateServiceOrderInitialAgreement()) {
+    // Auto-add current equipment when moving past the items step if it has content
+    if (steps[this.createServiceOrderStep]?.key === "items") {
+      const initialIssue = (this.createServiceOrderForm.get("initialIssue")?.value || "").trim()
+      if (initialIssue && this.areCurrentCreateOrderItemControlsValid() && this.validateCreateServiceOrderInitialAgreement()) {
         this.addCurrentEquipmentToCreateOrderBatch()
       }
     }
@@ -2703,6 +2704,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     if (step === "items") {
+      const initialIssue = (this.createServiceOrderForm.get("initialIssue")?.value || "").trim()
+      const isEditing = this.editingCreateServiceOrderCandidateIndex !== null
+      const hasCandidates = this.createServiceOrderCandidates.length > 0
+
+      if (hasCandidates && !isEditing && !initialIssue) {
+        return true
+      }
+
       this.markControlsAsTouched([
         "equipmentType",
         "equipmentTypeOther",

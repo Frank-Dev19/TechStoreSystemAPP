@@ -100,11 +100,11 @@ export class ServiceOrderAgreementService {
     return this.voidAgreement(id, notes);
   }
 
-  supersedeServiceOrderAgreement(id: number, payload: { products?: any[]; services?: any[]; notes?: string }): Observable<ServiceOrderAgreement> {
+  supersedeServiceOrderAgreement(id: number, payload: ServiceOrderAgreementRequest): Observable<ServiceOrderAgreement> {
     return this.update(id, payload);
   }
 
-  supersedeVoidedAgreement(id: number, payload: { products?: any[]; services?: any[]; notes?: string }): Observable<ServiceOrderAgreement> {
+  supersedeVoidedAgreement(id: number, payload: ServiceOrderAgreementRequest): Observable<ServiceOrderAgreement> {
     return this.update(id, payload);
   }
 }

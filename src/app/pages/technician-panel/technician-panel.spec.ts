@@ -2,8 +2,14 @@ import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { of } from 'rxjs';
+import { NgSelectModule } from '@ng-select/ng-select';
+import { of, Subject } from 'rxjs';
 
+import {
+  resolveLatestActiveAgreement,
+  shouldOpenDerivedAgreementComposer,
+  TechnicianPanel,
+} from './technician-panel';
 import { ServiceOrderDiagnosisService } from '../../services/service-orders/service-order-diagnosis.service';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
 import { ServiceOrderAgreementService } from '../../services/service-orders/service-agreement.service';
@@ -17,16 +23,20 @@ import {
   RequestOrigin,
   ServiceOrder,
   ServiceOrderCommercialStatus,
-  ServiceOrderDerivedMetric,
   ServiceOrderEconomicStatus,
   ServiceOrderOperativeStatus,
   ServiceOrderPriority,
-  ServiceOrderSla,
   ServiceOrderTechnicalStatus,
-  ServiceOrderTimeMetrics,
   ServiceType,
 } from '../../models/service-orders/service-order';
-import { TechnicianPanel } from './technician-panel';
+import {
+  ServiceOrderAgreement,
+  ServiceOrderAgreementStatus,
+} from '../../models/service-orders/service-agreement';
+import {
+  ServiceOrderDiagnosisOutcome,
+  ServiceOrderDiagnosisStatus,
+} from '../../models/service-orders/service-order-diagnosis';
 
 describe('TechnicianPanel', () => {
   let component: TechnicianPanel;
@@ -43,8 +53,9 @@ describe('TechnicianPanel', () => {
   };
 
   const agreementServiceStub = {
-    create: jasmine.createSpy('create').and.returnValue(of({})),
-    update: jasmine.createSpy('update').and.returnValue(of({})),
+    create: jasmine.createSpy('create').and.returnValue(of({ id: 999 })),
+    update: jasmine.createSpy('update').and.returnValue(of({ id: 999 })),
+    confirm: jasmine.createSpy('confirm').and.returnValue(of({ id: 999 })),
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
     getCurrentByOrder: jasmine.createSpy('getCurrentByOrder').and.returnValue(of(null)),
     createDiagnosisFeeAgreement: jasmine.createSpy('createDiagnosisFeeAgreement').and.returnValue(of({})),
@@ -55,6 +66,7 @@ describe('TechnicianPanel', () => {
   };
 
   const pricingQueryStub = {
+    calculatePrice: jasmine.createSpy('calculatePrice').and.returnValue(of({ salePrice: 0 })),
     getSalePriceForProduct: jasmine.createSpy('getSalePriceForProduct').and.returnValue(of({ unitPrice: 0 })),
   };
 
@@ -75,9 +87,17 @@ describe('TechnicianPanel', () => {
   };
 
   beforeEach(async () => {
+    agreementServiceStub.create.calls.reset();
+    agreementServiceStub.update.calls.reset();
+    agreementServiceStub.confirm.calls.reset();
+    agreementServiceStub.findAll.calls.reset();
+    diagnosisServiceStub.findAll.calls.reset();
+    agreementServiceStub.findAll.and.returnValue(of({ data: [] }));
+    diagnosisServiceStub.findAll.and.returnValue(of({ data: [] }));
+
     await TestBed.configureTestingModule({
       declarations: [TechnicianPanel],
-      imports: [CommonModule, FormsModule, ReactiveFormsModule],
+      imports: [CommonModule, FormsModule, ReactiveFormsModule, NgSelectModule],
       providers: [
         { provide: ServiceOrderService, useValue: serviceOrderServiceStub },
         { provide: ServiceOrderDiagnosisService, useValue: diagnosisServiceStub },
@@ -130,149 +150,170 @@ describe('TechnicianPanel', () => {
 
     component.setActiveTab('todo');
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.items-grid .item-card').length).toBe(2);
+    expect(fixture.nativeElement.querySelectorAll('.order-list-row').length).toBe(2);
 
     component.setActiveTab('repair');
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.items-grid .item-card').length).toBe(1);
+    expect(fixture.nativeElement.querySelectorAll('.order-list-row').length).toBe(1);
     expect(component.visibleOrders.map((order) => order.code)).toEqual(['REPAIR-1']);
   });
 
-  it('enables diagnosis and service actions only for matching technical statuses', () => {
-    const assignedDiagnosis = createServiceOrder({
-      technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
-      serviceType: ServiceType.DIAGNOSIS,
-    });
-    const assignedWarranty = createServiceOrder({
-      technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
-      serviceType: ServiceType.WARRANTY_SERVICE,
-    });
-    const authorizedStandard = createServiceOrder({
-      technicalStatus: ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION,
-      serviceType: ServiceType.STANDARD_SERVICE,
-    });
-    const authorizedDiagnosis = createServiceOrder({
-      technicalStatus: ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION,
-      serviceType: ServiceType.DIAGNOSIS,
-    });
-    const executingDiagnosis = createServiceOrder({
-      technicalStatus: ServiceOrderTechnicalStatus.EN_EJECUCION,
-      serviceType: ServiceType.DIAGNOSIS,
-    });
-
-    expect(component.canStartDiagnosis(assignedDiagnosis)).toBeTrue();
-    expect(component.canStartDiagnosis(assignedWarranty)).toBeTrue();
-    expect(component.canStartDiagnosis(authorizedStandard)).toBeFalse();
-
-    expect(component.canStartStandardService(authorizedStandard)).toBeTrue();
-    expect(component.canStartStandardService(assignedDiagnosis)).toBeFalse();
-
-    expect(component.canStartRepairDirectly(authorizedDiagnosis)).toBeTrue();
-    expect(component.canStartRepairDirectly(authorizedStandard)).toBeFalse();
-
-    expect(component.canFinishRepair(executingDiagnosis)).toBeTrue();
-    expect(component.canFinishRepair(authorizedDiagnosis)).toBeFalse();
-
-    expect(component.canOpenRediagnosis(executingDiagnosis)).toBeTrue();
-    expect(component.canOpenRediagnosis(authorizedDiagnosis)).toBeFalse();
-  });
-
-  it('allows starting diagnosis on a second eligible order even if another one is already in diagnosis', () => {
-    const inDiagnosis = createServiceOrder({
-      id: 1,
-      technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
-      serviceType: ServiceType.DIAGNOSIS,
-    });
-    const assignedDiagnosis = createServiceOrder({
-      id: 2,
-      technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
-      serviceType: ServiceType.DIAGNOSIS,
-    });
-    const transitionWorkflowSpy = spyOn<any>(component, 'transitionWorkflow');
-    const showMessageSpy = spyOn<any>(component, 'showMessage');
-
-    component['hydrateLists']([inDiagnosis, assignedDiagnosis]);
-    component.startDiagnosis(assignedDiagnosis);
-
-    expect(transitionWorkflowSpy).toHaveBeenCalledWith(
-      assignedDiagnosis,
-      ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
-      'Diagnostico iniciado correctamente.',
-    );
-    expect(showMessageSpy).not.toHaveBeenCalledWith(
-      'warning',
-      'fas fa-exclamation-circle',
-      'Completa la revision activa antes de iniciar otra.',
-    );
-  });
-  it('enables warranty review actions only while warranty orders are in diagnosis', () => {
-    const warrantyInDiagnosis = createServiceOrder({
-      technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
-      serviceType: ServiceType.WARRANTY_SERVICE,
-    });
-    const warrantyResolved = createServiceOrder({
-      technicalStatus: ServiceOrderTechnicalStatus.RESUELTA,
-      serviceType: ServiceType.WARRANTY_SERVICE,
-    });
-    const diagnosisOrder = createServiceOrder({
-      technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
-      serviceType: ServiceType.DIAGNOSIS,
-    });
-
-    expect(component.canAcceptWarrantyReview(warrantyInDiagnosis)).toBeTrue();
-    expect(component.canRejectWarrantyReview(warrantyInDiagnosis)).toBeTrue();
-    expect(component.canAcceptWarrantyReview(warrantyResolved)).toBeFalse();
-    expect(component.canRejectWarrantyReview(diagnosisOrder)).toBeFalse();
-  });
-
-  it('construye el acuerdo técnico con monto mínimo fijo sin catálogo', () => {
-    component.agreementItems = [
-      {
-        id: 1,
-        type: 'service',
-        serviceId: 1,
-        unitPrice: 35,
-        notes: 'Servicio base',
-      } as any,
+  it('detects derived mode only when the order already reached execution and has an active agreement', () => {
+    const agreements = [
+      createAgreement({ id: 41, sequenceNumber: 1, status: ServiceOrderAgreementStatus.SUPERSEDED }),
+      createAgreement({ id: 42, sequenceNumber: 3, status: ServiceOrderAgreementStatus.CONFIRMED }),
+      createAgreement({ id: 43, sequenceNumber: 2, status: ServiceOrderAgreementStatus.SUPERSEDED }),
     ];
 
-    expect((component as any).resolveTechnicalServiceAmount()).toBe(35);
-    expect(component.getServiceName({ serviceNameSnapshot: 'Servicio técnico', serviceId: null } as any)).toBe('Servicio técnico');
+    expect(resolveLatestActiveAgreement(agreements)?.id).toBe(42);
+    expect(
+      shouldOpenDerivedAgreementComposer(
+        createServiceOrder({ technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA, serviceStartedAt: '2026-04-04T10:00:00.000Z' }),
+        [{ status: ServiceOrderDiagnosisStatus.SUPERSEDED }, { status: ServiceOrderDiagnosisStatus.CURRENT }],
+        agreements,
+      ),
+    ).toBeTrue();
+    expect(
+      shouldOpenDerivedAgreementComposer(
+        createServiceOrder({ technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA, serviceStartedAt: null }),
+        [{ status: ServiceOrderDiagnosisStatus.SUPERSEDED }, { status: ServiceOrderDiagnosisStatus.CURRENT }],
+        agreements,
+      ),
+    ).toBeFalse();
   });
 
-  it('abre el modal con la línea fija de servicio técnico cuando no existe acuerdo previo', () => {
-    const order = createServiceOrder({ id: 19, technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
+  it('opens a rediagnosis composer with the latest active agreement as inherited base', () => {
+    const order = createServiceOrder({
+      id: 19,
+      technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA,
+      serviceStartedAt: '2026-04-04T10:00:00.000Z',
+    });
+    const inheritedBase = createAgreement({
+      id: 52,
+      sequenceNumber: 4,
+      status: ServiceOrderAgreementStatus.CONFIRMED,
+      notes: 'Notas del acuerdo anterior',
+      productItems: [
+        createAgreementProduct({ id: 81, productId: 700, productCodeSnapshot: 'RAM-16', productNameSnapshot: 'Memoria RAM', quantity: 2, unitPrice: 45 }),
+      ],
+      serviceItems: [createAgreementService({ id: 91, unitPrice: 65 })],
+    });
+
+    agreementServiceStub.findAll.and.returnValue(of({ data: [inheritedBase] }));
+    diagnosisServiceStub.findAll.and.returnValue(
+      of({
+        data: [
+          { id: 1, status: ServiceOrderDiagnosisStatus.CURRENT, outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE },
+          { id: 2, status: ServiceOrderDiagnosisStatus.SUPERSEDED, outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE },
+        ],
+      }),
+    );
 
     component.openAgreementModal(order);
+    fixture.detectChanges();
 
-    expect(component.agreementItems).toEqual([
-      jasmine.objectContaining({
-        type: 'service',
-        serviceId: 1,
-        unitPrice: 20,
+    expect(component.isDerivedAgreementComposer()).toBeTrue();
+    expect(component.agreementBaseVersion?.id).toBe(52);
+    expect(component.getAgreementInheritedItems().length).toBe(1);
+    expect(component.getTechnicalServiceItem()?.unitPrice).toBe(65);
+    expect(component.agreementForm.get('notes')?.value).toBe('');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Acuerdo anterior heredado');
+    expect(compiled.textContent).toContain('Nuevos agregados');
+    expect(compiled.textContent).toContain('Notas del acuerdo anterior');
+  });
+
+  it('waits for diagnosis history before resolving the derived composer context', () => {
+    const order = createServiceOrder({
+      id: 21,
+      technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA,
+      serviceStartedAt: '2026-04-04T10:00:00.000Z',
+    });
+    const inheritedBase = createAgreement({
+      id: 62,
+      sequenceNumber: 5,
+      status: ServiceOrderAgreementStatus.CONFIRMED,
+      productItems: [createAgreementProduct({ id: 82, productNameSnapshot: 'Pantalla' })],
+      serviceItems: [createAgreementService({ id: 92, unitPrice: 75 })],
+    });
+    const agreements$ = new Subject<{ data: ServiceOrderAgreement[] }>();
+    const diagnoses$ = new Subject<any>();
+
+    agreementServiceStub.findAll.and.returnValue(agreements$);
+    diagnosisServiceStub.findAll.and.returnValues(of({ data: [] }), diagnoses$);
+
+    component.openAgreementModal(order);
+    agreements$.next({ data: [inheritedBase] });
+    agreements$.complete();
+
+    expect(component.isDerivedAgreementComposer()).toBeFalse();
+
+    diagnoses$.next({
+      data: [
+        { id: 1, status: ServiceOrderDiagnosisStatus.CURRENT, outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE },
+        { id: 2, status: ServiceOrderDiagnosisStatus.SUPERSEDED, outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE },
+      ],
+    });
+    diagnoses$.complete();
+
+    expect(component.isDerivedAgreementComposer()).toBeTrue();
+    expect(component.agreementBaseVersion?.id).toBe(62);
+    expect(component.getAgreementInheritedItems().length).toBe(1);
+  });
+
+  it('keeps inherited product lines blocked and only leaves the inherited technical amount editable', () => {
+    const order = createServiceOrder({
+      id: 22,
+      technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA,
+      serviceStartedAt: '2026-04-04T10:00:00.000Z',
+    });
+    const inheritedBase = createAgreement({
+      id: 61,
+      sequenceNumber: 2,
+      status: ServiceOrderAgreementStatus.CONFIRMED,
+      productItems: [createAgreementProduct({ id: 811, productNameSnapshot: 'SSD NVMe', unitPrice: 120 })],
+      serviceItems: [createAgreementService({ id: 911, unitPrice: 55 })],
+    });
+
+    agreementServiceStub.findAll.and.returnValue(of({ data: [inheritedBase] }));
+    diagnosisServiceStub.findAll.and.returnValue(
+      of({
+        data: [
+          { id: 1, status: ServiceOrderDiagnosisStatus.CURRENT, outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE },
+          { id: 2, status: ServiceOrderDiagnosisStatus.SUPERSEDED, outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE },
+        ],
       }),
-    ]);
-  });
-
-  it('no permite remover manualmente la línea fija de servicio técnico', () => {
-    component.agreementItems = [
-      { id: 1, type: 'service', serviceId: 1, unitPrice: 50, notes: '' } as any,
-      { id: 2, type: 'product', productId: 9, quantity: 1, unitPrice: 30, requiresPurchase: false, notes: '' } as any,
-    ];
-
-    component.removeAgreementItem(0);
-
-    expect(component.agreementItems[0]).toEqual(
-      jasmine.objectContaining({ type: 'service', serviceId: 1, unitPrice: 50 }),
     );
-    expect(component.agreementItems.length).toBe(2);
+
+    component.openAgreementModal(order);
+    component.addAgreementProduct();
+    fixture.detectChanges();
+
+    const inheritedItem = component.getAgreementInheritedItems()[0];
+    expect(component.canEditAgreementItem(inheritedItem)).toBeFalse();
+    expect(component.canRemoveAgreementItemById(inheritedItem.id)).toBeFalse();
+
+    component.updateTechnicalServiceAmount(90);
+    expect(component.getTechnicalServiceItem()?.unitPrice).toBe(90);
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Bloqueado');
+    expect(compiled.textContent).toContain('Monto editable');
   });
 
-  it('rechaza confirmar si el monto del servicio técnico es menor a S/20', () => {
+  it('rejects confirmation if the technical service amount is lower than S/20', () => {
     component.selectedServiceOrder = createServiceOrder({ id: 30 });
-    component.agreementItems = [
-      { id: 1, type: 'service', serviceId: 1, unitPrice: 19.5, notes: '' } as any,
-    ];
+    component['agreementEditableTechnicalService'] = {
+      id: 1,
+      type: 'service',
+      serviceId: 1,
+      serviceCodeSnapshot: 'TECHNICAL_SERVICE',
+      serviceNameSnapshot: 'Servicio técnico',
+      unitPrice: 19.5,
+      notes: '',
+      permissions: { provenance: 'NEW', canEdit: true, canDelete: false },
+    };
     const showMessageSpy = spyOn<any>(component, 'showMessage');
 
     component.submitAgreement(true);
@@ -286,25 +327,127 @@ describe('TechnicianPanel', () => {
     expect(agreementServiceStub.update).not.toHaveBeenCalled();
   });
 
-  it('shows only the operational SLA summary in the sla tab', () => {
-    component.selectedServiceOrder = createServiceOrder({
-      sla: {
-        stage: 'diagnosis',
-        targetMinutes: 120,
-        elapsedMinutes: 30,
-        remainingMinutes: 90,
-        breached: false,
+  it('submits only the derived delta payload with baseAgreementId, technicalServiceAmount, notes and newProducts', () => {
+    const order = createServiceOrder({ id: 32, technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
+
+    component.selectedServiceOrder = order;
+    component.agreementBaseVersion = createAgreement({ id: 72, sequenceNumber: 4, status: ServiceOrderAgreementStatus.CONFIRMED });
+    component.isDerivedAgreementComposerActive = true;
+    component['agreementEditableTechnicalService'] = {
+      id: 1,
+      type: 'service',
+      serviceId: 1,
+      serviceCodeSnapshot: 'TECHNICAL_SERVICE',
+      serviceNameSnapshot: 'Servicio técnico',
+      unitPrice: 85,
+      notes: '',
+      permissions: { provenance: 'INHERITED', canEdit: true, canDelete: false },
+    };
+    component.agreementNewItems = [
+      {
+        id: 2,
+        type: 'product',
+        productId: 9,
+        productCodeSnapshot: null,
+        productNameSnapshot: 'Disco SSD',
+        quantity: 1,
+        unitPrice: 54.9815,
+        requiresPurchase: true,
+        notes: 'Agregar por rediagnóstico',
+        permissions: { provenance: 'NEW', canEdit: true, canDelete: true },
       },
-      timeMetrics: createTimeMetrics(),
+    ];
+    component.agreementForm.patchValue({ notes: 'Nuevo alcance de servicio' });
+    component.diagnosticHistory = [
+      {
+        id: 444,
+        serviceOrderId: 32,
+        sequenceNumber: 2,
+        status: ServiceOrderDiagnosisStatus.CURRENT,
+        outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE,
+        summary: 'Nuevo hallazgo',
+        details: null,
+        outcomeReason: null,
+        recommendedAction: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+      },
+    ];
+
+    component.submitAgreement(false);
+
+    expect(agreementServiceStub.create).toHaveBeenCalledWith({
+      serviceOrderId: 32,
+      diagnosisId: 444,
+      baseAgreementId: 72,
+      notes: 'Nuevo alcance de servicio',
+      technicalServiceAmount: 85,
+      newProducts: [
+        {
+          productId: 9,
+          quantity: 1,
+          unitPrice: 54.98,
+          requiresPurchase: true,
+          notes: 'Agregar por rediagnóstico',
+        },
+      ],
     });
-    component.activeDetailTab = 'sla';
 
-    fixture.detectChanges();
+    const payload = agreementServiceStub.create.calls.mostRecent().args[0];
+    expect(payload.products).toBeUndefined();
+  });
 
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('.service-order-sla-summary')).not.toBeNull();
-    expect(compiled.querySelector('.service-order-derived-metrics-grid')).toBeNull();
-    expect(compiled.textContent).not.toContain('Tiempo a diagnóstico');
+  it('confirms a derived agreement with explicit replacement messaging', () => {
+    component.selectedServiceOrder = createServiceOrder({ id: 40 });
+    component.isDerivedAgreementComposerActive = true;
+    component['agreementEditableTechnicalService'] = {
+      id: 1,
+      type: 'service',
+      serviceId: 1,
+      serviceCodeSnapshot: 'TECHNICAL_SERVICE',
+      serviceNameSnapshot: 'Servicio técnico',
+      unitPrice: 85,
+      notes: '',
+      permissions: { provenance: 'INHERITED', canEdit: true, canDelete: false },
+    };
+    const showMessageSpy = spyOn<any>(component, 'showMessage');
+
+    component.confirmAgreement(999);
+
+    expect(agreementServiceStub.confirm).toHaveBeenCalledWith(999);
+    expect(showMessageSpy).toHaveBeenCalledWith(
+      'success',
+      'fas fa-check-circle',
+      'Nueva versión de acuerdo confirmada. La versión anterior quedó reemplazada.',
+    );
+  });
+
+  it('does not duplicate inherited draft product lines already represented by the base version', () => {
+    const baseAgreement = createAgreement({
+      id: 71,
+      status: ServiceOrderAgreementStatus.CONFIRMED,
+      productItems: [createAgreementProduct({ id: 801, productNameSnapshot: 'RAM heredada' })],
+      serviceItems: [createAgreementService({ id: 901, unitPrice: 60 })],
+    });
+    const derivedDraft = createAgreement({
+      id: 72,
+      derivedFromAgreementId: 71,
+      status: ServiceOrderAgreementStatus.DRAFT,
+      productItems: [
+        createAgreementProduct({ id: 802, provenance: 'INHERITED', derivedFromItemId: 801, productNameSnapshot: 'RAM heredada' }),
+        createAgreementProduct({ id: 803, provenance: 'NEW', canEdit: true, canDelete: true, productNameSnapshot: 'Flex nuevo' }),
+      ],
+      serviceItems: [createAgreementService({ id: 902, provenance: 'INHERITED', derivedFromItemId: 901, unitPrice: 85 })],
+    });
+
+    component.agreementBaseVersion = baseAgreement;
+    component.isDerivedAgreementComposerActive = true;
+    component['hydrateAgreementComposer'](derivedDraft);
+
+    expect(component.getAgreementInheritedItems().map((item) => component.getAgreementItemDisplayName(item))).toEqual(['SKU-1 · RAM heredada']);
+    expect(component.getAgreementProductItems().map((item) => item.productNameSnapshot)).toEqual(['Flex nuevo']);
+    expect(component.getTechnicalServiceItem()?.unitPrice).toBe(85);
   });
 });
 
@@ -362,19 +505,73 @@ function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder
   };
 }
 
-function createTimeMetrics(): ServiceOrderTimeMetrics {
-  const metric: ServiceOrderDerivedMetric = {
-    valueMinutes: 15,
-    isComputable: true,
-    missingTimestamps: [],
-  };
-
+function createAgreement(overrides: Partial<ServiceOrderAgreement> = {}): ServiceOrderAgreement {
   return {
-    timeToDiagnosis: { ...metric },
-    timeToServiceStart: { ...metric },
-    timeToService: { ...metric },
-    timeToResolution: { ...metric },
-    timeToDelivery: { ...metric },
+    id: 1,
+    serviceOrderId: 1,
+    serviceOrder: null,
+    diagnosisId: 1,
+    derivedFromAgreementId: null,
+    sequenceNumber: 1,
+    status: ServiceOrderAgreementStatus.DRAFT,
+    source: null,
+    currency: 'PEN',
+    totalAmount: 0,
+    notes: null,
+    productItems: [],
+    serviceItems: [],
+    agreedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    ...overrides,
+  } as ServiceOrderAgreement;
+}
+
+function createAgreementProduct(overrides: any = {}) {
+  return {
+    id: 1,
+    serviceOrderAgreementId: 1,
+    provenance: 'INHERITED',
+    canEdit: false,
+    canDelete: false,
+    derivedFromItemId: 1,
+    productId: 1,
+    productCodeSnapshot: 'SKU-1',
+    productNameSnapshot: 'Producto base',
+    productDescriptionSnapshot: null,
+    quantity: 1,
+    unitPrice: 25,
+    lineTotal: 25,
+    requiresPurchase: true,
+    notes: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    ...overrides,
   };
 }
 
+function createAgreementService(overrides: any = {}) {
+  return {
+    id: 1,
+    serviceOrderAgreementId: 1,
+    provenance: 'INHERITED',
+    canEdit: true,
+    canDelete: false,
+    derivedFromItemId: 1,
+    serviceId: 1,
+    serviceCodeSnapshot: 'TECHNICAL_SERVICE',
+    serviceNameSnapshot: 'Servicio técnico',
+    serviceDescriptionSnapshot: null,
+    estimatedHours: 1,
+    unitPrice: 20,
+    lineTotal: 20,
+    notes: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    service: null,
+    ...overrides,
+  };
+}

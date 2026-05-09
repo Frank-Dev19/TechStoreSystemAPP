@@ -6,6 +6,9 @@ export interface ServiceOrderAgreement {
   serviceOrderId: number;
   serviceOrder?: ServiceOrder | null;
   diagnosisId: number | null;
+  derivedFromAgreementId?: number | null;
+  supersededByAgreementId?: number | null;
+  isCurrentVersion?: boolean | null;
   sequenceNumber: number;
   status: ServiceOrderAgreementStatus;
   source?: ServiceOrderAgreementSource | null;
@@ -34,6 +37,10 @@ export enum ServiceOrderAgreementSource {
 export interface ServiceOrderAgreementProduct {
   id: number;
   serviceOrderAgreementId: number;
+  provenance?: AgreementLineProvenance | null;
+  canEdit?: boolean | null;
+  canDelete?: boolean | null;
+  derivedFromItemId?: number | null;
   productId: number | null;
   productCodeSnapshot: string;
   productNameSnapshot: string;
@@ -52,6 +59,10 @@ export interface ServiceOrderAgreementProduct {
 export interface ServiceOrderAgreementService {
   id: number;
   serviceOrderAgreementId: number;
+  provenance?: AgreementLineProvenance | null;
+  canEdit?: boolean | null;
+  canDelete?: boolean | null;
+  derivedFromItemId?: number | null;
   serviceId: number | null;
   serviceCodeSnapshot: string;
   serviceNameSnapshot: string;
@@ -80,5 +91,14 @@ export enum ServiceOrderAgreementStatus {
   REJECTED = 'VOIDED',
   ARCHIVED = 'SUPERSEDED',
   EXPIRED = 'SUPERSEDED',
+}
+
+export type AgreementLineProvenance = 'INHERITED' | 'NEW';
+
+export interface AgreementLineUiMeta {
+  provenance: AgreementLineProvenance;
+  canEdit: boolean;
+  canDelete: boolean;
+  derivedFromItemId?: number | null;
 }
 

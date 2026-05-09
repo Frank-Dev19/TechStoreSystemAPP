@@ -1,4 +1,4 @@
-import { Component, OnInit } from "@angular/core"
+import { Component, OnDestroy, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { forkJoin, of } from "rxjs"
 import { catchError, finalize, map, switchMap } from "rxjs/operators"
@@ -20,6 +20,8 @@ import {
 } from "../../models/service-orders/service-order-diagnosis"
 import { ServiceOrderDiagnosisSaveRequest } from "../../models/service-orders/service-order-diagnosis-request"
 import {
+  AgreementLineProvenance,
+  AgreementLineUiMeta,
   ServiceOrderAgreement,
   ServiceOrderAgreementProduct,
   ServiceOrderAgreementService as ServiceOrderAgreementServiceItem,
@@ -50,21 +52,37 @@ interface AgreementProductComposer {
   id: number
   type: "product"
   productId: number | null
+  productCodeSnapshot: string | null
+  productNameSnapshot: string
   quantity: number
   unitPrice: number
   requiresPurchase: boolean
   notes: string
+  permissions: AgreementLineUiMeta
 }
 
 interface AgreementServiceComposer {
   id: number
   type: "service"
   serviceId: number | null
+  serviceCodeSnapshot: string | null
+  serviceNameSnapshot: string
   unitPrice: number
   notes: string
+  permissions: AgreementLineUiMeta
 }
 
 type AgreementComposerItem = AgreementProductComposer | AgreementServiceComposer
+
+interface AgreementModalContext {
+  summary: ServiceOrderAgreement | null
+  baseAgreement: ServiceOrderAgreement | null
+  sourceAgreement: ServiceOrderAgreement | null
+  derivedMode: boolean
+  inheritedNotes: string
+  formNotes: string
+  currency: string
+}
 
 interface FixedTechnicalServiceOption {
   id: number
@@ -74,7 +92,7 @@ interface FixedTechnicalServiceOption {
 }
 
 type TechnicianPanelTab = "todo" | "diagnosis" | "pending_approval" | "repair" | "repaired" | "all"
-type TechnicianDetailTab = "equipment" | "sla" | "history"
+type TechnicianDetailTab = "equipment" | "sla" | "history" | "agreements"
 
 const TECHNICAL_SERVICE_OPTION: FixedTechnicalServiceOption = {
   id: 1,
@@ -83,13 +101,45 @@ const TECHNICAL_SERVICE_OPTION: FixedTechnicalServiceOption = {
   price: 20,
 }
 
+const EDITABLE_AGREEMENT_STATUSES: ServiceOrderTechnicalStatus[] = [
+  ServiceOrderTechnicalStatus.DIAGNOSTICADA,
+  ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL,
+]
+
+const ACTIVE_AGREEMENT_STATUSES = new Set<ServiceOrderAgreementStatus>([
+  ServiceOrderAgreementStatus.CONFIRMED,
+])
+
+export function hasReachedAgreementExecution(order: Pick<ServiceOrder, "serviceStartedAt" | "serviceCompletedAt" | "resolvedAt"> | null): boolean {
+  if (!order) return false
+  return Boolean(order.serviceStartedAt || order.serviceCompletedAt || order.resolvedAt)
+}
+
+export function resolveLatestActiveAgreement(agreements: ServiceOrderAgreement[]): ServiceOrderAgreement | null {
+  return [...(agreements ?? [])]
+    .filter((agreement) => agreement && ACTIVE_AGREEMENT_STATUSES.has(agreement.status))
+    .sort((left, right) => Number(right.sequenceNumber ?? 0) - Number(left.sequenceNumber ?? 0))[0] ?? null
+}
+
+export function shouldOpenDerivedAgreementComposer(
+  order: Pick<ServiceOrder, "technicalStatus" | "serviceType" | "serviceStartedAt" | "serviceCompletedAt" | "resolvedAt"> | null,
+  diagnoses: Array<Pick<ServiceOrderDiagnosis, "status">>,
+  agreements: ServiceOrderAgreement[],
+): boolean {
+  if (!order || order.serviceType === ServiceType.WARRANTY_SERVICE) return false
+  if (!EDITABLE_AGREEMENT_STATUSES.includes(order.technicalStatus)) return false
+  if (!hasReachedAgreementExecution(order)) return false
+  if (!diagnoses.some((entry) => entry.status === ServiceOrderDiagnosisStatus.SUPERSEDED)) return false
+  return !!resolveLatestActiveAgreement(agreements)
+}
+
 @Component({
   selector: "app-technician-panel",
   standalone: false,
   templateUrl: "./technician-panel.html",
   styleUrls: ["./technician-panel.scss"],
 })
-export class TechnicianPanel implements OnInit {
+export class TechnicianPanel implements OnInit, OnDestroy {
   activeTab: TechnicianPanelTab = "todo"
   activeDetailTab: TechnicianDetailTab = "equipment"
   currentPage = 1
@@ -112,7 +162,12 @@ export class TechnicianPanel implements OnInit {
   agreementHistory: ServiceOrderAgreement[] = []
   isLoadingServiceOrderAgreement = false
   isSavingAgreement = false
-  agreementItems: AgreementComposerItem[] = []
+  agreementBaseVersion: ServiceOrderAgreement | null = null
+  agreementInheritedItems: AgreementComposerItem[] = []
+  agreementEditableTechnicalService: AgreementServiceComposer | null = null
+  agreementNewItems: AgreementProductComposer[] = []
+  agreementInheritedNotes = ""
+  isDerivedAgreementComposerActive = false
   products: Product[] = []
   productPriceLoading: Record<number, boolean> = {}
 
@@ -134,6 +189,8 @@ export class TechnicianPanel implements OnInit {
 
   private currentUser: User | null = null
   private techniciansMap = new Map<number, string>()
+  liveElapsedSeconds = 0
+  private liveTimer: ReturnType<typeof setInterval> | null = null
 
   private readonly equipmentTypeLabels: Record<EquipmentType, string> = {
     [EquipmentType.LAPTOP]: "Laptop",
@@ -178,9 +235,18 @@ export class TechnicianPanel implements OnInit {
     this.loadTechnicians()
   }
 
+  ngOnDestroy(): void {
+    this.stopLiveTimer()
+  }
+
   setActiveTab(tab: TechnicianPanelTab): void {
+    if (this.activeTab === tab) {
+      return
+    }
+
     this.activeTab = tab
     this.currentPage = 1
+    this.clearSelectedServiceOrder()
   }
 
   setActiveDetailTab(tab: TechnicianDetailTab): void {
@@ -190,7 +256,7 @@ export class TechnicianPanel implements OnInit {
   private createDiagnosisForm(): FormGroup {
     return this.formBuilder.group({
       summary: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(100)]],
-      details: ["", [Validators.required, Validators.minLength(10), Validators.maxLength(1000)]],
+      details: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(1000)]],
       outcome: [ServiceOrderDiagnosisOutcome.REPAIRABLE, Validators.required],
     })
   }
@@ -264,8 +330,12 @@ export class TechnicianPanel implements OnInit {
       const updated = orders.find((entry) => Number(entry.id) === Number(this.selectedServiceOrder?.id))
       this.selectedServiceOrder = updated ?? null
       if (this.selectedServiceOrder) {
-        this.loadServiceOrderDiagnosisHistory(Number(this.selectedServiceOrder.id))
-        this.loadServiceOrderAgreementSummary(this.selectedServiceOrder)
+        if (!this.isOrderVisibleInCurrentTab(this.selectedServiceOrder)) {
+          this.clearSelectedServiceOrder()
+        } else {
+          this.loadServiceOrderDiagnosisHistory(Number(this.selectedServiceOrder.id))
+          this.loadServiceOrderAgreementSummary(this.selectedServiceOrder)
+        }
       } else {
         this.diagnosticHistory = []
         this.agreementSummary = null
@@ -321,6 +391,7 @@ export class TechnicianPanel implements OnInit {
     this.activeDetailTab = "equipment"
     this.loadServiceOrderDiagnosisHistory(Number(order.id))
     this.loadServiceOrderAgreementSummary(order)
+    this.startLiveTimer(order.sla?.elapsedMinutes ?? 0)
   }
 
   clearSelectedServiceOrder(): void {
@@ -329,10 +400,15 @@ export class TechnicianPanel implements OnInit {
     this.diagnosticHistory = []
     this.agreementSummary = null
     this.agreementHistory = []
+    this.stopLiveTimer()
   }
 
   isOrderSelected(order: ServiceOrder): boolean {
     return Number(this.selectedServiceOrder?.id) === Number(order.id)
+  }
+
+  private isOrderVisibleInCurrentTab(order: ServiceOrder): boolean {
+    return this.visibleOrders.some((entry) => Number(entry.id) === Number(order.id))
   }
 
   getTabLabel(tab: TechnicianPanelTab): string {
@@ -409,16 +485,21 @@ export class TechnicianPanel implements OnInit {
 
   getOrderBadgeClass(order: ServiceOrder): string {
     switch (order.technicalStatus) {
+      case ServiceOrderTechnicalStatus.EN_DIAGNOSTICO:
+        return "badge badge-diagnosis"
       case ServiceOrderTechnicalStatus.DIAGNOSTICADA:
-        return "badge badge-warning-soft"
-      case ServiceOrderTechnicalStatus.EN_EJECUCION:
-      case ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO:
+      case ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL:
+        return "badge badge-commercial-pending"
       case ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION:
-        return "badge badge-primary-soft"
+        return "badge badge-authorized"
+      case ServiceOrderTechnicalStatus.EN_EJECUCION:
+        return "badge badge-repair"
+      case ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO:
+        return "badge badge-waiting"
       case ServiceOrderTechnicalStatus.RESUELTA:
-        return "badge badge-success-soft"
+        return "badge badge-success-strong"
       default:
-        return "badge badge-info-soft"
+        return "badge badge-info-strong"
     }
   }
 
@@ -563,7 +644,7 @@ export class TechnicianPanel implements OnInit {
           this.hydrateInboxAttachmentPreviews(this.inboxMessages)
           const partialFailures = sendResult.partialFailures ?? []
           if (partialFailures.length) {
-            this.showMessage("warning", "fas fa-exclamation-triangle", "El mensaje salió parcialmente: revisá los adjuntos fallidos antes de reenviar.")
+            this.showMessage("warning", "fas fa-exclamation-triangle", "El mensaje saliÃ³ parcialmente: revisÃ¡ los adjuntos fallidos antes de reenviar.")
           }
         },
         error: () => {
@@ -582,7 +663,7 @@ export class TechnicianPanel implements OnInit {
       case "SUPERVISOR":
         return "Supervisor"
       case "RECEPTION":
-        return "Recepción"
+        return "RecepciÃ³n"
       case "CLIENT":
         return this.inboxActiveThread?.clientAlias ?? "Cliente"
       default:
@@ -683,34 +764,42 @@ export class TechnicianPanel implements OnInit {
     event?.stopPropagation()
     this.selectServiceOrder(order)
     this.showAgreementModal = true
-    this.agreementSummary = null
-    this.agreementItems = []
+    this.resetAgreementComposerState()
     this.agreementForm.reset({ notes: "", currency: "PEN" })
     this.isLoadingServiceOrderAgreement = true
 
-    this.agreementService
-      .findAll({ page: 1, limit: 5, serviceOrderId: Number(order.id) })
+    forkJoin({
+      agreements: this.agreementService
+        .findAll({ page: 1, limit: 5, serviceOrderId: Number(order.id) })
+        .pipe(catchError(() => of({ data: [] }))),
+      diagnoses: this.diagnosticService
+        .findAll({ serviceOrderId: Number(order.id), limit: 20 })
+        .pipe(catchError(() => of({ data: [] }))),
+    })
       .pipe(finalize(() => (this.isLoadingServiceOrderAgreement = false)))
       .subscribe({
-        next: ({ data }) => {
-          const list = data ?? []
+        next: ({ agreements, diagnoses }) => {
+          this.diagnosticHistory = diagnoses.data ?? []
+          const list = agreements.data ?? []
           this.agreementHistory = list
-          const draft = list.find((entry) => entry.status === ServiceOrderAgreementStatus.DRAFT)
-          const confirmed = list.find((entry) => entry.status === ServiceOrderAgreementStatus.CONFIRMED)
-          const allowNewAgreement = this.canManageAgreement(order)
-          this.agreementSummary = draft ?? (!allowNewAgreement ? confirmed ?? null : null)
+          const context = this.resolveAgreementModalContext(order, list)
+          this.agreementSummary = context.summary
+          this.agreementBaseVersion = context.baseAgreement
+          this.isDerivedAgreementComposerActive = context.derivedMode
+          this.agreementInheritedNotes = context.inheritedNotes
           this.agreementForm.patchValue({
-            notes: this.agreementSummary?.notes ?? "",
-            currency: this.agreementSummary?.currency ?? "PEN",
+            notes: context.formNotes,
+            currency: context.currency,
           })
-          if (this.agreementSummary) {
-            this.hydrateAgreementComposer(this.agreementSummary)
+
+          if (context.sourceAgreement) {
+            this.hydrateAgreementComposer(context.sourceAgreement)
           } else {
             this.ensureTechnicalServiceItem()
           }
         },
         error: () => {
-          this.agreementSummary = null
+          this.resetAgreementComposerState()
           this.agreementHistory = []
         },
       })
@@ -721,9 +810,13 @@ export class TechnicianPanel implements OnInit {
     if (!this.selectedServiceOrder) return
 
     this.showAgreementModal = true
+    this.resetAgreementComposerState()
     this.agreementSummary = agreement
+    this.agreementBaseVersion = this.resolveAgreementBaseById(agreement.derivedFromAgreementId ?? null, this.agreementHistory)
+    this.isDerivedAgreementComposerActive = this.isDerivedAgreement(agreement)
+    this.agreementInheritedNotes = this.agreementBaseVersion?.notes ?? ""
     this.agreementForm.reset({
-      notes: agreement.notes ?? "",
+      notes: this.isDerivedAgreementComposerActive ? agreement.notes ?? "" : agreement.notes ?? "",
       currency: agreement.currency ?? "PEN",
     })
     this.hydrateAgreementComposer(agreement)
@@ -732,27 +825,31 @@ export class TechnicianPanel implements OnInit {
   closeAgreementModal(): void {
     this.showAgreementModal = false
     this.agreementForm.reset({ notes: "", currency: "PEN" })
-    this.agreementItems = []
+    this.resetAgreementComposerState()
     this.productPriceLoading = {}
   }
 
   addAgreementProduct(): void {
     if (!this.isAgreementEditable()) return
-    this.agreementItems.push({
+    this.agreementNewItems.push({
       id: Date.now() + Math.random(),
       type: "product",
       productId: null,
+      productCodeSnapshot: null,
+      productNameSnapshot: "",
       quantity: 1,
       unitPrice: 0,
       requiresPurchase: true,
       notes: "",
+      permissions: this.buildUiMeta("NEW", true, true),
     })
   }
 
   removeAgreementItem(index: number): void {
     if (!this.isAgreementEditable()) return
-    if (this.agreementItems[index]?.type === "service") return
-    this.agreementItems.splice(index, 1)
+    const item = this.getAgreementProductItems()[index]
+    if (!item || !item.permissions.canDelete) return
+    this.agreementNewItems = this.agreementNewItems.filter((entry) => entry.id !== item.id)
   }
 
   updateTechnicalServiceAmount(value: unknown): void {
@@ -801,7 +898,7 @@ export class TechnicianPanel implements OnInit {
   }
 
   calculateAgreementTotal(): number {
-    return this.agreementItems.reduce((total, item) => total + this.calculateAgreementItemSubtotal(item), 0)
+    return this.getAgreementComposerItems().reduce((total, item) => total + this.calculateAgreementItemSubtotal(item), 0)
   }
 
   getAgreementProductsTotal(): number {
@@ -812,10 +909,10 @@ export class TechnicianPanel implements OnInit {
     const order = this.selectedServiceOrder
     if (!order?.id) return
     if (!this.isAgreementEditable()) {
-      this.showMessage("warning", "fas fa-info-circle", "El acuerdo ya esta confirmado y no puede modificarse.")
+      this.showMessage("warning", "fas fa-info-circle", "El acuerdo ya está confirmado y no puede modificarse.")
       return
     }
-    if (!this.agreementItems.length) {
+    if (!this.hasAgreementComposerItems()) {
       this.showMessage("warning", "fas fa-exclamation-circle", "Agrega al menos un producto o servicio al acuerdo.")
       return
     }
@@ -828,24 +925,41 @@ export class TechnicianPanel implements OnInit {
       this.diagnosticHistory.find((entry) => entry.status === ServiceOrderDiagnosisStatus.CURRENT)?.id,
     )
 
-    const payload = {
-      serviceOrderId: Number(order.id),
-      ...(currentDiagnosisId ? { diagnosisId: currentDiagnosisId } : {}),
-      notes: this.agreementForm.get("notes")?.value || undefined,
-      technicalServiceAmount: this.resolveTechnicalServiceAmount(),
-      products: this.agreementItems.flatMap((entry) => {
-        if (entry.type !== "product") return []
-        const productId = this.toNumericId(entry.productId)
-        if (!productId) return []
-        return [{
-          productId,
-          quantity: Math.max(1, Number(entry.quantity) || 1),
-          unitPrice: Number(entry.unitPrice || 0),
-          requiresPurchase: entry.requiresPurchase,
-          notes: entry.notes || undefined,
-        }]
-      }),
-    }
+    const productsPayload = this.getAgreementProductItems().flatMap((entry) => {
+      const productId = this.toNumericId(entry.productId)
+      if (!productId) return []
+
+      const quantity = Math.max(1, Number(entry.quantity) || 1)
+      const unitPriceRaw = entry.unitPrice !== undefined && entry.unitPrice !== null ? Number(entry.unitPrice) : undefined
+      const unitPrice = unitPriceRaw !== undefined && Number.isFinite(unitPriceRaw)
+        ? Number(unitPriceRaw.toFixed(2))
+        : undefined
+
+      return [{
+        productId,
+        quantity,
+        unitPrice,
+        requiresPurchase: entry.requiresPurchase,
+        notes: entry.notes || undefined,
+      }]
+    })
+
+    const payload = this.isDerivedAgreementComposer()
+      ? {
+          serviceOrderId: Number(order.id),
+          ...(currentDiagnosisId ? { diagnosisId: currentDiagnosisId } : {}),
+          ...(this.agreementBaseVersion?.id ? { baseAgreementId: this.agreementBaseVersion.id } : {}),
+          notes: this.agreementForm.get("notes")?.value || undefined,
+          technicalServiceAmount: this.resolveTechnicalServiceAmount(),
+          newProducts: productsPayload,
+        }
+      : {
+          serviceOrderId: Number(order.id),
+          ...(currentDiagnosisId ? { diagnosisId: currentDiagnosisId } : {}),
+          notes: this.agreementForm.get("notes")?.value || undefined,
+          technicalServiceAmount: this.resolveTechnicalServiceAmount(),
+          products: productsPayload,
+        }
 
     const request$ = this.agreementSummary?.status === ServiceOrderAgreementStatus.DRAFT
       ? this.agreementService.update(this.agreementSummary.id, payload)
@@ -872,7 +986,7 @@ export class TechnicianPanel implements OnInit {
 
   confirmAgreement(agreementId: number): void {
     if (!this.isAgreementEditable()) {
-      this.showMessage("warning", "fas fa-info-circle", "El acuerdo ya esta confirmado.")
+      this.showMessage("warning", "fas fa-info-circle", "El acuerdo ya está confirmado.")
       return
     }
     this.isSavingAgreement = true
@@ -881,7 +995,13 @@ export class TechnicianPanel implements OnInit {
       .pipe(finalize(() => (this.isSavingAgreement = false)))
       .subscribe({
         next: () => {
-          this.showMessage("success", "fas fa-check-circle", "Acuerdo confirmado. Ya puedes continuar con el servicio.")
+          this.showMessage(
+            "success",
+            "fas fa-check-circle",
+            this.isDerivedAgreementComposer()
+              ? "Nueva versión de acuerdo confirmada. La versión anterior quedó reemplazada."
+              : "Acuerdo confirmado. Ya puedes continuar con el servicio.",
+          )
           this.closeAgreementModal()
           this.loadTechnicianOrders()
         },
@@ -950,17 +1070,17 @@ export class TechnicianPanel implements OnInit {
             "success",
             "fas fa-check-circle",
             resolution === "DIAGNOSIS_FEE"
-              ? "Diagnostico registrado. La orden quedo lista para entrega con cobro de diagnostico."
+              ? "Diagnóstico registrado. La orden quedó lista para entrega con cobro de diagnóstico."
               : resolution === "WAIVED"
-                ? "Diagnostico registrado. La orden quedo lista para entrega sin cobro."
+                ? "Diagnóstico registrado. La orden quedó lista para entrega sin cobro."
                 : wasInService
-                  ? "Nuevo diagnostico registrado. La orden volvio a coordinacion para generar un nuevo acuerdo."
+                  ? "Nuevo diagnóstico registrado. La orden volvió a coordinación para generar un nuevo acuerdo."
                   : "Diagnostico registrado correctamente.",
           )
           this.closeDiagnosisModal()
           this.loadTechnicianOrders()
         },
-        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar el diagnostico."),
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar el diagnóstico."),
       })
   }
 
@@ -976,10 +1096,6 @@ export class TechnicianPanel implements OnInit {
     }
 
     this.submitDiagnosis()
-  }
-
-  canSubmitDiagnosisAsIrreparable(): boolean {
-    return this.diagnosisForm.get("outcome")?.value === ServiceOrderDiagnosisOutcome.IRREPARABLE
   }
 
   startRepair(order: ServiceOrder): void {
@@ -1048,7 +1164,7 @@ export class TechnicianPanel implements OnInit {
     }
     this.diagnosticService.findAll({ serviceOrderId: normalizedId, limit: 20 }).subscribe({
       next: ({ data }) => (this.diagnosticHistory = data ?? []),
-      error: () => this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el historial de diagnosticos."),
+      error: () => this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el historial de diagnósticos."),
     })
   }
 
@@ -1064,10 +1180,7 @@ export class TechnicianPanel implements OnInit {
 
   canManageAgreement(order: ServiceOrder | null): boolean {
     if (!order || this.isWarrantyService(order)) return false
-    return [
-      ServiceOrderTechnicalStatus.DIAGNOSTICADA,
-      ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL,
-    ].includes(order.technicalStatus)
+    return EDITABLE_AGREEMENT_STATUSES.includes(order.technicalStatus)
   }
 
   isAgreementEditable(): boolean {
@@ -1075,17 +1188,21 @@ export class TechnicianPanel implements OnInit {
   }
 
   getAgreementModalMessage(): string | null {
+    if (this.isDerivedAgreementComposer()) {
+      return 'Estás preparando una nueva versión derivada. Al confirmar, este acuerdo reemplaza al acuerdo activo anterior.'
+    }
+
     if (!this.agreementSummary) {
       return null
     }
 
     switch (this.agreementSummary.status) {
       case ServiceOrderAgreementStatus.DRAFT:
-        return 'Este acuerdo esta en borrador. Puedes editarlo o confirmarlo.'
+        return 'Este acuerdo está en borrador. Puedes editarlo o confirmarlo.'
       case ServiceOrderAgreementStatus.CONFIRMED:
-        return 'Este acuerdo ya esta confirmado. Solo puedes revisarlo.'
+        return 'Este acuerdo ya está confirmado. Solo puedes revisarlo.'
       case ServiceOrderAgreementStatus.SUPERSEDED:
-        return 'Este acuerdo fue reemplazado por una version mas reciente. Solo puedes revisarlo.'
+        return 'Este acuerdo fue reemplazado por una versión más reciente. Solo puedes revisarlo.'
       case ServiceOrderAgreementStatus.VOIDED:
         return 'Este acuerdo fue anulado. Solo puedes revisarlo.'
       default:
@@ -1095,14 +1212,6 @@ export class TechnicianPanel implements OnInit {
 
   isAdditionalDiagnosisFlow(): boolean {
     return this.selectedServiceOrder?.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION
-  }
-
-  getDiagnosisOutcomeOptions(): Array<{ value: ServiceOrderDiagnosisOutcome; label: string }> {
-    return [
-      { value: ServiceOrderDiagnosisOutcome.REPAIRABLE, label: "Reparable" },
-      { value: ServiceOrderDiagnosisOutcome.IRREPARABLE, label: "Sin arreglo / irreparable" },
-      { value: ServiceOrderDiagnosisOutcome.NO_FAULT_FOUND, label: "No replicable" },
-    ]
   }
 
   canStartRepairDirectly(order: ServiceOrder): boolean {
@@ -1259,7 +1368,7 @@ export class TechnicianPanel implements OnInit {
 
   formatMinutes(value?: number | null): string {
     if (value === null || value === undefined || !Number.isFinite(Number(value))) {
-      return "—"
+      return "â€”"
     }
     const totalMinutes = Math.max(0, Math.round(Number(value)))
     const hours = Math.floor(totalMinutes / 60)
@@ -1339,11 +1448,11 @@ export class TechnicianPanel implements OnInit {
   }
 
   canShowServiceOrderAgreementSection(order: ServiceOrder | null): boolean {
-    return this.shouldLoadServiceOrderAgreement(order)
+    return !!order && !this.isWarrantyService(order)
   }
 
   private loadServiceOrderAgreementSummary(order: ServiceOrder | null): void {
-    if (!order?.id || !this.shouldLoadServiceOrderAgreement(order)) {
+    if (!order?.id || !this.canShowServiceOrderAgreementSection(order)) {
       this.agreementSummary = null
       this.agreementHistory = []
       return
@@ -1359,7 +1468,7 @@ export class TechnicianPanel implements OnInit {
           const list = data ?? []
           this.agreementHistory = list
           const draft = list.find((agreement) => agreement.status === ServiceOrderAgreementStatus.DRAFT) ?? null
-          const confirmed = list.find((agreement) => agreement.status === ServiceOrderAgreementStatus.CONFIRMED) ?? null
+          const confirmed = resolveLatestActiveAgreement(list)
           if (this.canManageAgreement(order) && !draft) {
             this.agreementSummary = null
             return
@@ -1374,27 +1483,67 @@ export class TechnicianPanel implements OnInit {
   }
 
   private hydrateAgreementComposer(agreement: ServiceOrderAgreement): void {
-    this.agreementItems = []
+    this.agreementInheritedItems = []
+    this.agreementNewItems = []
+    this.agreementEditableTechnicalService = null
+
+    if (this.isDerivedAgreementComposer()) {
+      const baseAgreement = this.agreementBaseVersion ?? agreement
+      this.hydrateDerivedAgreementComposer(baseAgreement, agreement)
+      return
+    }
+
     agreement.productItems?.forEach((product) => {
-      this.agreementItems.push({
-        id: Date.now() + Math.random(),
-        type: "product",
-        productId: product.productId,
-        quantity: product.quantity,
-        unitPrice: product.unitPrice,
-        requiresPurchase: product.requiresPurchase,
-        notes: product.notes || "",
-      })
+      this.agreementNewItems.push(this.mapAgreementProductToComposer(product, "NEW", true, true))
     })
-    agreement.serviceItems?.forEach((service) => {
-      this.agreementItems.push({
-        id: Date.now() + Math.random(),
-        type: "service",
-        serviceId: TECHNICAL_SERVICE_OPTION.id,
-        unitPrice: Number(service.unitPrice ?? TECHNICAL_SERVICE_OPTION.price),
-        notes: service.notes || "",
-      })
+
+    const technicalService = agreement.serviceItems?.find((service) => this.isTechnicalService(service)) ?? null
+    if (technicalService) {
+      this.agreementEditableTechnicalService = this.mapAgreementServiceToComposer(technicalService, "NEW", true, false)
+    }
+
+    this.ensureTechnicalServiceItem()
+  }
+
+  private hydrateDerivedAgreementComposer(baseAgreement: ServiceOrderAgreement, draftAgreement: ServiceOrderAgreement): void {
+    baseAgreement.productItems?.forEach((product) => {
+      this.agreementInheritedItems.push(this.mapAgreementProductToComposer(product, "INHERITED", false, false))
     })
+
+    const baseTechnicalService = baseAgreement.serviceItems?.find((service) => this.isTechnicalService(service)) ?? null
+    const draftTechnicalService = draftAgreement.serviceItems?.find((service) => this.isTechnicalService(service)) ?? null
+
+    if (baseTechnicalService || draftTechnicalService) {
+      const technicalServiceSource = draftTechnicalService ?? baseTechnicalService
+      if (technicalServiceSource) {
+        this.agreementEditableTechnicalService = this.mapAgreementServiceToComposer(
+          technicalServiceSource,
+          "INHERITED",
+          true,
+          false,
+          draftTechnicalService?.unitPrice ?? baseTechnicalService?.unitPrice ?? TECHNICAL_SERVICE_OPTION.price,
+        )
+      }
+    }
+
+    if (Number(draftAgreement.id) !== Number(baseAgreement.id)) {
+      draftAgreement.productItems?.forEach((product) => {
+        const provenance = product.provenance === "INHERITED" ? "INHERITED" : "NEW"
+        const canEdit = provenance === "NEW"
+        const canDelete = provenance === "NEW"
+        if (provenance === "INHERITED") {
+          return
+        }
+
+        this.agreementNewItems.push(this.mapAgreementProductToComposer(product, provenance, canEdit, canDelete))
+      })
+    }
+
+    const inheritedNonTechnicalServices = (baseAgreement.serviceItems ?? []).filter((service) => !this.isTechnicalService(service))
+    inheritedNonTechnicalServices.forEach((service) => {
+      this.agreementInheritedItems.push(this.mapAgreementServiceToComposer(service, "INHERITED", false, false))
+    })
+
     this.ensureTechnicalServiceItem()
   }
 
@@ -1429,39 +1578,214 @@ export class TechnicianPanel implements OnInit {
   }
 
   getTechnicalServiceItem(): AgreementServiceComposer | null {
-    return this.agreementItems.find((entry): entry is AgreementServiceComposer => entry.type === "service") ?? null
+    return this.agreementEditableTechnicalService
   }
 
   getAgreementProductItems(): AgreementProductComposer[] {
-    return this.agreementItems.filter((entry): entry is AgreementProductComposer => entry.type === "product")
+    return this.agreementNewItems
+  }
+
+  getAgreementInheritedItems(): AgreementComposerItem[] {
+    return this.agreementInheritedItems
+  }
+
+  getAgreementComposerItems(): AgreementComposerItem[] {
+    return [
+      ...this.agreementInheritedItems,
+      ...(this.agreementEditableTechnicalService ? [this.agreementEditableTechnicalService] : []),
+      ...this.agreementNewItems,
+    ]
   }
 
   canRemoveAgreementItemById(itemId: number): boolean {
-    return this.agreementItems.find((entry) => entry.id === itemId)?.type === "product"
+    return this.agreementNewItems.find((entry) => entry.id === itemId)?.permissions.canDelete ?? false
   }
 
   isTechnicalServiceAmountValid(): boolean {
     return this.resolveTechnicalServiceAmount() >= TECHNICAL_SERVICE_OPTION.price
   }
 
+  isDerivedAgreementComposer(): boolean {
+    return this.isDerivedAgreementComposerActive
+  }
+
+  hasAgreementComposerItems(): boolean {
+    return this.getAgreementComposerItems().length > 0
+  }
+
+  canEditAgreementItem(item: AgreementComposerItem): boolean {
+    return item.permissions.canEdit
+  }
+
+  getAgreementItemDisplayName(item: AgreementComposerItem): string {
+    if (item.type === "product") {
+      if (item.permissions.provenance === "NEW") {
+        return item.productNameSnapshot || this.getCatalogProductName(item.productId)
+      }
+      const code = item.productCodeSnapshot ? `${item.productCodeSnapshot} · ` : ""
+      return `${code}${item.productNameSnapshot || this.getCatalogProductName(item.productId)}`
+    }
+
+    const code = item.serviceCodeSnapshot ? `${item.serviceCodeSnapshot} · ` : ""
+    return `${code}${item.serviceNameSnapshot || TECHNICAL_SERVICE_OPTION.name}`
+  }
+
+  getAgreementItemProvenanceLabel(item: AgreementComposerItem): string {
+    if (item.permissions.provenance === "NEW") return "Nuevo agregado"
+    return item.permissions.canEdit ? "Heredado · solo monto editable" : "Heredado bloqueado"
+  }
+
   private ensureTechnicalServiceItem(): void {
     const current = this.getTechnicalServiceItem()
     if (current) {
       current.serviceId = TECHNICAL_SERVICE_OPTION.id
-      current.notes = ""
+      current.serviceCodeSnapshot = current.serviceCodeSnapshot || TECHNICAL_SERVICE_OPTION.code
+      current.serviceNameSnapshot = current.serviceNameSnapshot || TECHNICAL_SERVICE_OPTION.name
       if (!Number.isFinite(Number(current.unitPrice)) || Number(current.unitPrice) <= 0) {
         current.unitPrice = TECHNICAL_SERVICE_OPTION.price
       }
       return
     }
 
-    this.agreementItems.unshift({
+    this.agreementEditableTechnicalService = {
       id: Date.now() + Math.random(),
       type: "service",
       serviceId: TECHNICAL_SERVICE_OPTION.id,
+      serviceCodeSnapshot: TECHNICAL_SERVICE_OPTION.code,
+      serviceNameSnapshot: TECHNICAL_SERVICE_OPTION.name,
       unitPrice: TECHNICAL_SERVICE_OPTION.price,
       notes: "",
-    })
+      permissions: this.buildUiMeta(this.isDerivedAgreementComposer() ? "INHERITED" : "NEW", true, false),
+    }
+  }
+
+  private mapAgreementProductToComposer(
+    product: ServiceOrderAgreementProduct,
+    provenance: AgreementLineProvenance,
+    canEdit: boolean,
+    canDelete: boolean,
+  ): AgreementProductComposer {
+    return {
+      id: Date.now() + Math.random(),
+      type: "product",
+      productId: product.productId,
+      productCodeSnapshot: product.productCodeSnapshot ?? null,
+      productNameSnapshot: product.productNameSnapshot ?? this.getProductName(product),
+      quantity: product.quantity,
+      unitPrice: product.unitPrice,
+      requiresPurchase: product.requiresPurchase,
+      notes: product.notes || "",
+      permissions: this.buildUiMeta(provenance, product.canEdit ?? canEdit, product.canDelete ?? canDelete, product.derivedFromItemId ?? null),
+    }
+  }
+
+  private mapAgreementServiceToComposer(
+    service: ServiceOrderAgreementServiceItem,
+    provenance: AgreementLineProvenance,
+    canEdit: boolean,
+    canDelete: boolean,
+    unitPriceOverride?: number,
+  ): AgreementServiceComposer {
+    return {
+      id: Date.now() + Math.random(),
+      type: "service",
+      serviceId: service.serviceId,
+      serviceCodeSnapshot: service.serviceCodeSnapshot ?? TECHNICAL_SERVICE_OPTION.code,
+      serviceNameSnapshot: service.serviceNameSnapshot || this.getServiceName(service),
+      unitPrice: Number(unitPriceOverride ?? service.unitPrice ?? TECHNICAL_SERVICE_OPTION.price),
+      notes: service.notes || "",
+      permissions: this.buildUiMeta(provenance, service.canEdit ?? canEdit, service.canDelete ?? canDelete, service.derivedFromItemId ?? null),
+    }
+  }
+
+  private buildUiMeta(
+    provenance: AgreementLineProvenance,
+    canEdit: boolean,
+    canDelete: boolean,
+    derivedFromItemId: number | null = null,
+  ): AgreementLineUiMeta {
+    return {
+      provenance,
+      canEdit,
+      canDelete,
+      derivedFromItemId,
+    }
+  }
+
+  private isTechnicalService(service: Pick<ServiceOrderAgreementServiceItem, "serviceId" | "serviceCodeSnapshot" | "serviceNameSnapshot"> | null): boolean {
+    if (!service) return false
+    const name = String(service.serviceNameSnapshot ?? "").toLowerCase()
+    const code = String(service.serviceCodeSnapshot ?? "").toUpperCase()
+    return Number(service.serviceId) === TECHNICAL_SERVICE_OPTION.id || code === TECHNICAL_SERVICE_OPTION.code || name.includes("servicio técnico") || name.includes("servicio tecnico")
+  }
+
+  private resetAgreementComposerState(): void {
+    this.agreementSummary = null
+    this.agreementBaseVersion = null
+    this.agreementInheritedItems = []
+    this.agreementEditableTechnicalService = null
+    this.agreementNewItems = []
+    this.agreementInheritedNotes = ""
+    this.isDerivedAgreementComposerActive = false
+  }
+
+  private resolveAgreementModalContext(order: ServiceOrder, agreements: ServiceOrderAgreement[]): AgreementModalContext {
+    const draft = [...agreements]
+      .filter((entry) => entry.status === ServiceOrderAgreementStatus.DRAFT)
+      .sort((left, right) => Number(right.sequenceNumber ?? 0) - Number(left.sequenceNumber ?? 0))[0] ?? null
+    const activeAgreement = resolveLatestActiveAgreement(agreements)
+    const derivedWithoutDraft = !draft && shouldOpenDerivedAgreementComposer(order, this.diagnosticHistory, agreements)
+
+    if (draft) {
+      const baseAgreement = this.resolveAgreementBaseById(draft.derivedFromAgreementId ?? null, agreements) ?? activeAgreement
+      const derivedMode = this.isDerivedAgreement(draft)
+      return {
+        summary: draft,
+        baseAgreement: derivedMode ? baseAgreement : null,
+        sourceAgreement: draft,
+        derivedMode,
+        inheritedNotes: derivedMode ? baseAgreement?.notes ?? "" : "",
+        formNotes: draft.notes ?? "",
+        currency: draft.currency ?? baseAgreement?.currency ?? "PEN",
+      }
+    }
+
+    if (derivedWithoutDraft && activeAgreement) {
+      return {
+        summary: null,
+        baseAgreement: activeAgreement,
+        sourceAgreement: activeAgreement,
+        derivedMode: true,
+        inheritedNotes: activeAgreement.notes ?? "",
+        formNotes: "",
+        currency: activeAgreement.currency ?? "PEN",
+      }
+    }
+
+    const allowNewAgreement = this.canManageAgreement(order)
+    const summary = !allowNewAgreement ? activeAgreement ?? agreements[0] ?? null : null
+    return {
+      summary,
+      baseAgreement: null,
+      sourceAgreement: summary,
+      derivedMode: false,
+      inheritedNotes: "",
+      formNotes: summary?.notes ?? "",
+      currency: summary?.currency ?? "PEN",
+    }
+  }
+
+  private resolveAgreementBaseById(agreementId: number | null, agreements: ServiceOrderAgreement[]): ServiceOrderAgreement | null {
+    if (!agreementId) return null
+    return agreements.find((entry) => Number(entry.id) === Number(agreementId)) ?? null
+  }
+
+  private isDerivedAgreement(agreement: ServiceOrderAgreement | null): boolean {
+    if (!agreement) return false
+    if (agreement.derivedFromAgreementId) return true
+    const hasInheritedProduct = (agreement.productItems ?? []).some((item) => item.provenance === "INHERITED")
+    const hasInheritedService = (agreement.serviceItems ?? []).some((item) => item.provenance === "INHERITED")
+    return hasInheritedProduct || hasInheritedService
   }
 
   getWorkflowLabel(order: ServiceOrder): string {
@@ -1493,7 +1817,32 @@ export class TechnicianPanel implements OnInit {
     }
   }
 
+
+
+  private startLiveTimer(elapsedMinutes: number): void {
+    this.stopLiveTimer()
+    this.liveElapsedSeconds = Math.round((elapsedMinutes ?? 0) * 60)
+    this.liveTimer = setInterval(() => {
+      this.liveElapsedSeconds += 1
+    }, 1000)
+  }
+
+  private stopLiveTimer(): void {
+    if (this.liveTimer !== null) {
+      clearInterval(this.liveTimer)
+      this.liveTimer = null
+    }
+    this.liveElapsedSeconds = 0
+  }
+
+  formatLiveTime(totalSeconds: number): string {
+    const s = Math.max(0, Math.round(totalSeconds))
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = s % 60
+    const mm = String(m).padStart(2, '0')
+    const ss = String(sec).padStart(2, '0')
+    return h > 0 ? `${h}h ${mm}m ${ss}s` : `${mm}m ${ss}s`
+  }
+
 }
-
-
-

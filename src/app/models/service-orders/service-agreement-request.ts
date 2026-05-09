@@ -3,11 +3,13 @@
 export interface ServiceOrderAgreementRequest {
   serviceOrderId?: number;
   diagnosisId?: number;
+  baseAgreementId?: number;
   sequenceNumber?: number;
   status?: ServiceOrderAgreementStatus;
   source?: ServiceOrderAgreementSource;
   notes?: string;
   products?: ServiceOrderAgreementProductRequest[];
+  newProducts?: ServiceOrderAgreementProductRequest[];
   technicalServiceAmount?: number;
 }
 
