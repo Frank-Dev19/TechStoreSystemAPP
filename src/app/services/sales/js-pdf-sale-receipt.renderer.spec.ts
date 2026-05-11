@@ -36,6 +36,19 @@ describe('JsPdfSaleReceiptRenderer', () => {
     expect(itemsTable.head).toEqual([['N°', 'Descripcion', 'Cant.', 'P. unitario', 'Total']]);
     expect(JSON.stringify(itemsTable.head)).not.toContain('Tipo');
   });
+
+  it('renders the IGV label from a decimal taxRate returned by backend', () => {
+    const doc = createDocSpy();
+    const renderer = new JsPdfSaleReceiptRenderer();
+    spyOn<any>(renderer, 'renderAutoTable').and.callFake(() => {
+      doc.lastAutoTable = { finalY: 120 };
+    });
+    spyOn<any>(renderer, 'createDocument').and.returnValue(doc as never);
+
+    renderer.render(createModel('full'));
+
+    expect(doc.text).toHaveBeenCalledWith('IGV (18%):', 145, jasmine.any(Number));
+  });
 });
 
 function createDocSpy() {
@@ -97,6 +110,7 @@ function createModel(variant: 'full' | 'linked-summary'): SaleReceiptPdfModel {
       subtotal: 200,
       discount: 0,
       tax: 36,
+      taxRate: 0.18,
       total: 236,
     },
   };

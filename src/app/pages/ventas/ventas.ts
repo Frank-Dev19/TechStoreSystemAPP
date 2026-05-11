@@ -18,8 +18,7 @@ import { DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from
 import { DocumentType } from '../../models/sales/enums';
 import { ClientKind, ClientSaveRequest } from '../../models/clients-request';
 import { ClientResponse } from '../../models/clients-response';
-import { ServiceOrder, ServiceOrderEconomicStatus } from '../../models/service-orders/service-order';
-import { ServiceOrderService } from '../../services/service-orders/service-order.service';
+import { ServiceOrder } from '../../models/service-orders/service-order';
 import { SaleReceiptPdfService } from '../../services/sales/sale-receipt-pdf.service';
 // ============================================
 // INTERFACES & TYPES (siguiendo exactamente el prompt)
@@ -308,6 +307,7 @@ export type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'm
 export class Ventas implements OnInit {
   // Expose Math to template
   Math = Math;
+  private readonly defaultSaleTaxRate = 0.18;
 
   constructor(
     private salesApi: SalesApiService,
@@ -321,7 +321,6 @@ export class Ventas implements OnInit {
     private documentTypesApi: DocumentTypesApiService,
     private pricingQueryApi: PricingQueryApiService,
     private currentUser: CurrentUserService,
-    private serviceOrderService: ServiceOrderService,
     private saleReceiptPdfService: SaleReceiptPdfService,
   ) { }
 
@@ -391,6 +390,9 @@ export class Ventas implements OnInit {
   selectedServiceOrder: ServiceOrder | null = null
   selectedServiceOrderIds: number[] = []
   selectedServiceOrders: ServiceOrder[] = []
+  serviceOrderSearchText = ''
+  serviceOrderSearchMatches: ServiceOrder[] = []
+  serviceOrderSearchPerformed = false
   creditNoteFormData: Partial<CreditNote> | null = null
   dispatchGuideFormData: Partial<ShippingGuide> | null = null
   currentSaleItem: any = {}
@@ -936,8 +938,8 @@ export class Ventas implements OnInit {
         }
         this.currentOpenRegister = reg
         this.saleCreationMode = 'MANUAL_PRODUCT'
-        this.selectedServiceOrderId = null
-        this.selectedServiceOrder = null
+        this.resetServiceOrderSearchState()
+        this.clearGroupedServiceOrderSelection()
         this.eligibleServiceOrders = []
         this.foundCustomer = null
         this.saleFormData = {
@@ -947,6 +949,7 @@ export class Ventas implements OnInit {
           customerId: 0,
           customerName: '',
           customerDocumentNumber: '',
+          taxRate: this.defaultSaleTaxRate,
         };
         // Limpiar campos de pago
         this.paymentOperationNumber = ''
@@ -973,14 +976,13 @@ export class Ventas implements OnInit {
     if (!this.saleFormData) return
 
     if (mode === 'MANUAL_PRODUCT') {
-      this.selectedServiceOrderId = null
-      this.selectedServiceOrder = null
-      this.selectedServiceOrderIds = []
-      this.selectedServiceOrders = []
+      this.resetServiceOrderSearchState()
+      this.clearGroupedServiceOrderSelection()
       this.saleFormData.lines = []
       this.saleFormData.total = 0
       this.saleFormData.subtotal = 0
       this.saleFormData.igv = 0
+      this.saleFormData.taxRate = this.defaultSaleTaxRate
       return
     }
 
@@ -988,39 +990,25 @@ export class Ventas implements OnInit {
     this.saleFormData.total = 0
     this.saleFormData.subtotal = 0
     this.saleFormData.igv = 0
-    this.selectedServiceOrderId = null
-    this.selectedServiceOrder = null
-    this.selectedServiceOrderIds = []
-    this.selectedServiceOrders = []
+    this.saleFormData.taxRate = this.defaultSaleTaxRate
+    this.resetServiceOrderSearchState()
+    this.clearGroupedServiceOrderSelection()
   }
 
   onServiceOrderSelected(serviceOrderId: number | string | null): void {
     const numericId = Number(serviceOrderId)
-    this.selectedServiceOrderId = Number.isFinite(numericId) && numericId > 0 ? numericId : null
-    this.selectedServiceOrder = this.eligibleServiceOrders.find((order) => Number(order.id) === this.selectedServiceOrderId) ?? null
-
-    if (!this.saleFormData) return
-    if (!this.selectedServiceOrder) {
-      this.saleFormData.lines = []
-      this.saleFormData.total = 0
-      this.saleFormData.subtotal = 0
-      this.saleFormData.igv = 0
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      this.clearGroupedServiceOrderSelection()
       return
     }
 
-    const total = Number(this.selectedServiceOrder.montoComprometidoVigente ?? 0)
-    this.saleFormData.lines = [
-      {
-        itemType: 'SERVICE',
-        productName: `Orden ${this.selectedServiceOrder.code} · Servicio técnico`,
-        quantity: 1,
-        unitPrice: total,
-        lineTotal: total,
-      },
-    ]
-    this.saleFormData.total = total
-    this.saleFormData.subtotal = total
-    this.saleFormData.igv = 0
+    const order = this.eligibleServiceOrders.find((candidate) => Number(candidate.id) === numericId)
+    if (!order) {
+      this.clearGroupedServiceOrderSelection()
+      return
+    }
+
+    this.selectAnchoredServiceOrder(order)
   }
 
   onServiceOrdersSelectionChange(event: Event): void {
@@ -1031,30 +1019,7 @@ export class Ventas implements OnInit {
       .map((option) => Number(option.value))
       .filter((value) => Number.isFinite(value) && value > 0)
 
-    const selectedOrders = this.eligibleServiceOrders.filter((order) => ids.includes(Number(order.id)))
-    if (!selectedOrders.length) {
-      this.selectedServiceOrderIds = []
-      this.selectedServiceOrders = []
-      this.selectedServiceOrderId = null
-      this.selectedServiceOrder = null
-      this.saleFormData.lines = []
-      this.saleFormData.total = 0
-      this.saleFormData.subtotal = 0
-      this.saleFormData.igv = 0
-      return
-    }
-
-    const firstClientId = Number(selectedOrders[0].clientId || 0)
-    const sameClientOrders = selectedOrders.filter((order) => Number(order.clientId || 0) === firstClientId)
-    if (sameClientOrders.length !== selectedOrders.length) {
-      this.showToast('warning', 'Solo podés agrupar órdenes del mismo cliente')
-    }
-
-    this.selectedServiceOrders = sameClientOrders
-    this.selectedServiceOrderIds = sameClientOrders.map((order) => Number(order.id))
-    this.selectedServiceOrder = sameClientOrders[0] ?? null
-    this.selectedServiceOrderId = this.selectedServiceOrder ? Number(this.selectedServiceOrder.id) : null
-    this.hydrateGroupedServiceOrderLines()
+    this.applyGroupedServiceOrderSelectionByIds(ids)
   }
 
   private hydrateGroupedServiceOrderLines(): void {
@@ -1065,6 +1030,7 @@ export class Ventas implements OnInit {
       this.saleFormData.total = 0
       this.saleFormData.subtotal = 0
       this.saleFormData.igv = 0
+      this.saleFormData.taxRate = this.defaultSaleTaxRate
       return
     }
 
@@ -1080,31 +1046,146 @@ export class Ventas implements OnInit {
     })
 
     const total = Number(lines.reduce((sum, line) => sum + Number(line.lineTotal ?? 0), 0).toFixed(2))
+    const fiscalBreakdown = this.splitTaxIncludedTotal(total)
     this.saleFormData.lines = lines
-    this.saleFormData.total = total
-    this.saleFormData.subtotal = total
-    this.saleFormData.igv = 0
+    this.saleFormData.total = fiscalBreakdown.total
+    this.saleFormData.subtotal = fiscalBreakdown.subtotal
+    this.saleFormData.igv = fiscalBreakdown.taxAmount
+    this.saleFormData.taxRate = fiscalBreakdown.taxRate
   }
 
-  private loadEligibleServiceOrders(): void {
-    this.serviceOrderService.findAll({ page: 1, limit: 100, economicStatus: ServiceOrderEconomicStatus.PENDIENTE }).subscribe({
-      next: ({ data }) => {
-        this.eligibleServiceOrders = (data ?? []).filter((order) => Number(order.montoComprometidoVigente ?? 0) >= 20)
-      },
-      error: () => {
-        this.eligibleServiceOrders = []
-        this.showToast('warning', 'No pudimos cargar las órdenes pendientes para facturar')
-      },
-    })
+  private async loadEligibleServiceOrders(): Promise<void> {
+    try {
+      const firstPage = await lastValueFrom(this.salesApi.getEligibleServiceOrders({ page: 1, limit: 100 }))
+      const pageLimit = Number(firstPage.limit || 100)
+      const totalPages = Number(firstPage.totalPages || Math.ceil(Number(firstPage.total || 0) / pageLimit) || 1)
+      const remainingPages = totalPages > 1
+        ? await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, index) =>
+              lastValueFrom(this.salesApi.getEligibleServiceOrders({ page: index + 2, limit: pageLimit })),
+            ),
+          )
+        : []
+
+      const mergedOrders = [firstPage, ...remainingPages]
+        .flatMap((response) => response.data ?? [])
+        .filter((order, index, collection) => collection.findIndex((candidate) => Number(candidate.id) === Number(order.id)) === index)
+
+      this.eligibleServiceOrders = this.sortServiceOrdersByCode(mergedOrders)
+      this.serviceOrderSearchMatches = this.sortServiceOrdersByCode(this.serviceOrderSearchMatches)
+    } catch {
+      this.eligibleServiceOrders = []
+      this.resetServiceOrderSearchState()
+      this.clearGroupedServiceOrderSelection()
+      this.showToast('warning', 'No pudimos cargar las órdenes elegibles para facturar')
+    }
+  }
+
+  onEligibleServiceOrdersSearch(): void {
+    const search = this.serviceOrderSearchText.trim().toUpperCase()
+    this.serviceOrderSearchPerformed = true
+
+    if (!search) {
+      this.serviceOrderSearchMatches = []
+      this.clearGroupedServiceOrderSelection()
+      return
+    }
+
+    this.serviceOrderSearchMatches = this.eligibleServiceOrders
+      .filter((order) => (order.code || '').toUpperCase().includes(search))
+      .slice(0, 6)
+  }
+
+  onEligibleServiceOrdersSearchInput(): void {
+    if (this.serviceOrderSearchText.trim()) return
+    this.serviceOrderSearchPerformed = false
+    this.serviceOrderSearchMatches = []
+  }
+
+  selectAnchoredServiceOrder(order: ServiceOrder): void {
+    const anchoredOrder = this.eligibleServiceOrders.find((candidate) => Number(candidate.id) === Number(order.id))
+    if (!anchoredOrder) return
+
+    this.serviceOrderSearchText = anchoredOrder.code
+    this.serviceOrderSearchMatches = []
+    this.serviceOrderSearchPerformed = false
+    this.applyGroupedServiceOrderSelectionByIds([Number(anchoredOrder.id)])
+  }
+
+  getSelectableGroupedServiceOrders(): ServiceOrder[] {
+    if (!this.selectedServiceOrder) return []
+
+    const operationalClientId = Number(this.selectedServiceOrder.clientId ?? 0)
+    if (!operationalClientId) return []
+
+    return this.sortServiceOrdersByCode(
+      this.eligibleServiceOrders.filter((order) => (
+        Number(order.clientId ?? 0) === operationalClientId
+        && Number(order.id) !== Number(this.selectedServiceOrderId)
+      )),
+    )
+  }
+
+  isServiceOrderChecked(orderId: number | string): boolean {
+    const numericId = Number(orderId)
+    return this.selectedServiceOrderIds.some((selectedId) => Number(selectedId) === numericId)
+  }
+
+  areAllSelectableGroupedOrdersSelected(): boolean {
+    const selectableOrders = this.getSelectableGroupedServiceOrders()
+    return selectableOrders.length > 0 && selectableOrders.every((order) => this.isServiceOrderChecked(order.id))
+  }
+
+  hasPartiallySelectedGroupedOrders(): boolean {
+    const selectableOrders = this.getSelectableGroupedServiceOrders()
+    if (!selectableOrders.length) return false
+
+    const selectedCount = selectableOrders.filter((order) => this.isServiceOrderChecked(order.id)).length
+    return selectedCount > 0 && selectedCount < selectableOrders.length
+  }
+
+  onGroupedServiceOrderToggle(order: ServiceOrder, event: Event): void {
+    const checkbox = event.target as HTMLInputElement | null
+    const nextIds = new Set(this.selectedServiceOrderIds.map((id) => Number(id)))
+
+    if (checkbox?.checked) {
+      nextIds.add(Number(order.id))
+    } else {
+      nextIds.delete(Number(order.id))
+    }
+
+    if (this.selectedServiceOrderId) {
+      nextIds.add(Number(this.selectedServiceOrderId))
+    }
+
+    this.applyGroupedServiceOrderSelectionByIds([...nextIds])
+  }
+
+  onToggleAllGroupedServiceOrders(event: Event): void {
+    const checkbox = event.target as HTMLInputElement | null
+    const anchorId = Number(this.selectedServiceOrderId ?? 0)
+    if (!anchorId) return
+
+    const nextIds = checkbox?.checked
+      ? [anchorId, ...this.getSelectableGroupedServiceOrders().map((order) => Number(order.id))]
+      : [anchorId]
+
+    this.applyGroupedServiceOrderSelectionByIds(nextIds)
+  }
+
+  getGroupedServiceOrderSearchEmptyMessage(): string {
+    if (!this.serviceOrderSearchPerformed) return ''
+    if (!this.serviceOrderSearchText.trim()) return 'Ingresa un código de orden y presiona Enter.'
+    return 'No encontramos órdenes elegibles con ese código.'
   }
 
   getSelectedServiceOrderClientLabel(): string {
-    if (!this.selectedServiceOrder) return 'Seleccioná una orden pendiente'
+    if (!this.selectedServiceOrder) return 'Selecciona una orden pendiente'
     return this.selectedServiceOrder.clientSnapshotName || this.selectedServiceOrder.client?.name || 'Cliente de la orden'
   }
 
   getGroupedOperationalClientLabel(): string {
-    if (!this.selectedServiceOrders.length) return 'Seleccioná al menos una orden pendiente'
+    if (!this.selectedServiceOrders.length) return 'Selecciona al menos una orden pendiente'
     const firstOrder = this.selectedServiceOrders[0]
     return firstOrder.clientSnapshotName || firstOrder.client?.name || 'Cliente operativo'
   }
@@ -1120,32 +1201,95 @@ export class Ventas implements OnInit {
   }
 
   getOrdersStillPendingForGroupedClient(): ServiceOrder[] {
-    if (!this.selectedServiceOrders.length) return []
-
-    const operationalClientId = Number(this.selectedServiceOrders[0]?.clientId ?? 0)
-    if (!operationalClientId) return []
+    const selectableOrders = this.getSelectableGroupedServiceOrders()
+    if (!selectableOrders.length) return []
 
     const selectedIds = new Set(this.selectedServiceOrderIds.map((id) => Number(id)))
-    return this.eligibleServiceOrders.filter((order) => {
-      const sameClient = Number(order.clientId ?? 0) === operationalClientId
-      const notSelected = !selectedIds.has(Number(order.id))
-      return sameClient && notSelected
-    })
+    return selectableOrders.filter((order) => !selectedIds.has(Number(order.id)))
   }
 
   getGroupedOrderCoverageSummary(): string {
     const coveredCount = this.getOrdersCoveredByCurrentGroupedSale().length
     const pendingCount = this.getOrdersStillPendingForGroupedClient().length
 
-    if (!coveredCount) return 'Seleccioná al menos una orden para ver el alcance del comprobante.'
+    if (!coveredCount) return 'Selecciona al menos una orden para ver el alcance del comprobante.'
     if (!pendingCount) return 'Este comprobante cubrirá todas las órdenes pendientes del cliente seleccionado.'
     const coveredLabel = coveredCount === 1 ? 'orden' : 'órdenes'
     return `Este comprobante liberará ${coveredCount} ${coveredLabel} y dejará ${pendingCount} pendiente${pendingCount === 1 ? '' : 's'} para otra venta.`
   }
 
+  private applyGroupedServiceOrderSelectionByIds(ids: number[]): void {
+    if (!this.saleFormData) return
+
+    const normalizedIds = ids
+      .map((value) => Number(value))
+      .filter((value, index, collection) => Number.isFinite(value) && value > 0 && collection.indexOf(value) === index)
+
+    if (!normalizedIds.length) {
+      this.clearGroupedServiceOrderSelection()
+      return
+    }
+
+    const selectedOrders = this.eligibleServiceOrders.filter((order) => normalizedIds.includes(Number(order.id)))
+    if (!selectedOrders.length) {
+      this.clearGroupedServiceOrderSelection()
+      return
+    }
+
+    const preferredAnchorId = Number(this.selectedServiceOrderId ?? normalizedIds[0] ?? 0)
+    const anchorCandidate = selectedOrders.find((order) => Number(order.id) === preferredAnchorId) ?? selectedOrders[0]
+    const anchorClientId = Number(anchorCandidate?.clientId ?? 0)
+    const sameClientOrders = this.sortServiceOrdersByCode(
+      selectedOrders.filter((order) => Number(order.clientId ?? 0) === anchorClientId),
+    )
+
+    if (sameClientOrders.length !== selectedOrders.length) {
+      this.showToast('warning', 'Solo puedes agrupar órdenes del mismo cliente')
+    }
+
+    const anchoredOrder = sameClientOrders.find((order) => Number(order.id) === Number(anchorCandidate.id)) ?? sameClientOrders[0] ?? null
+    const groupedOrders = anchoredOrder
+      ? [
+          anchoredOrder,
+          ...sameClientOrders.filter((order) => Number(order.id) !== Number(anchoredOrder.id)),
+        ]
+      : []
+
+    this.selectedServiceOrder = anchoredOrder
+    this.selectedServiceOrderId = anchoredOrder ? Number(anchoredOrder.id) : null
+    this.selectedServiceOrders = groupedOrders
+    this.selectedServiceOrderIds = groupedOrders.map((order) => Number(order.id))
+    this.hydrateGroupedServiceOrderLines()
+  }
+
+  private clearGroupedServiceOrderSelection(): void {
+    this.selectedServiceOrderId = null
+    this.selectedServiceOrder = null
+    this.selectedServiceOrderIds = []
+    this.selectedServiceOrders = []
+
+    if (!this.saleFormData) return
+
+    this.saleFormData.lines = []
+    this.saleFormData.total = 0
+    this.saleFormData.subtotal = 0
+    this.saleFormData.igv = 0
+    this.saleFormData.taxRate = this.defaultSaleTaxRate
+  }
+
+  private resetServiceOrderSearchState(): void {
+    this.serviceOrderSearchText = ''
+    this.serviceOrderSearchMatches = []
+    this.serviceOrderSearchPerformed = false
+  }
+
+  private sortServiceOrdersByCode(orders: ServiceOrder[]): ServiceOrder[] {
+    return [...orders].sort((left, right) => right.code.localeCompare(left.code))
+  }
+
   private validateTaxpayerForSelectedDocumentType(): boolean {
     if (!this.foundCustomer) {
-      this.showToast('error', 'Seleccioná el contribuyente para emitir el comprobante')
+      this.showToast('error', 'Selecciona el contribuyente para emitir el comprobante')
       return false
     }
 
@@ -1287,6 +1431,9 @@ export class Ventas implements OnInit {
   }
 
   onCancelSaleForm(): void {
+    this.resetServiceOrderSearchState()
+    this.clearGroupedServiceOrderSelection()
+    this.foundCustomer = null
     this.saleFormData = null
     this.paymentOperationNumber = ''   // <- limpiar
     this.paymentReference = ''
@@ -1337,7 +1484,7 @@ export class Ventas implements OnInit {
 
     if (this.saleCreationMode === 'SERVICE_ORDER') {
       if (!this.selectedServiceOrderIds.length) {
-        this.showToast('error', 'Seleccioná al menos una orden pendiente para facturar')
+        this.showToast('error', 'Selecciona al menos una orden pendiente para facturar')
         return
       }
 
@@ -1541,9 +1688,60 @@ export class Ventas implements OnInit {
   private calculateSaleTotals(): void {
     if (!this.saleFormData?.lines) return
     const total = this.saleFormData.lines.reduce((sum, line) => sum + line.lineTotal, 0)
-    this.saleFormData.subtotal = total / 1.18
-    this.saleFormData.igv = total - (this.saleFormData.subtotal || 0)
-    this.saleFormData.total = total
+    const fiscalBreakdown = this.splitTaxIncludedTotal(total)
+    this.saleFormData.subtotal = fiscalBreakdown.subtotal
+    this.saleFormData.igv = fiscalBreakdown.taxAmount
+    this.saleFormData.total = fiscalBreakdown.total
+    this.saleFormData.taxRate = fiscalBreakdown.taxRate
+  }
+
+  getCurrentSaleTaxRateLabel(): string {
+    return this.formatTaxRateLabel(this.saleFormData?.taxRate)
+  }
+
+  getSaleTaxRateLabel(sale: Pick<Sale, 'taxRate'> | null | undefined): string {
+    return this.formatTaxRateLabel(sale?.taxRate)
+  }
+
+  private splitTaxIncludedTotal(totalAmount: number, rawTaxRate: number = this.defaultSaleTaxRate): {
+    subtotal: number
+    taxAmount: number
+    total: number
+    taxRate: number
+  } {
+    const total = Number((Number(totalAmount) || 0).toFixed(2))
+    const normalizedTaxRate = this.normalizeTaxRate(rawTaxRate)
+
+    if (total <= 0 || normalizedTaxRate <= 0) {
+      return {
+        subtotal: total,
+        taxAmount: 0,
+        total,
+        taxRate: normalizedTaxRate,
+      }
+    }
+
+    const subtotal = Number((total / (1 + normalizedTaxRate)).toFixed(2))
+    const taxAmount = Number((total - subtotal).toFixed(2))
+
+    return {
+      subtotal,
+      taxAmount,
+      total,
+      taxRate: normalizedTaxRate,
+    }
+  }
+
+  private normalizeTaxRate(rate: number | null | undefined): number {
+    const numericRate = Number(rate ?? this.defaultSaleTaxRate)
+    if (!Number.isFinite(numericRate) || numericRate <= 0) return this.defaultSaleTaxRate
+    return numericRate > 1 ? numericRate / 100 : numericRate
+  }
+
+  private formatTaxRateLabel(rate: number | null | undefined): string {
+    const normalizedTaxRate = this.normalizeTaxRate(rate)
+    const pct = Number((normalizedTaxRate * 100).toFixed(2))
+    return Number.isInteger(pct) ? `${pct.toFixed(0)}%` : `${pct.toFixed(2)}%`
   }
 
   // ============================================

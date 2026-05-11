@@ -493,26 +493,138 @@
                         </select>
                     </div>
 
-                    <div class="form-group" *ngIf="saleCreationMode === 'SERVICE_ORDER'">
-                        <label>Órdenes/acuerdos pendientes</label>
-                        <select class="form-control" multiple size="8" (change)="onServiceOrdersSelectionChange($event)">
-                            <option *ngFor="let order of eligibleServiceOrders" [value]="order.id"
-                                [selected]="selectedServiceOrderIds.includes(+order.id)">
-                                {{ order.code }} · {{ order.clientSnapshotName || order.client?.name || 'Cliente' }} · S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}
-                            </option>
-                        </select>
-                        <small style="color: var(--text-muted);">Podés seleccionar varias órdenes del mismo cliente.</small>
+                    <div class="anchored-service-order-search" *ngIf="saleCreationMode === 'SERVICE_ORDER'">
+                        <label>Buscar orden por código</label>
+
+                        <div class="anchored-service-order-search__input">
+                            <input
+                                type="text"
+                                [(ngModel)]="serviceOrderSearchText"
+                                class="form-control"
+                                placeholder="Escribe el código completo o parcial"
+                                (input)="onEligibleServiceOrdersSearchInput()"
+                                (keydown.enter)="onEligibleServiceOrdersSearch()">
+
+                            <button
+                                type="button"
+                                class="anchored-service-order-search__trigger"
+                                [disabled]="!serviceOrderSearchText.trim()"
+                                (click)="onEligibleServiceOrdersSearch()">
+                                <i class="fas fa-search"></i>
+                                Buscar
+                            </button>
+                        </div>
+
+                        <small class="anchored-service-order-search__hint">
+                            Presiona Enter para buscar y usar una orden como ancla del cliente.
+                        </small>
+
+                        <div class="anchored-service-order-search__results" *ngIf="serviceOrderSearchMatches.length">
+                            <button
+                                type="button"
+                                class="anchored-service-order-search__result"
+                                *ngFor="let order of serviceOrderSearchMatches"
+                                (click)="selectAnchoredServiceOrder(order)">
+                                <div class="anchored-service-order-search__result-main">
+                                    <strong>{{ order.code }}</strong>
+                                    <span>{{ order.clientSnapshotName || order.client?.name || 'Cliente' }}</span>
+                                </div>
+                                <div class="anchored-service-order-search__result-meta">
+                                    <span>{{ order.receivedAt | date:'dd/MM/yy HH:mm' }}</span>
+                                    <strong>S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}</strong>
+                                </div>
+                            </button>
+                        </div>
+
+                        <div class="anchored-service-order-search__empty" *ngIf="serviceOrderSearchPerformed && !serviceOrderSearchMatches.length">
+                            <i class="fas fa-search-minus"></i>
+                            <span>{{ getGroupedServiceOrderSearchEmptyMessage() }}</span>
+                        </div>
                     </div>
 
-                    <div class="customer-card" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrders.length">
-                        <p class="customer-name">{{ getGroupedOperationalClientLabel() }}</p>
-                        <p class="customer-detail">Órdenes seleccionadas: {{ selectedServiceOrders.length }}</p>
-                        <p class="customer-detail">Total pendiente seleccionado: S/ {{ getGroupedOrdersPendingTotal() | number:'1.2-2' }}</p>
+                    <div class="anchored-order-context" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrder">
+                        <div class="anchored-order-context__summary">
+                            <span class="anchored-order-context__eyebrow">Cliente operativo</span>
+                            <p class="anchored-order-context__title">{{ getGroupedOperationalClientLabel() }}</p>
+                            <p class="anchored-order-context__subtitle">
+                                Orden ancla: {{ selectedServiceOrder.code }} · {{ selectedServiceOrder.receivedAt | date:'dd/MM/yy HH:mm' }}
+                            </p>
+                        </div>
+
+                        <div class="anchored-order-context__metrics">
+                            <div class="anchored-order-context__metric">
+                                <span>Seleccionadas</span>
+                                <strong>{{ selectedServiceOrders.length }}</strong>
+                            </div>
+                            <div class="anchored-order-context__metric">
+                                <span>Siguen pendientes</span>
+                                <strong>{{ getOrdersStillPendingForGroupedClient().length }}</strong>
+                            </div>
+                            <div class="anchored-order-context__metric anchored-order-context__metric--money">
+                                <span>Total seleccionado</span>
+                                <strong>S/ {{ getGroupedOrdersPendingTotal() | number:'1.2-2' }}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="anchored-order-table" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrder">
+                        <div class="anchored-order-table__header">
+                            <div>
+                                <h4>Órdenes elegibles del mismo cliente</h4>
+                                <p>
+                                    La orden ancla queda incluida automáticamente. Marca solo las adicionales que quieres cobrar ahora.
+                                </p>
+                            </div>
+                            <span class="anchored-order-table__anchor-pill">{{ selectedServiceOrder.code }}</span>
+                        </div>
+
+                        <div class="anchored-order-table__scroll" *ngIf="getSelectableGroupedServiceOrders().length; else onlyAnchorEligibleState">
+                            <table class="data-table anchored-order-table__grid">
+                                <thead>
+                                    <tr>
+                                        <th class="anchored-order-table__checkbox-col">
+                                            <input
+                                                type="checkbox"
+                                                [checked]="areAllSelectableGroupedOrdersSelected()"
+                                                [indeterminate]="hasPartiallySelectedGroupedOrders()"
+                                                (change)="onToggleAllGroupedServiceOrders($event)">
+                                        </th>
+                                        <th>Código</th>
+                                        <th>Fecha</th>
+                                        <th>Monto pendiente</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let order of getSelectableGroupedServiceOrders()"
+                                        [class.is-selected]="isServiceOrderChecked(order.id)">
+                                        <td class="anchored-order-table__checkbox-col">
+                                            <input
+                                                type="checkbox"
+                                                [checked]="isServiceOrderChecked(order.id)"
+                                                (change)="onGroupedServiceOrderToggle(order, $event)">
+                                        </td>
+                                        <td>
+                                            <div class="anchored-order-table__code">
+                                                <strong>{{ order.code }}</strong>
+                                                <span>{{ order.clientSnapshotName || order.client?.name || 'Cliente' }}</span>
+                                            </div>
+                                        </td>
+                                        <td>{{ order.receivedAt | date:'dd/MM/yy HH:mm' }}</td>
+                                        <td><strong>S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <ng-template #onlyAnchorEligibleState>
+                            <div class="anchored-order-table__empty">
+                                <i class="fas fa-check-circle"></i>
+                                <span>La orden ancla es la única elegible de este cliente en este momento.</span>
+                            </div>
+                        </ng-template>
                     </div>
 
                     <div class="grouped-orders-clarity" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrders.length">
-                        <p class="grouped-orders-clarity__summary">{{ getGroupedOrderCoverageSummary() }}</p>
-
                         <div class="grouped-orders-clarity__grid">
                             <div class="grouped-orders-clarity__panel grouped-orders-clarity__panel--covered">
                                 <div class="grouped-orders-clarity__panel-header">
@@ -810,8 +922,8 @@
                             <span>S/ {{ (saleFormData?.subtotal || 0).toFixed(2) }}</span>
                         </div>
                         <div class="summary-row">
-                            <span>IGV (18%)</span>
-                            <span>S/ {{ (saleFormData?.igv || 0).toFixed(2) }}</span>
+                                    <span>IGV ({{ getCurrentSaleTaxRateLabel() }})</span>
+                                    <span>S/ {{ (saleFormData?.igv || 0).toFixed(2) }}</span>
                         </div>
                         <div class="summary-row total">
                             <span>Total</span>
@@ -1607,8 +1719,8 @@
                     <span class="detail-value">S/ {{ selectedSale.subtotal | number:'1.2-2' }}</span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">IGV (18%):</span>
-                    <span class="detail-value">S/ {{ selectedSale.taxAmount | number:'1.2-2' }}</span>
+                                    <span class="detail-label">IGV ({{ getSaleTaxRateLabel(selectedSale) }}):</span>
+                                    <span class="detail-value">S/ {{ selectedSale.taxAmount | number:'1.2-2' }}</span>
                 </div>
                 <div class="detail-row total">
                     <span class="detail-label">Total:</span>

@@ -40,6 +40,7 @@ export interface SaleReceiptPdfModel {
     subtotal: number;
     discount: number;
     tax: number;
+    taxRate: number;
     total: number;
   };
 }

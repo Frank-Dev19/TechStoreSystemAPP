@@ -20,6 +20,7 @@ describe('SaleReceiptPdfMapper', () => {
     expect(model.items[0].unitLabel).toBe('NIU');
     expect(model.items[0].description).toBe('Laptop Gamer');
     expect(model.totals.total).toBe(236);
+    expect(model.totals.taxRate).toBe(0.18);
   });
 
   it('maps linked-summary with N° label and fallback values for incomplete sales', () => {
@@ -64,7 +65,7 @@ function createSale(): Sale {
     discountTotal: 0,
     taxAmount: 36,
     total: 236,
-    taxRate: 18,
+    taxRate: 0.18,
     status: SaleStatus.CONFIRMED,
     createdAt: '2026-04-05T10:00:00.000Z',
     updatedAt: '2026-04-05T10:00:00.000Z',

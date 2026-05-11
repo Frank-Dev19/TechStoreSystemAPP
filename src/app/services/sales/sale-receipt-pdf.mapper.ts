@@ -71,6 +71,7 @@ export class SaleReceiptPdfMapper {
         subtotal: Number(sale.subtotal || 0),
         discount: Number(sale.discountTotal || 0),
         tax: Number(sale.taxAmount || 0),
+        taxRate: Number(sale.taxRate || 0),
         total: Number(sale.total || 0),
       },
     };

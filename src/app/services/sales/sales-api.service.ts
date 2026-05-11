@@ -5,6 +5,7 @@ import { BaseService } from '../base.service';
 import { config } from '../../../environments/environment';
 
 import { Sale } from '../../models/sales/sale.model';
+import { ServiceOrder } from '../../models/service-orders/service-order';
 import {
     CreateSaleDto,
     CreateSaleFromServiceAgreementsDto,
@@ -56,6 +57,11 @@ export interface SalesByProductRow {
     averagePrice: number;
 }
 
+export interface EligibleServiceOrdersParams {
+    page?: number;
+    limit?: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SalesApiService {
     // Asumiendo que en tu environment tienes algo como:
@@ -105,6 +111,12 @@ export class SalesApiService {
 
     createFromServiceAgreements(payload: CreateSaleFromServiceAgreementsDto): Observable<Sale> {
         return this.base.post<Sale>(`${this.baseUrl}/from-service-agreements`, payload);
+    }
+
+    getEligibleServiceOrders(params: EligibleServiceOrdersParams = {}): Observable<PaginatedResponse<ServiceOrder>> {
+        return this.base.get<PaginatedResponse<ServiceOrder>>(`${this.baseUrl}/eligible-service-orders`, {
+            params: toHttpParams(params as any),
+        });
     }
 
     cancel(id: number, payload: CancelSaleDto): Observable<Sale> {

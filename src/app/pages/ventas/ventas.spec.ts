@@ -15,7 +15,6 @@ import { DocumentTypesApiService } from '../../services/document-types-api.servi
 import { PricingQueryApiService } from '../../services/pricing/pricing-query-api.service';
 import { CurrentUserService } from '../../services/current-user.service';
 import { ServiceOrderEconomicStatus } from '../../models/service-orders/service-order';
-import { ServiceOrderService } from '../../services/service-orders/service-order.service';
 import { of, throwError } from 'rxjs';
 import { SaleReceiptPdfService } from '../../services/sales/sale-receipt-pdf.service';
 
@@ -26,12 +25,10 @@ describe('Ventas', () => {
     create: jasmine.createSpy('create').and.returnValue(of({ id: 10 })),
     createFromServiceOrder: jasmine.createSpy('createFromServiceOrder').and.returnValue(of({ id: 11 })),
     createFromServiceAgreements: jasmine.createSpy('createFromServiceAgreements').and.returnValue(of({ id: 12 })),
+    getEligibleServiceOrders: jasmine.createSpy('getEligibleServiceOrders').and.returnValue(of({ data: [], total: 0, page: 1, limit: 10, totalPages: 0 })),
   };
   const saleReceiptPdfServiceStub = {
     downloadBySaleId: jasmine.createSpy('downloadBySaleId').and.returnValue(of('F001-123.pdf')),
-  };
-  const serviceOrderServiceStub = {
-    findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
   };
 
   beforeEach(async () => {
@@ -40,8 +37,8 @@ describe('Ventas', () => {
     salesApiStub.create.calls.reset();
     salesApiStub.createFromServiceOrder.calls.reset();
     salesApiStub.createFromServiceAgreements.calls.reset();
-    serviceOrderServiceStub.findAll.calls.reset();
-    serviceOrderServiceStub.findAll.and.returnValue(of({ data: [] }));
+    salesApiStub.getEligibleServiceOrders.calls.reset();
+    salesApiStub.getEligibleServiceOrders.and.returnValue(of({ data: [], total: 0, page: 1, limit: 10, totalPages: 0 }));
 
     await TestBed.configureTestingModule({
       declarations: [Ventas],
@@ -58,7 +55,6 @@ describe('Ventas', () => {
         { provide: DocumentTypesApiService, useValue: {} },
         { provide: PricingQueryApiService, useValue: {} },
         { provide: CurrentUserService, useValue: { value: { id: 1, name: 'Test User' } } },
-        { provide: ServiceOrderService, useValue: serviceOrderServiceStub },
         { provide: SaleReceiptPdfService, useValue: saleReceiptPdfServiceStub },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -145,7 +141,7 @@ describe('Ventas', () => {
   });
 
   it('agrupa líneas de servicio al seleccionar varias órdenes del mismo cliente', () => {
-    component.saleFormData = { lines: [], total: 0, subtotal: 0, igv: 0 };
+    component.saleFormData = { lines: [], total: 0, subtotal: 0, igv: 0, taxRate: 0.18 };
     component.eligibleServiceOrders = [
       {
         id: 9,
@@ -180,6 +176,98 @@ describe('Ventas', () => {
       jasmine.objectContaining({ productName: 'Servicio técnico - Orden SO-002', lineTotal: 80 }),
     ]);
     expect(component.saleFormData.total).toBe(200);
+    expect(component.saleFormData.subtotal).toBeCloseTo(169.49, 2);
+    expect(component.saleFormData.igv).toBeCloseTo(30.51, 2);
+    expect(component.saleFormData.taxRate).toBe(0.18);
+  });
+
+  it('busca coincidencias por código y usa la orden elegida como ancla del cliente', () => {
+    component.saleFormData = { lines: [], total: 0, subtotal: 0, igv: 0, taxRate: 0.18 };
+    component.eligibleServiceOrders = [
+      {
+        id: 9,
+        code: 'SO2026050517470002',
+        clientId: 4,
+        clientSnapshotName: 'Sergio Avila',
+        receivedAt: '2026-05-05T17:47:00.000Z',
+        montoComprometidoVigente: 120,
+      } as any,
+      {
+        id: 10,
+        code: 'SO2026042700400001',
+        clientId: 4,
+        clientSnapshotName: 'Sergio Avila',
+        receivedAt: '2026-04-27T00:40:00.000Z',
+        montoComprometidoVigente: 80,
+      } as any,
+      {
+        id: 21,
+        code: 'SO2026040100100001',
+        clientId: 8,
+        clientSnapshotName: 'Otro cliente',
+        receivedAt: '2026-04-01T00:10:00.000Z',
+        montoComprometidoVigente: 60,
+      } as any,
+    ];
+
+    component.serviceOrderSearchText = '4000';
+    component.onEligibleServiceOrdersSearch();
+
+    expect(component.serviceOrderSearchMatches.map((order) => order.code)).toEqual(['SO2026042700400001']);
+
+    component.selectAnchoredServiceOrder(component.serviceOrderSearchMatches[0] as any);
+
+    expect(component.selectedServiceOrderId).toBe(10);
+    expect(component.selectedServiceOrderIds).toEqual([10]);
+    expect(component.selectedServiceOrders.map((order) => order.code)).toEqual(['SO2026042700400001']);
+    expect(component.getSelectableGroupedServiceOrders().map((order) => order.code)).toEqual(['SO2026050517470002']);
+    expect(component.saleFormData.total).toBe(80);
+    expect(component.saleFormData.subtotal).toBeCloseTo(67.8, 2);
+    expect(component.saleFormData.igv).toBeCloseTo(12.2, 2);
+  });
+
+  it('el checkbox maestro marca y desmarca solo las órdenes adicionales del mismo cliente', () => {
+    component.saleFormData = { lines: [], total: 0, subtotal: 0, igv: 0, taxRate: 0.18 };
+    component.eligibleServiceOrders = [
+      {
+        id: 9,
+        code: 'SO2026050517470002',
+        clientId: 4,
+        receivedAt: '2026-05-05T17:47:00.000Z',
+        montoComprometidoVigente: 120,
+      } as any,
+      {
+        id: 10,
+        code: 'SO2026042700400001',
+        clientId: 4,
+        receivedAt: '2026-04-27T00:40:00.000Z',
+        montoComprometidoVigente: 80,
+      } as any,
+      {
+        id: 11,
+        code: 'SO2026042000300001',
+        clientId: 4,
+        receivedAt: '2026-04-20T00:30:00.000Z',
+        montoComprometidoVigente: 60,
+      } as any,
+      {
+        id: 21,
+        code: 'SO2026040100100001',
+        clientId: 8,
+        receivedAt: '2026-04-01T00:10:00.000Z',
+        montoComprometidoVigente: 60,
+      } as any,
+    ];
+
+    component.selectAnchoredServiceOrder(component.eligibleServiceOrders[1] as any);
+
+    component.onToggleAllGroupedServiceOrders({ target: { checked: true } } as any);
+    expect(component.selectedServiceOrderIds).toEqual([10, 9, 11]);
+    expect(component.areAllSelectableGroupedOrdersSelected()).toBeTrue();
+
+    component.onToggleAllGroupedServiceOrders({ target: { checked: false } } as any);
+    expect(component.selectedServiceOrderIds).toEqual([10]);
+    expect(component.areAllSelectableGroupedOrdersSelected()).toBeFalse();
   });
 
   it('bloquea factura si el contribuyente seleccionado no es empresa', () => {
@@ -231,6 +319,8 @@ describe('Ventas', () => {
         montoComprometidoVigente: 80,
       } as any,
     ];
+    component.selectedServiceOrder = component.selectedServiceOrders[0] as any;
+    component.selectedServiceOrderId = 9;
     component.eligibleServiceOrders = [
       component.selectedServiceOrders[0] as any,
       component.selectedServiceOrders[1] as any,
@@ -252,6 +342,62 @@ describe('Ventas', () => {
     expect(component.getOrdersStillPendingForGroupedClient().map((order) => order.code)).toEqual(['SO-003']);
     expect(component.getGroupedOrderCoverageSummary()).toContain('liberará 2 órdenes');
     expect(component.getGroupedOrderCoverageSummary()).toContain('dejará 1 pendiente');
+  });
+
+  it('carga órdenes elegibles desde el endpoint explícito del backend sin filtro local por monto', async () => {
+    salesApiStub.getEligibleServiceOrders.and.returnValue(of({
+      data: [
+        {
+          id: 9,
+          code: 'SO-001',
+          clientId: 4,
+          economicStatus: ServiceOrderEconomicStatus.PENDIENTE,
+          montoComprometidoVigente: 15,
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 100,
+      totalPages: 1,
+    } as any));
+
+    await (component as any).loadEligibleServiceOrders();
+
+    expect(salesApiStub.getEligibleServiceOrders).toHaveBeenCalledWith({ page: 1, limit: 100 });
+    expect(component.eligibleServiceOrders.map((order) => order.code)).toEqual(['SO-001']);
+  });
+
+  it('carga todas las páginas de órdenes elegibles y las ordena por código descendente', async () => {
+    salesApiStub.getEligibleServiceOrders.and.callFake((params?: any) => {
+      if (params?.page === 2) {
+        return of({
+          data: [
+            { id: 9, code: 'SO-001', clientId: 4, montoComprometidoVigente: 20 },
+          ],
+          total: 3,
+          page: 2,
+          limit: 2,
+          totalPages: 2,
+        } as any);
+      }
+
+      return of({
+        data: [
+          { id: 10, code: 'SO-002', clientId: 4, montoComprometidoVigente: 30 },
+          { id: 11, code: 'SO-003', clientId: 4, montoComprometidoVigente: 40 },
+        ],
+        total: 3,
+        page: 1,
+        limit: 2,
+        totalPages: 2,
+      } as any);
+    });
+
+    await (component as any).loadEligibleServiceOrders();
+
+    expect(salesApiStub.getEligibleServiceOrders.calls.argsFor(0)).toEqual([{ page: 1, limit: 100 }]);
+    expect(salesApiStub.getEligibleServiceOrders.calls.argsFor(1)).toEqual([{ page: 2, limit: 2 }]);
+    expect(component.eligibleServiceOrders.map((order) => order.code)).toEqual(['SO-003', 'SO-002', 'SO-001']);
   });
 
   it('mantiene la venta manual general como venta solo de productos', () => {

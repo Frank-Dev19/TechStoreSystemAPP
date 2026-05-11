@@ -158,7 +158,7 @@ export class JsPdfSaleReceiptRenderer {
     }
 
     if (model.totals.tax > 0) {
-      doc.text('IGV (18%):', 145, y);
+      doc.text(`IGV (${this.formatTaxRateLabel(model.totals.taxRate)}):`, 145, y);
       doc.text(`S/ ${model.totals.tax.toFixed(2)}`, 180, y, { align: 'right' });
       y += 4;
     }
@@ -226,5 +226,12 @@ export class JsPdfSaleReceiptRenderer {
 
   private truncate(value: string, maxLength: number): string {
     return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
+  }
+
+  private formatTaxRateLabel(rate: number): string {
+    const numericRate = Number(rate || 0);
+    const normalizedRate = numericRate > 1 ? numericRate / 100 : numericRate;
+    const pct = Number((normalizedRate * 100).toFixed(2));
+    return Number.isInteger(pct) ? `${pct.toFixed(0)}%` : `${pct.toFixed(2)}%`;
   }
 }
