@@ -1,3 +1,5 @@
+@use "sass:color";
+
 $primary: #2c5282;
 $primary-dark: #1a365d;
 $secondary: #3b6ba8;
@@ -77,7 +79,7 @@ $bg-light: #f5f7fa;
         color: white;
 
         &.primary {
-          background: linear-gradient(135deg, $accent, lighten($accent, 10%));
+          background: linear-gradient(135deg, $accent, color.adjust($accent, $lightness: 10%));
         }
 
         &.warning {
@@ -1679,12 +1681,12 @@ $bg-light: #f5f7fa;
 
         &.danger {
           background: rgba($danger, 0.08);
-          color: darken($danger, 10%);
+          color: color.adjust($danger, $lightness: -10%);
         }
 
         &.info {
           background: rgba($info, 0.08);
-          color: darken($info, 20%);
+          color: color.adjust($info, $lightness: -20%);
         }
       }
 

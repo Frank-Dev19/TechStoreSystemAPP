@@ -1,3 +1,5 @@
+@use "sass:color";
+
 $primary: #2c5282;
 $secondary: #3b6ba8;
 $accent: #3182ce;
@@ -343,7 +345,7 @@ $border: #e2e8f0;
 
                 &:hover:not(:disabled) {
                     background: #f9fafb;
-                    border-color: darken($border, 5%);
+                    border-color: color.adjust($border, $lightness: -5%);
                 }
 
                 &:disabled {

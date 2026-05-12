@@ -1,5 +1,7 @@
-@import "../abstracts/colors";
-@import "../abstracts/mixins";
+@use "sass:color";
+@use "sass:math";
+@use "../abstracts/colors" as colors;
+@use "../abstracts/mixins";
 
 %btn-common {
   display: inline-block;
@@ -22,7 +24,7 @@
 }
 
 @mixin get_size($height, $font) {
-  $padding: floor(($height - ($font * 1.4)) / 2);
+  $padding: math.floor(math.div($height - ($font * 1.4), 2));
   padding: 0 $padding;
   height: $height;
   font-size: $font;
@@ -60,33 +62,33 @@
 }
 
 $btn_color: (
-  first: $primary,
-  second: $black,
-  greenish: $green-sucess,
-  bluish: $blue-dark,
+  first: colors.$primary,
+  second: colors.$black,
+  greenish: colors.$green-sucess,
+  bluish: colors.$blue-dark,
 );
 
 @mixin btn_classic($name, $color) {
   .btn-#{$name} {
     background-color: $color;
     border: 1px solid $color;
-    color: $white;
+    color: colors.$white;
     &:active {
-      background-color: darken($color, 10%);
-      border-color: darken($color, 10%);
+      background-color: color.adjust($color, $lightness: -10%);
+      border-color: color.adjust($color, $lightness: -10%);
     }
     &:focus {
       box-shadow: 0 0 0 0.2rem rgba($color, 0.5);
     }
     &:hover {
-      background-color: lighten($color, 10%);
-      border-color: lighten($color, 10%);
+      background-color: color.adjust($color, $lightness: 10%);
+      border-color: color.adjust($color, $lightness: 10%);
       opacity: 0.8;
     }
 
     &:disabled {
-      background-color: $gray-disabled;
-      border-color: $gray-disabled;
+      background-color: colors.$gray-disabled;
+      border-color: colors.$gray-disabled;
     }
   }
 
@@ -95,17 +97,17 @@ $btn_color: (
     border: 1px solid $color;
     color: $color;
     &:active {
-      border-color: darken($color, 10%);
-      color: darken($color, 10%);
+      border-color: color.adjust($color, $lightness: -10%);
+      color: color.adjust($color, $lightness: -10%);
     }
     &:hover {
-      border-color: lighten($color, 10%);
-      color: lighten($color, 10%);
+      border-color: color.adjust($color, $lightness: 10%);
+      color: color.adjust($color, $lightness: 10%);
     }
 
     &:disabled {
-      border-color: $gray-disabled;
-      color: $gray-disabled;
+      border-color: colors.$gray-disabled;
+      color: colors.$gray-disabled;
     }
   }
 }

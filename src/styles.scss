@@ -1,6 +1,5 @@
 /* You can add global styles to this file, and also import other style files */
-@import 'bootstrap/scss/bootstrap';
-@import "../node_modules/bootstrap/scss/bootstrap";
+@use 'bootstrap/scss/bootstrap';
 
 @import "assets/sass/abstracts/functions";
 @import "assets/sass/abstracts/mixins";
@@ -16,10 +15,9 @@
 @import "assets/sass/components/modal";
 @import "assets/sass/components/grid";
 
-
-@import "../node_modules/ngx-toastr/toastr.css";
-@import "../node_modules/font-awesome/css/font-awesome.min.css";
-@import "../node_modules/@ng-select/ng-select/themes/default.theme.css";
+@import url("../node_modules/ngx-toastr/toastr.css");
+@import url("../node_modules/font-awesome/css/font-awesome.min.css");
+@import url("../node_modules/@ng-select/ng-select/themes/default.theme.css");
 
 
 
