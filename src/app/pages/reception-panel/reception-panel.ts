@@ -52,6 +52,15 @@ import {
   ServiceOrderInboxThreadSummary,
 } from "../../models/service-orders/service-order-inbox"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
+import {
+  buildPhoneFormValue,
+  DEFAULT_PHONE_COUNTRY,
+  e164PhoneValidator,
+  invalidPhoneSentinel,
+  normalizePhoneToE164,
+  parseStoredPhoneToFormValue,
+  PhoneCountry,
+} from "../../utils/phone.util"
 
 interface ServiceOrderAgreementProductComposer {
   id: number
@@ -366,7 +375,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       companyName: [""],
       companyTradeName: [""],
       contactName: ["", Validators.required],
-      contactPhone: ["", [Validators.required, Validators.pattern(/^[0-9+\-\s]*$/)]],
+      contactPhone: ["", [e164PhoneValidator({ required: true })]],
+      contactPhoneCountry: [DEFAULT_PHONE_COUNTRY],
+      contactPhoneNationalNumber: [""],
       contactEmail: ["", Validators.email],
       priority: [ServiceOrderPriority.MEDIUM, Validators.required],
       assignedToTechnicianId: [null, Validators.required],
@@ -394,7 +405,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const group = this.formBuilder.group({
       contactName: ["", Validators.required],
       contactEmail: ["", Validators.email],
-      contactPhone: ["", Validators.pattern(/^[0-9+\-\s]*$/)],
+      contactPhone: ["", e164PhoneValidator()],
+      contactPhoneCountry: [DEFAULT_PHONE_COUNTRY],
+      contactPhoneNationalNumber: [""],
       priority: [ServiceOrderPriority.MEDIUM, Validators.required],
       notes: [""],
       equipmentType: [EquipmentType.LAPTOP, Validators.required],
@@ -867,6 +880,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       companyTradeName: "",
       contactName: "",
       contactPhone: "",
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: "",
       contactEmail: "",
       clientContactId: null,
     }, { emitEvent: false })
@@ -1245,6 +1260,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       contactName: "",
       contactEmail: "",
       contactPhone: "",
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: "",
       priority: ServiceOrderPriority.MEDIUM,
       assignedToTechnicianId: null,
       notes: "",
@@ -1273,7 +1290,32 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.createServiceOrderStep = 0
     this.createServiceOrderCandidates = []
     this.editingCreateServiceOrderCandidateIndex = null
-    this.createServiceOrderForm.reset()
+    this.createServiceOrderForm.reset({
+      requestOrigin: RequestOrigin.CLIENT,
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      clientId: null,
+      clientKind: ClientKind.PERSON,
+      clientContactId: null,
+      documentNumber: "",
+      documentTypeId: null,
+      companyName: "",
+      companyTradeName: "",
+      contactName: "",
+      contactEmail: "",
+      contactPhone: "",
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: "",
+      priority: ServiceOrderPriority.MEDIUM,
+      assignedToTechnicianId: null,
+      notes: "",
+      equipmentType: EquipmentType.LAPTOP,
+      equipmentTypeOther: "",
+      brand: "",
+      model: "",
+      serialNumber: "",
+      initialIssue: "",
+      accessories: "",
+    })
     this.documentSearchMessage = ""
     this.documentSearchError = ""
     this.isSearchingPartner = false
@@ -1288,14 +1330,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   private applyClientContact(partnerId: number | null): void {
     if (this.isInternalRequestOrigin()) {
       this.createServiceOrderForm.patchValue(
-        { clientId: null, contactName: "", contactEmail: "", contactPhone: "" },
+        { clientId: null, contactName: "", contactEmail: "", contactPhone: "", contactPhoneCountry: DEFAULT_PHONE_COUNTRY, contactPhoneNationalNumber: "" },
         { emitEvent: false },
       )
       return
     }
     if (!partnerId) {
       this.createServiceOrderForm.patchValue(
-        { contactName: "", contactEmail: "", contactPhone: "" },
+        { contactName: "", contactEmail: "", contactPhone: "", contactPhoneCountry: DEFAULT_PHONE_COUNTRY, contactPhoneNationalNumber: "" },
         { emitEvent: false },
       )
       this.setCustomerFieldsEnabled(true)
@@ -1307,6 +1349,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   submitCreateServiceOrder(): void {
+    this.syncPhoneControls(this.createServiceOrderForm)
     // Validate shared context fields only (equipment is already captured in candidates)
     const sharedContextFields = [
       "requestOrigin", "workflowServiceType", "priority", "assignedToTechnicianId",
@@ -1347,7 +1390,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
               priority: formValue.priority,
               assignedToTechnicianId: this.toNumericId(formValue.assignedToTechnicianId) ?? null,
               contactName: String(formValue.contactName ?? '').trim(),
-              contactPhone: String(formValue.contactPhone ?? '').trim() || null,
+              contactPhone: normalizeOptionalPhone(formValue.contactPhone),
               contactEmail: String(formValue.contactEmail ?? '').trim() || null,
             },
             orders: this.createServiceOrderCandidates.map((candidate) => ({
@@ -1399,7 +1442,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const documentNumber = String(this.createServiceOrderForm.get("documentNumber")?.value ?? "").trim()
     const documentTypeId = Number(this.createServiceOrderForm.get("documentTypeId")?.value)
     const contactName = String(this.createServiceOrderForm.get("contactName")?.value ?? "").trim()
-    const contactPhone = String(this.createServiceOrderForm.get("contactPhone")?.value ?? "").trim()
+    const contactPhone = normalizeOptionalPhone(this.createServiceOrderForm.get("contactPhone")?.value)
 
     if (!documentNumber || !documentTypeId || !contactName || !contactPhone) {
       this.showMessage(
@@ -1431,14 +1474,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       documentTypeId,
       documentNumber,
       email: String(this.createServiceOrderForm.get("contactEmail")?.value ?? "").trim() || null,
-      phone: String(this.createServiceOrderForm.get("contactPhone")?.value ?? "").trim() || null,
+      phone: normalizeOptionalPhone(this.createServiceOrderForm.get("contactPhone")?.value),
       address: null,
       city: null,
       country: null,
       contacts: [{
         name: contactName,
         email: String(this.createServiceOrderForm.get("contactEmail")?.value ?? "").trim() || null,
-        phone: String(this.createServiceOrderForm.get("contactPhone")?.value ?? "").trim() || null,
+        phone: normalizeOptionalPhone(this.createServiceOrderForm.get("contactPhone")?.value),
         isPrimary: true,
       }],
     }
@@ -1519,10 +1562,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           ? primaryContact.name
           : (partner.name ?? partner.tradeName ?? partner.documentNumber ?? ""),
         contactEmail: primaryContact?.email ?? partner.email ?? "",
-        contactPhone: primaryContact?.phone ?? partner.phone ?? "",
+        contactPhone: "",
+        contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+        contactPhoneNationalNumber: "",
       },
       { emitEvent: false },
     )
+    this.patchPhoneControls(this.createServiceOrderForm, primaryContact?.phone ?? partner.phone ?? "", { emitEvent: false })
 
     this.updateExpectedDocumentDigits(documentTypeId)
     this.documentSearchMessage = "Cliente encontrado. Datos completados automáticamente."
@@ -1580,6 +1626,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         contactName: "",
         contactEmail: "",
         contactPhone: "",
+        contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+        contactPhoneNationalNumber: "",
       },
       { emitEvent: false },
     )
@@ -1600,6 +1648,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         contactName: "",
         contactEmail: "",
         contactPhone: "",
+        contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+        contactPhoneNationalNumber: "",
       }, { emitEvent: false })
       const controls = ["contactName", "contactEmail", "contactPhone"]
       controls.forEach((name) => {
@@ -1613,8 +1663,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       this.createServiceOrderForm.patchValue({
         contactName: contact.name,
         contactEmail: contact.email ?? "",
-        contactPhone: contact.phone ?? "",
+        contactPhone: "",
+        contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+        contactPhoneNationalNumber: "",
       }, { emitEvent: false })
+      this.patchPhoneControls(this.createServiceOrderForm, contact.phone ?? "", { emitEvent: false })
     }
   }
 
@@ -2649,6 +2702,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         contactName: "",
         contactEmail: "",
         contactPhone: "",
+        contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+        contactPhoneNationalNumber: "",
       },
       { emitEvent: false },
     )
@@ -3384,7 +3439,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.editServiceOrderForm.patchValue({
       contactName: this.getServiceOrderContactName(serviceOrder),
       contactEmail: this.getServiceOrderContactEmail(serviceOrder),
-      contactPhone: this.getServiceOrderContactPhone(serviceOrder),
+      contactPhone: "",
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: "",
       priority: serviceOrder.priority,
       notes: serviceOrder.notes,
       equipmentType: serviceOrder.equipmentType ?? EquipmentType.LAPTOP,
@@ -3396,6 +3453,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       initialIssue: serviceOrder.initialIssue ?? "",
       accessories: serviceOrder.accessories ?? "",
     })
+    this.patchPhoneControls(this.editServiceOrderForm, this.getServiceOrderContactPhone(serviceOrder), { emitEvent: false })
     this.showEditServiceOrderModal = true
   }
 
@@ -3642,10 +3700,27 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   closeEditServiceOrderModal(): void {
     this.showEditServiceOrderModal = false
     this.editingServiceOrder = null
-    this.editServiceOrderForm.reset()
+    this.editServiceOrderForm.reset({
+      contactName: "",
+      contactEmail: "",
+      contactPhone: "",
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: "",
+      priority: ServiceOrderPriority.MEDIUM,
+      notes: "",
+      equipmentType: EquipmentType.LAPTOP,
+      equipmentTypeOther: "",
+      serviceType: ServiceType.DIAGNOSIS,
+      brand: "",
+      model: "",
+      serialNumber: "",
+      initialIssue: "",
+      accessories: "",
+    })
   }
 
   submitEditServiceOrder(): void {
+    this.syncPhoneControls(this.editServiceOrderForm)
     if (this.editServiceOrderForm.invalid || !this.editingServiceOrder) {
       return
     }
@@ -3654,7 +3729,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const formValue = this.editServiceOrderForm.getRawValue()
     const serviceOrderPayload: ServiceOrderUpdateRequest = {
       contactName: String(formValue.contactName ?? "").trim(),
-      contactPhone: String(formValue.contactPhone ?? "").trim() || null,
+      contactPhone: normalizeOptionalPhone(formValue.contactPhone),
       contactEmail: String(formValue.contactEmail ?? "").trim() || null,
       priority: formValue.priority,
       notes: formValue.notes ?? null,
@@ -3760,4 +3835,47 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       }
     })
   }
+
+  private buildPhoneControlsValue(value: unknown): {
+    country: PhoneCountry
+    nationalNumber: string
+    e164: string
+  } {
+    const parsed = parseStoredPhoneToFormValue(value)
+    return {
+      country: parsed.country,
+      nationalNumber: parsed.nationalNumber,
+      e164: parsed.e164 ?? "",
+    }
+  }
+
+  private patchPhoneControls(
+    form: FormGroup,
+    value: unknown,
+    options?: { emitEvent?: boolean },
+  ): void {
+    const phoneValue = this.buildPhoneControlsValue(value)
+    form.patchValue(
+      {
+        contactPhone: phoneValue.e164,
+        contactPhoneCountry: phoneValue.country,
+        contactPhoneNationalNumber: phoneValue.nationalNumber,
+      },
+      options,
+    )
+  }
+
+  private syncPhoneControls(form: FormGroup): void {
+    const parsed = buildPhoneFormValue(
+      form.get("contactPhoneCountry")?.value,
+      form.get("contactPhoneNationalNumber")?.value,
+    )
+    form.get("contactPhone")?.setValue(
+      !parsed.nationalNumber ? "" : parsed.e164 ?? invalidPhoneSentinel(),
+      { emitEvent: false },
+    )
+    form.get("contactPhone")?.updateValueAndValidity({ emitEvent: false })
+  }
 }
+
+const normalizeOptionalPhone = (value: unknown): string | null => normalizePhoneToE164(value) ?? null

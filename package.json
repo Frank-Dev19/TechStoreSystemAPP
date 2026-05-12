@@ -38,6 +38,7 @@
     "font-awesome": "^4.7.0",
     "jspdf": "^3.0.3",
     "jspdf-autotable": "^5.0.2",
+    "libphonenumber-js": "^1.13.1",
     "moment": "^2.30.1",
     "ng-apexcharts": "^2.0.1",
     "ngx-toastr": "^19.0.0",

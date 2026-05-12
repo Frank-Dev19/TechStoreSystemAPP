@@ -534,13 +534,15 @@
                     </div>
 
                     <div class="form-group" *ngIf="!isCompanyClientFlow()">
-                        <label for="phone">Teléfono *</label>
-                        <input type="tel" id="phone" formControlName="phone" class="form-input"
-                            [class.error]="partnerForm.get('phone')?.invalid && partnerForm.get('phone')?.touched">
-                        <div class="error-message"
-                            *ngIf="partnerForm.get('phone')?.invalid && partnerForm.get('phone')?.touched">
-                            El teléfono es requerido
-                        </div>
+                        <app-phone-input
+                            [formGroup]="partnerForm"
+                            e164ControlName="phone"
+                            countryControlName="phoneCountry"
+                            nationalNumberControlName="phoneNationalNumber"
+                            inputId="phone"
+                            label="Teléfono"
+                            [required]="true"
+                        />
                     </div>
 
                     <ng-container *ngIf="isCompanyClientFlow()">
@@ -563,12 +565,15 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="contactPhone">Teléfono del contacto *</label>
-                            <input type="tel" id="contactPhone" formControlName="contactPhone" class="form-input"
-                                [class.error]="partnerForm.get('contactPhone')?.invalid && partnerForm.get('contactPhone')?.touched">
-                            <div class="error-message" *ngIf="partnerForm.get('contactPhone')?.invalid && partnerForm.get('contactPhone')?.touched">
-                                El teléfono del contacto es requerido
-                            </div>
+                            <app-phone-input
+                                [formGroup]="partnerForm"
+                                e164ControlName="contactPhone"
+                                countryControlName="contactPhoneCountry"
+                                nationalNumberControlName="contactPhoneNationalNumber"
+                                inputId="contactPhone"
+                                label="Teléfono del contacto"
+                                [required]="true"
+                            />
                         </div>
                     </ng-container>
 
@@ -764,14 +769,15 @@
                         </div>
 
                         <div class="drawer-field">
-                            <label class="drawer-field__label" for="drawer-contact-phone">Teléfono *</label>
-                            <input
-                                id="drawer-contact-phone"
-                                type="tel"
-                                class="drawer-input"
-                                formControlName="phone"
-                                [class.error]="contactsDrawerForm.get('phone')?.invalid && contactsDrawerForm.get('phone')?.touched"
-                            >
+                            <app-phone-input
+                                [formGroup]="contactsDrawerForm"
+                                e164ControlName="phone"
+                                countryControlName="phoneCountry"
+                                nationalNumberControlName="phoneNationalNumber"
+                                inputId="drawer-contact-phone"
+                                label="Teléfono"
+                                [required]="true"
+                            />
                         </div>
                     </div>
 

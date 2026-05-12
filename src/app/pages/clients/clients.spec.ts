@@ -9,6 +9,7 @@ import { ClientKind } from '../../models/clients-request';
 import { ClientsApiService } from '../../services/clients-api.service';
 import { CurrentUserService } from '../../services/current-user.service';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
+import { DEFAULT_PHONE_COUNTRY } from '../../utils/phone.util';
 import { Clients } from './clients';
 
 describe('Clients', () => {
@@ -66,6 +67,10 @@ describe('Clients', () => {
     clientsApiStub.update.calls.reset();
   });
 
+  it('usa Perú por defecto en la captura telefónica principal', () => {
+    expect(component.partnerForm.get('phoneCountry')?.value).toEqual(DEFAULT_PHONE_COUNTRY);
+  });
+
   it('crea empresa con primer contacto en el mismo payload', () => {
     component.partnerForm.patchValue({
       name: 'Empresa SAC',
@@ -75,7 +80,8 @@ describe('Clients', () => {
       tradeName: 'Empresa',
       contactName: 'Ana Contacto',
       contactEmail: 'ana@empresa.com',
-      contactPhone: '900111222',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '900111222',
     });
 
     component.savePartner();
@@ -88,7 +94,7 @@ describe('Clients', () => {
           jasmine.objectContaining({
             name: 'Ana Contacto',
             email: 'ana@empresa.com',
-            phone: '900111222',
+            phone: '+51900111222',
             isPrimary: true,
           }),
         ],
@@ -145,7 +151,7 @@ describe('Clients', () => {
       name: 'Empresa SAC',
       documentTypeId: 2,
       documentNumber: '12345678901',
-      contacts: [{ id: 201, clientId: 20, name: 'Principal', phone: '900111222', isPrimary: true }],
+      contacts: [{ id: 201, clientId: 20, name: 'Principal', phone: '+51900111222', isPrimary: true }],
     } as any;
 
     component.openContactsDrawer(company);
@@ -163,15 +169,15 @@ describe('Clients', () => {
       name: 'Empresa SAC',
       documentTypeId: 2,
       documentNumber: '12345678901',
-      contacts: [{ id: 301, clientId: 21, name: 'Principal', phone: '900111222', isPrimary: true, isActive: true }],
+      contacts: [{ id: 301, clientId: 21, name: 'Principal', phone: '+51900111222', isPrimary: true, isActive: true }],
     } as any;
 
     clientsApiStub.update.and.returnValue(
       of({
         ...company,
         contacts: [
-          { id: 301, clientId: 21, name: 'Principal', phone: '900111222', isPrimary: true, isActive: true },
-          { id: 302, clientId: 21, name: 'Nuevo contacto', phone: '988777666', email: 'nuevo@empresa.com', isPrimary: false, isActive: true },
+          { id: 301, clientId: 21, name: 'Principal', phone: '+51900111222', isPrimary: true, isActive: true },
+          { id: 302, clientId: 21, name: 'Nuevo contacto', phone: '+51988777666', email: 'nuevo@empresa.com', isPrimary: false, isActive: true },
         ],
       }),
     );
@@ -180,7 +186,8 @@ describe('Clients', () => {
     component.contactsDrawerForm.patchValue({
       name: 'Nuevo contacto',
       email: 'nuevo@empresa.com',
-      phone: '988777666',
+      phoneCountry: DEFAULT_PHONE_COUNTRY,
+      phoneNationalNumber: '988777666',
       isPrimary: false,
     });
 
@@ -191,7 +198,7 @@ describe('Clients', () => {
       jasmine.objectContaining({
         contacts: [
           jasmine.objectContaining({ id: 301, name: 'Principal', isPrimary: true }),
-          jasmine.objectContaining({ name: 'Nuevo contacto', email: 'nuevo@empresa.com', phone: '988777666', isPrimary: false }),
+          jasmine.objectContaining({ name: 'Nuevo contacto', email: 'nuevo@empresa.com', phone: '+51988777666', isPrimary: false }),
         ],
       }),
     );
@@ -206,8 +213,8 @@ describe('Clients', () => {
       documentTypeId: 2,
       documentNumber: '12345678901',
       contacts: [
-        { id: 401, clientId: 22, name: 'Principal', phone: '900111222', isPrimary: true, isActive: true },
-        { id: 402, clientId: 22, name: 'Operaciones', phone: '977666555', isPrimary: false, isActive: true },
+        { id: 401, clientId: 22, name: 'Principal', phone: '+51900111222', isPrimary: true, isActive: true },
+        { id: 402, clientId: 22, name: 'Operaciones', phone: '+51977666555', isPrimary: false, isActive: true },
       ],
     } as any;
 

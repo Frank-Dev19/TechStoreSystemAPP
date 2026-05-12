@@ -31,6 +31,7 @@ import { ServiceOrderDiagnosisService } from '../../services/service-orders/serv
 import { ServiceOrderDocumentsService } from '../../services/service-orders/service-order-documents.service';
 import { ServiceOrderInboxService } from '../../services/service-orders/service-order-inbox.service';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
+import { DEFAULT_PHONE_COUNTRY } from '../../utils/phone.util';
 import { ReceptionPanel } from './reception-panel';
 
 describe('ReceptionPanel', () => {
@@ -140,6 +141,10 @@ describe('ReceptionPanel', () => {
     expect(component).toBeTruthy();
   });
 
+  it('usa Perú por defecto en la captura telefónica del wizard', () => {
+    expect(component.createServiceOrderForm.get('contactPhoneCountry')?.value).toEqual(DEFAULT_PHONE_COUNTRY);
+  });
+
   it('filters orders by operative status', () => {
     component.serviceOrders = [
       createServiceOrder({ id: 1, code: 'SO-OPEN', operativeStatus: ServiceOrderOperativeStatus.ABIERTA }),
@@ -166,7 +171,7 @@ describe('ReceptionPanel', () => {
     expect(showMessageSpy).toHaveBeenCalledWith(
       'warning',
       'fas fa-info-circle',
-      'El marcado manual de pago fue eliminado. Vincula un comprobante para reflejar el estado econÃ³mico de la orden.',
+      'El marcado manual de pago fue eliminado. Vincula un comprobante para reflejar el estado económico de la orden.',
     );
   });
 
@@ -268,7 +273,8 @@ describe('ReceptionPanel', () => {
       documentNumber: '12345678',
       documentTypeId: 1,
       contactName: 'Cliente Test',
-      contactPhone: '999999999',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '999999999',
       contactEmail: 'cliente@test.com',
       priority: ServiceOrderPriority.MEDIUM,
       assignedToTechnicianId: 10,
@@ -284,7 +290,7 @@ describe('ReceptionPanel', () => {
       jasmine.objectContaining({
         sharedContext: jasmine.objectContaining({
           contactName: 'Cliente Test',
-          contactPhone: '999999999',
+          contactPhone: '+51999999999',
           contactEmail: 'cliente@test.com',
         }),
         orders: [jasmine.objectContaining({
@@ -304,7 +310,7 @@ describe('ReceptionPanel', () => {
         tradeName: 'Empresa',
         documentTypeId: 2,
         documentNumber: '12345678901',
-        contacts: [{ id: 55, clientId: 40, name: 'Ana Contacto', isPrimary: true, phone: '900111222' }],
+        contacts: [{ id: 55, clientId: 40, name: 'Ana Contacto', isPrimary: true, phone: '+51900111222' }],
       } as any),
     );
 
@@ -317,7 +323,8 @@ describe('ReceptionPanel', () => {
       companyName: 'Empresa SAC',
       companyTradeName: 'Empresa',
       contactName: 'Ana Contacto',
-      contactPhone: '900111222',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '900111222',
       contactEmail: 'ana@empresa.com',
       priority: ServiceOrderPriority.MEDIUM,
       assignedToTechnicianId: 10,
@@ -337,7 +344,7 @@ describe('ReceptionPanel', () => {
         contacts: [
           jasmine.objectContaining({
             name: 'Ana Contacto',
-            phone: '900111222',
+            phone: '+51900111222',
             isPrimary: true,
           }),
         ],
@@ -401,7 +408,7 @@ describe('ReceptionPanel', () => {
     expect(component.canAddAnotherCreateServiceOrderCandidate()).toBeFalse()
   })
 
-  it('preselecciona el contacto primary al aplicar una empresa existente', () => {
+  it('preselecciona el contacto primary al aplicar una empresa existente', fakeAsync(() => {
     component.clients = [
       {
         id: 77,
@@ -419,10 +426,11 @@ describe('ReceptionPanel', () => {
     ];
 
     (component as any).applyPartnerData(component.clients[0] as any);
+    tick();
 
-    expect(component.createServiceOrderForm.get('clientContactId')?.value).toBe(92);
+    expect(component.createServiceOrderForm.get('clientContactId')?.value).toBe('92');
     expect(component.createServiceOrderForm.get('contactName')?.value).toBe('Principal');
-  });
+  }));
 
   it('mantiene los datos legales de empresa en solo lectura y permite crear un nuevo contacto inline', () => {
     component.clients = [
@@ -622,10 +630,10 @@ function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder
     assignedToTechnicianName: 'Tech Base',
     clientSnapshotName: 'Cliente Base',
     clientSnapshotDocumentNumber: '12345678',
-    clientSnapshotPhone: '999999999',
+    clientSnapshotPhone: '+51999999999',
     clientSnapshotEmail: 'cliente@test.com',
     contactName: 'Cliente Base',
-    contactPhone: '999999999',
+    contactPhone: '+51999999999',
     contactEmail: 'cliente@test.com',
     equipmentType: EquipmentType.LAPTOP,
     equipmentTypeOther: null,

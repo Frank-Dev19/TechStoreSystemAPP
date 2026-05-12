@@ -25,6 +25,7 @@ import { Pricing } from "../../pages/pricing/pricing";
 import { TechnicianPanel } from "../../pages/technician-panel/technician-panel";
 import { ReceptionPanel } from "../../pages/reception-panel/reception-panel";
 import { SupervisorPanel } from "../../pages/supervisor-panel/supervisor-panel";
+import { PhoneInputComponent } from "../../components/phone-input/phone-input";
 
 @NgModule({
     imports: [
@@ -36,7 +37,8 @@ import { SupervisorPanel } from "../../pages/supervisor-panel/supervisor-panel";
         NgbModule,
         NgbCollapseModule,
         NgApexchartsModule,
-        NgSelectModule
+        NgSelectModule,
+        PhoneInputComponent
     ],
     declarations: [
         Home,

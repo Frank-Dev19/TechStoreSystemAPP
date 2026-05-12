@@ -948,24 +948,15 @@
                   </div>
 
                   <div class="form-group">
-                    <label for="contactPhone">Teléfono *</label>
-                    <input
-                      type="text"
-                      id="contactPhone"
-                      class="form-control"
-                      formControlName="contactPhone"
-                      placeholder="Ej: 987654321"
-                      [class.is-invalid]="
-                        createServiceOrderForm.get('contactPhone')?.invalid &&
-                        createServiceOrderForm.get('contactPhone')?.touched
-                      "
+                    <app-phone-input
+                      [formGroup]="createServiceOrderForm"
+                      e164ControlName="contactPhone"
+                      countryControlName="contactPhoneCountry"
+                      nationalNumberControlName="contactPhoneNationalNumber"
+                      inputId="contactPhone"
+                      label="Teléfono"
+                      [required]="true"
                     />
-                    @if (
-                      createServiceOrderForm.get('contactPhone')?.invalid &&
-                      createServiceOrderForm.get('contactPhone')?.touched
-                    ) {
-                      <div class="invalid-feedback">Ingresa un teléfono válido</div>
-                    }
                   </div>
                 </div>
               </div>
@@ -2351,12 +2342,14 @@
               />
             </div>
             <div class="form-group">
-              <label for="edit-contactPhone">Teléfono *</label>
-              <input
-                id="edit-contactPhone"
-                class="form-control"
-                formControlName="contactPhone"
-                type="text"
+              <app-phone-input
+                [formGroup]="editServiceOrderForm"
+                e164ControlName="contactPhone"
+                countryControlName="contactPhoneCountry"
+                nationalNumberControlName="contactPhoneNationalNumber"
+                inputId="edit-contactPhone"
+                label="Teléfono"
+                [required]="false"
               />
             </div>
             <div class="form-group">

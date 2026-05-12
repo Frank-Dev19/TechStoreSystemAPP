@@ -1,0 +1,43 @@
+<div class="phone-input" [formGroup]="formGroup">
+  <label class="phone-input__label" [attr.for]="inputId">
+    {{ label }}@if (required) { * }
+  </label>
+
+  <div class="phone-input__row" [class.phone-input__row--invalid]="controlInvalid">
+    <ng-select
+      class="phone-input__country"
+      [items]="countries"
+      bindLabel="label"
+      [searchable]="true"
+      [clearable]="false"
+      [formControlName]="countryControlName"
+      placeholder="País"
+    >
+      <ng-template ng-label-tmp let-item="item">
+        <span>{{ item.iso2 }} {{ item.dialCode }}</span>
+      </ng-template>
+      <ng-template ng-option-tmp let-item="item">
+        <span>{{ item.label }}</span>
+      </ng-template>
+    </ng-select>
+
+    <input
+      [id]="inputId"
+      type="tel"
+      class="phone-input__number"
+      [formControlName]="nationalNumberControlName"
+      [placeholder]="'Ej: ' + defaultCountry.dialCode + ' / número local'"
+      (blur)="markTouched()"
+    />
+  </div>
+
+  <div class="phone-input__meta" [class.phone-input__meta--error]="controlInvalid">
+    @if (showRequiredError) {
+      <span>El teléfono es obligatorio.</span>
+    } @else if (controlInvalid) {
+      <span>Ingresá un número válido para el país seleccionado.</span>
+    } @else {
+      <span>{{ helperText }}</span>
+    }
+  </div>
+</div>

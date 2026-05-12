@@ -19,6 +19,15 @@ import {
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
 import { CurrentUserService } from '../../services/current-user.service';
+import {
+  buildPhoneFormValue,
+  DEFAULT_PHONE_COUNTRY,
+  e164PhoneValidator,
+  invalidPhoneSentinel,
+  normalizePhoneToE164,
+  parseStoredPhoneToFormValue,
+  PhoneCountry,
+} from '../../utils/phone.util';
 
 type ImportFilterStatus = 'all' | ClientImportStatus;
 
@@ -189,10 +198,14 @@ export class Clients implements OnInit {
         documentTypeId: [null, Validators.required],
         documentNumber: ['', [Validators.required, Validators.pattern(this.documentNumberPattern)]],
         email: ['', Validators.email],
-        phone: ['', Validators.required],
+        phone: ['', [e164PhoneValidator({ required: true })]],
+        phoneCountry: [DEFAULT_PHONE_COUNTRY],
+        phoneNationalNumber: [''],
         contactName: [''],
         contactEmail: ['', Validators.email],
         contactPhone: [''],
+        contactPhoneCountry: [DEFAULT_PHONE_COUNTRY],
+        contactPhoneNationalNumber: [''],
         address: [''],
         city: [''],
         country: [''],
@@ -204,7 +217,9 @@ export class Clients implements OnInit {
     return this.formBuilder.group({
       name: ['', [Validators.required, Validators.minLength(2)]],
       email: ['', Validators.email],
-      phone: ['', [Validators.required, Validators.pattern(/^[0-9+\-\s]*$/)]],
+      phone: ['', [e164PhoneValidator({ required: true })]],
+      phoneCountry: [DEFAULT_PHONE_COUNTRY],
+      phoneNationalNumber: [''],
       isPrimary: [false],
     });
   }
@@ -254,18 +269,18 @@ export class Clients implements OnInit {
 
     if (isCompany) {
       phoneControl?.clearValidators();
-      phoneControl?.setValue('', { emitEvent: false });
+      this.patchPhoneControls(this.partnerForm, 'phone', '', { emitEvent: false });
       contactNameControl?.setValidators([Validators.required]);
       contactEmailControl?.setValidators([Validators.email]);
-      contactPhoneControl?.setValidators([Validators.required, Validators.pattern(/^[0-9+\-\s]*$/)]);
+      contactPhoneControl?.setValidators([e164PhoneValidator({ required: true })]);
     } else {
-      phoneControl?.setValidators([Validators.required]);
+      phoneControl?.setValidators([e164PhoneValidator({ required: true })]);
       contactNameControl?.clearValidators();
       contactEmailControl?.setValidators([Validators.email]);
       contactPhoneControl?.clearValidators();
       contactNameControl?.setValue('', { emitEvent: false });
       contactEmailControl?.setValue('', { emitEvent: false });
-      contactPhoneControl?.setValue('', { emitEvent: false });
+      this.patchPhoneControls(this.partnerForm, 'contactPhone', '', { emitEvent: false });
     }
 
     phoneControl?.updateValueAndValidity({ emitEvent: false });
@@ -465,9 +480,13 @@ export class Clients implements OnInit {
       documentNumber: '',
       email: '',
       phone: '',
+      phoneCountry: DEFAULT_PHONE_COUNTRY,
+      phoneNationalNumber: '',
       contactName: '',
       contactEmail: '',
       contactPhone: '',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '',
       address: '',
       city: '',
       country: '',
@@ -486,14 +505,19 @@ export class Clients implements OnInit {
       documentTypeId: Number(partner.documentTypeId),
       documentNumber: partner.documentNumber,
       email: partner.email ?? '',
-      phone: partner.phone ?? '',
+      phone: '',
+      phoneCountry: DEFAULT_PHONE_COUNTRY,
+      phoneNationalNumber: '',
       contactName: '',
       contactEmail: '',
       contactPhone: '',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '',
       address: partner.address ?? '',
       city: partner.city ?? '',
       country: partner.country ?? '',
     });
+    this.patchPhoneControls(this.partnerForm, 'phone', partner.phone ?? '', { emitEvent: false });
     const docType = this.documentTypes.find((item) => Number(item.id) === Number(partner.documentTypeId));
     this.documentDigitsHint = docType?.digits ?? null;
     this.updateDocumentNumberValidators(this.documentDigitsHint);
@@ -520,6 +544,8 @@ export class Clients implements OnInit {
       name: '',
       email: '',
       phone: '',
+      phoneCountry: DEFAULT_PHONE_COUNTRY,
+      phoneNationalNumber: '',
       isPrimary: !this.getDrawerContacts().length,
     });
     this.showContactsDrawer = true;
@@ -532,6 +558,8 @@ export class Clients implements OnInit {
       name: '',
       email: '',
       phone: '',
+      phoneCountry: DEFAULT_PHONE_COUNTRY,
+      phoneNationalNumber: '',
       isPrimary: false,
     });
   }
@@ -544,6 +572,7 @@ export class Clients implements OnInit {
     if (!this.contactsDrawerClient) {
       return;
     }
+    this.syncPhoneControls(this.contactsDrawerForm, 'phone');
     if (this.contactsDrawerForm.invalid) {
       this.contactsDrawerForm.markAllAsTouched();
       return;
@@ -554,7 +583,7 @@ export class Clients implements OnInit {
       id: Number(contact.id),
       name: String(contact.name ?? '').trim(),
       email: String(contact.email ?? '').trim() || null,
-      phone: String(contact.phone ?? '').trim() || null,
+      phone: this.normalizeOptionalPhone(contact.phone),
       isPrimary: !!contact.isPrimary,
       isActive: contact.isActive ?? true,
     }));
@@ -568,7 +597,7 @@ export class Clients implements OnInit {
       {
         name: String(formValue.name ?? '').trim(),
         email: String(formValue.email ?? '').trim() || null,
-        phone: String(formValue.phone ?? '').trim() || null,
+        phone: this.normalizeOptionalPhone(formValue.phone),
         isPrimary: shouldBePrimary,
         isActive: true,
       },
@@ -586,7 +615,7 @@ export class Clients implements OnInit {
       id: Number(contact.id),
       name: String(contact.name ?? '').trim(),
       email: String(contact.email ?? '').trim() || null,
-      phone: String(contact.phone ?? '').trim() || null,
+      phone: this.normalizeOptionalPhone(contact.phone),
       isPrimary: Number(contact.id) === Number(contactId),
       isActive: contact.isActive ?? true,
     }));
@@ -610,6 +639,8 @@ export class Clients implements OnInit {
           name: '',
           email: '',
           phone: '',
+          phoneCountry: DEFAULT_PHONE_COUNTRY,
+          phoneNationalNumber: '',
           isPrimary: false,
         });
         this.showMessage('success', 'fas fa-check-circle', successMessage);
@@ -655,6 +686,52 @@ export class Clients implements OnInit {
     };
   }
 
+  private normalizeOptionalPhone(value: unknown): string | null {
+    return normalizePhoneToE164(value) ?? null;
+  }
+
+  private buildPhoneControlsValue(value: unknown): {
+    country: PhoneCountry;
+    nationalNumber: string;
+    e164: string;
+  } {
+    const parsed = parseStoredPhoneToFormValue(value);
+    return {
+      country: parsed.country,
+      nationalNumber: parsed.nationalNumber,
+      e164: parsed.e164 ?? '',
+    };
+  }
+
+  private patchPhoneControls(
+    form: FormGroup,
+    baseControlName: 'phone' | 'contactPhone',
+    value: unknown,
+    options?: { emitEvent?: boolean },
+  ): void {
+    const phoneValue = this.buildPhoneControlsValue(value);
+    form.patchValue(
+      {
+        [baseControlName]: phoneValue.e164,
+        [`${baseControlName}Country`]: phoneValue.country,
+        [`${baseControlName}NationalNumber`]: phoneValue.nationalNumber,
+      },
+      options,
+    );
+  }
+
+  private syncPhoneControls(form: FormGroup, baseControlName: 'phone' | 'contactPhone'): void {
+    const parsed = buildPhoneFormValue(
+      form.get(`${baseControlName}Country`)?.value,
+      form.get(`${baseControlName}NationalNumber`)?.value,
+    );
+    form.get(baseControlName)?.setValue(
+      !parsed.nationalNumber ? '' : parsed.e164 ?? invalidPhoneSentinel(),
+      { emitEvent: false },
+    );
+    form.get(baseControlName)?.updateValueAndValidity({ emitEvent: false });
+  }
+
   private buildSavePayload(): ClientSaveRequest {
     const formValue = this.partnerForm.value;
 	    const kind = (formValue.kind as ClientKind | null | undefined) ?? this.inferClientKindFromDocumentTypeId(formValue.documentTypeId);
@@ -674,7 +751,7 @@ export class Clients implements OnInit {
       const firstContact: ClientContactRequest = {
         name: String(formValue.contactName ?? '').trim(),
         email: String(formValue.contactEmail ?? '').trim() || null,
-        phone: String(formValue.contactPhone ?? '').trim() || null,
+        phone: this.normalizeOptionalPhone(formValue.contactPhone),
         isPrimary: true,
         isActive: true,
       };
@@ -690,7 +767,7 @@ export class Clients implements OnInit {
     return {
       ...basePayload,
       email: formValue.email ? String(formValue.email).trim() : undefined,
-      phone: String(formValue.phone).trim(),
+      phone: this.normalizeOptionalPhone(formValue.phone) ?? undefined,
       contacts: [],
     };
   }
@@ -713,6 +790,8 @@ export class Clients implements OnInit {
   }
 
   savePartner(): void {
+    this.syncPhoneControls(this.partnerForm, 'phone');
+    this.syncPhoneControls(this.partnerForm, 'contactPhone');
     if (this.partnerForm.invalid) {
       this.markFormAsTouched();
       return;
@@ -1381,6 +1460,10 @@ export class Clients implements OnInit {
         row.localErrors.push('Completa la razón social o nombre del cliente.');
       }
 
+      if (row.phone && !normalizePhoneToE164(row.phone)) {
+        row.localErrors.push('El teléfono debe estar en formato E.164.');
+      }
+
       const key =
         row.documentTypeId && row.documentNumber && /^\d+$/.test(row.documentNumber)
           ? `${row.documentTypeId}:${row.documentNumber}`
@@ -1481,7 +1564,7 @@ export class Clients implements OnInit {
       documentNumber: row.documentNumber || undefined,
       name: row.name || undefined,
       tradeName: row.tradeName || undefined,
-      phone: row.phone || undefined,
+      phone: this.normalizeOptionalPhone(row.phone) || undefined,
       address: row.address || undefined,
       city: row.city || undefined,
       country: row.country || undefined,
