@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from "@angular/core"
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { forkJoin, of } from "rxjs"
 import { catchError, finalize, map, switchMap } from "rxjs/operators"
@@ -140,6 +140,8 @@ export function shouldOpenDerivedAgreementComposer(
   styleUrls: ["./technician-panel.scss"],
 })
 export class TechnicianPanel implements OnInit, OnDestroy {
+  @ViewChild("inboxMessagesContainer") inboxMessagesContainer?: ElementRef<HTMLDivElement>
+
   activeTab: TechnicianPanelTab = "todo"
   activeDetailTab: TechnicianDetailTab = "equipment"
   currentPage = 1
@@ -191,6 +193,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   private techniciansMap = new Map<number, string>()
   liveElapsedSeconds = 0
   private liveTimer: ReturnType<typeof setInterval> | null = null
+  private inboxRefreshTimer: ReturnType<typeof setInterval> | null = null
 
   private readonly equipmentTypeLabels: Record<EquipmentType, string> = {
     [EquipmentType.LAPTOP]: "Laptop",
@@ -237,6 +240,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopLiveTimer()
+    this.stopInboxRefreshTimer()
   }
 
   setActiveTab(tab: TechnicianPanelTab): void {
@@ -597,6 +601,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           this.inboxActiveThread = response?.thread ?? null
           this.inboxMessages = response?.messages ?? []
           this.hydrateInboxAttachmentPreviews(this.inboxMessages)
+          this.scheduleInboxMessagesScrollToBottom()
+          this.startInboxRefreshTimer()
         },
         error: () => {
           this.inboxActiveThread = null
@@ -611,6 +617,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     this.inboxDraftMessage = ""
     this.isLoadingInbox = false
     this.isSendingInboxMessage = false
+    this.stopInboxRefreshTimer()
     this.inboxActiveThread = null
     this.inboxMessages = []
     this.clearInboxAttachmentPreviews()
@@ -642,6 +649,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           this.inboxDraftMessage = ""
           this.clearInboxDraftAttachments()
           this.hydrateInboxAttachmentPreviews(this.inboxMessages)
+          this.scheduleInboxMessagesScrollToBottom()
           const partialFailures = sendResult.partialFailures ?? []
           if (partialFailures.length) {
             this.showMessage("warning", "fas fa-exclamation-triangle", "El mensaje saliÃ³ parcialmente: revisÃ¡ los adjuntos fallidos antes de reenviar.")
@@ -948,7 +956,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       ? {
           serviceOrderId: Number(order.id),
           ...(currentDiagnosisId ? { diagnosisId: currentDiagnosisId } : {}),
-          ...(this.agreementBaseVersion?.id ? { baseAgreementId: this.agreementBaseVersion.id } : {}),
+          ...(this.agreementBaseVersion?.id ? { baseAgreementId: Number(this.agreementBaseVersion.id) } : {}),
           notes: this.agreementForm.get("notes")?.value || undefined,
           technicalServiceAmount: this.resolveTechnicalServiceAmount(),
           newProducts: productsPayload,
@@ -1271,6 +1279,46 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       }
     })
     this.inboxDraftAttachments = []
+  }
+
+  private scheduleInboxMessagesScrollToBottom(): void {
+    setTimeout(() => {
+      const container = this.inboxMessagesContainer?.nativeElement
+      if (!container) return
+      container.scrollTop = container.scrollHeight
+    }, 0)
+  }
+
+  private startInboxRefreshTimer(): void {
+    this.stopInboxRefreshTimer()
+    if (!this.inboxActiveThread || !this.showInboxModal) return
+
+    this.inboxRefreshTimer = setInterval(() => {
+      if (!this.inboxActiveThread || !this.showInboxModal || this.isLoadingInbox || this.isSendingInboxMessage) {
+        return
+      }
+
+      this.serviceOrderInboxService.getMessages(this.inboxActiveThread.id).subscribe({
+        next: (response) => {
+          const nextMessages = response.messages ?? []
+          if (nextMessages.length === this.inboxMessages.length) {
+            return
+          }
+
+          this.inboxActiveThread = response.thread
+          this.inboxMessages = nextMessages
+          this.hydrateInboxAttachmentPreviews(this.inboxMessages)
+          this.scheduleInboxMessagesScrollToBottom()
+        },
+      })
+    }, 8000)
+  }
+
+  private stopInboxRefreshTimer(): void {
+    if (this.inboxRefreshTimer !== null) {
+      clearInterval(this.inboxRefreshTimer)
+      this.inboxRefreshTimer = null
+    }
   }
 
   private showMessage(type: string, icon: string, message: string): void {

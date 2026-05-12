@@ -7,33 +7,33 @@
   </div>
 
     <section class="technician-status-card">
-      <div class="tabs-section technician-status-nav">
-        <button type="button" class="tab-button technician-status-pill" [class.active]="activeTab === 'todo'" (click)="setActiveTab('todo')">
+      <div class="tabs-navigation technician-status-nav">
+        <button type="button" class="tab-button" [class.active]="activeTab === 'todo'" (click)="setActiveTab('todo')">
           <i [class]="getTabIcon('todo')"></i>
           <span>{{ getTabLabel('todo') }}</span>
           <strong>{{ getTabCount('todo') }}</strong>
         </button>
-        <button type="button" class="tab-button technician-status-pill" [class.active]="activeTab === 'diagnosis'" (click)="setActiveTab('diagnosis')">
+        <button type="button" class="tab-button" [class.active]="activeTab === 'diagnosis'" (click)="setActiveTab('diagnosis')">
           <i [class]="getTabIcon('diagnosis')"></i>
           <span>{{ getTabLabel('diagnosis') }}</span>
           <strong>{{ getTabCount('diagnosis') }}</strong>
         </button>
-        <button type="button" class="tab-button technician-status-pill" [class.active]="activeTab === 'pending_approval'" (click)="setActiveTab('pending_approval')">
+        <button type="button" class="tab-button" [class.active]="activeTab === 'pending_approval'" (click)="setActiveTab('pending_approval')">
           <i [class]="getTabIcon('pending_approval')"></i>
           <span>{{ getTabLabel('pending_approval') }}</span>
           <strong>{{ getTabCount('pending_approval') }}</strong>
         </button>
-        <button type="button" class="tab-button technician-status-pill" [class.active]="activeTab === 'repair'" (click)="setActiveTab('repair')">
+        <button type="button" class="tab-button" [class.active]="activeTab === 'repair'" (click)="setActiveTab('repair')">
           <i [class]="getTabIcon('repair')"></i>
           <span>{{ getTabLabel('repair') }}</span>
           <strong>{{ getTabCount('repair') }}</strong>
         </button>
-        <button type="button" class="tab-button technician-status-pill" [class.active]="activeTab === 'repaired'" (click)="setActiveTab('repaired')">
+        <button type="button" class="tab-button" [class.active]="activeTab === 'repaired'" (click)="setActiveTab('repaired')">
           <i [class]="getTabIcon('repaired')"></i>
           <span>{{ getTabLabel('repaired') }}</span>
           <strong>{{ getTabCount('repaired') }}</strong>
         </button>
-        <button type="button" class="tab-button technician-status-pill" [class.active]="activeTab === 'all'" (click)="setActiveTab('all')">
+        <button type="button" class="tab-button" [class.active]="activeTab === 'all'" (click)="setActiveTab('all')">
           <i [class]="getTabIcon('all')"></i>
           <span>{{ getTabLabel('all') }}</span>
           <strong>{{ getTabCount('all') }}</strong>
@@ -750,7 +750,7 @@
                 </div>
               </div>
 
-              <div class="inbox-messages">
+              <div class="inbox-messages" #inboxMessagesContainer>
                 @for (message of inboxMessages; track message.id) {
                   <article
                     class="message-row"

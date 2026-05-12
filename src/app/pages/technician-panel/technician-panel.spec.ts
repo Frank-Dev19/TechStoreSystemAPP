@@ -120,6 +120,23 @@ describe('TechnicianPanel', () => {
     expect(component).toBeTruthy();
   });
 
+  it('scrolls the inbox to the latest message when opening the thread', () => {
+    const order = createServiceOrder({ id: 88, code: 'SO-88' });
+    const scheduleScrollSpy = spyOn<any>(component, 'scheduleInboxMessagesScrollToBottom');
+    const refreshTimerSpy = spyOn<any>(component, 'startInboxRefreshTimer');
+
+    inboxServiceStub.ensureThreadByOrder.and.returnValue(of({ id: 901 }));
+    inboxServiceStub.getMessages.and.returnValue(of({
+      thread: { id: 901, serviceOrderId: 88, serviceOrderCode: 'SO-88', clientAlias: 'Cliente', assignedTechnicianAlias: 'Técnico', equipmentLabel: 'Laptop', unreadCount: 0 },
+      messages: [{ id: 1, text: 'hola', attachments: [], createdAt: new Date(), authorRole: 'SYSTEM', authorDisplayName: null }],
+    }));
+
+    component.openWhatsAppInbox(order);
+
+    expect(scheduleScrollSpy).toHaveBeenCalled();
+    expect(refreshTimerSpy).toHaveBeenCalled();
+  });
+
   it('segments orders into tabs by technical status', () => {
     const orders = [
       createServiceOrder({ id: 1, code: 'SO-1', technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA }),
@@ -396,6 +413,82 @@ describe('TechnicianPanel', () => {
 
     const payload = agreementServiceStub.create.calls.mostRecent().args[0];
     expect(payload.products).toBeUndefined();
+  });
+
+  it('forces baseAgreementId to be numeric when the inherited agreement id arrives as string', () => {
+    const order = createServiceOrder({ id: 32, technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
+
+    component.selectedServiceOrder = order;
+    component.agreementBaseVersion = createAgreement({ id: '72' as unknown as number, sequenceNumber: 4, status: ServiceOrderAgreementStatus.CONFIRMED });
+    component.isDerivedAgreementComposerActive = true;
+    component['agreementEditableTechnicalService'] = {
+      id: 1,
+      type: 'service',
+      serviceId: 1,
+      serviceCodeSnapshot: 'TECHNICAL_SERVICE',
+      serviceNameSnapshot: 'Servicio técnico',
+      unitPrice: 85,
+      notes: '',
+      permissions: { provenance: 'INHERITED', canEdit: true, canDelete: false },
+    };
+    component.agreementForm.patchValue({ notes: 'Nuevo alcance de servicio' });
+    component.diagnosticHistory = [
+      {
+        id: 444,
+        serviceOrderId: 32,
+        sequenceNumber: 2,
+        status: ServiceOrderDiagnosisStatus.CURRENT,
+        outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE,
+        summary: 'Nuevo hallazgo',
+        details: null,
+        outcomeReason: null,
+        recommendedAction: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+      },
+    ];
+
+    component.submitAgreement(false);
+
+    const payload = agreementServiceStub.create.calls.mostRecent().args[0];
+    expect(payload.baseAgreementId).toBe(72);
+    expect(typeof payload.baseAgreementId).toBe('number');
+  });
+
+  it('scrolls the inbox to the latest message after sending one', () => {
+    const scheduleScrollSpy = spyOn<any>(component, 'scheduleInboxMessagesScrollToBottom');
+    const activeThread = {
+      id: 901,
+      serviceOrderId: 88,
+      serviceOrderCode: 'SO-88',
+      clientAlias: 'Cliente',
+      assignedTechnicianAlias: 'Técnico',
+      equipmentLabel: 'Laptop',
+      operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO,
+      technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+        commercialStatus: ServiceOrderCommercialStatus.PENDIENTE_PROPUESTA,
+      economicStatus: ServiceOrderEconomicStatus.PENDIENTE,
+      clientPhone: null,
+      lastMessageText: null,
+      lastMessageAt: null,
+      lastMessageDirection: null,
+      lastMessageAuthorRole: null,
+      unreadCount: 0,
+      contextToken: 'ctx-901',
+    };
+
+    component.inboxActiveThread = activeThread;
+    component.inboxDraftMessage = 'Mensaje nuevo';
+    inboxServiceStub.sendMessage.and.returnValue(of({ partialFailures: [] }));
+    inboxServiceStub.getMessages.and.returnValue(of({
+      thread: activeThread,
+      messages: [{ id: 2, text: 'Mensaje nuevo', attachments: [], createdAt: new Date(), authorRole: 'TECHNICIAN', authorDisplayName: 'Técnico' }],
+    }));
+
+    component.sendInboxMessage();
+
+    expect(scheduleScrollSpy).toHaveBeenCalled();
   });
 
   it('confirms a derived agreement with explicit replacement messaging', () => {
