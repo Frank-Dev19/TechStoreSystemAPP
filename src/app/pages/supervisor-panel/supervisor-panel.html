@@ -6,7 +6,7 @@
     </div>
   </div>
 
-  <div class="stats-grid">
+  <div class="stats-grid panel-surface panel-surface--stats">
     <div class="stat-card">
       <div class="stat-icon info">
         <i class="fas fa-clipboard-list"></i>
@@ -39,7 +39,7 @@
     </div>
   </div>
 
-  <div class="tabs-navigation section-navigation">
+  <div class="tabs-navigation supervisor-tabs">
     <button class="tab-button" [class.active]="activeSection === 'orders'" (click)="setActiveSection('orders')">
       <i class="fas fa-clipboard-list"></i>
       Órdenes
@@ -50,12 +50,12 @@
     </button>
     <button class="tab-button" [class.active]="activeSection === 'inbox'" (click)="setActiveSection('inbox')">
       <i class="fas fa-comments"></i>
-      Conversaciones
+      Chats
     </button>
   </div>
 
   @if (activeSection === 'ranking') {
-  <section class="ranking-panel">
+  <section class="ranking-panel panel-surface panel-surface--ranking">
     <header class="ranking-header">
       <div>
         <h2>Ranking económico de técnicos</h2>
@@ -159,7 +159,7 @@
   }
 
   @if (activeSection === 'inbox') {
-  <section class="inbox-monitor">
+  <section class="inbox-monitor panel-surface panel-surface--chats">
     <header class="inbox-monitor-header">
       <div>
         <h2>Monitoreo de conversaciones</h2>
@@ -338,8 +338,8 @@
   }
 
   @if (activeSection === 'orders') {
-  <div class="panel-container">
-    <div class="tabs-navigation order-filters">
+  <div class="panel-container panel-surface panel-surface--orders">
+    <div class="tabs-navigation order-filters surface-toolbar">
       <input
         class="thread-input"
         type="text"
@@ -354,65 +354,68 @@
       </select>
     </div>
 
-    <div class="serviceOrderAgreements-grid">
-      @if (!serviceOrders.length) {
-        <div class="empty-state">
-          <i class="fas fa-spinner fa-spin"></i>
-          <p>Cargando órdenes...</p>
-        </div>
-      } @else if (filteredServiceOrders.length === 0) {
-        <div class="empty-state">
-          <i class="fas fa-inbox"></i>
-          <p>No hay órdenes para esta vista.</p>
-        </div>
-      } @else {
-        @for (order of paginatedServiceOrders; track order.id) {
-          <div class="quote-card" (click)="selectServiceOrder(order)" [class.selected]="selectedServiceOrder?.id === order.id">
-            <div class="card-header">
-              <div class="quote-info">
-                <h3>{{ order.code }} . {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</h3>
-                <span class="quote-badge status-current">
-                  {{ getInboxThreadOperativeStatusLabel(order.operativeStatus) }}
-                </span>
+    <div class="orders-workspace" [class.has-selection]="selectedServiceOrder">
+      <div class="orders-list-column">
+        <div class="serviceOrderAgreements-grid">
+          @if (!serviceOrders.length) {
+            <div class="empty-state">
+              <i class="fas fa-spinner fa-spin"></i>
+              <p>Cargando órdenes...</p>
+            </div>
+          } @else if (filteredServiceOrders.length === 0) {
+            <div class="empty-state">
+              <i class="fas fa-inbox"></i>
+              <p>No hay órdenes para esta vista.</p>
+            </div>
+          } @else {
+            @for (order of paginatedServiceOrders; track order.id) {
+              <div class="quote-card" (click)="selectServiceOrder(order)" [class.selected]="selectedServiceOrder?.id === order.id">
+                <div class="card-header">
+                  <div class="quote-info">
+                    <h3>{{ order.code }} . {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</h3>
+                    <span class="quote-badge status-current">
+                      {{ getInboxThreadOperativeStatusLabel(order.operativeStatus) }}
+                    </span>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p class="quote-date">
+                    <i class="fas fa-calendar-alt"></i>
+                    {{ order.receivedAt | date: 'dd/MM/yyyy HH:mm' }}
+                  </p>
+                  <p class="quote-date">
+                    <i class="fas fa-tag"></i>
+                    {{ getServiceTypeLabel(order.serviceType) }}
+                  </p>
+                  <p class="quote-date">
+                    <i class="fas fa-user-cog"></i>
+                    {{ order.assignedToTechnicianName || 'Sin asignar' }}
+                  </p>
+                  @if (order.initialIssue) {
+                    <p class="quote-notes">
+                      <i class="fas fa-sticky-note"></i>
+                      {{ order.initialIssue }}
+                    </p>
+                  }
+                </div>
               </div>
-            </div>
-            <div class="card-body">
-              <p class="quote-date">
-                <i class="fas fa-calendar-alt"></i>
-                {{ order.receivedAt | date: 'dd/MM/yyyy HH:mm' }}
-              </p>
-              <p class="quote-date">
-                <i class="fas fa-tag"></i>
-                {{ getServiceTypeLabel(order.serviceType) }}
-              </p>
-              <p class="quote-date">
-                <i class="fas fa-user-cog"></i>
-                {{ order.assignedToTechnicianName || 'Sin asignar' }}
-              </p>
-              @if (order.initialIssue) {
-                <p class="quote-notes">
-                  <i class="fas fa-sticky-note"></i>
-                  {{ order.initialIssue }}
-                </p>
-              }
-            </div>
+            }
+          }
+        </div>
+        @if (filteredServiceOrders.length > itemsPerPage) {
+          <div class="pagination">
+            <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
+              <i class="fas fa-chevron-left"></i> Anterior
+            </button>
+            <span class="pagination-info">Pagina {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span>
+            <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
+              Siguiente <i class="fas fa-chevron-right"></i>
+            </button>
           </div>
         }
-      }
-    </div>
-    @if (filteredServiceOrders.length > itemsPerPage) {
-      <div class="pagination">
-        <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
-          <i class="fas fa-chevron-left"></i> Anterior
-        </button>
-        <span class="pagination-info">Pagina {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span>
-        <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
-          Siguiente <i class="fas fa-chevron-right"></i>
-        </button>
       </div>
-    }
 
-    @if (selectedServiceOrder) {
+      @if (selectedServiceOrder) {
       <aside class="detail-view">
         <header class="detail-drawer-header">
           <div>
@@ -584,7 +587,8 @@
           </section>
         </div>
       </aside>
-    }
+      }
+    </div>
   </div>
   }
 
