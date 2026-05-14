@@ -78,6 +78,9 @@ describe('Clients', () => {
       documentTypeId: 2,
       documentNumber: '12345678901',
       tradeName: 'Empresa',
+      email: 'ventas@empresa.com',
+      phoneCountry: DEFAULT_PHONE_COUNTRY,
+      phoneNationalNumber: '987654321',
       contactName: 'Ana Contacto',
       contactEmail: 'ana@empresa.com',
       contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
@@ -90,6 +93,8 @@ describe('Clients', () => {
       jasmine.objectContaining({
         kind: ClientKind.COMPANY,
         name: 'Empresa SAC',
+        email: 'ventas@empresa.com',
+        phone: '+51987654321',
         contacts: [
           jasmine.objectContaining({
             name: 'Ana Contacto',
@@ -159,6 +164,151 @@ describe('Clients', () => {
     expect(component.showContactsDrawer).toBeTrue();
     expect(component.contactsDrawerClient?.id).toBe(20);
     expect(component.getDrawerContacts().length).toBe(1);
+  });
+
+  it('prellena el contacto principal al editar una empresa', () => {
+    const company = {
+      id: 23,
+      companyId: 1,
+      kind: ClientKind.COMPANY,
+      name: 'Carter SAC',
+      tradeName: 'Carter',
+      documentTypeId: 2,
+      documentNumber: '20609766108',
+      contacts: [
+        {
+          id: 501,
+          clientId: 23,
+          name: 'Debora Flores',
+          email: 'debora@carter.com',
+          phone: '+51900111222',
+          isPrimary: true,
+          isActive: true,
+        },
+      ],
+    } as any;
+
+    component.openEditModal(company);
+
+    expect(component.partnerForm.get('contactName')?.value).toBe('Debora Flores');
+    expect(component.partnerForm.get('contactEmail')?.value).toBe('debora@carter.com');
+    expect(component.partnerForm.get('contactPhone')?.value).toBe('+51900111222');
+    expect(component.partnerForm.get('contactPhoneCountry')?.value).toEqual(DEFAULT_PHONE_COUNTRY);
+    expect(component.partnerForm.get('contactPhoneNationalNumber')?.value).toBe('900111222');
+  });
+
+  it('usa fallback del cliente al editar empresa sin contactos cargados', () => {
+    const company = {
+      id: 24,
+      companyId: 1,
+      kind: ClientKind.COMPANY,
+      name: 'Carter SAC',
+      tradeName: 'Carter',
+      documentTypeId: 2,
+      documentNumber: '20609766108',
+      email: 'principal@carter.com',
+      phone: '+51988777666',
+      contacts: [],
+    } as any;
+
+    component.openEditModal(company);
+
+    expect(component.partnerForm.get('email')?.value).toBe('principal@carter.com');
+    expect(component.partnerForm.get('phone')?.value).toBe('+51988777666');
+    expect(component.partnerForm.get('phoneNationalNumber')?.value).toBe('988777666');
+    expect(component.partnerForm.get('contactName')?.value).toBe('Carter SAC');
+    expect(component.partnerForm.get('contactEmail')?.value).toBe('principal@carter.com');
+    expect(component.partnerForm.get('contactPhone')?.value).toBe('+51988777666');
+    expect(component.partnerForm.get('contactPhoneNationalNumber')?.value).toBe('988777666');
+  });
+
+  it('hidrata por separado teléfono de empresa y teléfono del contacto al editar empresa', () => {
+    const company = {
+      id: 25,
+      companyId: 1,
+      kind: ClientKind.COMPANY,
+      name: 'Carter SAC',
+      tradeName: 'Carter',
+      documentTypeId: 2,
+      documentNumber: '20609766108',
+      email: 'ventas@carter.com',
+      phone: '+51987654321',
+      contacts: [
+        {
+          id: 701,
+          clientId: 25,
+          name: 'Debora Flores',
+          email: 'debora@carter.com',
+          phone: '+51900111222',
+          isPrimary: true,
+          isActive: true,
+        },
+      ],
+    } as any;
+
+    component.openEditModal(company);
+
+    expect(component.partnerForm.get('email')?.value).toBe('ventas@carter.com');
+    expect(component.partnerForm.get('phone')?.value).toBe('+51987654321');
+    expect(component.partnerForm.get('phoneNationalNumber')?.value).toBe('987654321');
+    expect(component.partnerForm.get('contactName')?.value).toBe('Debora Flores');
+    expect(component.partnerForm.get('contactEmail')?.value).toBe('debora@carter.com');
+    expect(component.partnerForm.get('contactPhone')?.value).toBe('+51900111222');
+    expect(component.partnerForm.get('contactPhoneNationalNumber')?.value).toBe('900111222');
+  });
+
+  it('actualiza empresa enviando datos top-level y contacto principal en el mismo payload', () => {
+    const company = {
+      id: 26,
+      companyId: 1,
+      kind: ClientKind.COMPANY,
+      name: 'Carter SAC',
+      tradeName: 'Carter',
+      documentTypeId: 2,
+      documentNumber: '20609766108',
+      email: 'ventas@carter.com',
+      phone: '+51987654321',
+      contacts: [
+        {
+          id: 801,
+          clientId: 26,
+          name: 'Debora Flores',
+          email: 'debora@carter.com',
+          phone: '+51900111222',
+          isPrimary: true,
+          isActive: true,
+        },
+      ],
+    } as any;
+
+    component.openEditModal(company);
+    component.partnerForm.patchValue({
+      email: 'facturacion@carter.com',
+      phoneCountry: DEFAULT_PHONE_COUNTRY,
+      phoneNationalNumber: '999888777',
+      contactName: 'Debora Flores',
+      contactEmail: 'postventa@carter.com',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '900111333',
+    });
+
+    component.savePartner();
+
+    expect(clientsApiStub.update).toHaveBeenCalledWith(
+      26,
+      jasmine.objectContaining({
+        email: 'facturacion@carter.com',
+        phone: '+51999888777',
+        contacts: [
+          jasmine.objectContaining({
+            name: 'Debora Flores',
+            email: 'postventa@carter.com',
+            phone: '+51900111333',
+            isPrimary: true,
+          }),
+        ],
+      }),
+    );
   });
 
   it('agrega contactos nuevos desde el drawer sin perder los existentes', () => {

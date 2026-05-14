@@ -5,7 +5,7 @@
 
   <div class="phone-input__row" [class.phone-input__row--invalid]="controlInvalid">
     <ng-select
-      class="phone-input__country"
+      class="phone-input__country custom"
       [items]="countries"
       bindLabel="label"
       [searchable]="true"
@@ -31,13 +31,13 @@
     />
   </div>
 
-  <div class="phone-input__meta" [class.phone-input__meta--error]="controlInvalid">
-    @if (showRequiredError) {
-      <span>El teléfono es obligatorio.</span>
-    } @else if (controlInvalid) {
-      <span>Ingresá un número válido para el país seleccionado.</span>
-    } @else {
-      <span>{{ helperText }}</span>
-    }
-  </div>
+  @if (controlInvalid) {
+    <div class="phone-input__meta phone-input__meta--error">
+      @if (showRequiredError) {
+        <span>El teléfono es obligatorio.</span>
+      } @else {
+        <span>Ingresá un número válido para el país seleccionado.</span>
+      }
+    </div>
+  }
 </div>

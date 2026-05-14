@@ -263,18 +263,20 @@ export class Clients implements OnInit {
   private syncClientKindValidation(): void {
     const isCompany = this.isCompanyClientFlow();
     const phoneControl = this.partnerForm.get('phone');
+    const emailControl = this.partnerForm.get('email');
     const contactNameControl = this.partnerForm.get('contactName');
     const contactEmailControl = this.partnerForm.get('contactEmail');
     const contactPhoneControl = this.partnerForm.get('contactPhone');
 
     if (isCompany) {
-      phoneControl?.clearValidators();
-      this.patchPhoneControls(this.partnerForm, 'phone', '', { emitEvent: false });
+      phoneControl?.setValidators([e164PhoneValidator({ required: false })]);
+      emailControl?.setValidators([Validators.email]);
       contactNameControl?.setValidators([Validators.required]);
       contactEmailControl?.setValidators([Validators.email]);
       contactPhoneControl?.setValidators([e164PhoneValidator({ required: true })]);
     } else {
       phoneControl?.setValidators([e164PhoneValidator({ required: true })]);
+      emailControl?.setValidators([Validators.email]);
       contactNameControl?.clearValidators();
       contactEmailControl?.setValidators([Validators.email]);
       contactPhoneControl?.clearValidators();
@@ -284,6 +286,7 @@ export class Clients implements OnInit {
     }
 
     phoneControl?.updateValueAndValidity({ emitEvent: false });
+    emailControl?.updateValueAndValidity({ emitEvent: false });
     contactNameControl?.updateValueAndValidity({ emitEvent: false });
     contactEmailControl?.updateValueAndValidity({ emitEvent: false });
     contactPhoneControl?.updateValueAndValidity({ emitEvent: false });
@@ -498,6 +501,8 @@ export class Clients implements OnInit {
   openEditModal(partner: ClientResponse): void {
     this.isEditMode = true;
     this.currentPartner = partner;
+    const editContactSeed = this.getEditContactSeed(partner);
+    const companyPhoneSeed = String(partner.phone ?? '').trim();
     this.partnerForm.patchValue({
       name: partner.name,
       kind: partner.kind ?? this.inferClientKindFromDocumentTypeId(Number(partner.documentTypeId)),
@@ -505,19 +510,20 @@ export class Clients implements OnInit {
       documentTypeId: Number(partner.documentTypeId),
       documentNumber: partner.documentNumber,
       email: partner.email ?? '',
-      phone: '',
+      phone: companyPhoneSeed,
       phoneCountry: DEFAULT_PHONE_COUNTRY,
       phoneNationalNumber: '',
-      contactName: '',
-      contactEmail: '',
-      contactPhone: '',
+      contactName: editContactSeed.name,
+      contactEmail: editContactSeed.email,
+      contactPhone: editContactSeed.phone,
       contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
       contactPhoneNationalNumber: '',
       address: partner.address ?? '',
       city: partner.city ?? '',
       country: partner.country ?? '',
     });
-    this.patchPhoneControls(this.partnerForm, 'phone', partner.phone ?? '', { emitEvent: false });
+    this.patchPhoneControls(this.partnerForm, 'phone', companyPhoneSeed, { emitEvent: false });
+    this.patchPhoneControls(this.partnerForm, 'contactPhone', editContactSeed.phone, { emitEvent: false });
     const docType = this.documentTypes.find((item) => Number(item.id) === Number(partner.documentTypeId));
     this.documentDigitsHint = docType?.digits ?? null;
     this.updateDocumentNumberValidators(this.documentDigitsHint);
@@ -670,6 +676,24 @@ export class Clients implements OnInit {
     return [...contacts].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
   }
 
+  private getPrimaryContact(partner: ClientResponse | null | undefined): ClientContactResponse | null {
+    const contacts = this.getSortedContacts(partner?.contacts ?? []);
+    return contacts.find((contact) => contact.isPrimary) ?? contacts[0] ?? null;
+  }
+
+  private getEditContactSeed(partner: ClientResponse | null | undefined): {
+    name: string;
+    email: string;
+    phone: string;
+  } {
+    const primaryContact = this.getPrimaryContact(partner);
+    return {
+      name: String(primaryContact?.name ?? partner?.name ?? '').trim(),
+      email: String(primaryContact?.email ?? partner?.email ?? '').trim(),
+      phone: String(primaryContact?.phone ?? partner?.phone ?? '').trim(),
+    };
+  }
+
   private normalizeClientResponse(partner: ClientResponse): ClientResponse {
     return {
       ...partner,
@@ -758,8 +782,8 @@ export class Clients implements OnInit {
 
       return {
         ...basePayload,
-        email: null,
-        phone: null,
+        email: formValue.email ? String(formValue.email).trim() : null,
+        phone: this.normalizeOptionalPhone(formValue.phone),
         contacts: [firstContact],
       };
     }
@@ -776,9 +800,6 @@ export class Clients implements OnInit {
     const payload = this.buildSavePayload();
     if (this.currentPartner) {
       delete payload.companyId;
-      if (this.canManageContacts(this.currentPartner)) {
-        delete payload.contacts;
-      }
     }
     return payload;
   }

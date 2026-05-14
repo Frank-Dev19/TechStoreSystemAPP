@@ -58,18 +58,6 @@ export class PhoneInputComponent implements OnInit, OnDestroy {
     return !!this.e164Control.errors?.['required'] && this.controlInvalid;
   }
 
-  get helperText(): string {
-    return `Se guardará como ${this.previewE164 || 'E.164'}`;
-  }
-
-  get previewE164(): string | null {
-    const currentValue = String(this.e164Control.value ?? '').trim();
-    if (!currentValue || currentValue === invalidPhoneSentinel()) {
-      return null;
-    }
-    return currentValue;
-  }
-
   get countryControl() {
     return this.formGroup.get(this.countryControlName)!;
   }

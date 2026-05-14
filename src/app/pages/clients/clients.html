@@ -482,6 +482,7 @@
                     <div class="form-group">
                         <label for="nombre">{{ isCompanyClientFlow() ? 'Razón social *' : 'Nombre *' }}</label>
                         <input type="text" id="nombre" formControlName="name" class="form-input"
+                            [placeholder]="isCompanyClientFlow() ? 'Ej. CARTER SAC' : 'Ej. Juan Pérez'"
                             [class.error]="partnerForm.get('name')?.invalid && partnerForm.get('name')?.touched">
                         <div class="error-message" *ngIf="partnerForm.get('name')?.invalid && partnerForm.get('name')?.touched">
                             {{ isCompanyClientFlow() ? 'La razón social es requerida' : 'El nombre es requerido' }}
@@ -490,7 +491,8 @@
 
                     <div class="form-group">
                         <label for="nombreComercial">Nombre Comercial</label>
-                        <input type="text" id="nombreComercial" formControlName="tradeName" class="form-input">
+                        <input type="text" id="nombreComercial" formControlName="tradeName" class="form-input"
+                            placeholder="Ej. CARTER">
                     </div>
 
                     <div class="form-group">
@@ -512,6 +514,7 @@
                     <div class="form-group">
                         <label for="numeroDocumento">Número de Documento *</label>
                         <input type="text" id="numeroDocumento" formControlName="documentNumber" class="form-input"
+                            [placeholder]="documentDigitsHint === 11 ? '20609766108' : (documentDigitsHint === 8 ? '12345678' : 'Ingresa el documento')"
                             [attr.maxlength]="documentDigitsHint || null"
                             (input)="onDocumentNumberInput()"
                             [class.error]="partnerForm.get('documentNumber')?.invalid && partnerForm.get('documentNumber')?.touched">
@@ -526,6 +529,7 @@
                     <div class="form-group" *ngIf="!isCompanyClientFlow()">
                         <label for="email">Correo electrónico</label>
                         <input type="email" id="email" formControlName="email" class="form-input"
+                            placeholder="correo@empresa.com"
                             [class.error]="partnerForm.get('email')?.invalid && partnerForm.get('email')?.touched">
                         <div class="error-message"
                             *ngIf="partnerForm.get('email')?.invalid && partnerForm.get('email')?.touched">
@@ -546,9 +550,37 @@
                     </div>
 
                     <ng-container *ngIf="isCompanyClientFlow()">
+                        <div class="form-section-title form-section-title--full">Datos de la empresa</div>
+
+                        <div class="form-group">
+                            <label for="email">Correo de la empresa</label>
+                            <input type="email" id="email" formControlName="email" class="form-input"
+                                placeholder="empresa@dominio.com"
+                                [class.error]="partnerForm.get('email')?.invalid && partnerForm.get('email')?.touched">
+                            <div class="error-message"
+                                *ngIf="partnerForm.get('email')?.invalid && partnerForm.get('email')?.touched">
+                                Ingresa un correo válido
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <app-phone-input
+                                [formGroup]="partnerForm"
+                                e164ControlName="phone"
+                                countryControlName="phoneCountry"
+                                nationalNumberControlName="phoneNationalNumber"
+                                inputId="phone"
+                                label="Teléfono de la empresa"
+                                [required]="false"
+                            />
+                        </div>
+
+                        <div class="form-section-title form-section-title--full">Contacto principal</div>
+
                         <div class="form-group">
                             <label for="contactName">Nombre de contacto *</label>
                             <input type="text" id="contactName" formControlName="contactName" class="form-input"
+                                placeholder="Nombre del contacto"
                                 [class.error]="partnerForm.get('contactName')?.invalid && partnerForm.get('contactName')?.touched">
                             <div class="error-message" *ngIf="partnerForm.get('contactName')?.invalid && partnerForm.get('contactName')?.touched">
                                 El nombre de contacto es requerido
@@ -558,6 +590,7 @@
                         <div class="form-group">
                             <label for="contactEmail">Correo del contacto</label>
                             <input type="email" id="contactEmail" formControlName="contactEmail" class="form-input"
+                                placeholder="contacto@empresa.com"
                                 [class.error]="partnerForm.get('contactEmail')?.invalid && partnerForm.get('contactEmail')?.touched">
                             <div class="error-message" *ngIf="partnerForm.get('contactEmail')?.invalid && partnerForm.get('contactEmail')?.touched">
                                 Ingresa un correo válido
@@ -579,17 +612,17 @@
 
                     <div class="form-group">
                         <label for="address">Dirección</label>
-                        <input type="text" id="address" formControlName="address" class="form-input">
+                        <input type="text" id="address" formControlName="address" class="form-input" placeholder="Av. ...">
                     </div>
 
                     <div class="form-group">
                         <label for="city">Ciudad</label>
-                        <input type="text" id="city" formControlName="city" class="form-input">
+                        <input type="text" id="city" formControlName="city" class="form-input" placeholder="Lima">
                     </div>
 
                     <div class="form-group">
                         <label for="country">País</label>
-                        <input type="text" id="country" formControlName="country" class="form-input">
+                        <input type="text" id="country" formControlName="country" class="form-input" placeholder="Perú">
                     </div>
 
                 </div>
