@@ -1,19 +1,14 @@
 /* You can add global styles to this file, and also import other style files */
 @use 'bootstrap/scss/bootstrap';
-
-@import "assets/sass/abstracts/functions";
-@import "assets/sass/abstracts/mixins";
-@import "assets/sass/abstracts/colors";
-@import "assets/sass/abstracts/variables";
-@import "assets/sass/base/animations";
-@import "assets/sass/base/typography";
-@import "assets/sass/base/utilities";
-@import "assets/sass/components/button";
-@import "assets/sass/components/form";
-@import "assets/sass/components/select";
-@import "assets/sass/components/checkbox";
-@import "assets/sass/components/modal";
-@import "assets/sass/components/grid";
+@use "assets/sass/base/animations";
+@use "assets/sass/base/typography";
+@use "assets/sass/base/utilities";
+@use "assets/sass/components/button";
+@use "assets/sass/components/form";
+@use "assets/sass/components/select";
+@use "assets/sass/components/checkbox";
+@use "assets/sass/components/modal";
+@use "assets/sass/components/grid";
 
 @import url("../node_modules/ngx-toastr/toastr.css");
 @import url("../node_modules/font-awesome/css/font-awesome.min.css");

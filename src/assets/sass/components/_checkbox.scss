@@ -1,4 +1,4 @@
-@import "../abstracts/colors";
+@use "../abstracts/colors" as *;
 
 @supports (-webkit-appearance: none) or (-moz-appearance: none) {
   input[type="checkbox"],

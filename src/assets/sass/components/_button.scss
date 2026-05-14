@@ -1,4 +1,5 @@
 @use "sass:color";
+@use "sass:map";
 @use "sass:math";
 @use "../abstracts/colors" as colors;
 @use "../abstracts/mixins";
@@ -113,7 +114,7 @@ $btn_color: (
 }
 
 @each $name, $color in $btn_color {
-  @include btn_classic($name, map-get($btn_color, $name));
+  @include btn_classic($name, map.get($btn_color, $name));
 }
 
 .btn-full {

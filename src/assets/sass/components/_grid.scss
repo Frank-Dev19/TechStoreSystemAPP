@@ -1,3 +1,8 @@
+@use "sass:map";
+@use "../abstracts/colors" as *;
+@use "../abstracts/functions" as *;
+@use "../abstracts/variables" as *;
+
 .custom-header {
     display: flex;
     justify-content: space-between;
@@ -66,7 +71,7 @@ $status_color: ( "blue": $blue-logo, "yellow": $yellow-toast-warn-b, "green": $g
 
 @each $name,
 $color in $status_color {
-    @include status_base($name, map-get($status_color, $name));
+    @include status_base($name, map.get($status_color, $name));
 }
 
 //

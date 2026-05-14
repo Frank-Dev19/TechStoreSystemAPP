@@ -1,3 +1,6 @@
+@use "./colors" as *;
+@use "./functions" as *;
+
 // Dimensions 
 $border-width: 1px !default;
 $input-line-height: 1.9 !default;
@@ -13,7 +16,6 @@ $header-height: 5rem;
 // Gradients
 $blue-header-gradient: linear-gradient(175deg, rgba($blue-logo, 1) 0% , rgba($blue-logo, 0.7) 35% , rgba($blue-logo, 0.4) 80%);
 
-$alert-factor: 1.4;
 $page-y-padding: 2rem; // Used only in the dashboard
 $excution-name-height: 4.3rem;
 $excution-name-bottom-padding: 1rem; 
