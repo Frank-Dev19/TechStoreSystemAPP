@@ -75,7 +75,7 @@ The reception wizard MUST capture client data according to `documentType.kind` a
 
 ### Requirement: Company Contact Selection
 
-When the selected client is `COMPANY`, the wizard MUST request exactly one contact for the order, SHOULD preselect the primary contact, and MAY allow inline creation of a new contact.
+When the selected client is `COMPANY`, the wizard MUST resolve exactly one contact for the order, SHOULD preselect the primary contact when one exists, and MUST allow inline creation of a new contact when no suitable contact is selected.
 
 #### Scenario: Selecting an existing primary contact
 - GIVEN an existing `COMPANY` client with multiple contacts
@@ -86,13 +86,21 @@ When the selected client is `COMPANY`, the wizard MUST request exactly one conta
 #### Scenario: No contacts available for a company
 - GIVEN an existing `COMPANY` client without contacts
 - WHEN the user continues the order flow
-- THEN the wizard MUST require creating one contact before finishing the order
+- THEN the wizard MUST show an empty-state message indicating that the company has no active contacts
+- AND the wizard MUST require creating one contact before finishing the order
 
 #### Scenario: Creating a new contact inline for an existing company
 - GIVEN an existing `COMPANY` client without a suitable contact selected
 - WHEN the user completes the inline contact block
 - THEN the wizard MUST persist that contact on the master company
 - AND the order MUST use that newly created contact as the selected operational contact
+
+#### Scenario: Switching from an existing contact to a new inline contact
+- GIVEN an existing `COMPANY` client with contacts listed in the wizard
+- WHEN the user changes the selector to register a new contact inline
+- THEN the wizard MUST clear the operative contact snapshot fields
+- AND MUST enable the inline contact inputs without unlocking the legal company fields
+- AND when the new contact is completed, the order MUST use the persisted `clientContactId` of that new contact
 
 #### Scenario: Legacy person lookup remains unchanged
 - GIVEN an existing `PERSON` client is found by document

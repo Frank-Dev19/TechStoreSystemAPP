@@ -1482,6 +1482,11 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     return issue || "Sin detalle adicional del servicio."
   }
 
+  getEquipmentDetailValue(value: string | null | undefined, fallback: string): string {
+    const normalizedValue = String(value ?? "").trim()
+    return normalizedValue || fallback
+  }
+
   private shouldLoadServiceOrderAgreement(order: ServiceOrder | null): boolean {
     if (!order) return false
     if (order.serviceType === ServiceType.WARRANTY_SERVICE) return false

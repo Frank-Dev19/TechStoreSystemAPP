@@ -263,6 +263,38 @@
               </article>
 
               <article class="equipment-info-card">
+                <div class="equipment-info-card__icon"><i class="fas fa-copyright"></i></div>
+                <div>
+                  <p>Marca</p>
+                  <strong>{{ getEquipmentDetailValue(selectedServiceOrder.brand, 'Sin marca registrada') }}</strong>
+                </div>
+              </article>
+
+              <article class="equipment-info-card">
+                <div class="equipment-info-card__icon"><i class="fas fa-layer-group"></i></div>
+                <div>
+                  <p>Modelo</p>
+                  <strong>{{ getEquipmentDetailValue(selectedServiceOrder.model, 'Sin modelo registrado') }}</strong>
+                </div>
+              </article>
+
+              <article class="equipment-info-card">
+                <div class="equipment-info-card__icon"><i class="fas fa-fingerprint"></i></div>
+                <div>
+                  <p>N.° de serie</p>
+                  <strong>{{ getEquipmentDetailValue(selectedServiceOrder.serialNumber, 'Sin número de serie') }}</strong>
+                </div>
+              </article>
+
+              <article class="equipment-info-card">
+                <div class="equipment-info-card__icon"><i class="fas fa-plug"></i></div>
+                <div>
+                  <p>Accesorios</p>
+                  <strong>{{ getEquipmentDetailValue(selectedServiceOrder.accessories, 'Sin accesorios reportados') }}</strong>
+                </div>
+              </article>
+
+              <article class="equipment-info-card">
                 <div class="equipment-info-card__icon"><i class="fas fa-exclamation-triangle"></i></div>
                 <div>
                   <p>Problema reportado</p>

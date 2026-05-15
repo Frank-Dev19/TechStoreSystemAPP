@@ -1,0 +1,5 @@
+- [x] Ajustar el estado y validaciones del wizard para activar gestión de contactos solo en clientes `COMPANY`
+- [x] Completar la UI del área de contacto empresa para seleccionar contacto existente o entrar a alta inline
+- [x] Persistir el contacto inline en la empresa existente antes de crear la orden
+- [x] Bloquear la creación de órdenes de empresa sin contacto resuelto
+- [x] Verificar typecheck y tests del wizard de `reception-panel`

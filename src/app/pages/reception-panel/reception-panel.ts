@@ -5,7 +5,7 @@ import { catchError, finalize, map, switchMap, tap } from "rxjs/operators"
 import { forkJoin, of, throwError } from "rxjs"
 import { ClientsApiService } from "../../services/clients-api.service"
 import { ClientContactResponse, ClientResponse } from "../../models/clients-response"
-import { ClientKind, ClientSaveRequest } from "../../models/clients-request"
+import { ClientContactRequest, ClientKind, ClientSaveRequest } from "../../models/clients-request"
 import {
   ServiceOrderService,
   TechnicianAssignmentSuggestion,
@@ -143,6 +143,17 @@ interface CreateServiceOrderCandidateDraft {
   serviceType: ServiceType
   notes: string | null
   quoteItems: ServiceOrderAgreementComposerItem[]
+}
+
+interface EquipmentDraftSnapshot {
+  equipmentType: EquipmentType
+  equipmentTypeOther: string
+  brand: string
+  model: string
+  serialNumber: string
+  accessories: string
+  initialIssue: string
+  notes: string
 }
 
 const SERVICE_ORDER_OPERATIVE_STATUS_LABELS: Record<ServiceOrderOperativeStatus, string> = {
@@ -1402,6 +1413,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
               accessories: candidate.accessories,
               initialIssue: candidate.initialIssue,
               serviceType: candidate.serviceType,
+              notes: candidate.notes,
             })),
           }
           return this.serviceOrderService.createBatch(batchPayload)
@@ -1435,7 +1447,19 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const workflowServiceType = this.getSelectedWorkflowServiceType()
     const existingPartnerId = Number(this.createServiceOrderForm.get("clientId")?.value)
     if (existingPartnerId) {
+      const existingPartner = this.clients.find((client) => Number(client.id) === existingPartnerId) ?? null
       const existingContactId = this.toNumericId(this.createServiceOrderForm.get("clientContactId")?.value)
+      if ((existingPartner?.kind ?? formValue["clientKind"]) === ClientKind.COMPANY && !existingContactId) {
+        if (!existingPartner) {
+          this.showMessage(
+            "warning",
+            "fas fa-exclamation-circle",
+            "No pudimos resolver la empresa seleccionada. Vuelve a buscarla antes de continuar.",
+          )
+          return throwError(() => new Error("Empresa no resuelta"))
+        }
+        return this.persistInlineContactForExistingCompany(existingPartner)
+      }
       return of({ clientId: existingPartnerId, clientContactId: existingContactId })
     }
 
@@ -1543,6 +1567,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   private applyPartnerData(partner: ClientResponse): void {
+    this.syncClientInCache(partner)
     const documentTypeId = partner.documentTypeId ?? partner.documentType?.id ?? null
     const kind = partner.kind ?? ClientKind.PERSON
     const contacts = partner.contacts ?? []
@@ -1558,10 +1583,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         documentTypeId: documentTypeId,
         companyName: kind === ClientKind.COMPANY ? (partner.name ?? "") : "",
         companyTradeName: kind === ClientKind.COMPANY ? (partner.tradeName ?? "") : "",
-        contactName: primaryContact
+        contactName: kind === ClientKind.COMPANY && !primaryContact
+          ? ""
+          : primaryContact
           ? primaryContact.name
           : (partner.name ?? partner.tradeName ?? partner.documentNumber ?? ""),
-        contactEmail: primaryContact?.email ?? partner.email ?? "",
+        contactEmail: kind === ClientKind.COMPANY && !primaryContact ? "" : (primaryContact?.email ?? partner.email ?? ""),
         contactPhone: "",
         contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
         contactPhoneNationalNumber: "",
@@ -1575,7 +1602,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.documentSearchError = ""
     this.setCustomerFieldsEnabled(false)
 
-    if (!partner.phone && !primaryContact?.phone) {
+    if (kind === ClientKind.COMPANY && !primaryContact) {
+      this.enableCompanyInlineContactFields()
+    } else if (!partner.phone && !primaryContact?.phone) {
       this.createServiceOrderForm.get("contactPhone")?.enable({ emitEvent: false })
       this.createServiceOrderForm.get("contactPhoneCountry")?.enable({ emitEvent: false })
       this.createServiceOrderForm.get("contactPhoneNationalNumber")?.enable({ emitEvent: false })
@@ -1643,6 +1672,21 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return client?.contacts?.filter((c) => c.isActive !== false) ?? []
   }
 
+  isExistingCompanyClient(): boolean {
+    const clientId = Number(this.createServiceOrderForm.get("clientId")?.value)
+    if (!clientId) return false
+    const client = this.clients.find((item) => Number(item.id) === clientId)
+    return (client?.kind ?? this.createServiceOrderForm.get("clientKind")?.value) === ClientKind.COMPANY
+  }
+
+  shouldShowCompanyContactSelector(): boolean {
+    return this.isExistingCompanyClient() && this.getClientContactOptions().length > 0
+  }
+
+  shouldShowCompanyContactEmptyState(): boolean {
+    return this.isExistingCompanyClient() && this.getClientContactOptions().length === 0
+  }
+
   onClientContactSelectionChange(): void {
     const contactId = Number(this.createServiceOrderForm.get("clientContactId")?.value)
     if (!contactId) {
@@ -1653,7 +1697,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
         contactPhoneNationalNumber: "",
       }, { emitEvent: false })
-      const controls = ["contactName", "contactEmail", "contactPhone"]
+      const controls = ["contactName", "contactEmail", "contactPhone", "contactPhoneCountry", "contactPhoneNationalNumber"]
       controls.forEach((name) => {
         const ctrl = this.createServiceOrderForm.get(name)
         if (ctrl && ctrl.disabled) ctrl.enable({ emitEvent: false })
@@ -1662,6 +1706,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
     const contact = this.getClientContactOptions().find((c) => Number(c.id) === contactId)
     if (contact) {
+      this.setCustomerFieldsEnabled(false)
       this.createServiceOrderForm.patchValue({
         contactName: contact.name,
         contactEmail: contact.email ?? "",
@@ -2303,14 +2348,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   beginAnotherCreateServiceOrderCandidate(): void {
-    // Validate current form before adding another
-    if (!this.validateCurrentCreateServiceOrderStep()) {
+    if (!this.areCurrentCreateOrderItemControlsValid()) {
       this.showMessage("warning", "fas fa-exclamation-circle", "Completa los campos obligatorios antes de agregar otro equipo.")
       return
     }
-    // Save current equipment
     this.addCurrentEquipmentToCreateOrderBatch()
-    // Clear form for next equipment
     this.resetCreateServiceOrderItemDraft()
     this.createServiceOrderStep = 3
   }
@@ -2324,15 +2366,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private resetCreateServiceOrderItemDraft(): void {
     this.editingCreateServiceOrderCandidateIndex = null
-    this.createServiceOrderForm.patchValue({
-      equipmentType: EquipmentType.LAPTOP,
-      equipmentTypeOther: "",
-      brand: "",
-      model: "",
-      serialNumber: "",
-      accessories: "",
-      initialIssue: "",
-    })
+    this.createServiceOrderForm.patchValue(this.getEmptyEquipmentDraftSnapshot())
     this.createOrderAgreementItemsByItemIndex[0] = []
   }
 
@@ -2400,6 +2434,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       serialNumber: candidate.serialNumber || "",
       accessories: candidate.accessories || "",
       initialIssue: candidate.initialIssue,
+      notes: candidate.notes || "",
     })
     this.createOrderAgreementItemsByItemIndex[0] = candidate.quoteItems.map(item => ({ ...item }))
     this.createServiceOrderStep = 3
@@ -2448,6 +2483,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     model: string | null
     serialNumber: string | null
     accessories: string | null
+    notes: string | null
     quoteItems: ServiceOrderAgreementComposerItem[]
     quoteItemsCount: number
     quoteTotal: number
@@ -2461,6 +2497,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       model: candidate.model,
       serialNumber: candidate.serialNumber,
       accessories: candidate.accessories,
+      notes: candidate.notes,
       quoteItems: candidate.quoteItems,
       quoteItemsCount: candidate.quoteItems.length,
       quoteTotal: this.calculateQuoteItemsTotal(candidate.quoteItems),
@@ -2491,15 +2528,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
     const nextStep = Math.min(this.createServiceOrderStep + 1, steps.length - 1)
-
-    // Auto-add current equipment when moving past the items step if it has content
-    if (steps[this.createServiceOrderStep]?.key === "items") {
-      const initialIssue = (this.createServiceOrderForm.get("initialIssue")?.value || "").trim()
-      if (initialIssue && this.areCurrentCreateOrderItemControlsValid() && this.validateCreateServiceOrderInitialAgreement()) {
-        this.addCurrentEquipmentToCreateOrderBatch()
-      }
-    }
-
     this.createServiceOrderStep = nextStep
   }
 
@@ -2721,6 +2749,107 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return Boolean(this.createServiceOrderForm.get("clientId")?.value)
   }
 
+  private persistInlineContactForExistingCompany(partner: ClientResponse): Observable<{ clientId: number; clientContactId: number | null }> {
+    const contactName = String(this.createServiceOrderForm.get("contactName")?.value ?? "").trim()
+    const contactEmail = String(this.createServiceOrderForm.get("contactEmail")?.value ?? "").trim() || null
+    const contactPhone = normalizeOptionalPhone(this.createServiceOrderForm.get("contactPhone")?.value)
+
+    if (!contactName || !contactPhone) {
+      this.showMessage(
+        "warning",
+        "fas fa-exclamation-circle",
+        "La empresa requiere un contacto con nombre y teléfono para continuar.",
+      )
+      return throwError(() => new Error("Contacto de empresa incompleto"))
+    }
+
+    const existingContacts = (partner.contacts ?? []).map<ClientContactRequest>((contact) => ({
+      id: Number(contact.id),
+      name: contact.name,
+      email: contact.email ?? null,
+      phone: contact.phone ?? null,
+      isPrimary: contact.isPrimary,
+      isActive: contact.isActive ?? true,
+    }))
+
+    const nextContact: ClientContactRequest = {
+      name: contactName,
+      email: contactEmail,
+      phone: contactPhone,
+      isPrimary: existingContacts.length === 0,
+      isActive: true,
+    }
+
+    return this.clientsService.update(Number(partner.id), { contacts: [...existingContacts, nextContact] }).pipe(
+      map((updatedPartner) => ({
+        ...partner,
+        ...updatedPartner,
+        id: Number(updatedPartner.id ?? partner.id),
+        companyId: Number(updatedPartner.companyId ?? partner.companyId),
+        documentTypeId: Number(updatedPartner.documentTypeId ?? partner.documentTypeId),
+        contacts: updatedPartner.contacts ?? partner.contacts ?? [],
+      })),
+      map((updatedPartner) => {
+        const persistedContact =
+          [...(updatedPartner.contacts ?? [])].reverse().find(
+            (contact) =>
+              (contact.name ?? "").trim() === contactName &&
+              (contact.email ?? null) === contactEmail &&
+              (contact.phone ?? null) === contactPhone,
+          ) ??
+          updatedPartner.contacts?.find(
+            (contact) =>
+              (contact.name ?? "").trim() === contactName &&
+              (contact.phone ?? null) === contactPhone,
+          ) ??
+          null
+
+        if (!persistedContact?.id) {
+          throw new Error("No se pudo resolver el contacto persistido")
+        }
+
+        return { updatedPartner, persistedContact }
+      }),
+      tap(({ updatedPartner, persistedContact }) => {
+        this.clients = this.clients.map((client) => Number(client.id) === Number(updatedPartner.id) ? updatedPartner : client)
+        this.createServiceOrderForm.patchValue(
+          {
+            clientContactId: Number(persistedContact.id),
+            contactName: persistedContact.name,
+            contactEmail: persistedContact.email ?? "",
+          },
+          { emitEvent: false },
+        )
+        this.patchPhoneControls(this.createServiceOrderForm, persistedContact.phone ?? "", { emitEvent: false })
+        this.setCustomerFieldsEnabled(false)
+      }),
+      map(({ updatedPartner, persistedContact }) => ({
+        clientId: Number(updatedPartner.id),
+        clientContactId: Number(persistedContact.id),
+      })),
+    )
+  }
+
+  private syncClientInCache(partner: ClientResponse): void {
+    const partnerId = Number(partner.id)
+    if (!partnerId) return
+
+    const existingIndex = this.clients.findIndex((client) => Number(client.id) === partnerId)
+    if (existingIndex === -1) {
+      this.clients = [partner, ...this.clients]
+      return
+    }
+
+    this.clients = this.clients.map((client) => Number(client.id) === partnerId ? partner : client)
+  }
+
+  private enableCompanyInlineContactFields(): void {
+    const controls = ["contactName", "contactEmail", "contactPhone", "contactPhoneCountry", "contactPhoneNationalNumber"]
+    controls.forEach((controlName) => {
+      this.createServiceOrderForm.get(controlName)?.enable({ emitEvent: false })
+    })
+  }
+
   private setCustomerFieldsEnabled(enabled: boolean): void {
     const controls = [
       "companyName",
@@ -2763,32 +2892,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     if (step === "items") {
-      const initialIssue = (this.createServiceOrderForm.get("initialIssue")?.value || "").trim()
-      const isEditing = this.editingCreateServiceOrderCandidateIndex !== null
-      const hasCandidates = this.createServiceOrderCandidates.length > 0
-
-      if (hasCandidates && !isEditing && !initialIssue) {
-        return true
-      }
-
-      this.markControlsAsTouched([
-        "equipmentType",
-        "equipmentTypeOther",
-        "brand",
-        "model",
-        "serialNumber",
-        "initialIssue",
-        "accessories",
-      ])
-      return this.areControlsValid([
-        "equipmentType",
-        "equipmentTypeOther",
-        "brand",
-        "model",
-        "serialNumber",
-        "initialIssue",
-        "accessories",
-      ])
+      return this.canAdvanceFromEquipmentStep()
     }
 
     if (step === "initialQuote") {
@@ -2826,6 +2930,71 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     return true
+  }
+
+  private canAdvanceFromEquipmentStep(): boolean {
+    if (!this.hasSavedEquipmentCandidates()) {
+      this.showMessage("warning", "fas fa-exclamation-circle", "Debes guardar al menos un equipo antes de continuar.")
+      return false
+    }
+
+    if (this.hasPendingEquipmentDraft()) {
+      this.showMessage(
+        "warning",
+        "fas fa-exclamation-circle",
+        "Tienes un equipo en edición o sin guardar. Guárdalo o limpia el formulario antes de continuar.",
+      )
+      return false
+    }
+
+    return true
+  }
+
+  private hasSavedEquipmentCandidates(): boolean {
+    return this.createServiceOrderCandidates.length > 0
+  }
+
+  private isEditingEquipmentDraft(): boolean {
+    return this.editingCreateServiceOrderCandidateIndex !== null
+  }
+
+  private hasPendingEquipmentDraft(): boolean {
+    return this.isEditingEquipmentDraft() || !this.isCurrentEquipmentDraftClean()
+  }
+
+  private isCurrentEquipmentDraftClean(): boolean {
+    return JSON.stringify(this.getCurrentEquipmentDraftSnapshot()) === JSON.stringify(this.getEmptyEquipmentDraftSnapshot())
+  }
+
+  private getCurrentEquipmentDraftSnapshot(): EquipmentDraftSnapshot {
+    const formValue = this.createServiceOrderForm.getRawValue()
+    return {
+      equipmentType: formValue.equipmentType ?? EquipmentType.LAPTOP,
+      equipmentTypeOther: this.normalizeEquipmentDraftText(formValue.equipmentTypeOther),
+      brand: this.normalizeEquipmentDraftText(formValue.brand),
+      model: this.normalizeEquipmentDraftText(formValue.model),
+      serialNumber: this.normalizeEquipmentDraftText(formValue.serialNumber),
+      accessories: this.normalizeEquipmentDraftText(formValue.accessories),
+      initialIssue: this.normalizeEquipmentDraftText(formValue.initialIssue),
+      notes: this.normalizeEquipmentDraftText(formValue.notes),
+    }
+  }
+
+  private getEmptyEquipmentDraftSnapshot(): EquipmentDraftSnapshot {
+    return {
+      equipmentType: EquipmentType.LAPTOP,
+      equipmentTypeOther: "",
+      brand: "",
+      model: "",
+      serialNumber: "",
+      accessories: "",
+      initialIssue: "",
+      notes: "",
+    }
+  }
+
+  private normalizeEquipmentDraftText(value: unknown): string {
+    return value == null ? "" : String(value).trim()
   }
 
   private createInitialAgreementsForStandardService(serviceOrder: ServiceOrder) {

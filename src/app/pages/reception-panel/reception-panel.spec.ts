@@ -386,6 +386,58 @@ describe('ReceptionPanel', () => {
     ])
   })
 
+  it('permite guardar el primer equipo aunque accesorios quede vacío', () => {
+    component.createServiceOrderStep = 3
+    component.createServiceOrderForm.patchValue({
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      equipmentType: EquipmentType.LAPTOP,
+      brand: 'Lenovo',
+      initialIssue: 'No enciende',
+      accessories: '',
+    })
+
+    component.beginAnotherCreateServiceOrderCandidate()
+
+    expect(component.createServiceOrderCandidates.length).toBe(1)
+    expect(component.createServiceOrderCandidates[0].accessories).toBeNull()
+  })
+
+  it('guarda y expone la nota por equipo en el resumen del batch', () => {
+    component.createServiceOrderForm.patchValue({
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      equipmentType: EquipmentType.LAPTOP,
+      brand: 'Dell',
+      initialIssue: 'Pantalla negra',
+      notes: 'Equipo con golpe lateral',
+    })
+
+    component.addCurrentEquipmentToCreateOrderBatch()
+
+    expect(component.createServiceOrderCandidates[0].notes).toBe('Equipo con golpe lateral')
+    expect(component.getCreateOrderSummaryItems()[0].notes).toBe('Equipo con golpe lateral')
+  })
+
+  it('reabre la nota por equipo al editar un candidato guardado', () => {
+    component.createServiceOrderCandidates = [
+      {
+        equipmentType: EquipmentType.LAPTOP,
+        equipmentTypeOther: null,
+        brand: 'HP',
+        model: null,
+        serialNumber: null,
+        accessories: null,
+        initialIssue: 'No enciende',
+        serviceType: ServiceType.DIAGNOSIS,
+        notes: 'Revisar bisagras',
+        quoteItems: [],
+      } as any,
+    ]
+
+    component.editCreateServiceOrderCandidate(0)
+
+    expect(component.createServiceOrderForm.get('notes')?.value).toBe('Revisar bisagras')
+  })
+
   it('ofrece agregar otro equipo desde la etapa de equipos y no durante ediciÃ³n', () => {
     component.createServiceOrderStep = 3
     component.createServiceOrderCandidates = [
@@ -406,6 +458,131 @@ describe('ReceptionPanel', () => {
 
     component.editingCreateServiceOrderCandidateIndex = 0
     expect(component.canAddAnotherCreateServiceOrderCandidate()).toBeFalse()
+  })
+
+  it('bloquea avanzar desde Equipos si no hay equipos guardados aunque el draft esté limpio', () => {
+    const showMessageSpy = spyOn<any>(component, 'showMessage')
+    component.createServiceOrderStep = 3
+    component.createServiceOrderCandidates = []
+
+    component.nextCreateServiceOrderStep()
+
+    expect(component.createServiceOrderStep).toBe(3)
+    expect(showMessageSpy).toHaveBeenCalledWith(
+      'warning',
+      'fas fa-exclamation-circle',
+      'Debes guardar al menos un equipo antes de continuar.',
+    )
+  })
+
+  it('permite avanzar desde Equipos cuando hay al menos un equipo guardado y el draft está limpio', () => {
+    component.createServiceOrderStep = 3
+    component.createServiceOrderCandidates = [
+      {
+        equipmentType: EquipmentType.LAPTOP,
+        equipmentTypeOther: null,
+        brand: 'Lenovo',
+        model: null,
+        serialNumber: null,
+        accessories: null,
+        initialIssue: 'No enciende',
+        serviceType: ServiceType.DIAGNOSIS,
+        quoteItems: [],
+      } as any,
+    ]
+
+    component.nextCreateServiceOrderStep()
+
+    expect(component.createServiceOrderStep).toBe(4)
+  })
+
+  it('bloquea avanzar desde Equipos si hay draft pendiente aunque ya exista un equipo guardado', () => {
+    const showMessageSpy = spyOn<any>(component, 'showMessage')
+    component.createServiceOrderStep = 3
+    component.createServiceOrderCandidates = [
+      {
+        equipmentType: EquipmentType.LAPTOP,
+        equipmentTypeOther: null,
+        brand: 'Lenovo',
+        model: null,
+        serialNumber: null,
+        accessories: null,
+        initialIssue: 'No enciende',
+        serviceType: ServiceType.DIAGNOSIS,
+        quoteItems: [],
+      } as any,
+    ]
+    component.createServiceOrderForm.patchValue({
+      brand: 'Dell',
+    })
+
+    component.nextCreateServiceOrderStep()
+
+    expect(component.createServiceOrderStep).toBe(3)
+    expect(showMessageSpy).toHaveBeenCalledWith(
+      'warning',
+      'fas fa-exclamation-circle',
+      'Tienes un equipo en edición o sin guardar. Guárdalo o limpia el formulario antes de continuar.',
+    )
+  })
+
+  it('bloquea avanzar desde Equipos si está editando un equipo existente', () => {
+    const showMessageSpy = spyOn<any>(component, 'showMessage')
+    component.createServiceOrderStep = 3
+    component.createServiceOrderCandidates = [
+      {
+        equipmentType: EquipmentType.LAPTOP,
+        equipmentTypeOther: null,
+        brand: 'Lenovo',
+        model: null,
+        serialNumber: null,
+        accessories: null,
+        initialIssue: 'No enciende',
+        serviceType: ServiceType.DIAGNOSIS,
+        quoteItems: [],
+      } as any,
+    ]
+    component.editCreateServiceOrderCandidate(0)
+
+    component.nextCreateServiceOrderStep()
+
+    expect(component.createServiceOrderStep).toBe(3)
+    expect(showMessageSpy).toHaveBeenCalledWith(
+      'warning',
+      'fas fa-exclamation-circle',
+      'Tienes un equipo en edición o sin guardar. Guárdalo o limpia el formulario antes de continuar.',
+    )
+  })
+
+  it('bloquea avanzar desde Equipos si el draft quedó en OTHER sin completar', () => {
+    const showMessageSpy = spyOn<any>(component, 'showMessage')
+    component.createServiceOrderStep = 3
+    component.createServiceOrderCandidates = [
+      {
+        equipmentType: EquipmentType.LAPTOP,
+        equipmentTypeOther: null,
+        brand: 'Lenovo',
+        model: null,
+        serialNumber: null,
+        accessories: null,
+        initialIssue: 'No enciende',
+        serviceType: ServiceType.DIAGNOSIS,
+        quoteItems: [],
+      } as any,
+    ]
+    component.createServiceOrderForm.patchValue({
+      equipmentType: EquipmentType.OTHER,
+      equipmentTypeOther: '',
+    })
+
+    component.nextCreateServiceOrderStep()
+
+    expect(component.createServiceOrderStep).toBe(3)
+    expect(showMessageSpy).toHaveBeenCalledWith(
+      'warning',
+      'fas fa-exclamation-circle',
+      'Tienes un equipo en edición o sin guardar. Guárdalo o limpia el formulario antes de continuar.',
+    )
   })
 
   it('preselecciona el contacto primary al aplicar una empresa existente', fakeAsync(() => {
@@ -430,6 +607,86 @@ describe('ReceptionPanel', () => {
 
     expect(component.createServiceOrderForm.get('clientContactId')?.value).toBe('92');
     expect(component.createServiceOrderForm.get('contactName')?.value).toBe('Principal');
+  }));
+
+  it('muestra los contactos seleccionables cuando la empresa encontrada viene de búsqueda remota', fakeAsync(() => {
+    component.clients = [];
+
+    const remoteCompany = {
+      id: 77,
+      companyId: 1,
+      kind: ClientKind.COMPANY,
+      name: 'Cliente Empresa',
+      tradeName: 'CE',
+      documentTypeId: 2,
+      documentNumber: '12345678901',
+      contacts: [
+        { id: 91, clientId: 77, name: 'Secundario', isPrimary: false, phone: '+51900000001' },
+        { id: 92, clientId: 77, name: 'Principal', isPrimary: true, phone: '+51900000002' },
+      ],
+    } as any;
+
+    (component as any).applyPartnerData(remoteCompany);
+    tick();
+
+    expect(component.shouldShowCompanyContactSelector()).toBeTrue();
+    expect(component.getClientContactOptions().map((contact) => Number(contact.id))).toEqual([91, 92]);
+    expect(component.createServiceOrderForm.get('clientContactId')?.value).toBe('92');
+  }));
+
+  it('permite usar un contacto existente alternativo de la empresa en la orden', fakeAsync(() => {
+    component.clients = [
+      {
+        id: 77,
+        companyId: 1,
+        kind: ClientKind.COMPANY,
+        name: 'Cliente Empresa',
+        tradeName: 'CE',
+        documentTypeId: 2,
+        documentNumber: '12345678901',
+        contacts: [
+          { id: 91, clientId: 77, name: 'Secundario', isPrimary: false, phone: '+51900000001', email: 'sec@empresa.com' },
+          { id: 92, clientId: 77, name: 'Principal', isPrimary: true, phone: '+51900000002', email: 'pri@empresa.com' },
+        ],
+      } as any,
+    ];
+
+    component.createServiceOrderForm.patchValue({
+      requestOrigin: RequestOrigin.CLIENT,
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      clientId: 77,
+      clientKind: ClientKind.COMPANY,
+      documentTypeId: 2,
+      documentNumber: '12345678901',
+      companyName: 'Cliente Empresa',
+      companyTradeName: 'CE',
+      clientContactId: '91',
+      contactName: 'Principal',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '900000002',
+      contactEmail: 'pri@empresa.com',
+      priority: ServiceOrderPriority.MEDIUM,
+      assignedToTechnicianId: 10,
+      equipmentType: EquipmentType.LAPTOP,
+      initialIssue: 'No enciende',
+    });
+
+    component.onClientContactSelectionChange();
+    (component as any).addCurrentEquipmentToCreateOrderBatch();
+    component.submitCreateServiceOrder();
+    tick();
+
+    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        sharedContext: jasmine.objectContaining({
+          clientId: 77,
+          clientContactId: 91,
+          contactName: 'Secundario',
+          contactPhone: '+51900000001',
+          contactEmail: 'sec@empresa.com',
+        }),
+      }),
+    );
   }));
 
   it('mantiene los datos legales de empresa en solo lectura y permite crear un nuevo contacto inline', () => {
@@ -462,6 +719,211 @@ describe('ReceptionPanel', () => {
     expect(component.createServiceOrderForm.get('contactName')?.enabled).toBeTrue();
     expect(component.createServiceOrderForm.get('contactPhone')?.enabled).toBeTrue();
   });
+
+  it('persiste un contacto inline para una empresa existente sin contactos antes de crear la orden', fakeAsync(() => {
+    clientsServiceStub.update.and.returnValue(
+      of({
+        id: 88,
+        companyId: 1,
+        kind: ClientKind.COMPANY,
+        name: 'Empresa SAC',
+        tradeName: 'Empresa',
+        documentTypeId: 2,
+        documentNumber: '12345678901',
+        contacts: [
+          { id: 201, clientId: 88, name: 'Nuevo Contacto', email: 'nuevo@empresa.com', phone: '+51987654321', isPrimary: true },
+        ],
+      } as any),
+    );
+
+    component.clients = [
+      {
+        id: 88,
+        companyId: 1,
+        kind: ClientKind.COMPANY,
+        name: 'Empresa SAC',
+        tradeName: 'Empresa',
+        documentTypeId: 2,
+        documentNumber: '12345678901',
+        contacts: [],
+      } as any,
+    ];
+
+    component.createServiceOrderForm.patchValue({
+      requestOrigin: RequestOrigin.CLIENT,
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      clientId: 88,
+      clientKind: ClientKind.COMPANY,
+      documentTypeId: 2,
+      documentNumber: '12345678901',
+      companyName: 'Empresa SAC',
+      companyTradeName: 'Empresa',
+      clientContactId: null,
+      contactName: 'Nuevo Contacto',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '987654321',
+      contactEmail: 'nuevo@empresa.com',
+      priority: ServiceOrderPriority.MEDIUM,
+      assignedToTechnicianId: 10,
+      equipmentType: EquipmentType.LAPTOP,
+      initialIssue: 'No enciende',
+    });
+
+    (component as any).addCurrentEquipmentToCreateOrderBatch();
+    component.submitCreateServiceOrder();
+    tick();
+
+    expect(clientsServiceStub.update).toHaveBeenCalledWith(
+      88,
+      jasmine.objectContaining({
+        contacts: [
+          jasmine.objectContaining({
+            name: 'Nuevo Contacto',
+            email: 'nuevo@empresa.com',
+            phone: '+51987654321',
+          }),
+        ],
+      }),
+    );
+    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        sharedContext: jasmine.objectContaining({
+          clientId: 88,
+          clientContactId: 201,
+          contactName: 'Nuevo Contacto',
+          contactPhone: '+51987654321',
+        }),
+      }),
+    );
+  }));
+
+  it('bloquea la orden de empresa si el contacto inline está incompleto', fakeAsync(() => {
+    const showMessageSpy = spyOn<any>(component, 'showMessage');
+    clientsServiceStub.update.calls.reset();
+    serviceOrderServiceStub.createBatch.calls.reset();
+
+    component.clients = [
+      {
+        id: 95,
+        companyId: 1,
+        kind: ClientKind.COMPANY,
+        name: 'Empresa Incompleta SAC',
+        tradeName: 'Empresa Incompleta',
+        documentTypeId: 2,
+        documentNumber: '12312312312',
+        contacts: [],
+      } as any,
+    ];
+
+    component.createServiceOrderForm.patchValue({
+      requestOrigin: RequestOrigin.CLIENT,
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      clientId: 95,
+      clientKind: ClientKind.COMPANY,
+      documentTypeId: 2,
+      documentNumber: '12312312312',
+      companyName: 'Empresa Incompleta SAC',
+      companyTradeName: 'Empresa Incompleta',
+      clientContactId: null,
+      contactName: '',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '',
+      contactEmail: 'contacto@empresa.com',
+      priority: ServiceOrderPriority.MEDIUM,
+      assignedToTechnicianId: 10,
+      equipmentType: EquipmentType.LAPTOP,
+      initialIssue: 'No enciende',
+    });
+
+    (component as any).addCurrentEquipmentToCreateOrderBatch();
+    component.submitCreateServiceOrder();
+    tick();
+
+    expect(clientsServiceStub.update).not.toHaveBeenCalled();
+    expect(serviceOrderServiceStub.createBatch).not.toHaveBeenCalled();
+    expect(component.createServiceOrderForm.get('contactName')?.invalid).toBeTrue();
+    expect(component.createServiceOrderForm.get('contactPhone')?.invalid).toBeTrue();
+    expect(showMessageSpy).not.toHaveBeenCalled();
+  }));
+
+  it('agrega un nuevo contacto inline sin perder los contactos existentes de la empresa', fakeAsync(() => {
+    clientsServiceStub.update.and.returnValue(
+      of({
+        id: 90,
+        companyId: 1,
+        kind: ClientKind.COMPANY,
+        name: 'Empresa Dos SAC',
+        tradeName: 'Empresa Dos',
+        documentTypeId: 2,
+        documentNumber: '10987654321',
+        contacts: [
+          { id: 301, clientId: 90, name: 'Principal', email: 'principal@empresa.com', phone: '+51900111222', isPrimary: true },
+          { id: 302, clientId: 90, name: 'Secundario', email: 'sec@empresa.com', phone: '+51900333444', isPrimary: false },
+          { id: 303, clientId: 90, name: 'Contacto Nuevo', email: 'nuevo2@empresa.com', phone: '+51999888777', isPrimary: false },
+        ],
+      } as any),
+    );
+
+    component.clients = [
+      {
+        id: 90,
+        companyId: 1,
+        kind: ClientKind.COMPANY,
+        name: 'Empresa Dos SAC',
+        tradeName: 'Empresa Dos',
+        documentTypeId: 2,
+        documentNumber: '10987654321',
+        contacts: [
+          { id: 301, clientId: 90, name: 'Principal', email: 'principal@empresa.com', phone: '+51900111222', isPrimary: true },
+          { id: 302, clientId: 90, name: 'Secundario', email: 'sec@empresa.com', phone: '+51900333444', isPrimary: false },
+        ],
+      } as any,
+    ];
+
+    component.createServiceOrderForm.patchValue({
+      requestOrigin: RequestOrigin.CLIENT,
+      workflowServiceType: ServiceType.DIAGNOSIS,
+      clientId: 90,
+      clientKind: ClientKind.COMPANY,
+      documentTypeId: 2,
+      documentNumber: '10987654321',
+      companyName: 'Empresa Dos SAC',
+      companyTradeName: 'Empresa Dos',
+      clientContactId: null,
+      contactName: 'Contacto Nuevo',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '999888777',
+      contactEmail: 'nuevo2@empresa.com',
+      priority: ServiceOrderPriority.MEDIUM,
+      assignedToTechnicianId: 10,
+      equipmentType: EquipmentType.LAPTOP,
+      initialIssue: 'Pantalla negra',
+    });
+
+    (component as any).addCurrentEquipmentToCreateOrderBatch();
+    component.submitCreateServiceOrder();
+    tick();
+
+    expect(clientsServiceStub.update).toHaveBeenCalledWith(
+      90,
+      jasmine.objectContaining({
+        contacts: [
+          jasmine.objectContaining({ id: 301, name: 'Principal' }),
+          jasmine.objectContaining({ id: 302, name: 'Secundario' }),
+          jasmine.objectContaining({ name: 'Contacto Nuevo', phone: '+51999888777' }),
+        ],
+      }),
+    );
+    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        sharedContext: jasmine.objectContaining({
+          clientId: 90,
+          clientContactId: 303,
+          contactName: 'Contacto Nuevo',
+        }),
+      }),
+    );
+  }));
 
   it('prefiere documentType.kind sobre la heurÃ­stica legacy en recepciÃ³n', () => {
     component.documentTypes = [

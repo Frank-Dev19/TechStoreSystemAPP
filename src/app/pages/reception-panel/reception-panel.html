@@ -885,7 +885,7 @@
                   <p>Datos de la persona responsable.</p>
                 </div>
 
-                @if (getClientContactOptions().length > 1) {
+                @if (shouldShowCompanyContactSelector()) {
                   <div class="form-group">
                     <label for="clientContactId">Seleccionar contacto</label>
                     <select
@@ -894,13 +894,19 @@
                       formControlName="clientContactId"
                       (change)="onClientContactSelectionChange()"
                     >
-                      <option value="">Seleccionar contacto</option>
+                      <option value="">Registrar nuevo contacto</option>
                       @for (contact of getClientContactOptions(); track contact.id) {
                         <option [value]="contact.id">
                           {{ contact.name }}@if (contact.isPrimary) { (Principal) }@if (contact.phone) { — {{ contact.phone }} }
                         </option>
                       }
                     </select>
+                  </div>
+                }
+
+                @if (shouldShowCompanyContactEmptyState()) {
+                  <div class="form-group">
+                    <small class="text-muted">Esta empresa no tiene contactos activos. Registrá uno para continuar con la orden.</small>
                   </div>
                 }
 
@@ -1112,6 +1118,15 @@
                       formControlName="accessories"
                       rows="2"
                       placeholder="Listado de accesorios entregados (cargador, mouse, etc.)"
+                    ></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label>Nota del equipo</label>
+                    <textarea
+                      class="form-control"
+                      formControlName="notes"
+                      rows="2"
+                      placeholder="Observaciones internas o detalle adicional de este equipo"
                     ></textarea>
                   </div>
                 </div>
@@ -1418,6 +1433,13 @@
                         </div>
                       }
 
+                      @if (summaryItem.notes) {
+                        <div class="info-tile full-span">
+                          <span class="muted">Nota del equipo</span>
+                          <strong>{{ summaryItem.notes }}</strong>
+                        </div>
+                      }
+
                       @if (requiresCreateServiceOrderInitialAgreementStep()) {
                         <div class="review-quote-lines">
                           <div class="review-quote-lines-header">
@@ -1465,19 +1487,6 @@
                     </div>
                   </div>
                 }
-              </div>
-
-              <div class="summary-card">
-                <h5>Notas</h5>
-                <div class="form-group full-width">
-                  <textarea
-                    id="notes"
-                    class="form-control"
-                    formControlName="notes"
-                    rows="2"
-                    placeholder="Notas adicionales"
-                  ></textarea>
-                </div>
               </div>
             </div>
           }

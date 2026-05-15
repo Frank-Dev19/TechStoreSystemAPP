@@ -175,6 +175,30 @@ describe('TechnicianPanel', () => {
     expect(component.visibleOrders.map((order) => order.code)).toEqual(['REPAIR-1']);
   });
 
+  it('renders brand, model, serial number and accessories in the equipment split pane', () => {
+    component.selectedServiceOrder = createServiceOrder({
+      brand: 'Lenovo',
+      model: 'ThinkPad T14',
+      serialNumber: 'SN-TECH-14',
+      accessories: 'Cargador de 65W, mouse inalámbrico',
+    });
+    component.activeDetailTab = 'equipment';
+
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const equipmentCardsText = compiled.querySelector('.equipment-info-grid')?.textContent ?? '';
+
+    expect(equipmentCardsText).toContain('Marca');
+    expect(equipmentCardsText).toContain('Lenovo');
+    expect(equipmentCardsText).toContain('Modelo');
+    expect(equipmentCardsText).toContain('ThinkPad T14');
+    expect(equipmentCardsText).toContain('N.° de serie');
+    expect(equipmentCardsText).toContain('SN-TECH-14');
+    expect(equipmentCardsText).toContain('Accesorios');
+    expect(equipmentCardsText).toContain('Cargador de 65W, mouse inalámbrico');
+  });
+
   it('detects derived mode only when the order already reached execution and has an active agreement', () => {
     const agreements = [
       createAgreement({ id: 41, sequenceNumber: 1, status: ServiceOrderAgreementStatus.SUPERSEDED }),
