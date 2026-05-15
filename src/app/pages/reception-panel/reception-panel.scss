@@ -1395,10 +1395,16 @@ $bg-light: #f5f7fa;
       display: flex;
       flex-direction: column;
       gap: 0.4rem;
+      min-width: 0;
 
       label {
         font-weight: 600;
         color: #0f172a;
+      }
+
+      app-phone-input {
+        display: block;
+        width: 100%;
       }
 
       .form-control {
@@ -1439,6 +1445,7 @@ $bg-light: #f5f7fa;
 
     .form-grid--wide {
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      align-items: start;
     }
 
     .service-order-items-builder {

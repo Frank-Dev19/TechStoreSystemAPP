@@ -23,10 +23,13 @@ import {
   buildPhoneFormValue,
   DEFAULT_PHONE_COUNTRY,
   e164PhoneValidator,
+  findPhoneCountry,
   invalidPhoneSentinel,
+  PHONE_COUNTRIES,
   normalizePhoneToE164,
   parseStoredPhoneToFormValue,
   PhoneCountry,
+  sanitizeNationalPhoneInput,
 } from '../../utils/phone.util';
 
 type ImportFilterStatus = 'all' | ClientImportStatus;
@@ -38,6 +41,7 @@ type ClientImportPreviewRow = {
   documentNumber: string;
   name: string;
   tradeName: string;
+  phoneCountryCode: string;
   phone: string;
   address: string;
   city: string;
@@ -125,6 +129,7 @@ export class Clients implements OnInit {
   readonly entityLabel = 'cliente';
   readonly entityLabelPlural = 'clientes';
   readonly entityDisplayLabel = 'Cliente';
+  readonly importPhoneCountries = PHONE_COUNTRIES;
 
   private readonly companyId = Number(config.defaultCompanyId ?? 1) || 1;
 
@@ -177,6 +182,10 @@ export class Clients implements OnInit {
     return this.importRows.filter((row) => row.status === 'pending').length;
   }
 
+  get importFilteredRowsCount(): number {
+    return this.getFilteredImportRows().length;
+  }
+
   get canStartImportCommit(): boolean {
     return (
       !!this.importRows.length &&
@@ -190,27 +199,25 @@ export class Clients implements OnInit {
   }
 
   private createForm(): FormGroup {
-    return this.formBuilder.group(
-      {
-        name: ['', [Validators.required, Validators.minLength(2)]],
-        kind: [ClientKind.PERSON, Validators.required],
-        tradeName: [''],
-        documentTypeId: [null, Validators.required],
-        documentNumber: ['', [Validators.required, Validators.pattern(this.documentNumberPattern)]],
-        email: ['', Validators.email],
-        phone: ['', [e164PhoneValidator({ required: true })]],
-        phoneCountry: [DEFAULT_PHONE_COUNTRY],
-        phoneNationalNumber: [''],
-        contactName: [''],
-        contactEmail: ['', Validators.email],
-        contactPhone: [''],
-        contactPhoneCountry: [DEFAULT_PHONE_COUNTRY],
-        contactPhoneNationalNumber: [''],
-        address: [''],
-        city: [''],
-        country: [''],
-      }
-    );
+    return this.formBuilder.group({
+      name: ['', [Validators.required, Validators.minLength(2)]],
+      kind: [ClientKind.PERSON, Validators.required],
+      tradeName: [''],
+      documentTypeId: [null, Validators.required],
+      documentNumber: ['', [Validators.required, Validators.pattern(this.documentNumberPattern)]],
+      email: ['', Validators.email],
+      phone: ['', [e164PhoneValidator({ required: true })]],
+      phoneCountry: [DEFAULT_PHONE_COUNTRY],
+      phoneNationalNumber: [''],
+      contactName: [''],
+      contactEmail: ['', Validators.email],
+      contactPhone: [''],
+      contactPhoneCountry: [DEFAULT_PHONE_COUNTRY],
+      contactPhoneNationalNumber: [''],
+      address: [''],
+      city: [''],
+      country: [''],
+    });
   }
 
   private createContactsDrawerForm(): FormGroup {
@@ -229,7 +236,9 @@ export class Clients implements OnInit {
       const docTypeId = Number(value);
       const docType = this.documentTypes.find((item) => Number(item.id) === docTypeId);
       this.documentDigitsHint = docType?.digits ?? null;
-      this.partnerForm.get('kind')?.setValue(this.inferClientKindFromDocumentTypeId(docTypeId), { emitEvent: false });
+      this.partnerForm
+        .get('kind')
+        ?.setValue(this.inferClientKindFromDocumentTypeId(docTypeId), { emitEvent: false });
       this.updateDocumentNumberValidators(this.documentDigitsHint);
       this.syncClientKindValidation();
       this.enforceDocumentNumberLength();
@@ -237,18 +246,18 @@ export class Clients implements OnInit {
   }
 
   private inferClientKindFromDocumentTypeId(documentTypeId: number | null | undefined): ClientKind {
-	    const docType = this.documentTypes.find((item) => Number(item.id) === Number(documentTypeId));
-	    if (docType?.kind === ClientKind.COMPANY) {
-	      return ClientKind.COMPANY;
-	    }
-	    if (docType?.kind === ClientKind.PERSON) {
-	      return ClientKind.PERSON;
-	    }
-	    const normalizedName = String(docType?.name ?? '').toUpperCase();
-	    if (normalizedName.includes('RUC') || Number(docType?.digits) === 11) {
-	      return ClientKind.COMPANY;
-	    }
-	    return ClientKind.PERSON;
+    const docType = this.documentTypes.find((item) => Number(item.id) === Number(documentTypeId));
+    if (docType?.kind === ClientKind.COMPANY) {
+      return ClientKind.COMPANY;
+    }
+    if (docType?.kind === ClientKind.PERSON) {
+      return ClientKind.PERSON;
+    }
+    const normalizedName = String(docType?.name ?? '').toUpperCase();
+    if (normalizedName.includes('RUC') || Number(docType?.digits) === 11) {
+      return ClientKind.COMPANY;
+    }
+    return ClientKind.PERSON;
   }
 
   isCompanyClientFlow(): boolean {
@@ -256,7 +265,8 @@ export class Clients implements OnInit {
   }
 
   canManageContacts(partner: ClientResponse): boolean {
-    const inferredKind = partner.kind ?? this.inferClientKindFromDocumentTypeId(partner.documentTypeId);
+    const inferredKind =
+      partner.kind ?? this.inferClientKindFromDocumentTypeId(partner.documentTypeId);
     return inferredKind === ClientKind.COMPANY;
   }
 
@@ -341,7 +351,9 @@ export class Clients implements OnInit {
         }));
         const currentDocTypeId = Number(this.partnerForm.get('documentTypeId')?.value);
         if (currentDocTypeId) {
-          const currentDocType = this.documentTypes.find((item) => Number(item.id) === currentDocTypeId);
+          const currentDocType = this.documentTypes.find(
+            (item) => Number(item.id) === currentDocTypeId,
+          );
           this.documentDigitsHint = currentDocType?.digits ?? null;
           this.updateDocumentNumberValidators(this.documentDigitsHint);
         }
@@ -465,11 +477,17 @@ export class Clients implements OnInit {
   }
 
   isAllSelected(): boolean {
-    return this.visiblePartners.length > 0 && this.selectedPartnerIds.length === this.visiblePartners.length;
+    return (
+      this.visiblePartners.length > 0 &&
+      this.selectedPartnerIds.length === this.visiblePartners.length
+    );
   }
 
   isIndeterminate(): boolean {
-    return this.selectedPartnerIds.length > 0 && this.selectedPartnerIds.length < this.visiblePartners.length;
+    return (
+      this.selectedPartnerIds.length > 0 &&
+      this.selectedPartnerIds.length < this.visiblePartners.length
+    );
   }
 
   openCreateModal(): void {
@@ -523,8 +541,12 @@ export class Clients implements OnInit {
       country: partner.country ?? '',
     });
     this.patchPhoneControls(this.partnerForm, 'phone', companyPhoneSeed, { emitEvent: false });
-    this.patchPhoneControls(this.partnerForm, 'contactPhone', editContactSeed.phone, { emitEvent: false });
-    const docType = this.documentTypes.find((item) => Number(item.id) === Number(partner.documentTypeId));
+    this.patchPhoneControls(this.partnerForm, 'contactPhone', editContactSeed.phone, {
+      emitEvent: false,
+    });
+    const docType = this.documentTypes.find(
+      (item) => Number(item.id) === Number(partner.documentTypeId),
+    );
     this.documentDigitsHint = docType?.digits ?? null;
     this.updateDocumentNumberValidators(this.documentDigitsHint);
     this.syncClientKindValidation();
@@ -652,7 +674,11 @@ export class Clients implements OnInit {
         this.showMessage('success', 'fas fa-check-circle', successMessage);
       },
       error: () => {
-        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron guardar los contactos.');
+        this.showMessage(
+          'error',
+          'fas fa-exclamation-circle',
+          'No se pudieron guardar los contactos.',
+        );
       },
       complete: () => {
         this.isSavingContactsDrawer = false;
@@ -676,7 +702,9 @@ export class Clients implements OnInit {
     return [...contacts].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
   }
 
-  private getPrimaryContact(partner: ClientResponse | null | undefined): ClientContactResponse | null {
+  private getPrimaryContact(
+    partner: ClientResponse | null | undefined,
+  ): ClientContactResponse | null {
     const contacts = this.getSortedContacts(partner?.contacts ?? []);
     return contacts.find((contact) => contact.isPrimary) ?? contacts[0] ?? null;
   }
@@ -749,16 +777,19 @@ export class Clients implements OnInit {
       form.get(`${baseControlName}Country`)?.value,
       form.get(`${baseControlName}NationalNumber`)?.value,
     );
-    form.get(baseControlName)?.setValue(
-      !parsed.nationalNumber ? '' : parsed.e164 ?? invalidPhoneSentinel(),
-      { emitEvent: false },
-    );
+    form
+      .get(baseControlName)
+      ?.setValue(!parsed.nationalNumber ? '' : (parsed.e164 ?? invalidPhoneSentinel()), {
+        emitEvent: false,
+      });
     form.get(baseControlName)?.updateValueAndValidity({ emitEvent: false });
   }
 
   private buildSavePayload(): ClientSaveRequest {
     const formValue = this.partnerForm.value;
-	    const kind = (formValue.kind as ClientKind | null | undefined) ?? this.inferClientKindFromDocumentTypeId(formValue.documentTypeId);
+    const kind =
+      (formValue.kind as ClientKind | null | undefined) ??
+      this.inferClientKindFromDocumentTypeId(formValue.documentTypeId);
     const basePayload: ClientSaveRequest = {
       companyId: this.companyId ?? undefined,
       name: String(formValue.name).trim(),
@@ -818,9 +849,10 @@ export class Clients implements OnInit {
       return;
     }
 
-    const request$ = this.isEditMode && this.currentPartner
-      ? this.clientsApi.update(Number(this.currentPartner.id), this.buildUpdatePayload())
-      : this.clientsApi.create(this.buildSavePayload());
+    const request$ =
+      this.isEditMode && this.currentPartner
+        ? this.clientsApi.update(Number(this.currentPartner.id), this.buildUpdatePayload())
+        : this.clientsApi.create(this.buildSavePayload());
 
     request$.subscribe({
       next: () => {
@@ -849,7 +881,11 @@ export class Clients implements OnInit {
           return;
         }
         this.isEditMode
-          ? this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo actualizar el cliente!')
+          ? this.showMessage(
+              'error',
+              'fas fa-exclamation-circle',
+              'No se pudo actualizar el cliente!',
+            )
           : this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudo crear el cliente!');
       },
     });
@@ -922,7 +958,11 @@ export class Clients implements OnInit {
       },
       error: (err) => {
         console.error('Error deleting clients', err);
-        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron eliminar los clientes!');
+        this.showMessage(
+          'error',
+          'fas fa-exclamation-circle',
+          'No se pudieron eliminar los clientes!',
+        );
       },
       complete: () => {
         this.closeConfirmModal();
@@ -934,7 +974,10 @@ export class Clients implements OnInit {
     this.restorePartnerWithOptions(partnerId);
   }
 
-  private restorePartnerWithOptions(partnerId: number | string, options?: { onSuccess?: () => void; closeConfirm?: boolean }): void {
+  private restorePartnerWithOptions(
+    partnerId: number | string,
+    options?: { onSuccess?: () => void; closeConfirm?: boolean },
+  ): void {
     const id = Number(partnerId);
     const closeConfirm = options?.closeConfirm ?? true;
     const onSuccess = options?.onSuccess;
@@ -971,7 +1014,11 @@ export class Clients implements OnInit {
       },
       error: (err) => {
         console.error('Error restoring clients', err);
-        this.showMessage('error', 'fas fa-exclamation-circle', 'No se pudieron restaurar los clientes!');
+        this.showMessage(
+          'error',
+          'fas fa-exclamation-circle',
+          'No se pudieron restaurar los clientes!',
+        );
       },
       complete: () => {
         this.closeConfirmModal();
@@ -1078,7 +1125,8 @@ export class Clients implements OnInit {
         await this.validatePendingImportRows();
       } catch (error) {
         console.error('Error parsing import file', error);
-        this.importFileError = 'No pudimos leer el archivo Excel. Revisa el formato e inténtalo de nuevo.';
+        this.importFileError =
+          'No pudimos leer el archivo Excel. Revisa el formato e inténtalo de nuevo.';
       } finally {
         if (input) {
           input.value = '';
@@ -1132,10 +1180,13 @@ export class Clients implements OnInit {
 
   toggleSelectAllImportRows(): void {
     const visibleIds = this.visibleImportRows.map((row) => row.localId);
-    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => this.selectedImportRowIds.includes(id));
+    const allSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => this.selectedImportRowIds.includes(id));
 
     if (allSelected) {
-      this.selectedImportRowIds = this.selectedImportRowIds.filter((id) => !visibleIds.includes(id));
+      this.selectedImportRowIds = this.selectedImportRowIds.filter(
+        (id) => !visibleIds.includes(id),
+      );
       return;
     }
 
@@ -1154,13 +1205,33 @@ export class Clients implements OnInit {
     );
   }
 
-  onImportRowFieldChanged(row: ClientImportPreviewRow, field: keyof ClientImportPreviewRow, value: string | number | null): void {
-    if (!['documentTypeId', 'documentNumber', 'name', 'tradeName', 'phone', 'address', 'city', 'country'].includes(String(field))) {
+  onImportRowFieldChanged(
+    row: ClientImportPreviewRow,
+    field: keyof ClientImportPreviewRow,
+    value: string | number | null,
+  ): void {
+    if (
+      ![
+        'documentTypeId',
+        'documentNumber',
+        'name',
+        'tradeName',
+        'phoneCountryCode',
+        'phone',
+        'address',
+        'city',
+        'country',
+      ].includes(String(field))
+    ) {
       return;
     }
 
     if (field === 'documentTypeId') {
       row.documentTypeId = value != null && value !== '' ? Number(value) : null;
+    } else if (field === 'phoneCountryCode') {
+      row.phoneCountryCode = this.normalizeImportPhoneCountryCode(String(value ?? ''));
+    } else if (field === 'phone') {
+      row.phone = sanitizeNationalPhoneInput(value);
     } else {
       (row as Record<string, unknown>)[field] = this.normalizeImportText(String(value ?? ''));
     }
@@ -1298,7 +1369,11 @@ export class Clients implements OnInit {
       this.fetchPartners();
     } catch (error) {
       console.error('Error committing client import', error);
-      this.showMessage('error', 'fas fa-exclamation-circle', 'No pudimos completar la importación.');
+      this.showMessage(
+        'error',
+        'fas fa-exclamation-circle',
+        'No pudimos completar la importación.',
+      );
     } finally {
       this.importCommitInProgress = false;
     }
@@ -1311,7 +1386,9 @@ export class Clients implements OnInit {
     this.importUserPermissions = new Set(codes);
   }
 
-  private buildImportRowsFromSheet(rawRows: (string | number | null)[][]): ClientImportPreviewRow[] {
+  private buildImportRowsFromSheet(
+    rawRows: (string | number | null)[][],
+  ): ClientImportPreviewRow[] {
     if (!rawRows.length) {
       return [];
     }
@@ -1322,17 +1399,28 @@ export class Clients implements OnInit {
     }
 
     const { headerRowIndex, indexes } = headerInfo;
-    const rucIndex = indexes.ruc;
+    const documentNumberIndex = indexes.documentNumber;
     const legalNameIndex = indexes.legalName;
     const tradeNameIndex = indexes.tradeName;
+    const documentTypeIndex = indexes.documentType;
+    const phoneCountryCodeIndex = indexes.phoneCountryCode;
     const phoneIndex = indexes.phone;
     const addressIndex = indexes.address;
 
     return rawRows
       .slice(headerRowIndex + 1)
       .map((columns, index) => {
-        const documentNumber = this.normalizeDocumentNumber(String(columns[rucIndex] ?? ''));
-        const inferredDocumentTypeId = this.inferDocumentTypeId(documentNumber);
+        const documentNumber = this.normalizeDocumentNumber(
+          String(columns[documentNumberIndex] ?? ''),
+        );
+        const documentTypeLabel = this.normalizeImportText(
+          String(documentTypeIndex >= 0 ? (columns[documentTypeIndex] ?? '') : ''),
+        );
+        const inferredDocumentTypeId = this.inferDocumentTypeId(documentNumber, documentTypeLabel);
+        const phoneParts = this.buildImportPhoneParts(
+          String(columns[phoneIndex] ?? ''),
+          String(phoneCountryCodeIndex >= 0 ? (columns[phoneCountryCodeIndex] ?? '') : ''),
+        );
         return {
           localId: index + 1,
           rowNumber: headerRowIndex + index + 2,
@@ -1340,7 +1428,8 @@ export class Clients implements OnInit {
           documentNumber,
           name: this.normalizeImportName(String(columns[legalNameIndex] ?? '')),
           tradeName: this.normalizeImportText(String(columns[tradeNameIndex] ?? '')),
-          phone: this.normalizeImportText(String(columns[phoneIndex] ?? '')),
+          phoneCountryCode: phoneParts.phoneCountryCode,
+          phone: phoneParts.phone,
           address: this.normalizeImportText(String(columns[addressIndex] ?? '')),
           city: '',
           country: '',
@@ -1352,43 +1441,89 @@ export class Clients implements OnInit {
         } satisfies ClientImportPreviewRow;
       })
       .filter((row) =>
-        [row.documentNumber, row.name, row.tradeName, row.phone, row.address].some((value) => !!String(value ?? '').trim()),
+        [
+          row.documentNumber,
+          row.name,
+          row.tradeName,
+          row.phoneCountryCode,
+          row.phone,
+          row.address,
+        ].some((value) => !!String(value ?? '').trim()),
       );
   }
 
   private findImportHeaderRow(rawRows: (string | number | null)[][]): {
     headerRowIndex: number;
     indexes: {
-      ruc: number;
+      documentNumber: number;
+      documentType: number;
       legalName: number;
       tradeName: number;
+      phoneCountryCode: number;
       phone: number;
       address: number;
     };
   } | null {
     const aliasGroups = {
-      ruc: ['ruc', 'numero de ruc', 'nro ruc', 'nro de ruc', 'num ruc'],
+      documentNumber: [
+        'ruc',
+        'numero de ruc',
+        'nro ruc',
+        'nro de ruc',
+        'num ruc',
+        'numero documento',
+        'numero de documento',
+        'nro documento',
+        'documento',
+        'document number',
+      ],
+      documentType: [
+        'tipo documento',
+        'tipo de documento',
+        'document type',
+        'tipo doc',
+        'doc type',
+      ],
       legalName: ['razon social', 'razon_social', 'nombre', 'cliente', 'nombre o razon social'],
       tradeName: ['razon comercial', 'nombre comercial', 'trade name', 'razon_comercial'],
+      phoneCountryCode: [
+        'codigo pais',
+        'codigo de pais',
+        'cod pais',
+        'country code',
+        'phone country code',
+        'lada',
+        'prefijo',
+      ],
       phone: ['celular', 'telefono', 'telefono celular', 'movil', 'mobile'],
       address: ['direccion', 'direccion fiscal', 'domicilio', 'address'],
     } as const;
 
     for (let rowIndex = 0; rowIndex < Math.min(rawRows.length, 10); rowIndex++) {
-      const headers = (rawRows[rowIndex] ?? []).map((value) => this.normalizeHeader(String(value ?? '')));
+      const headers = (rawRows[rowIndex] ?? []).map((value) =>
+        this.normalizeHeader(String(value ?? '')),
+      );
       const phoneIndex =
         headers.findIndex((header) => header === 'celular') >= 0
           ? headers.findIndex((header) => header === 'celular')
           : headers.findIndex((header) => aliasGroups.phone.includes(header as never));
       const indexes = {
-        ruc: headers.findIndex((header) => aliasGroups.ruc.includes(header as never)),
+        documentNumber: headers.findIndex((header) =>
+          aliasGroups.documentNumber.includes(header as never),
+        ),
+        documentType: headers.findIndex((header) =>
+          aliasGroups.documentType.includes(header as never),
+        ),
         legalName: headers.findIndex((header) => aliasGroups.legalName.includes(header as never)),
         tradeName: headers.findIndex((header) => aliasGroups.tradeName.includes(header as never)),
+        phoneCountryCode: headers.findIndex((header) =>
+          aliasGroups.phoneCountryCode.includes(header as never),
+        ),
         phone: phoneIndex,
         address: headers.findIndex((header) => aliasGroups.address.includes(header as never)),
       };
 
-      if (indexes.ruc >= 0 && indexes.legalName >= 0) {
+      if (indexes.documentNumber >= 0 && indexes.legalName >= 0) {
         return { headerRowIndex: rowIndex, indexes };
       }
     }
@@ -1416,6 +1551,41 @@ export class Clients implements OnInit {
     return value.replace(/\s+/g, '').trim();
   }
 
+  private normalizeImportPhoneCountryCode(value: string): string {
+    const normalized = this.normalizeImportText(value);
+    if (!normalized) {
+      return DEFAULT_PHONE_COUNTRY.iso2;
+    }
+
+    return findPhoneCountry(normalized).iso2;
+  }
+
+  private buildImportPhoneParts(
+    value: string,
+    phoneCountryCode?: string,
+  ): { phoneCountryCode: string; phone: string } {
+    const normalized = this.normalizeImportText(value);
+    if (!normalized) {
+      return {
+        phoneCountryCode: this.normalizeImportPhoneCountryCode(phoneCountryCode ?? ''),
+        phone: '',
+      };
+    }
+
+    if (normalized.startsWith('+')) {
+      const parsed = parseStoredPhoneToFormValue(normalized);
+      return {
+        phoneCountryCode: parsed.country.iso2,
+        phone: sanitizeNationalPhoneInput(parsed.nationalNumber),
+      };
+    }
+
+    return {
+      phoneCountryCode: this.normalizeImportPhoneCountryCode(phoneCountryCode ?? ''),
+      phone: sanitizeNationalPhoneInput(normalized),
+    };
+  }
+
   private normalizeImportName(value: string): string {
     const normalized = this.normalizeImportText(value);
     if (!normalized) {
@@ -1426,25 +1596,49 @@ export class Clients implements OnInit {
     return lowerCased.replace(/\b\p{L}/gu, (match) => match.toLocaleUpperCase('es-PE'));
   }
 
-  private inferDocumentTypeId(documentNumber: string): number | null {
+  private inferDocumentTypeId(documentNumber: string, typeLabel?: string): number | null {
+    const normalizedTypeLabel = this.normalizeHeader(typeLabel ?? '');
+    if (normalizedTypeLabel) {
+      const typeByName = this.documentTypes.find(
+        (item) => this.normalizeHeader(item.name) === normalizedTypeLabel,
+      );
+      if (typeByName) {
+        return Number(typeByName.id);
+      }
+    }
+
     if (!/^\d+$/.test(documentNumber)) {
       return null;
     }
 
-    if (documentNumber.length === 8) {
-      return this.getDocumentTypeIdByDigits(8);
+    const matchingByDigits = this.documentTypes.filter(
+      (item) => Number(item.digits) === documentNumber.length,
+    );
+    if (!matchingByDigits.length) {
+      return null;
     }
 
-    if (documentNumber.length === 11) {
-      return this.getDocumentTypeIdByDigits(11);
+    if (matchingByDigits.length === 1) {
+      return Number(matchingByDigits[0].id);
     }
 
-    return null;
-  }
+    const preferredByName =
+      matchingByDigits.find((item) => {
+        const normalizedName = this.normalizeHeader(item.name);
+        return (
+          (documentNumber.length === 8 && normalizedName.includes('dni')) ||
+          (documentNumber.length === 9 && normalizedName.includes('ce')) ||
+          (documentNumber.length === 11 && normalizedName.includes('ruc'))
+        );
+      }) ??
+      matchingByDigits.find((item) => {
+        if (documentNumber.length === 11) {
+          return item.kind === ClientKind.COMPANY;
+        }
+        return item.kind === ClientKind.PERSON;
+      });
 
-  private getDocumentTypeIdByDigits(digits: number): number | null {
-    const docType = this.documentTypes.find((item) => Number(item.digits) === digits);
-    return docType ? Number(docType.id) : null;
+    return preferredByName ? Number(preferredByName.id) : null;
   }
 
   private recomputeImportRows(): void {
@@ -1462,12 +1656,14 @@ export class Clients implements OnInit {
         row.localErrors.push('Completa el número de documento.');
       } else if (!/^\d+$/.test(row.documentNumber)) {
         row.localErrors.push('El documento solo puede contener dígitos.');
-      } else if (![8, 11].includes(row.documentNumber.length)) {
-        row.localErrors.push('El documento debe tener exactamente 8 u 11 dígitos.');
+      } else if (/^0+$/.test(row.documentNumber)) {
+        row.localErrors.push('El número de documento no puede ser 0 ni contener solo ceros.');
       }
 
       if (!row.documentTypeId) {
-        row.localErrors.push('Selecciona un tipo de documento.');
+        row.localErrors.push(
+          'No pudimos inferir el tipo de documento con la configuración actual.',
+        );
       } else {
         const docType = this.documentTypes.find((item) => Number(item.id) === docTypeId);
         if (!docType) {
@@ -1481,8 +1677,8 @@ export class Clients implements OnInit {
         row.localErrors.push('Completa la razón social o nombre del cliente.');
       }
 
-      if (row.phone && !normalizePhoneToE164(row.phone)) {
-        row.localErrors.push('El teléfono debe estar en formato E.164.');
+      if (row.phone && !buildPhoneFormValue(row.phoneCountryCode, row.phone).e164) {
+        row.localErrors.push('El teléfono no es válido incluso aplicando el código de país.');
       }
 
       const key =
@@ -1516,7 +1712,9 @@ export class Clients implements OnInit {
       } else if (row.localErrors.length > 0) {
         row.status = 'error';
       } else if (row.serverErrors.length > 0) {
-        row.status = row.serverErrors.some((error) => error.includes('base de datos')) ? 'duplicate' : 'error';
+        row.status = row.serverErrors.some((error) => error.includes('base de datos'))
+          ? 'duplicate'
+          : 'error';
       } else if (row.requiresServerValidation) {
         row.status = 'pending';
       } else {
@@ -1570,7 +1768,11 @@ export class Clients implements OnInit {
     } catch (error) {
       console.error('Error validating import rows', error);
       this.importValidationSummary = 'No pudimos validar las filas contra la base de datos.';
-      this.showMessage('error', 'fas fa-exclamation-circle', 'No pudimos validar las filas del archivo.');
+      this.showMessage(
+        'error',
+        'fas fa-exclamation-circle',
+        'No pudimos validar las filas del archivo.',
+      );
     } finally {
       this.importValidationInProgress = false;
       this.recomputeImportRows();
@@ -1585,7 +1787,7 @@ export class Clients implements OnInit {
       documentNumber: row.documentNumber || undefined,
       name: row.name || undefined,
       tradeName: row.tradeName || undefined,
-      phone: this.normalizeOptionalPhone(row.phone) || undefined,
+      phone: buildPhoneFormValue(row.phoneCountryCode, row.phone).e164 || undefined,
       address: row.address || undefined,
       city: row.city || undefined,
       country: row.country || undefined,
@@ -1593,7 +1795,57 @@ export class Clients implements OnInit {
   }
 
   private refreshImportView(): void {
-    const filteredRows = this.importRows.filter((row) => {
+    const filteredRows = this.getFilteredImportRows();
+
+    this.importTotalPages = Math.max(1, Math.ceil(filteredRows.length / this.importItemsPerPage));
+    if (this.importCurrentPage > this.importTotalPages) {
+      this.importCurrentPage = this.importTotalPages;
+    }
+
+    const start = (this.importCurrentPage - 1) * this.importItemsPerPage;
+    this.visibleImportRows = filteredRows.slice(start, start + this.importItemsPerPage);
+  }
+
+  getImportStatusLabel(status: ClientImportStatus): string {
+    const labels: Record<ClientImportStatus, string> = {
+      pending: 'Pendiente',
+      ready: 'Lista',
+      error: 'Con error',
+      duplicate: 'Duplicada',
+      omitted: 'Omitida',
+    };
+
+    return labels[status] ?? status;
+  }
+
+  get importEmptyStateMessage(): string {
+    if (!this.importRows.length) {
+      return 'Todavía no hay filas cargadas para previsualizar.';
+    }
+
+    const hasSearch = !!this.importSearchTerm.trim();
+    if (this.importStatusFilter === 'all') {
+      return hasSearch
+        ? 'No hay filas que coincidan con la búsqueda actual.'
+        : 'No hay filas para mostrar en este momento.';
+    }
+
+    const statusLabels: Record<Exclude<ImportFilterStatus, 'all'>, string> = {
+      ready: 'listas',
+      pending: 'pendientes',
+      error: 'con error',
+      duplicate: 'duplicadas',
+      omitted: 'omitidas',
+    };
+
+    const statusLabel = statusLabels[this.importStatusFilter];
+    return hasSearch
+      ? `No hay filas ${statusLabel} que coincidan con la búsqueda actual.`
+      : `No hay filas ${statusLabel}.`;
+  }
+
+  private getFilteredImportRows(): ClientImportPreviewRow[] {
+    return this.importRows.filter((row) => {
       if (this.importStatusFilter !== 'all' && row.status !== this.importStatusFilter) {
         return false;
       }
@@ -1603,19 +1855,18 @@ export class Clients implements OnInit {
         return true;
       }
 
-      return [row.documentNumber, row.name, row.tradeName, row.phone, row.address]
+      return [
+        row.documentNumber,
+        row.name,
+        row.tradeName,
+        row.phoneCountryCode,
+        row.phone,
+        row.address,
+      ]
         .join(' ')
         .toLocaleLowerCase('es-PE')
         .includes(term);
     });
-
-    this.importTotalPages = Math.max(1, Math.ceil(filteredRows.length / this.importItemsPerPage));
-    if (this.importCurrentPage > this.importTotalPages) {
-      this.importCurrentPage = this.importTotalPages;
-    }
-
-    const start = (this.importCurrentPage - 1) * this.importItemsPerPage;
-    this.visibleImportRows = filteredRows.slice(start, start + this.importItemsPerPage);
   }
 
   private chunkArray<T>(items: T[], chunkSize: number): T[][] {
@@ -1669,9 +1920,3 @@ export class Clients implements OnInit {
     this.showAlert = false;
   }
 }
-
-
-
-
-
-

@@ -59,6 +59,12 @@
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
+
+  &:disabled {
+    background-color: #e9ecef;
+    opacity: 1;
+    cursor: not-allowed;
+  }
 }
 
 .phone-input__country ::ng-deep .ng-select-container {
@@ -68,6 +74,12 @@
   align-items: center;
   box-shadow: none;
   color: #111827;
+}
+
+.phone-input__country ::ng-deep .ng-select.ng-select-disabled > .ng-select-container {
+  background-color: #e9ecef;
+  opacity: 1;
+  cursor: not-allowed;
 }
 
 .phone-input__country ::ng-deep .ng-select-container .ng-value-container,
@@ -95,6 +107,53 @@
 
 .phone-input__meta--error {
   color: #dc3545;
+}
+
+.phone-input--form-control {
+  .phone-input__label {
+    font-size: 1.15rem;
+    line-height: 1.5;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 0.3rem;
+  }
+
+  .phone-input__number {
+    min-height: 50px;
+    height: 50px;
+    padding: 0.75rem 1rem;
+    line-height: 1.5;
+    font-size: 1rem;
+    border-color: #e2e8f0;
+    border-radius: 10px;
+  }
+
+  .phone-input__country ::ng-deep {
+    .ng-select-container {
+      min-height: 50px;
+      height: 50px;
+      line-height: 1.5;
+      font-size: 1rem;
+      border-color: #e2e8f0;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+    }
+
+    .ng-value-container {
+      padding-left: 1rem;
+      padding-right: 1rem;
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+  }
+
+  .phone-input__meta {
+    min-height: 18px;
+    font-size: 0.85rem;
+    line-height: 1.2;
+  }
 }
 
 @container phone-input (max-width: 340px) {

@@ -1,4 +1,8 @@
-<div class="phone-input" [formGroup]="formGroup">
+<div
+  class="phone-input"
+  [class.phone-input--form-control]="appearance === 'form-control'"
+  [formGroup]="formGroup"
+>
   <label class="phone-input__label" [attr.for]="inputId">
     {{ label }}@if (required) { * }
   </label>

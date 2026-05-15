@@ -1577,6 +1577,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
     if (!partner.phone && !primaryContact?.phone) {
       this.createServiceOrderForm.get("contactPhone")?.enable({ emitEvent: false })
+      this.createServiceOrderForm.get("contactPhoneCountry")?.enable({ emitEvent: false })
+      this.createServiceOrderForm.get("contactPhoneNationalNumber")?.enable({ emitEvent: false })
     }
 
     // Segundo: forzar render del *ngIf ANTES de asignar el contacto seleccionado
@@ -2726,6 +2728,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       "contactName",
       "contactEmail",
       "contactPhone",
+      "contactPhoneCountry",
+      "contactPhoneNationalNumber",
     ]
     controls.forEach((controlName) => {
       const control = this.createServiceOrderForm.get(controlName)

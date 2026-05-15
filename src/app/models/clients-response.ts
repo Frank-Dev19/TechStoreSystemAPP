@@ -25,6 +25,7 @@ export interface ClientResponse {
   address?: string | null;
   city?: string | null;
   country?: string | null;
+  requiresContactCompletion?: boolean;
   isClient?: boolean;
   isSupplier?: boolean;
   documentType?: { id: number; name: string } | null;

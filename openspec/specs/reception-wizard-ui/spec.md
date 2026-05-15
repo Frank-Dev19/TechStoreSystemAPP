@@ -100,6 +100,23 @@ When the selected client is `COMPANY`, the wizard MUST request exactly one conta
 - THEN the wizard MUST preserve the legacy person behavior
 - AND the person name and phone MUST continue to populate the operative contact snapshot fields directly
 
+### Requirement: Cohesive Phone Input Alignment
+
+The reception wizard MUST render the `app-phone-input` country selector and national-number field as a cohesive form-control pair, and SHALL align their label, borders, heights, and focus treatment with adjacent native inputs in the same form row.
+
+#### Scenario: Aligning phone input with native contact fields
+- GIVEN the receptionist is on the customer/contact step of the service-order wizard
+- WHEN the contact row shows `Nombre de contacto`, `Correo`, and `Teléfono`
+- THEN the `Teléfono` label MUST align vertically with the native labels beside it
+- AND the country selector plus national-number input MUST share the same visible height and border language as the adjacent native inputs
+- AND the selected country prefix MUST appear vertically centered inside its control
+
+#### Scenario: Preserving alignment during validation
+- GIVEN the phone field becomes invalid and displays helper text
+- WHEN the wizard renders the error state
+- THEN the phone controls MUST remain horizontally aligned with the neighboring native inputs
+- AND the error/meta area MUST reserve enough space to avoid collapsing or jumping the control row
+
 ### Requirement: Transitional Document Type Fallback in Reception
 
 The reception wizard MUST prefer `documentType.kind` for company/person resolution and MAY fallback only when the selected catalog row is still unclassified. The wizard MUST NOT present a manual kind selector as part of the fallback.

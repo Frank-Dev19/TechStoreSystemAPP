@@ -30,6 +30,7 @@ export class PhoneInputComponent implements OnInit, OnDestroy {
   @Input() label = 'Teléfono';
   @Input() required = false;
   @Input() submitted = false;
+  @Input() appearance: 'default' | 'form-control' = 'default';
 
   readonly countries = PHONE_COUNTRIES;
   readonly defaultCountry = DEFAULT_PHONE_COUNTRY;
