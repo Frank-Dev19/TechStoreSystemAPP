@@ -5,6 +5,7 @@ export interface DocumentTypeResponse {
     name: string;
     digits: number;
     description: string;
+    sunatCode?: string | null;
     kind?: DocumentTypeKind | null;
     createdAt?: string | Date;
     updatedAt?: string | Date;

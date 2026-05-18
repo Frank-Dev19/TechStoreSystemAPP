@@ -23,11 +23,17 @@ export interface ClientResponse {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  ubigeo?: string | null;
+  department?: string | null;
+  province?: string | null;
+  district?: string | null;
+  urbanization?: string | null;
+  countryCode?: string | null;
   city?: string | null;
   country?: string | null;
   isClient?: boolean;
   isSupplier?: boolean;
-  documentType?: { id: number; name: string } | null;
+  documentType?: { id: number; name: string; sunatCode?: string | null; kind?: ClientKind | null } | null;
   contacts?: ClientContactResponse[] | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;

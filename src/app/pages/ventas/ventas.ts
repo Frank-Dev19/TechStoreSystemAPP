@@ -54,7 +54,7 @@ type NewCustomerForm = Partial<ClientSaveRequest> & {
   documentTypeId?: number | null
 }
 
-export type DocumentTypeCode = 'NOTA_PEDIDO' | 'BOLETA' | 'FACTURA'
+export type DocumentTypeCode = 'BOLETA' | 'FACTURA'
 // PAYMENT TYPES - Frontend values
 export type PaymentType = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO' | 'YAPE' | 'PLIN'
 
@@ -465,7 +465,14 @@ export class Ventas implements OnInit {
   metrics = { totalSales: 0, totalEmitted: 0, totalCancelled: 0, totalAmount: 0 }
 
   // ENUMS FOR TEMPLATES
-  documentTypes: DocumentTypeCode[] = ['NOTA_PEDIDO', 'BOLETA', 'FACTURA']
+  documentTypes: DocumentTypeCode[] = ['BOLETA', 'FACTURA']
+  readonly documentSeriesTypes: DocumentType[] = [
+    DocumentType.BOLETA,
+    DocumentType.FACTURA,
+    DocumentType.NOTA_CREDITO,
+    DocumentType.NOTA_DEBITO,
+    DocumentType.GUIA_REMISION,
+  ];
   saleStatuses: SaleStatus[] = ['PENDIENTE', 'EMITIDO', 'ANULADO']
   paymentTypes: string[] = ['CASH', 'CARD', 'TRANSFER', 'YAPE', 'PLIN', 'CREDIT']
   paymentTypeLabels: { [key: string]: string } = {
@@ -2288,6 +2295,12 @@ export class Ventas implements OnInit {
       return;
     }
 
+    this.documentSeriesForm.code = String(this.documentSeriesForm.code).trim().toUpperCase();
+    if (!this.isValidSeriesCodeForType(this.documentSeriesForm.documentType, this.documentSeriesForm.code)) {
+      this.showToast('warning', `La serie no corresponde al tipo ${this.getDocumentTypeLabel(this.documentSeriesForm.documentType!)}. ${this.getSeriesPlaceholder(this.documentSeriesForm.documentType)}`);
+      return;
+    }
+
     if (this.documentSeriesEditMode && this.selectedDocumentSeries) {
       // Modo edicion
       const updateDto: UpdateDocumentSeriesDto = {
@@ -2318,9 +2331,6 @@ export class Ventas implements OnInit {
         startingNumber: this.documentSeriesForm.startingNumber,
         createdBy: 'system', // En produccion, usar usuario actual
       };
-      console.log("pruebita: " + createDto);
-      console.log(createDto);
-
       this.documentSeriesApi.create(createDto).subscribe({
         next: () => {
           this.showToast('success', 'Serie creada correctamente');
@@ -2401,16 +2411,55 @@ export class Ventas implements OnInit {
   }
 
   // Helper methods for templates
-  getDocumentTypeLabel(documentType: DocumentType): string {
+  getDocumentTypeLabel(documentType: DocumentType | string): string {
     switch (documentType) {
       case 'BOLETA':
         return 'Boleta';
       case 'FACTURA':
         return 'Factura';
-      case 'NOTA_PEDIDO':
-        return 'Nota de Pedido';
+      case 'NOTA_CREDITO':
+        return 'Nota de Crédito';
+      case 'NOTA_DEBITO':
+        return 'Nota de Débito';
+      case 'GUIA_REMISION':
+        return 'Guía de Remisión';
       default:
         return documentType;
+    }
+  }
+
+  getSeriesPlaceholder(documentType?: DocumentType): string {
+    switch (documentType) {
+      case DocumentType.FACTURA:
+        return 'Ej: F001';
+      case DocumentType.BOLETA:
+        return 'Ej: B001';
+      case DocumentType.NOTA_CREDITO:
+        return 'Ej: FC01 o BC01';
+      case DocumentType.NOTA_DEBITO:
+        return 'Ej: FD01 o BD01';
+      case DocumentType.GUIA_REMISION:
+        return 'Ej: T001';
+      default:
+        return 'Ej: B001';
+    }
+  }
+
+  isValidSeriesCodeForType(documentType?: DocumentType, code?: string): boolean {
+    const normalizedCode = String(code ?? '').trim().toUpperCase();
+    switch (documentType) {
+      case DocumentType.FACTURA:
+        return /^F\d{3}$/.test(normalizedCode);
+      case DocumentType.BOLETA:
+        return /^B\d{3}$/.test(normalizedCode);
+      case DocumentType.NOTA_CREDITO:
+        return /^(FC|BC)\d{2}$/.test(normalizedCode);
+      case DocumentType.NOTA_DEBITO:
+        return /^(FD|BD)\d{2}$/.test(normalizedCode);
+      case DocumentType.GUIA_REMISION:
+        return /^T\d{3}$/.test(normalizedCode);
+      default:
+        return false;
     }
   }
 

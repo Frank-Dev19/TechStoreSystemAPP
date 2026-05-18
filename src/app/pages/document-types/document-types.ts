@@ -68,6 +68,7 @@ export class DocumentTypes implements OnInit {
     return this.formBuilder.group({
       name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
       kind: [null, Validators.required],
+      sunatCode: ['', [Validators.required, Validators.maxLength(4)]],
       digits: [null, [Validators.required, Validators.min(1), Validators.max(30)]],
       description: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(255)]],
     });
@@ -190,6 +191,7 @@ export class DocumentTypes implements OnInit {
     this.documentTypeForm.reset({
       name: '',
       kind: null,
+      sunatCode: '',
       digits: null,
       description: '',
     });
@@ -202,6 +204,7 @@ export class DocumentTypes implements OnInit {
     this.documentTypeForm.patchValue({
       name: documentType.name,
       kind: documentType.kind ?? null,
+      sunatCode: documentType.sunatCode ?? '',
       digits: Number(documentType.digits),
       description: documentType.description ?? '',
     });
@@ -210,7 +213,7 @@ export class DocumentTypes implements OnInit {
 
   closeModal(): void {
     this.showModal = false;
-    this.documentTypeForm.reset({ name: '', kind: null, digits: null, description: '' });
+    this.documentTypeForm.reset({ name: '', kind: null, sunatCode: '', digits: null, description: '' });
     this.currentDocumentType = null;
   }
 
@@ -220,6 +223,7 @@ export class DocumentTypes implements OnInit {
     return {
       name: String(formValue.name ?? '').trim(),
       kind: formValue.kind as DocumentTypeKind,
+      sunatCode: String(formValue.sunatCode ?? '').trim(),
       digits: Number.isFinite(digitsValue) && digitsValue > 0 ? digitsValue : 1,
       description: String(formValue.description ?? '').trim(),
     };
@@ -231,6 +235,7 @@ export class DocumentTypes implements OnInit {
     return {
       name: formValue.name ? String(formValue.name).trim() : undefined,
       kind: formValue.kind ?? undefined,
+      sunatCode: formValue.sunatCode ? String(formValue.sunatCode).trim() : undefined,
       digits: Number.isFinite(digitsValue) && digitsValue > 0 ? digitsValue : undefined,
       description: formValue.description ? String(formValue.description).trim() : undefined,
     };

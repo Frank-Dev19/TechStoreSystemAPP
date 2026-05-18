@@ -578,6 +578,44 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="ubigeo">Ubigeo</label>
+                        <input type="text" id="ubigeo" formControlName="ubigeo" class="form-input" maxlength="6"
+                            [class.error]="partnerForm.get('ubigeo')?.invalid && partnerForm.get('ubigeo')?.touched">
+                        <div class="error-message" *ngIf="partnerForm.get('ubigeo')?.invalid && partnerForm.get('ubigeo')?.touched">
+                            El ubigeo debe tener 6 digitos
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="department">Departamento</label>
+                        <input type="text" id="department" formControlName="department" class="form-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="province">Provincia</label>
+                        <input type="text" id="province" formControlName="province" class="form-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="district">Distrito</label>
+                        <input type="text" id="district" formControlName="district" class="form-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="urbanization">Urbanización</label>
+                        <input type="text" id="urbanization" formControlName="urbanization" class="form-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="countryCode">Código país</label>
+                        <input type="text" id="countryCode" formControlName="countryCode" class="form-input" maxlength="2"
+                            [class.error]="partnerForm.get('countryCode')?.invalid && partnerForm.get('countryCode')?.touched">
+                        <div class="error-message" *ngIf="partnerForm.get('countryCode')?.invalid && partnerForm.get('countryCode')?.touched">
+                            Usa dos letras, por ejemplo PE
+                        </div>
+                    </div>
+
+                    <div class="form-group">
                         <label for="city">Ciudad</label>
                         <input type="text" id="city" formControlName="city" class="form-input">
                     </div>

@@ -1,0 +1,278 @@
+.business-profile-page {
+  padding: 24px;
+  color: #263447;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+
+  h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 6px 0 0;
+    color: #718096;
+  }
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: #e6f0fb;
+  color: #1f5f99;
+  font-weight: 600;
+}
+
+.loading-state,
+.config-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 28px;
+}
+
+.content-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.config-section {
+  padding: 20px;
+}
+
+.section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf2f7;
+
+  h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  span {
+    color: #718096;
+    font-size: 13px;
+  }
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+
+  &.wide {
+    grid-column: span 2;
+  }
+
+  label {
+    font-weight: 600;
+    color: #2d3748;
+  }
+}
+
+.form-control {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #263447;
+  outline: none;
+
+  &:focus {
+    border-color: #2b6cb0;
+    box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.12);
+  }
+}
+
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.asset-box {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  border: 1px dashed #cbd5e0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.asset-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 96px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+
+  i {
+    color: #2b6cb0;
+    font-size: 34px;
+  }
+
+  img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+}
+
+.asset-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+
+  strong {
+    color: #2d3748;
+    word-break: break-word;
+  }
+
+  span {
+    color: #718096;
+    font-size: 13px;
+  }
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-light {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+}
+
+.btn-primary {
+  background: #2b6cb0;
+  color: #ffffff;
+}
+
+.btn-secondary {
+  position: relative;
+  overflow: hidden;
+  background: #718096;
+  color: #ffffff;
+
+  input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+}
+
+.btn-light {
+  background: #edf2f7;
+  color: #2d3748;
+}
+
+.footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 16px 0 4px;
+}
+
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  max-width: 420px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  color: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+
+  &.success { background: #2f855a; }
+  &.error { background: #c53030; }
+  &.warning { background: #b7791f; }
+  &.info { background: #2b6cb0; }
+}
+
+@media (max-width: 1100px) {
+  .form-grid,
+  .asset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .business-profile-page {
+    padding: 16px;
+  }
+
+  .page-header,
+  .section-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .form-grid,
+  .asset-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-group.wide {
+    grid-column: auto;
+  }
+
+  .asset-box {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-preview {
+    width: 100%;
+  }
+}

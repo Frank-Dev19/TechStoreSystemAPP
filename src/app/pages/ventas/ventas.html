@@ -405,8 +405,7 @@
                             <td>{{ sale.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
                             <td>
                                 <span class="doc-type-badge">
-                                    {{ sale.documentType === 'NOTA_PEDIDO' ? 'Nota Pedido' : (sale.documentType ===
-                                    'BOLETA' ? 'Boleta' : 'Factura') }}
+                                    {{ getDocumentTypeLabel(sale.documentType) }}
                                 </span>
                             </td>
                             <td><strong>{{ sale.series }}-{{ sale.number }}</strong></td>
@@ -828,7 +827,6 @@
                     <div class="form-group">
                         <label>Tipo</label>
                         <select [(ngModel)]="saleFormData.documentType" class="form-control">
-                            <option *ngIf="saleCreationMode === 'MANUAL_PRODUCT'" value="NOTA_PEDIDO">Nota de Pedido</option>
                             <option value="BOLETA">Boleta</option>
                             <option value="FACTURA">Factura</option>
                         </select>
@@ -1146,9 +1144,7 @@
                     <select class="form-control" [(ngModel)]="documentSeriesFilter.documentType"
                         (change)="onDocumentSeriesFilterChange()">
                         <option value="">Todos</option>
-                        <option value="BOLETA">Boleta</option>
-                        <option value="FACTURA">Factura</option>
-                        <option value="NOTA_PEDIDO">Nota de Pedido</option>
+                        <option *ngFor="let type of documentSeriesTypes" [ngValue]="type">{{ getDocumentTypeLabel(type) }}</option>
                     </select>
                 </div>
 
@@ -1337,15 +1333,13 @@
                         <label>Tipo de Documento *</label>
                         <select class="form-control" [(ngModel)]="documentSeriesForm.documentType"
                             [disabled]="documentSeriesEditMode">
-                            <option value="BOLETA">Boleta</option>
-                            <option value="FACTURA">Factura</option>
-                            <option value="NOTA_PEDIDO">Nota de Pedido</option>
+                            <option *ngFor="let type of documentSeriesTypes" [ngValue]="type">{{ getDocumentTypeLabel(type) }}</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Codigo *</label>
                         <input type="text" class="form-control" [(ngModel)]="documentSeriesForm.code"
-                            [disabled]="documentSeriesEditMode" placeholder="Ej: B001, F001" maxlength="10">
+                            [disabled]="documentSeriesEditMode" [placeholder]="getSeriesPlaceholder(documentSeriesForm.documentType)" maxlength="10">
                     </div>
                 </div>
                 <div class="form-group">
@@ -1512,8 +1506,7 @@
                 <div class="detail-row">
                     <span class="detail-label">Tipo:</span>
                     <span class="detail-value">
-                        {{ selectedSale.documentType === 'NOTA_PEDIDO' ? 'Nota de Pedido' : (selectedSale.documentType
-                        === 'BOLETA' ? 'Boleta' : 'Factura') }}
+                        {{ getDocumentTypeLabel(selectedSale.documentType) }}
                     </span>
                 </div>
                 <div class="detail-row">

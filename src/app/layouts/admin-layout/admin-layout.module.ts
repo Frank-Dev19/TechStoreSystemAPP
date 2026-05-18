@@ -22,6 +22,7 @@ import { Inventory } from "../../pages/inventory/inventory";
 import { Auditoria } from "../../pages/auditoria/auditoria";
 import { Ventas } from "../../pages/ventas/ventas";
 import { Pricing } from "../../pages/pricing/pricing";
+import { BusinessProfilePage } from "../../pages/business-profile/business-profile";
 import { TechnicianPanel } from "../../pages/technician-panel/technician-panel";
 import { ReceptionPanel } from "../../pages/reception-panel/reception-panel";
 import { SupervisorPanel } from "../../pages/supervisor-panel/supervisor-panel";
@@ -51,6 +52,7 @@ import { SupervisorPanel } from "../../pages/supervisor-panel/supervisor-panel";
         Auditoria,
         Ventas,
         Pricing,
+        BusinessProfilePage,
         TechnicianPanel,
         ReceptionPanel,
         SupervisorPanel,

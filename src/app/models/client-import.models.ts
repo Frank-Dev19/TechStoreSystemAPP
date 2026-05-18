@@ -15,6 +15,12 @@ export interface ClientImportRowDraft {
   tradeName?: string;
   phone?: string;
   address?: string;
+  ubigeo?: string;
+  department?: string;
+  province?: string;
+  district?: string;
+  urbanization?: string;
+  countryCode?: string;
   city?: string;
   country?: string;
 }

@@ -31,6 +31,12 @@ type ClientImportPreviewRow = {
   tradeName: string;
   phone: string;
   address: string;
+  ubigeo: string;
+  department: string;
+  province: string;
+  district: string;
+  urbanization: string;
+  countryCode: string;
   city: string;
   country: string;
   localErrors: string[];
@@ -194,6 +200,12 @@ export class Clients implements OnInit {
         contactEmail: ['', Validators.email],
         contactPhone: [''],
         address: [''],
+        ubigeo: ['', [Validators.pattern(/^\d{6}$/)]],
+        department: [''],
+        province: [''],
+        district: [''],
+        urbanization: [''],
+        countryCode: ['PE', [Validators.pattern(/^[A-Z]{2}$/)]],
         city: [''],
         country: [''],
       }
@@ -469,6 +481,12 @@ export class Clients implements OnInit {
       contactEmail: '',
       contactPhone: '',
       address: '',
+      ubigeo: '',
+      department: '',
+      province: '',
+      district: '',
+      urbanization: '',
+      countryCode: 'PE',
       city: '',
       country: '',
     });
@@ -491,6 +509,12 @@ export class Clients implements OnInit {
       contactEmail: '',
       contactPhone: '',
       address: partner.address ?? '',
+      ubigeo: partner.ubigeo ?? '',
+      department: partner.department ?? '',
+      province: partner.province ?? '',
+      district: partner.district ?? '',
+      urbanization: partner.urbanization ?? '',
+      countryCode: partner.countryCode ?? 'PE',
       city: partner.city ?? '',
       country: partner.country ?? '',
     });
@@ -666,6 +690,12 @@ export class Clients implements OnInit {
       documentTypeId: Number(formValue.documentTypeId),
       documentNumber: String(formValue.documentNumber).trim(),
       address: formValue.address ? String(formValue.address).trim() : undefined,
+      ubigeo: formValue.ubigeo ? String(formValue.ubigeo).trim() : undefined,
+      department: formValue.department ? String(formValue.department).trim() : undefined,
+      province: formValue.province ? String(formValue.province).trim() : undefined,
+      district: formValue.district ? String(formValue.district).trim() : undefined,
+      urbanization: formValue.urbanization ? String(formValue.urbanization).trim() : undefined,
+      countryCode: formValue.countryCode ? String(formValue.countryCode).trim().toUpperCase() : 'PE',
       city: formValue.city ? String(formValue.city).trim() : undefined,
       country: formValue.country ? String(formValue.country).trim() : undefined,
     };
@@ -1055,7 +1085,22 @@ export class Clients implements OnInit {
   }
 
   onImportRowFieldChanged(row: ClientImportPreviewRow, field: keyof ClientImportPreviewRow, value: string | number | null): void {
-    if (!['documentTypeId', 'documentNumber', 'name', 'tradeName', 'phone', 'address', 'city', 'country'].includes(String(field))) {
+    if (![
+      'documentTypeId',
+      'documentNumber',
+      'name',
+      'tradeName',
+      'phone',
+      'address',
+      'ubigeo',
+      'department',
+      'province',
+      'district',
+      'urbanization',
+      'countryCode',
+      'city',
+      'country',
+    ].includes(String(field))) {
       return;
     }
 
@@ -1242,6 +1287,12 @@ export class Clients implements OnInit {
           tradeName: this.normalizeImportText(String(columns[tradeNameIndex] ?? '')),
           phone: this.normalizeImportText(String(columns[phoneIndex] ?? '')),
           address: this.normalizeImportText(String(columns[addressIndex] ?? '')),
+          ubigeo: '',
+          department: '',
+          province: '',
+          district: '',
+          urbanization: '',
+          countryCode: 'PE',
           city: '',
           country: '',
           localErrors: [],
@@ -1381,6 +1432,14 @@ export class Clients implements OnInit {
         row.localErrors.push('Completa la razón social o nombre del cliente.');
       }
 
+      if (row.ubigeo?.trim() && !/^\d{6}$/.test(row.ubigeo.trim())) {
+        row.localErrors.push('El ubigeo debe tener 6 digitos.');
+      }
+
+      if (row.countryCode?.trim() && !/^[A-Z]{2}$/.test(row.countryCode.trim().toUpperCase())) {
+        row.localErrors.push('El codigo de pais debe tener 2 letras.');
+      }
+
       const key =
         row.documentTypeId && row.documentNumber && /^\d+$/.test(row.documentNumber)
           ? `${row.documentTypeId}:${row.documentNumber}`
@@ -1483,6 +1542,12 @@ export class Clients implements OnInit {
       tradeName: row.tradeName || undefined,
       phone: row.phone || undefined,
       address: row.address || undefined,
+      ubigeo: row.ubigeo || undefined,
+      department: row.department || undefined,
+      province: row.province || undefined,
+      district: row.district || undefined,
+      urbanization: row.urbanization || undefined,
+      countryCode: row.countryCode || undefined,
       city: row.city || undefined,
       country: row.country || undefined,
     };

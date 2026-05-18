@@ -19,7 +19,6 @@ export class DocumentSeriesApiService {
   constructor(private readonly baseService: BaseService) { }
 
   create(createDto: CreateDocumentSeriesDto): Observable<DocumentSeries> {
-    console.log("hijooooooooooooooo")
     return this.baseService.post<DocumentSeries>(this.baseUrl, createDto);
   }
 
@@ -37,6 +36,10 @@ export class DocumentSeriesApiService {
 
   getNextNumber(companyId: number, documentType: DocumentType): Observable<NextNumberResponse> {
     return this.baseService.get<NextNumberResponse>(`${this.baseUrl}/next-number?companyId=${companyId}&documentType=${documentType}`);
+  }
+
+  previewNextNumber(companyId: number, documentType: DocumentType): Observable<NextNumberResponse> {
+    return this.baseService.get<NextNumberResponse>(`${this.baseUrl}/preview-next-number?companyId=${companyId}&documentType=${documentType}`);
   }
 
   getNextNumberFormatted(companyId: number, documentType: DocumentType): Observable<NextNumberFormattedResponse> {

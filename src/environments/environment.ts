@@ -55,6 +55,10 @@ export const config = {
     dailyReport: '/cash-flow/reports/daily',
   },
 
+  businessProfile: {
+    base: '/business-profile',
+  },
+
   serviceOrders: {
     serviceOrders: '/service-orders',
     serviceOrderItems: '/service-order-items',
