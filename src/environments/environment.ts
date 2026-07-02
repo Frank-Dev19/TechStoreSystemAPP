@@ -59,6 +59,10 @@ export const config = {
     base: '/business-profile',
   },
 
+  electronicBilling: {
+    base: '/electronic-billing',
+  },
+
   serviceOrders: {
     serviceOrders: '/service-orders',
     serviceOrderItems: '/service-order-items',

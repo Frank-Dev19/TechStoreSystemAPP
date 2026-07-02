@@ -2,7 +2,7 @@ import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
 import { SalesApiService } from '../../services/sales/sales-api.service';
 import { DocumentSeriesApiService } from '../../services/sales/document-series-api.service';
 import { ProductsApiService } from '../../services/products-api.service';
-import { lastValueFrom } from 'rxjs';
+import { catchError, forkJoin, lastValueFrom, of } from 'rxjs';
 import { CashFlowApiService } from '../../services/sales/cash-flow-api.service';
 import { ClientsApiService } from '../../services/clients-api.service';
 import { PricingStockApiService } from '../../services/pricing-stock-api.service';
@@ -21,6 +21,8 @@ import { ClientResponse } from '../../models/clients-response';
 import { ServiceOrder, ServiceOrderEconomicStatus } from '../../models/service-orders/service-order';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
 import { SaleReceiptPdfService } from '../../services/sales/sale-receipt-pdf.service';
+import { ElectronicBillingApiService } from '../../services/electronic-billing/electronic-billing-api.service';
+import { ElectronicDocument, ElectronicDocumentStatus } from '../../models/electronic-billing/electronic-document.model';
 // ============================================
 // INTERFACES & TYPES (siguiendo exactamente el prompt)
 // ============================================
@@ -323,6 +325,7 @@ export class Ventas implements OnInit {
     private currentUser: CurrentUserService,
     private serviceOrderService: ServiceOrderService,
     private saleReceiptPdfService: SaleReceiptPdfService,
+    private electronicBillingApi: ElectronicBillingApiService,
   ) { }
 
   @ViewChild('productSearchInput') productSearchInput!: ElementRef<HTMLInputElement>
@@ -330,10 +333,14 @@ export class Ventas implements OnInit {
 
 
   private readonly COMPANY_ID = 1;
+  private readonly IGV_RATE = 0.18;
   // STATE
   sales: Sale[] = []
   selectedSale: Sale | null = null
   isLoading = false
+  electronicDocumentsBySaleId: { [saleId: number]: ElectronicDocument | null } = {}
+  selectedElectronicDocument: ElectronicDocument | null = null
+  electronicBillingLoadingBySaleId: { [saleId: number]: boolean } = {}
 
   // Cache para precios y stock de productos con informacion completa
   productPriceStockMap: {
@@ -595,14 +602,15 @@ export class Ventas implements OnInit {
           );
 
           if (priceCalc) {
+            const salePriceWithIgv = priceCalc.salePriceWithIgv ?? priceCalc.salePrice;
             this.productPriceStockMap[product.id] = {
               stock: stockMap[product.id] || 0,
               options: [],
               applied: {
                 priceListCode: '',
                 currency: 'PEN',
-                baseUnitPrice: priceCalc.salePrice,
-                finalUnitPrice: priceCalc.salePrice,
+                baseUnitPrice: salePriceWithIgv,
+                finalUnitPrice: salePriceWithIgv,
                 autoAppliedDiscounts: [],
               },
               discounts: [],
@@ -735,6 +743,7 @@ export class Ventas implements OnInit {
       next: (resp: any) => {
         this.sales = resp.data
         this.totalItems = resp.total
+        this.loadElectronicDocumentsForSales()
         this.loadMetrics()
         this.loadCashFlowData()
         this.isLoading = false
@@ -745,6 +754,29 @@ export class Ventas implements OnInit {
         this.showToast('error', 'Error cargando ventas')
       }
     })
+  }
+
+  private loadElectronicDocumentsForSales(): void {
+    this.electronicDocumentsBySaleId = {};
+
+    if (!this.sales.length) {
+      return;
+    }
+
+    const requests = this.sales.map((sale) =>
+      this.electronicBillingApi.getDocumentBySale(sale.id).pipe(
+        catchError(() => of(null))
+      )
+    );
+
+    forkJoin(requests).subscribe((documents) => {
+      documents.forEach((document, index) => {
+        const saleId = this.sales[index]?.id;
+        if (saleId) {
+          this.electronicDocumentsBySaleId[saleId] = document;
+        }
+      });
+    });
   }
 
   loadMetrics(): void {
@@ -1025,9 +1057,7 @@ export class Ventas implements OnInit {
         lineTotal: total,
       },
     ]
-    this.saleFormData.total = total
-    this.saleFormData.subtotal = total
-    this.saleFormData.igv = 0
+    this.calculateSaleTotals()
   }
 
   onServiceOrdersSelectionChange(event: Event): void {
@@ -1086,11 +1116,8 @@ export class Ventas implements OnInit {
       }
     })
 
-    const total = Number(lines.reduce((sum, line) => sum + Number(line.lineTotal ?? 0), 0).toFixed(2))
     this.saleFormData.lines = lines
-    this.saleFormData.total = total
-    this.saleFormData.subtotal = total
-    this.saleFormData.igv = 0
+    this.calculateSaleTotals()
   }
 
   private loadEligibleServiceOrders(): void {
@@ -1216,8 +1243,8 @@ export class Ventas implements OnInit {
           productSku: p.sku,
           quantity,
           stock: this.productPriceStockMap[p.id]?.stock || 0,
-          unitPrice: priceCalc.salePrice,
-          originalUnitPrice: priceCalc.salePrice,
+          unitPrice: priceCalc.salePriceWithIgv ?? priceCalc.salePrice,
+          originalUnitPrice: priceCalc.salePriceWithIgv ?? priceCalc.salePrice,
           discountPct: 0,
           appliedPriceListCode: '',
           appliedDiscounts: [],
@@ -1547,9 +1574,9 @@ export class Ventas implements OnInit {
 
   private calculateSaleTotals(): void {
     if (!this.saleFormData?.lines) return
-    const total = this.saleFormData.lines.reduce((sum, line) => sum + line.lineTotal, 0)
-    this.saleFormData.subtotal = total / 1.18
-    this.saleFormData.igv = total - (this.saleFormData.subtotal || 0)
+    const total = Number(this.saleFormData.lines.reduce((sum, line) => sum + line.lineTotal, 0).toFixed(2))
+    this.saleFormData.subtotal = Number((total / (1 + this.IGV_RATE)).toFixed(2))
+    this.saleFormData.igv = Number((total - (this.saleFormData.subtotal || 0)).toFixed(2))
     this.saleFormData.total = total
   }
 
@@ -1701,12 +1728,65 @@ export class Ventas implements OnInit {
           });
         }
         this.selectedSale = detail;
+        this.loadSelectedElectronicDocument(detail.id);
       },
       error: () => {
         // Fallback to list data if API fails
         this.selectedSale = sale;
+        this.loadSelectedElectronicDocument(sale.id);
         this.showToast('error', 'Error cargando detalles de venta');
       }
+    });
+  }
+
+  private loadSelectedElectronicDocument(saleId: number): void {
+    this.selectedElectronicDocument = this.electronicDocumentsBySaleId[saleId] ?? null;
+
+    this.electronicBillingApi.getDocumentBySale(saleId).pipe(
+      catchError(() => of(null))
+    ).subscribe((document) => {
+      this.selectedElectronicDocument = document;
+      this.electronicDocumentsBySaleId[saleId] = document;
+    });
+  }
+
+  onSendElectronicInvoice(sale: Sale | null): void {
+    if (!sale) {
+      return;
+    }
+
+    if (!this.canSendElectronicInvoice(sale)) {
+      return;
+    }
+
+    if (!confirm(`Emitir electronicamente ${sale.series}-${sale.number} ante SUNAT?`)) {
+      return;
+    }
+
+    this.electronicBillingLoadingBySaleId[sale.id] = true;
+    this.electronicBillingApi.sendInvoice(sale.id).subscribe({
+      next: (response) => {
+        this.electronicDocumentsBySaleId[sale.id] = response.document;
+        if (this.selectedSale?.id === sale.id) {
+          this.selectedElectronicDocument = response.document;
+        }
+
+        if (response.document.status === 'ACCEPTED') {
+          this.showToast('success', response.document.sunatDescription || 'Comprobante aceptado por SUNAT');
+        } else if (response.document.status === 'REJECTED') {
+          this.showToast('error', response.document.errorMessage || response.document.sunatDescription || 'SUNAT rechazo el comprobante');
+        } else {
+          this.showToast('info', 'Comprobante enviado a APIsPeru');
+        }
+      },
+      error: (err) => {
+        const message = err?.error?.message || err?.message || 'Error al emitir comprobante electronico';
+        this.showToast('error', Array.isArray(message) ? message.join(', ') : message);
+        this.electronicBillingLoadingBySaleId[sale.id] = false;
+      },
+      complete: () => {
+        this.electronicBillingLoadingBySaleId[sale.id] = false;
+      },
     });
   }
 
@@ -1727,6 +1807,7 @@ export class Ventas implements OnInit {
 
   closeDetailDrawer(): void {
     this.selectedSale = null
+    this.selectedElectronicDocument = null
   }
 
 
@@ -1758,6 +1839,54 @@ export class Ventas implements OnInit {
       'DRAFT': 'Borrador'
     }
     return labels[status] || status
+  }
+
+  getElectronicDocumentForSale(sale: Sale): ElectronicDocument | null {
+    return this.electronicDocumentsBySaleId[sale.id] ?? null;
+  }
+
+  getElectronicStatusLabel(status?: ElectronicDocumentStatus | null): string {
+    const labels: { [key: string]: string } = {
+      PENDING: 'Pendiente',
+      SENT: 'Enviado',
+      ACCEPTED: 'Aceptado',
+      REJECTED: 'Rechazado',
+      ERROR: 'Error',
+    };
+    return status ? labels[status] || status : 'Pendiente';
+  }
+
+  getElectronicStatusClass(status?: ElectronicDocumentStatus | null): string {
+    switch (status) {
+      case 'ACCEPTED':
+        return 'electronic-accepted';
+      case 'REJECTED':
+        return 'electronic-rejected';
+      case 'ERROR':
+        return 'electronic-error';
+      case 'SENT':
+        return 'electronic-sent';
+      case 'PENDING':
+      default:
+        return 'electronic-pending';
+    }
+  }
+
+  canSendElectronicInvoice(sale: Sale | null): boolean {
+    if (!sale) {
+      return false;
+    }
+
+    const document = this.getElectronicDocumentForSale(sale);
+    return sale.status === 'CONFIRMED'
+      && ['BOLETA', 'FACTURA'].includes(String(sale.documentType))
+      && document?.status !== 'ACCEPTED'
+      && !this.electronicBillingLoadingBySaleId[sale.id];
+  }
+
+  getElectronicNotes(document?: ElectronicDocument | null): string[] {
+    const notes = document?.sunatNotes;
+    return Array.isArray(notes) ? notes.map((note) => String(note)) : [];
   }
 
   getTransactionTypeLabel(type: string): string {
@@ -1889,7 +2018,8 @@ export class Ventas implements OnInit {
     this.currentSaleItem.productId = product.id
     this.currentSaleItem.productSku = product.sku
     this.currentSaleItem.productName = product.name
-    this.currentSaleItem.unitPrice = product.salePrice
+    const priceState = this.productPriceStockMap[product.id]
+    this.currentSaleItem.unitPrice = priceState?.applied?.finalUnitPrice ?? product.salePrice
 
     // Por defecto cantidad 1 si no hay nada
     this.currentSaleItem.quantity = this.currentSaleItem.quantity || 1

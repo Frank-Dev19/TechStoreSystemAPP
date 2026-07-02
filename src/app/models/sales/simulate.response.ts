@@ -57,6 +57,7 @@ export interface SimulateSaleResponse {
         baseSubtotal: number
         discountTotal: number
         subtotal: number
+        grossSubtotal?: number
         taxRate: number
         taxAmount: number
         total: number

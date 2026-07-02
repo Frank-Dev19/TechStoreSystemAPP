@@ -397,7 +397,8 @@
                             <th>Total</th>
                             <th>Forma de Pago</th>
                             <th>Estado</th>
-                            <th width="150">Acciones</th>
+                            <th>SUNAT</th>
+                            <th width="180">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -420,12 +421,33 @@
                                     {{ getStatusLabel(sale.status) }}
                                 </span>
                             </td>
+                            <td>
+                                <span class="electronic-status-badge"
+                                    [ngClass]="getElectronicStatusClass(getElectronicDocumentForSale(sale)?.status)"
+                                    [title]="getElectronicDocumentForSale(sale)?.sunatDescription || getElectronicDocumentForSale(sale)?.errorMessage || 'Pendiente de emision electronica'">
+                                    <i class="fas"
+                                        [class.fa-clock]="!getElectronicDocumentForSale(sale) || getElectronicDocumentForSale(sale)?.status === 'PENDING'"
+                                        [class.fa-paper-plane]="getElectronicDocumentForSale(sale)?.status === 'SENT'"
+                                        [class.fa-check-circle]="getElectronicDocumentForSale(sale)?.status === 'ACCEPTED'"
+                                        [class.fa-times-circle]="getElectronicDocumentForSale(sale)?.status === 'REJECTED'"
+                                        [class.fa-exclamation-triangle]="getElectronicDocumentForSale(sale)?.status === 'ERROR'"></i>
+                                    {{ getElectronicStatusLabel(getElectronicDocumentForSale(sale)?.status) }}
+                                </span>
+                            </td>
                             <td class="actions">
                                 <button class="btn-icon" (click)="onViewSale(sale)" title="Ver detalle">
                                     <i class="fas fa-eye"></i>
                                 </button>
                                 <button class="btn-icon" (click)="onDownloadSalePdf(sale)" title="Descargar PDF">
                                     <i class="fas fa-file-pdf"></i>
+                                </button>
+                                <button class="btn-icon success" (click)="onSendElectronicInvoice(sale)"
+                                    [disabled]="!canSendElectronicInvoice(sale)"
+                                    [title]="getElectronicDocumentForSale(sale)?.status === 'ACCEPTED' ? 'Ya aceptado por SUNAT' : 'Emitir electronicamente'">
+                                    <i class="fas"
+                                        [class.fa-spinner]="electronicBillingLoadingBySaleId[sale.id]"
+                                        [class.fa-spin]="electronicBillingLoadingBySaleId[sale.id]"
+                                        [class.fa-paper-plane]="!electronicBillingLoadingBySaleId[sale.id]"></i>
                                 </button>
                                 <!-- Nota de Credito y Guia de Remision temporalmente deshabilitados -->
                                 <button class="btn-icon danger" *ngIf="sale.status === 'CONFIRMED'"
@@ -436,7 +458,7 @@
                         </tr>
 
                         <tr *ngIf="sales.length === 0">
-                            <td colspan="8" class="empty-message">
+                            <td colspan="9" class="empty-message">
                                 <i class="fas fa-inbox"></i>
                                 <p>No se encontraron ventas</p>
                             </td>
@@ -1519,6 +1541,46 @@
                         [class]="'status-' + (selectedSale.status === 'CONFIRMED' ? 'emitido' : (selectedSale.status === 'CANCELLED' ? 'anulado' : 'pendiente'))">
                         {{ getStatusLabel(selectedSale.status) }}
                     </span>
+                </div>
+            </div>
+
+            <!-- Facturacion Electronica -->
+            <div class="detail-section">
+                <h4 class="detail-section-title">Facturacion Electronica</h4>
+                <div class="detail-row">
+                    <span class="detail-label">Estado SUNAT:</span>
+                    <span class="detail-value">
+                        <span class="electronic-status-badge"
+                            [ngClass]="getElectronicStatusClass(selectedElectronicDocument?.status)">
+                            {{ getElectronicStatusLabel(selectedElectronicDocument?.status) }}
+                        </span>
+                    </span>
+                </div>
+                <div class="detail-row" *ngIf="selectedElectronicDocument">
+                    <span class="detail-label">Respuesta:</span>
+                    <span class="detail-value">{{ selectedElectronicDocument.sunatDescription || selectedElectronicDocument.errorMessage || '-' }}</span>
+                </div>
+                <div class="detail-row" *ngIf="selectedElectronicDocument?.hash">
+                    <span class="detail-label">Hash:</span>
+                    <span class="detail-value electronic-hash">{{ selectedElectronicDocument?.hash }}</span>
+                </div>
+                <div class="detail-row" *ngIf="selectedElectronicDocument?.sentAt">
+                    <span class="detail-label">Enviado:</span>
+                    <span class="detail-value">{{ selectedElectronicDocument?.sentAt | date:'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+                <div class="electronic-notes" *ngIf="getElectronicNotes(selectedElectronicDocument).length">
+                    <strong>Notas SUNAT:</strong>
+                    <div *ngFor="let note of getElectronicNotes(selectedElectronicDocument)">{{ note }}</div>
+                </div>
+                <div class="detail-actions">
+                    <button class="btn-primary" (click)="onSendElectronicInvoice(selectedSale)"
+                        [disabled]="!canSendElectronicInvoice(selectedSale)">
+                        <i class="fas"
+                            [class.fa-spinner]="electronicBillingLoadingBySaleId[selectedSale.id]"
+                            [class.fa-spin]="electronicBillingLoadingBySaleId[selectedSale.id]"
+                            [class.fa-paper-plane]="!electronicBillingLoadingBySaleId[selectedSale.id]"></i>
+                        Emitir electronicamente
+                    </button>
                 </div>
             </div>
 
