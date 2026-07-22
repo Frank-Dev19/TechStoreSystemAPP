@@ -9,6 +9,7 @@ export interface DocumentTypeSaveRequest {
     name: string;
     digits: number;
     description: string;
+    sunatCode?: string | null;
     kind: DocumentTypeKind;
 }
 

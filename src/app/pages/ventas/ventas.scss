@@ -1038,6 +1038,64 @@
   }
 }
 
+.electronic-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 96px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  &.electronic-pending {
+    background: rgba(113, 128, 150, 0.14);
+    color: #64748b;
+  }
+
+  &.electronic-sent {
+    background: rgba(52, 152, 219, 0.14);
+    color: var(--primary);
+  }
+
+  &.electronic-accepted {
+    background: rgba(39, 174, 96, 0.16);
+    color: var(--success);
+  }
+
+  &.electronic-rejected,
+  &.electronic-error {
+    background: rgba(231, 76, 60, 0.14);
+    color: var(--danger);
+  }
+}
+
+.electronic-hash {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.electronic-notes {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(52, 152, 219, 0.08);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 // ============================================
 // NUEVA VENTA TAB - TWO COLUMN FORM LAYOUT
 // ============================================

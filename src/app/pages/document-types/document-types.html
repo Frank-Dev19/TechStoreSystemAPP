@@ -61,6 +61,8 @@
                                     (change)="toggleSelectAll()" class="checkbox-input">
                             </th>
                             <th>Nombre</th>
+                            <th>Código SUNAT</th>
+                            <th>Tipo</th>
                             <th>Descripción</th>
                             <th>Dígitos</th>
                             <th>{{isDeletedView ? 'Fecha Eliminación' : 'Fecha Creación'}}</th>
@@ -77,6 +79,8 @@
                                 <td class="name-cell">
                                     <div class="document-type-name">{{documentType.name}}</div>
                                 </td>
+                                <td>{{documentType.sunatCode || '—'}}</td>
+                                <td>{{documentType.kind === 'COMPANY' ? 'Empresa' : 'Persona natural'}}</td>
                                 <td class="description-cell">{{documentType.description}}</td>
                                 <td>{{documentType.digits}}</td>
                                 <td class="date-cell">
@@ -174,6 +178,18 @@
                         @if (documentTypeForm.get('kind')?.invalid && documentTypeForm.get('kind')?.touched) {
                             <div class="error-message">
                                 Debes seleccionar si el documento es para persona o empresa
+                            </div>
+                        }
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sunatCode">Código SUNAT *</label>
+                        <input type="text" id="sunatCode" formControlName="sunatCode" class="form-input"
+                            maxlength="4"
+                            [class.error]="documentTypeForm.get('sunatCode')?.invalid && documentTypeForm.get('sunatCode')?.touched">
+                        @if (documentTypeForm.get('sunatCode')?.invalid && documentTypeForm.get('sunatCode')?.touched) {
+                            <div class="error-message">
+                                Ingresa el código SUNAT del tipo de documento
                             </div>
                         }
                     </div>
