@@ -1,7 +1,8 @@
-﻿import { CommonModule } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { ClientKind, ClientSaveRequest } from '../../models/clients-request';
@@ -40,11 +41,15 @@ describe('ReceptionPanel', () => {
 
   const serviceOrderServiceStub = {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
+      findOne: jasmine.createSpy('findOne').and.returnValue(of(createServiceOrder())),
     create: jasmine.createSpy('create').and.returnValue(of({ id: 1, serviceType: ServiceType.DIAGNOSIS })),
     createBatch: jasmine.createSpy('createBatch').and.returnValue(of({ createdOrders: [{ id: 1, serviceType: ServiceType.DIAGNOSIS }] })),
     update: jasmine.createSpy('update').and.returnValue(of({})),
     markAsDelivered: jasmine.createSpy('markAsDelivered').and.returnValue(of({})),
     changeTechnicalStatus: jasmine.createSpy('changeTechnicalStatus').and.returnValue(of({})),
+    getTechnicianSuggestion: jasmine
+      .createSpy('getTechnicianSuggestion')
+      .and.returnValue(of({ suggestedTechnicianId: null, suggestedTechnicianName: null, activeCount: 0 })),
   };
 
   const clientsServiceStub = {
@@ -82,7 +87,7 @@ describe('ReceptionPanel', () => {
   };
 
   const serviceOrderDocumentsStub = {
-    downloadOrderSummaryPdf: jasmine.createSpy('downloadOrderSummaryPdf'),
+    downloadOrderSummaryPdf: jasmine.createSpy('downloadOrderSummaryPdf').and.returnValue(of(void 0)),
     openEquipmentStickerPdf: jasmine.createSpy('openEquipmentStickerPdf'),
   };
 
@@ -100,8 +105,13 @@ describe('ReceptionPanel', () => {
     downloadBySaleId: jasmine.createSpy('downloadBySaleId').and.returnValue(of('B001-001.pdf')),
   };
 
+  const routerStub = {
+    navigate: jasmine.createSpy('navigate').and.returnValue(Promise.resolve(true)),
+  };
+
   const inboxServiceStub = {
     ensureThreadByOrder: jasmine.createSpy('ensureThreadByOrder').and.returnValue(of(null)),
+    getThreadByOrder: jasmine.createSpy('getThreadByOrder').and.returnValue(of({ id: 91 } as any)),
     getMessages: jasmine.createSpy('getMessages').and.returnValue(of({ thread: null, messages: [] })),
     markRead: jasmine.createSpy('markRead').and.returnValue(of({ ok: true })),
     sendMessage: jasmine.createSpy('sendMessage').and.returnValue(of({})),
@@ -128,6 +138,7 @@ describe('ReceptionPanel', () => {
         { provide: SalesApiService, useValue: salesApiStub },
         { provide: SaleReceiptPdfService, useValue: saleReceiptPdfServiceStub },
         { provide: ServiceOrderInboxService, useValue: inboxServiceStub },
+        { provide: Router, useValue: routerStub },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -139,6 +150,28 @@ describe('ReceptionPanel', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('navega al inbox unificado en vez de abrir el modal legacy', fakeAsync(() => {
+    const order = createServiceOrder({ id: 44 });
+
+    component.openReceptionInbox(order);
+    tick();
+
+    expect(inboxServiceStub.getThreadByOrder).toHaveBeenCalledWith(44);
+    expect(routerStub.navigate).toHaveBeenCalledWith(['/service-order-inbox'], {
+      queryParams: { threadId: 91, serviceOrderId: 44 },
+    });
+  }));
+
+  it('descarga el resumen PDF single usando el endpoint backend y sin recargar el contexto legacy', () => {
+    const order = createServiceOrder({ id: 45 });
+
+    component.downloadServiceOrderSummaryPdf(order);
+
+    expect(serviceOrderDocumentsStub.downloadOrderSummaryPdf).toHaveBeenCalledWith(45);
+    expect(serviceOrderServiceStub.findOne).not.toHaveBeenCalled();
+    expect(agreementServiceStub.findAll).not.toHaveBeenCalled();
   });
 
   it('usa Perú por defecto en la captura telefónica del wizard', () => {
@@ -1072,6 +1105,58 @@ describe('ReceptionPanel', () => {
     expect(payload.technicalServiceAmount).toBe(85);
     expect(serviceItem.unitPrice).toBe(85);
   });
+
+  it('inicializa el acuerdo inicial estándar del wizard con la línea fija de servicio técnico', () => {
+    component.openCreateServiceOrderModal();
+    component.createServiceOrderForm.patchValue({ workflowServiceType: ServiceType.STANDARD_SERVICE });
+
+    component.onCreateWorkflowServiceTypeChange();
+
+    expect(component.getCreateOrderAgreementItems(0)).toEqual([
+      jasmine.objectContaining({
+        type: 'service',
+        serviceId: 1,
+        unitPrice: 20,
+      }),
+    ]);
+  });
+
+  it('no permite eliminar la línea fija de servicio técnico del acuerdo inicial estándar', () => {
+    component.openCreateServiceOrderModal();
+    component.createServiceOrderForm.patchValue({ workflowServiceType: ServiceType.STANDARD_SERVICE });
+    component.onCreateWorkflowServiceTypeChange();
+
+    component.removeCreateOrderItemAgreement(0, 0);
+
+    expect(component.getCreateOrderAgreementItems(0).length).toBe(1);
+    expect(component.getCreateOrderAgreementItems(0)[0]).toEqual(
+      jasmine.objectContaining({
+        type: 'service',
+        serviceId: 1,
+      }),
+    );
+  });
+
+  it('renderiza el acuerdo inicial estándar sin CTA ni selector de servicios genéricos', () => {
+    component.openCreateServiceOrderModal();
+    component.createServiceOrderForm.patchValue({ workflowServiceType: ServiceType.STANDARD_SERVICE });
+    component.onCreateWorkflowServiceTypeChange();
+    component.createServiceOrderStep = component.getCreateServiceOrderSteps().findIndex(
+      (step) => step.key === 'initialQuote',
+    );
+
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const initialAgreementSection = compiled.querySelector('.initial-agreement-section') as HTMLElement;
+    const sectionText = initialAgreementSection?.textContent ?? '';
+
+    expect(sectionText).toContain('La línea fija de servicio técnico ya está incluida.');
+    expect(sectionText).toContain('Agregar producto');
+    expect(sectionText).not.toContain('Agregar servicio');
+    expect(sectionText).toContain('Servicio técnico');
+    expect(initialAgreementSection.querySelectorAll('ng-select').length).toBe(0);
+  });
 });
 
 function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder {
@@ -1172,4 +1257,14 @@ function createBillingLink(serviceOrderId: number): ServiceOrderBillingLink {
     } as any,
   };
 }
+
+
+
+
+
+
+
+
+
+
 

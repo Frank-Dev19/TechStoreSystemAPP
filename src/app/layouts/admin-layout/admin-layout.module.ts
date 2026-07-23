@@ -12,8 +12,6 @@ import { Dashboard } from "../../components/dashboard/dashboard";
 import { Home } from "../../pages/home/home";
 import { Clients } from "../../pages/clients/clients";
 import { Suppliers } from "../../pages/suppliers/suppliers";
-// import { ForgotPassword } from "../../pages/forgot-password/forgot-password";
-// import { ResetPassword } from "../../pages/reset-password/reset-password";
 import { Tests } from "../../pages/tests/tests";
 import { Perfil } from "../../pages/perfil/perfil";
 import { DocumentTypes } from "../../pages/document-types/document-types";
@@ -25,6 +23,7 @@ import { Pricing } from "../../pages/pricing/pricing";
 import { BusinessProfilePage } from "../../pages/business-profile/business-profile";
 import { TechnicianPanel } from "../../pages/technician-panel/technician-panel";
 import { ReceptionPanel } from "../../pages/reception-panel/reception-panel";
+import { ServiceOrderInboxPage } from "../../pages/service-order-inbox/service-order-inbox";
 import { SupervisorPanel } from "../../pages/supervisor-panel/supervisor-panel";
 import { PhoneInputComponent } from "../../components/phone-input/phone-input";
 
@@ -57,10 +56,8 @@ import { PhoneInputComponent } from "../../components/phone-input/phone-input";
         BusinessProfilePage,
         TechnicianPanel,
         ReceptionPanel,
+        ServiceOrderInboxPage,
         SupervisorPanel,
-        //ForgotPassword,
-        //ResetPassword
-
     ],
     providers: [DatePipe],
     exports: [

@@ -14,6 +14,7 @@ import { Ventas } from '../../pages/ventas/ventas';
 import { Pricing } from '../../pages/pricing/pricing';
 import { BusinessProfilePage } from '../../pages/business-profile/business-profile';
 import { ReceptionPanel } from '../../pages/reception-panel/reception-panel';
+import { ServiceOrderInboxPage } from '../../pages/service-order-inbox/service-order-inbox';
 import { TechnicianPanel } from '../../pages/technician-panel/technician-panel';
 import { SupervisorPanel } from '../../pages/supervisor-panel/supervisor-panel';
 import { RoleGuard } from '../../helpers/role.guard';
@@ -38,6 +39,12 @@ export const AdminLayoutRoutes: Routes = [
         component: ReceptionPanel,
         canActivate: [RoleGuard],
         data: { allowedRoles: RECEPTIONIST_ROLE_NAMES },
+    },
+    {
+        path: 'service-order-inbox',
+        component: ServiceOrderInboxPage,
+        canActivate: [RoleGuard],
+        data: { allowedRoles: [...RECEPTIONIST_ROLE_NAMES, ...TECHNICIAN_ROLE_NAMES, ...SUPERVISOR_ROLE_NAMES] },
     },
     {
         path: 'technician-panel',

@@ -1,5 +1,6 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from "@angular/core"
+import { Component, OnDestroy, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
+import { Router } from "@angular/router"
 import { forkJoin, of } from "rxjs"
 import { catchError, finalize, map, switchMap } from "rxjs/operators"
 import {
@@ -36,17 +37,7 @@ import { UserApi } from "../../models/rbac/user.model"
 import { CurrentUserService } from "../../services/current-user.service"
 import { User } from "../../models/user/user"
 import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
-import {
-  ServiceOrderInboxAttachment,
-  ServiceOrderInboxMessage,
-  ServiceOrderInboxThreadSummary,
-} from "../../models/service-orders/service-order-inbox"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
-
-interface InboxDraftAttachment {
-  file: File
-  previewUrl: string | null
-}
 
 interface AgreementProductComposer {
   id: number
@@ -140,7 +131,6 @@ export function shouldOpenDerivedAgreementComposer(
   styleUrls: ["./technician-panel.scss"],
 })
 export class TechnicianPanel implements OnInit, OnDestroy {
-  @ViewChild("inboxMessagesContainer") inboxMessagesContainer?: ElementRef<HTMLDivElement>
 
   activeTab: TechnicianPanelTab = "todo"
   activeDetailTab: TechnicianDetailTab = "equipment"
@@ -180,20 +170,10 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   isLoadingOrders = false
   isSavingDiagnosis = false
-  showInboxModal = false
-  inboxDraftMessage = ""
-  inboxActiveThread: ServiceOrderInboxThreadSummary | null = null
-  inboxMessages: ServiceOrderInboxMessage[] = []
-  inboxDraftAttachments: InboxDraftAttachment[] = []
-  inboxAttachmentPreviewUrls: Record<number, string> = {}
-  isLoadingInbox = false
-  isSendingInboxMessage = false
-
   private currentUser: User | null = null
   private techniciansMap = new Map<number, string>()
   liveElapsedSeconds = 0
   private liveTimer: ReturnType<typeof setInterval> | null = null
-  private inboxRefreshTimer: ReturnType<typeof setInterval> | null = null
 
   private readonly equipmentTypeLabels: Record<EquipmentType, string> = {
     [EquipmentType.LAPTOP]: "Laptop",
@@ -226,6 +206,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     private readonly usersApi: UsersApiService,
     private readonly currentUserService: CurrentUserService,
     private readonly serviceOrderInboxService: ServiceOrderInboxService,
+    private readonly router: Router,
   ) {
     this.diagnosisForm = this.createDiagnosisForm()
     this.agreementForm = this.createAgreementForm()
@@ -240,7 +221,6 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopLiveTimer()
-    this.stopInboxRefreshTimer()
   }
 
   setActiveTab(tab: TechnicianPanelTab): void {
@@ -573,156 +553,18 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   openWhatsAppInbox(order: ServiceOrder, event?: Event): void {
     event?.stopPropagation()
     if (!this.canOpenClientInbox(order)) return
-    this.showInboxModal = true
-    this.isLoadingInbox = true
-    this.inboxDraftMessage = ""
-    this.clearInboxDraftAttachments()
 
-    this.serviceOrderInboxService
-      .ensureThreadByOrder(Number(order.id))
-      .pipe(
-        switchMap((thread) => {
-          if (!thread) {
-            return of(null)
-          }
-          return this.serviceOrderInboxService.getMessages(thread.id).pipe(
-            switchMap((response) =>
-              this.serviceOrderInboxService.markRead(thread.id).pipe(
-                catchError(() => of({ ok: false })),
-                map(() => response),
-              ),
-            ),
-          )
-        }),
-        finalize(() => (this.isLoadingInbox = false)),
-      )
-      .subscribe({
-        next: (response) => {
-          this.inboxActiveThread = response?.thread ?? null
-          this.inboxMessages = response?.messages ?? []
-          this.hydrateInboxAttachmentPreviews(this.inboxMessages)
-          this.scheduleInboxMessagesScrollToBottom()
-          this.startInboxRefreshTimer()
-        },
-        error: () => {
-          this.inboxActiveThread = null
-          this.inboxMessages = []
-          this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar el inbox de la orden.")
-        },
-      })
-  }
-
-  closeInboxModal(): void {
-    this.showInboxModal = false
-    this.inboxDraftMessage = ""
-    this.isLoadingInbox = false
-    this.isSendingInboxMessage = false
-    this.stopInboxRefreshTimer()
-    this.inboxActiveThread = null
-    this.inboxMessages = []
-    this.clearInboxAttachmentPreviews()
-    this.clearInboxDraftAttachments()
-  }
-
-  sendInboxMessage(): void {
-    if (!this.inboxActiveThread) return
-    const text = this.inboxDraftMessage.trim()
-    if (!text && !this.inboxDraftAttachments.length) return
-
-    this.isSendingInboxMessage = true
-    const attachments = this.inboxDraftAttachments.map((entry) => entry.file)
-
-    this.serviceOrderInboxService
-      .sendMessage(this.inboxActiveThread.id, text, attachments)
-      .pipe(
-        switchMap((sendResult) =>
-          this.serviceOrderInboxService.getMessages(this.inboxActiveThread!.id).pipe(
-            map((response) => ({ response, sendResult })),
-          ),
-        ),
-        finalize(() => (this.isSendingInboxMessage = false)),
-      )
-      .subscribe({
-        next: ({ response, sendResult }) => {
-          this.inboxActiveThread = response.thread
-          this.inboxMessages = response.messages
-          this.inboxDraftMessage = ""
-          this.clearInboxDraftAttachments()
-          this.hydrateInboxAttachmentPreviews(this.inboxMessages)
-          this.scheduleInboxMessagesScrollToBottom()
-          const partialFailures = sendResult.partialFailures ?? []
-          if (partialFailures.length) {
-            this.showMessage("warning", "fas fa-exclamation-triangle", "El mensaje saliÃ³ parcialmente: revisÃ¡ los adjuntos fallidos antes de reenviar.")
-          }
-        },
-        error: () => {
-          this.showMessage("danger", "fas fa-times-circle", "No pudimos enviar el mensaje al canal.")
-        },
-      })
-  }
-
-  getInboxAuthorLabel(message: ServiceOrderInboxMessage): string {
-    if (message.authorDisplayName?.trim()) {
-      return message.authorDisplayName.trim()
-    }
-    switch (message.authorRole) {
-      case "TECHNICIAN":
-        return "Tecnico"
-      case "SUPERVISOR":
-        return "Supervisor"
-      case "RECEPTION":
-        return "RecepciÃ³n"
-      case "CLIENT":
-        return this.inboxActiveThread?.clientAlias ?? "Cliente"
-      default:
-        return "Sistema"
-    }
-  }
-
-  triggerInboxAttachmentPicker(input: HTMLInputElement): void {
-    input.click()
-  }
-
-  onInboxFilesSelected(event: Event): void {
-    const target = event.target as HTMLInputElement
-    const files = Array.from(target.files ?? [])
-    if (!files.length) {
-      return
-    }
-
-    const nextAttachments = files.map((file) => ({
-      file,
-      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-    }))
-
-    this.inboxDraftAttachments = [...this.inboxDraftAttachments, ...nextAttachments]
-    target.value = ""
-  }
-
-  removeInboxDraftAttachment(index: number): void {
-    const attachment = this.inboxDraftAttachments[index]
-    if (attachment?.previewUrl) {
-      URL.revokeObjectURL(attachment.previewUrl)
-    }
-    this.inboxDraftAttachments.splice(index, 1)
-  }
-
-  getInboxAttachmentPreviewUrl(attachmentId: number): string | null {
-    return this.inboxAttachmentPreviewUrls[attachmentId] ?? null
-  }
-
-  downloadInboxAttachment(attachment: ServiceOrderInboxAttachment): void {
-    this.serviceOrderInboxService.downloadAttachmentBlob(attachment.id).subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob)
-        const anchor = document.createElement("a")
-        anchor.href = url
-        anchor.download = attachment.fileName
-        anchor.click()
-        URL.revokeObjectURL(url)
+    this.serviceOrderInboxService.getThreadByOrder(Number(order.id)).subscribe({
+      next: (thread) => {
+        void this.router.navigate(['/service-order-inbox'], {
+          queryParams: {
+            threadId: thread.id,
+            serviceOrderId: Number(order.id),
+          },
+        })
       },
       error: () => {
-        this.showMessage("warning", "fas fa-paperclip", "No pudimos descargar el adjunto.")
+        this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos abrir la conversación del cliente.")
       },
     })
   }
@@ -1245,81 +1087,6 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     return this.isStandardService(order) && order.technicalStatus === ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION
   }
 
-  private hydrateInboxAttachmentPreviews(messages: ServiceOrderInboxMessage[]): void {
-    const imageAttachments = messages.flatMap((message) =>
-      (message.attachments ?? []).filter((attachment) => attachment.previewable),
-    )
-
-    imageAttachments.forEach((attachment) => {
-      if (this.inboxAttachmentPreviewUrls[attachment.id]) {
-        return
-      }
-
-      this.serviceOrderInboxService.downloadAttachmentBlob(attachment.id).subscribe({
-        next: (blob) => {
-          this.inboxAttachmentPreviewUrls[attachment.id] = URL.createObjectURL(blob)
-        },
-      })
-    })
-  }
-
-  private clearInboxAttachmentPreviews(): void {
-    Object.values(this.inboxAttachmentPreviewUrls).forEach((url) => {
-      if (url) {
-        URL.revokeObjectURL(url)
-      }
-    })
-    this.inboxAttachmentPreviewUrls = {}
-  }
-
-  private clearInboxDraftAttachments(): void {
-    this.inboxDraftAttachments.forEach((attachment) => {
-      if (attachment.previewUrl) {
-        URL.revokeObjectURL(attachment.previewUrl)
-      }
-    })
-    this.inboxDraftAttachments = []
-  }
-
-  private scheduleInboxMessagesScrollToBottom(): void {
-    setTimeout(() => {
-      const container = this.inboxMessagesContainer?.nativeElement
-      if (!container) return
-      container.scrollTop = container.scrollHeight
-    }, 0)
-  }
-
-  private startInboxRefreshTimer(): void {
-    this.stopInboxRefreshTimer()
-    if (!this.inboxActiveThread || !this.showInboxModal) return
-
-    this.inboxRefreshTimer = setInterval(() => {
-      if (!this.inboxActiveThread || !this.showInboxModal || this.isLoadingInbox || this.isSendingInboxMessage) {
-        return
-      }
-
-      this.serviceOrderInboxService.getMessages(this.inboxActiveThread.id).subscribe({
-        next: (response) => {
-          const nextMessages = response.messages ?? []
-          if (nextMessages.length === this.inboxMessages.length) {
-            return
-          }
-
-          this.inboxActiveThread = response.thread
-          this.inboxMessages = nextMessages
-          this.hydrateInboxAttachmentPreviews(this.inboxMessages)
-          this.scheduleInboxMessagesScrollToBottom()
-        },
-      })
-    }, 8000)
-  }
-
-  private stopInboxRefreshTimer(): void {
-    if (this.inboxRefreshTimer !== null) {
-      clearInterval(this.inboxRefreshTimer)
-      this.inboxRefreshTimer = null
-    }
-  }
 
   private showMessage(type: string, icon: string, message: string): void {
     this.alertType = type
@@ -1899,3 +1666,6 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
 }
+
+
+

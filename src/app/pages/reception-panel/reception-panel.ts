@@ -1,4 +1,5 @@
 import { Component, HostListener, OnDestroy, OnInit, ChangeDetectorRef } from "@angular/core"
+import { Router } from "@angular/router"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { Observable, Subscription } from "rxjs"
 import { catchError, finalize, map, switchMap, tap } from "rxjs/operators"
@@ -46,11 +47,6 @@ import { ServiceOrderBillingLinkService } from "../../services/service-orders/se
 import { ServiceOrderBillingLink } from "../../models/service-orders/service-order-billing-link"
 import { Sale } from "../../models/sales/sale.model"
 import { SaleReceiptPdfService } from "../../services/sales/sale-receipt-pdf.service"
-import {
-  ServiceOrderInboxAttachment,
-  ServiceOrderInboxMessage,
-  ServiceOrderInboxThreadSummary,
-} from "../../models/service-orders/service-order-inbox"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
 import {
   buildPhoneFormValue,
@@ -127,10 +123,6 @@ interface SaleLinkSearchResult {
   totalProducts: number
 }
 
-interface InboxDraftAttachment {
-  file: File
-  previewUrl: string | null
-}
 
 interface CreateServiceOrderCandidateDraft {
   equipmentType: EquipmentType
@@ -313,14 +305,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   isViewingLinkedSaleDocument = false
   activeActionMenuOrderId: number | null = null
   actionMenuStyle: Record<string, string> | null = null
-  showReceptionInboxModal = false
-  receptionInboxDraftMessage = ""
-  receptionInboxActiveThread: ServiceOrderInboxThreadSummary | null = null
-  receptionInboxMessages: ServiceOrderInboxMessage[] = []
-  receptionInboxDraftAttachments: InboxDraftAttachment[] = []
-  receptionInboxAttachmentPreviewUrls: Record<number, string> = {}
-  isLoadingReceptionInbox = false
-  isSendingReceptionInbox = false
 
   private readonly subscriptions = new Subscription()
 
@@ -338,6 +322,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     private readonly serviceOrderBillingLinks: ServiceOrderBillingLinkService,
     private readonly saleReceiptPdfService: SaleReceiptPdfService,
     private readonly serviceOrderInboxService: ServiceOrderInboxService,
+    private readonly router: Router,
     private readonly cdr: ChangeDetectorRef,
   ) {
     this.createServiceOrderForm = this.createServiceOrderFormGroup()
@@ -1720,13 +1705,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   downloadServiceOrderSummaryPdf(serviceOrder: ServiceOrder, event?: Event): void {
     event?.stopPropagation()
-    this.loadServiceOrderDocumentContext(serviceOrder).subscribe({
-      next: ({ fullOrder, quote }) => {
-        this.serviceOrderDocuments.downloadOrderSummaryPdf({
-          serviceOrder: fullOrder,
-          agreement: quote,
-        })
-      },
+    this.serviceOrderDocuments.downloadOrderSummaryPdf(Number(serviceOrder.id)).subscribe({
       error: () => {
         this.showMessage("danger", "fas fa-times-circle", "No pudimos generar el resumen PDF de la orden.")
       },
@@ -2245,7 +2224,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   private buildDefaultAgreementItems(serviceOrder: ServiceOrder | null | undefined): ServiceOrderAgreementComposerItem[] {
-    if (!serviceOrder || [ServiceType.CUSTOMER_SERVICE, ServiceType.WARRANTY_SERVICE].includes(serviceOrder.serviceType)) {
+    return this.buildDefaultAgreementItemsForServiceType(serviceOrder?.serviceType ?? null)
+  }
+
+  private buildDefaultAgreementItemsForServiceType(
+    serviceType: ServiceType | null | undefined,
+  ): ServiceOrderAgreementComposerItem[] {
+    if (!serviceType || [ServiceType.CUSTOMER_SERVICE, ServiceType.WARRANTY_SERVICE].includes(serviceType)) {
       return []
     }
     return [this.createServiceComposer()]
@@ -2276,6 +2261,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       this.createServiceOrderForm.patchValue({ requestOrigin: RequestOrigin.CLIENT }, { emitEvent: false })
       this.setCustomerFieldsEnabled(true)
     }
+    this.createOrderAgreementItemsByItemIndex[0] = this.buildDefaultAgreementItemsForServiceType(serviceType)
     this.loadTechnicianAssignmentSuggestion()
   }
 
@@ -2367,7 +2353,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   private resetCreateServiceOrderItemDraft(): void {
     this.editingCreateServiceOrderCandidateIndex = null
     this.createServiceOrderForm.patchValue(this.getEmptyEquipmentDraftSnapshot())
-    this.createOrderAgreementItemsByItemIndex[0] = []
+    this.createOrderAgreementItemsByItemIndex[0] = this.buildDefaultAgreementItemsForServiceType(
+      this.getSelectedWorkflowServiceType(),
+    )
   }
 
   private areCurrentCreateOrderItemControlsValid(): boolean {
@@ -2437,6 +2425,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       notes: candidate.notes || "",
     })
     this.createOrderAgreementItemsByItemIndex[0] = candidate.quoteItems.map(item => ({ ...item }))
+    if (this.requiresCreateServiceOrderInitialAgreementStep()) {
+      this.ensureTechnicalServiceLine(this.createOrderAgreementItemsByItemIndex[0])
+    }
     this.createServiceOrderStep = 3
   }
 
@@ -2663,18 +2654,66 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return this.createOrderAgreementItemsByItemIndex[index] ?? []
   }
 
+  getCreateOrderAgreementTechnicalServiceItem(
+    index: number,
+  ): ServiceOrderAgreementServiceComposer | null {
+    return (
+      this.getCreateOrderAgreementItems(index).find(
+        (item): item is ServiceOrderAgreementServiceComposer => item.type === "service",
+      ) ?? null
+    )
+  }
+
+  getCreateOrderAgreementProductItems(index: number): ServiceOrderAgreementProductComposer[] {
+    return this.getCreateOrderAgreementItems(index).filter(
+      (item): item is ServiceOrderAgreementProductComposer => item.type === "product",
+    )
+  }
+
+  getQuoteTechnicalServiceItem(): ServiceOrderAgreementServiceComposer | null {
+    return (
+      this.quoteItems.find(
+        (item): item is ServiceOrderAgreementServiceComposer => item.type === "service",
+      ) ?? null
+    )
+  }
+
+  getQuoteProductItems(): ServiceOrderAgreementProductComposer[] {
+    return this.quoteItems.filter(
+      (item): item is ServiceOrderAgreementProductComposer => item.type === "product",
+    )
+  }
+
+  calculateAgreementProductsTotal(items: ServiceOrderAgreementProductComposer[]): number {
+    return items.reduce((total, item) => total + this.calculateItemSubtotal(item), 0)
+  }
+
+  isTechnicalServiceLineAmountValid(
+    item: ServiceOrderAgreementServiceComposer | null | undefined,
+  ): boolean {
+    if (!item) {
+      return false
+    }
+
+    return Number(item.unitPrice ?? 0) >= TECHNICAL_SERVICE_OPTION.price
+  }
+
   addProductToCreateOrderItemAgreement(index: number): void {
     const current = this.getCreateOrderAgreementItems(index)
     this.createOrderAgreementItemsByItemIndex[index] = [...current, this.createProductComposer()]
   }
 
   addServiceToCreateOrderItemAgreement(index: number): void {
-    const current = this.getCreateOrderAgreementItems(index)
-    this.createOrderAgreementItemsByItemIndex[index] = [...current, this.createServiceComposer()]
+    const current = [...this.getCreateOrderAgreementItems(index)]
+    this.ensureTechnicalServiceLine(current)
+    this.createOrderAgreementItemsByItemIndex[index] = current
   }
 
   removeCreateOrderItemAgreement(index: number, quoteIndex: number): void {
     const current = [...this.getCreateOrderAgreementItems(index)]
+    if (current[quoteIndex]?.type === "service") {
+      return
+    }
     current.splice(quoteIndex, 1)
     this.createOrderAgreementItemsByItemIndex[index] = current
   }
@@ -2917,14 +2956,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       if (entry.type === "product") {
         return !this.toNumericId(entry.productId) || Number(entry.quantity) <= 0
       }
-      return !this.toNumericId(entry.serviceId)
+      return !this.toNumericId(entry.serviceId) || Number(entry.unitPrice ?? 0) < TECHNICAL_SERVICE_OPTION.price
     })
 
     if (hasInvalidItem) {
       this.showMessage(
         "warning",
         "fas fa-exclamation-circle",
-        "Completa la cotización inicial del equipo.",
+        "Revisa la línea de servicio técnico y los productos del acuerdo inicial.",
       )
       return false
     }
@@ -3684,191 +3723,22 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   openReceptionInbox(serviceOrder: ServiceOrder, event?: Event): void {
     event?.stopPropagation()
     if (!this.canOpenReceptionInbox(serviceOrder)) return
-    this.showReceptionInboxModal = true
-    this.isLoadingReceptionInbox = true
-    this.receptionInboxDraftMessage = ""
-    this.clearReceptionInboxDraftAttachments()
 
-    this.serviceOrderInboxService
-      .ensureThreadByOrder(Number(serviceOrder.id))
-      .pipe(
-        switchMap((thread) => {
-          if (!thread) {
-            return of(null)
-          }
-          return this.serviceOrderInboxService.getMessages(thread.id).pipe(
-            switchMap((response) =>
-              this.serviceOrderInboxService.markRead(thread.id).pipe(
-                catchError(() => of({ ok: false })),
-                map(() => response),
-              ),
-            ),
-          )
-        }),
-        finalize(() => (this.isLoadingReceptionInbox = false)),
-      )
-      .subscribe({
-        next: (response) => {
-          this.receptionInboxActiveThread = response?.thread ?? null
-          this.receptionInboxMessages = response?.messages ?? []
-          this.hydrateReceptionInboxAttachmentPreviews(this.receptionInboxMessages)
-        },
-        error: () => {
-          this.receptionInboxActiveThread = null
-          this.receptionInboxMessages = []
-          this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar el inbox del cliente.")
-        },
-      })
-  }
-
-  closeReceptionInboxModal(): void {
-    this.showReceptionInboxModal = false
-    this.receptionInboxDraftMessage = ""
-    this.isLoadingReceptionInbox = false
-    this.isSendingReceptionInbox = false
-    this.receptionInboxActiveThread = null
-    this.receptionInboxMessages = []
-    this.clearReceptionInboxAttachmentPreviews()
-    this.clearReceptionInboxDraftAttachments()
-  }
-
-  sendReceptionInboxMessage(): void {
-    if (!this.receptionInboxActiveThread) return
-    const text = this.receptionInboxDraftMessage.trim()
-    if (!text && !this.receptionInboxDraftAttachments.length) return
-
-    this.isSendingReceptionInbox = true
-    const attachments = this.receptionInboxDraftAttachments.map((entry) => entry.file)
-
-    this.serviceOrderInboxService
-      .sendMessage(this.receptionInboxActiveThread.id, text, attachments)
-      .pipe(
-        switchMap((sendResult) =>
-          this.serviceOrderInboxService.getMessages(this.receptionInboxActiveThread!.id).pipe(
-            map((response) => ({ response, sendResult })),
-          ),
-        ),
-        finalize(() => (this.isSendingReceptionInbox = false)),
-      )
-      .subscribe({
-        next: ({ response, sendResult }) => {
-          this.receptionInboxActiveThread = response.thread
-          this.receptionInboxMessages = response.messages
-          this.receptionInboxDraftMessage = ""
-          this.clearReceptionInboxDraftAttachments()
-          this.hydrateReceptionInboxAttachmentPreviews(this.receptionInboxMessages)
-          const partialFailures = sendResult.partialFailures ?? []
-          if (partialFailures.length) {
-            this.showMessage("warning", "fas fa-exclamation-triangle", "El mensaje salió parcialmente: revisá los adjuntos fallidos antes de reenviar.")
-          }
-        },
-        error: () => {
-          this.showMessage("danger", "fas fa-times-circle", "No pudimos enviar el mensaje al canal.")
-        },
-      })
-  }
-
-  getReceptionInboxAuthorLabel(message: ServiceOrderInboxMessage): string {
-    if (message.authorDisplayName?.trim()) {
-      return message.authorDisplayName.trim()
-    }
-    switch (message.authorRole) {
-      case "RECEPTION":
-        return "Recepción"
-      case "TECHNICIAN":
-        return "Técnico"
-      case "SUPERVISOR":
-        return "Supervisor"
-      case "CLIENT":
-        return this.receptionInboxActiveThread?.clientAlias ?? "Cliente"
-      default:
-        return "Sistema"
-    }
-  }
-
-  triggerReceptionInboxAttachmentPicker(input: HTMLInputElement): void {
-    input.click()
-  }
-
-  onReceptionInboxFilesSelected(event: Event): void {
-    const target = event.target as HTMLInputElement
-    const files = Array.from(target.files ?? [])
-    if (!files.length) {
-      return
-    }
-
-    const nextAttachments = files.map((file) => ({
-      file,
-      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-    }))
-
-    this.receptionInboxDraftAttachments = [...this.receptionInboxDraftAttachments, ...nextAttachments]
-    target.value = ""
-  }
-
-  removeReceptionInboxDraftAttachment(index: number): void {
-    const attachment = this.receptionInboxDraftAttachments[index]
-    if (attachment?.previewUrl) {
-      URL.revokeObjectURL(attachment.previewUrl)
-    }
-    this.receptionInboxDraftAttachments.splice(index, 1)
-  }
-
-  getReceptionInboxAttachmentPreviewUrl(attachmentId: number): string | null {
-    return this.receptionInboxAttachmentPreviewUrls[attachmentId] ?? null
-  }
-
-  downloadReceptionInboxAttachment(attachment: ServiceOrderInboxAttachment): void {
-    this.serviceOrderInboxService.downloadAttachmentBlob(attachment.id).subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob)
-        const anchor = document.createElement("a")
-        anchor.href = url
-        anchor.download = attachment.fileName
-        anchor.click()
-        URL.revokeObjectURL(url)
+    this.serviceOrderInboxService.getThreadByOrder(Number(serviceOrder.id)).subscribe({
+      next: (thread) => {
+        void this.router.navigate(['/service-order-inbox'], {
+          queryParams: {
+            threadId: thread.id,
+            serviceOrderId: Number(serviceOrder.id),
+          },
+        })
       },
       error: () => {
-        this.showMessage("warning", "fas fa-paperclip", "No pudimos descargar el adjunto.")
+        this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos abrir la conversación del cliente.")
       },
     })
   }
 
-  private hydrateReceptionInboxAttachmentPreviews(messages: ServiceOrderInboxMessage[]): void {
-    const imageAttachments = messages.flatMap((message) =>
-      (message.attachments ?? []).filter((attachment) => attachment.previewable),
-    )
-
-    imageAttachments.forEach((attachment) => {
-      if (this.receptionInboxAttachmentPreviewUrls[attachment.id]) {
-        return
-      }
-
-      this.serviceOrderInboxService.downloadAttachmentBlob(attachment.id).subscribe({
-        next: (blob) => {
-          this.receptionInboxAttachmentPreviewUrls[attachment.id] = URL.createObjectURL(blob)
-        },
-      })
-    })
-  }
-
-  private clearReceptionInboxAttachmentPreviews(): void {
-    Object.values(this.receptionInboxAttachmentPreviewUrls).forEach((url) => {
-      if (url) {
-        URL.revokeObjectURL(url)
-      }
-    })
-    this.receptionInboxAttachmentPreviewUrls = {}
-  }
-
-  private clearReceptionInboxDraftAttachments(): void {
-    this.receptionInboxDraftAttachments.forEach((attachment) => {
-      if (attachment.previewUrl) {
-        URL.revokeObjectURL(attachment.previewUrl)
-      }
-    })
-    this.receptionInboxDraftAttachments = []
-  }
 
   closeEditServiceOrderModal(): void {
     this.showEditServiceOrderModal = false
@@ -4052,3 +3922,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 }
 
 const normalizeOptionalPhone = (value: unknown): string | null => normalizePhoneToE164(value) ?? null
+
+
+
+
+

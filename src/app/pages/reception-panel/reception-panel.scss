@@ -3353,6 +3353,614 @@ $bg-light: #f5f7fa;
   }
 }
 
+.initial-agreement-section,
+.quote-modal {
+  .agreement-section {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .agreement-required-card {
+    overflow: hidden;
+    border: 1px solid #dbe5f3;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+
+    .agreement-required-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 20px;
+      background: #2f4fa8;
+      color: rgba(255, 255, 255, 0.92);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .agreement-required-body {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+      padding: 22px 24px 18px;
+    }
+
+    .agreement-equipment-copy {
+      flex: 1;
+      min-width: 0;
+
+      label {
+        display: block;
+        margin: 0 0 8px;
+        color: #647a9b;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h3 {
+        margin: 0;
+        color: $primary;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      p {
+        margin: 6px 0 0;
+        color: $text-muted;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    }
+
+    .agreement-service-pricing {
+      width: 240px;
+      flex: 0 0 240px;
+
+      label {
+        display: block;
+        margin: 0 0 8px;
+        color: #647a9b;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+    }
+  }
+
+  .agreement-context-card {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 14px;
+    background: rgba(248, 250, 252, 0.92);
+
+    label {
+      display: block;
+      margin: 0 0 6px;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    p,
+    small {
+      display: block;
+      margin: 0;
+      color: $primary-dark;
+      line-height: 1.5;
+    }
+
+    small {
+      margin-top: 4px;
+      color: $text-muted;
+    }
+  }
+
+  .agreement-currency-input {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    border: 1px solid #cfdcf0;
+    border-radius: 14px;
+    background: #f4f7fc;
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+    span {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #6f84a4;
+      font-size: 13px;
+      font-weight: 600;
+      pointer-events: none;
+    }
+
+    input {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 14px 0 38px !important;
+      border: none !important;
+      background: transparent !important;
+      color: $primary;
+      font-size: 15px;
+      font-weight: 600;
+      box-shadow: none !important;
+
+      &:focus {
+        outline: none;
+      }
+
+      &.input-error {
+        color: $danger;
+      }
+    }
+
+    &.agreement-currency-input-readonly input {
+      text-align: right;
+    }
+
+    &.field-invalid {
+      border-color: #f3a6a6;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.08);
+    }
+  }
+
+  .agreement-minimum-copy {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: $text-muted;
+    font-style: italic;
+
+    &.invalid {
+      color: $danger;
+      font-style: normal;
+      font-weight: 600;
+    }
+  }
+
+  .agreement-inline-note {
+    padding: 0 24px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    label {
+      display: block;
+      margin: 0;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+  }
+
+  .agreement-products-section {
+    .agreement-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .agreement-section-title {
+      display: block;
+
+      span {
+        display: block;
+        color: #647a9b;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      p {
+        margin: 4px 0 0;
+        color: rgba(107, 114, 128, 0.9);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+    }
+  }
+
+  .agreement-products-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .agreement-add-product-btn {
+    min-height: 40px;
+    padding: 0 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 2px solid $primary;
+    border-radius: 999px;
+    background: #fff;
+    color: $primary;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+
+    span {
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: rgba(44, 82, 130, 0.08);
+      font-size: 14px;
+      line-height: 1;
+    }
+  }
+
+  .agreement-open-products-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 16px;
+    border: 1px solid #d6dfec;
+    border-radius: 999px;
+    background: #fff;
+    color: $primary;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-decoration: none;
+  }
+
+  .agreement-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    border: 2px dashed #d7e2ef;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.6);
+    text-align: center;
+
+    strong {
+      display: block;
+      color: #475569;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    p {
+      margin: 4px 0 0;
+      color: #8092ae;
+      font-size: 12px;
+    }
+
+    &--compact {
+      padding: 22px 20px;
+    }
+  }
+
+  .quote-items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+      margin-top: 6px;
+  }
+
+  .agreement-item-card {
+    padding: 16px;
+    border: 1px solid #dbe5f3;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+
+    .price-display {
+      display: flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 14px;
+      border: 1px solid #cfdcf0;
+      border-radius: 14px;
+      background: #f4f7fc;
+
+      strong {
+        color: $primary;
+        font-size: 14px;
+        font-weight: 700;
+      }
+    }
+  }
+
+  .agreement-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .agreement-item-label {
+    color: #647a9b;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .btn-icon {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #ffc8c8;
+    border-radius: 12px;
+    background: #fff5f5;
+    color: #111827;
+    box-shadow: none;
+
+    &:hover:not(:disabled) {
+      background: #ffecec;
+      color: $danger;
+      transform: none;
+    }
+  }
+
+  .agreement-product-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 120px 1fr;
+    gap: 12px;
+    align-items: end;
+  }
+
+  .agreement-product-field {
+    label {
+      display: block;
+      margin: 0 0 6px;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    input {
+      width: 100%;
+      min-height: 40px;
+      padding: 0 14px !important;
+      border: 1px solid #cfdcf0 !important;
+      border-radius: 14px !important;
+      background: #f4f7fc !important;
+      color: $primary;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: none !important;
+    }
+
+    &.agreement-product-field-qty input {
+      text-align: center;
+    }
+  }
+
+  .ng-select {
+    .ng-select-container {
+      min-height: 40px !important;
+      border: 1px solid #cfdcf0 !important;
+      border-radius: 14px !important;
+      background: #f4f7fc !important;
+      box-shadow: none !important;
+    }
+
+    .ng-value-container,
+    .ng-input {
+      padding-left: 0 !important;
+    }
+
+    .ng-placeholder {
+      color: #98a6b9;
+    }
+
+    &.ng-select-focused .ng-select-container,
+    &.ng-select-opened .ng-select-container {
+      border-color: rgba(44, 82, 130, 0.45) !important;
+      box-shadow: 0 0 0 3px rgba(44, 82, 130, 0.06) !important;
+    }
+  }
+
+  .agreement-subtotal-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #dbe5f3;
+
+    .agreement-subtotal-label {
+      color: #7b8da8;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .agreement-subtotal-value {
+      color: $primary;
+      font-size: 16px;
+      font-weight: 700;
+    }
+  }
+
+  .agreement-total-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 18px 24px;
+    border-top: 1px solid $border;
+    background: rgba(238, 244, 255, 0.75);
+
+    &--embedded {
+      margin-top: 4px;
+      border-radius: 16px;
+      border: 1px solid #dbe5f3;
+    }
+
+    .agreement-total-main {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+
+      span {
+        color: rgba(44, 82, 130, 0.7);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      strong {
+        color: $primary;
+        font-size: 42px;
+        font-weight: 700;
+        line-height: 1;
+
+        small {
+          margin-right: 4px;
+          font-size: 18px;
+          font-weight: 500;
+          opacity: 0.55;
+        }
+      }
+    }
+
+    .agreement-total-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      color: $text-muted;
+      font-size: 11px;
+      text-align: right;
+
+      span {
+        display: block;
+      }
+    }
+  }
+}
+
+.initial-agreement-section {
+  .initial-agreement-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+.quote-modal {
+  width: min(1120px, 96%);
+  border-radius: 24px;
+
+  .quote-topbar {
+    padding: 24px 32px 20px;
+    background: #fff;
+    border-bottom: 1px solid $border;
+  }
+
+  .quote-shell--agreement {
+    padding: 24px 32px;
+    background: #f7fafe;
+    gap: 24px;
+  }
+
+  .agreement-sidecar-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 320px);
+  }
+
+  .agreement-context-summary {
+    max-width: 360px;
+  }
+
+  .agreement-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 32px;
+    border-top: 1px solid $border;
+    background: #fff;
+
+    .agreement-footer-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      min-height: 40px;
+      padding: 0 18px;
+      border-radius: 14px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .agreement-cancel-btn {
+      padding: 0;
+      min-height: auto;
+      border: none;
+      background: transparent;
+      color: $text-muted;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+
+      &:hover:not(:disabled) {
+        color: $primary-dark;
+        background: transparent;
+      }
+    }
+
+    .agreement-confirm-btn {
+      border: 1px solid $primary;
+      background: $primary;
+      color: #fff;
+      box-shadow: 0 8px 18px rgba(44, 82, 130, 0.2);
+    }
+  }
+}
+
 .service-order-sla-main {
   display: flex;
   flex-direction: column;

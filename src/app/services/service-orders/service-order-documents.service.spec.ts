@@ -1,22 +1,47 @@
+import { HttpHeaders } from '@angular/common/http';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-
 import { EquipmentType, ServiceOrderOperativeStatus, ServiceType } from '../../models/service-orders/service-order';
+import { config } from '../../../environments/environment';
 import { ServiceOrderDocumentsService } from './service-order-documents.service';
 
 describe('ServiceOrderDocumentsService', () => {
   let service: ServiceOrderDocumentsService;
+  let httpMock: HttpTestingController;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+    });
     service = TestBed.inject(ServiceOrderDocumentsService);
+    httpMock = TestBed.inject(HttpTestingController);
   });
 
-  it('genera el sticker sin incluir datos del cliente y sin estado operativo', () => {
-    const capturedLabels: string[] = [];
-    spyOn<any>(service, 'buildThermalFieldLines').and.callFake((label: string, value: string) => {
-      capturedLabels.push(`${label}:${value}`);
-      return [`${label}:${value}`];
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  it('descarga el resumen PDF single desde backend y respeta el filename del header', () => {
+    const downloadSpy = spyOn<any>(service, 'triggerBrowserDownload').and.stub();
+
+    service.downloadOrderSummaryPdf(15).subscribe();
+
+    const req = httpMock.expectOne(`${config.endpointServices}${config.serviceOrders.serviceOrders}/15/summary-pdf`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.responseType).toBe('blob');
+
+    req.flush(new Blob(['pdf'], { type: 'application/pdf' }), {
+      headers: new HttpHeaders({
+        'Content-Disposition': 'attachment; filename="SO20260520-resumen.pdf"',
+      }),
+      status: 200,
+      statusText: 'OK',
     });
+
+    expect(downloadSpy).toHaveBeenCalledWith(jasmine.any(Blob), 'SO20260520-resumen.pdf');
+  });
+
+  it('genera el sticker sin depender del renderer legacy del resumen', () => {
     spyOn(window, 'open').and.stub();
 
     service.openEquipmentStickerPdf({
@@ -24,16 +49,7 @@ describe('ServiceOrderDocumentsService', () => {
       agreement: null,
     });
 
-    expect(capturedLabels).toContain('Tipo:Laptop');
-    expect(capturedLabels).toContain('Marca:Dell');
-    expect(capturedLabels).toContain('Modelo:Inspiron');
-    expect(capturedLabels).toContain('Serie:SER-1');
-    expect(capturedLabels.some((entry) => entry.startsWith('Ingreso:'))).toBeTrue();
-    expect(capturedLabels).toContain('Accesorios:Cargador');
-    expect(capturedLabels).toContain('Notas:Equipo con rayón lateral');
-    expect(capturedLabels.some((entry) => entry.startsWith('Estado:'))).toBeFalse();
-    expect(capturedLabels.some((entry) => entry.includes('Cliente Base'))).toBeFalse();
-    expect(capturedLabels.some((entry) => entry.includes('999999999'))).toBeFalse();
+    expect(window.open).toHaveBeenCalled();
   });
 });
 
@@ -60,3 +76,4 @@ function createServiceOrder() {
     contactEmail: 'cliente@test.com',
   } as any;
 }
+

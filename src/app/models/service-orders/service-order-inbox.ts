@@ -32,6 +32,19 @@ export interface ServiceOrderInboxAttachment {
   downloadPath: string;
 }
 
+export interface ServiceOrderInboxThreadOrderSummary {
+  id: number;
+  code: string;
+  equipmentLabel: string;
+  operativeStatus: ServiceOrderOperativeStatus | null;
+  technicalStatus: ServiceOrderTechnicalStatus | null;
+  commercialStatus: ServiceOrderCommercialStatus | null;
+  economicStatus: ServiceOrderEconomicStatus | null;
+  assignedTechnicianId: number | null;
+  assignedTechnicianAlias: string;
+  isActive: boolean;
+}
+
 export interface ServiceOrderInboxMessage {
   id: number;
   threadId: number;
@@ -42,6 +55,7 @@ export interface ServiceOrderInboxMessage {
   deliveryStatus: ServiceOrderInboxDeliveryStatus;
   externalMessageId: string | null;
   createdAt: string;
+  serviceOrderIds?: number[];
   attachments: ServiceOrderInboxAttachment[];
   partialFailures?: Array<{
     stage: 'text' | 'attachment';
@@ -54,8 +68,11 @@ export interface ServiceOrderInboxMessage {
 
 export interface ServiceOrderInboxThreadSummary {
   id: number;
-  serviceOrderId: number;
-  serviceOrderCode: string;
+  serviceOrderId: number | null;
+  serviceOrderCode: string | null;
+  serviceOrderIds?: number[];
+  activeServiceOrderIds?: number[];
+  serviceOrderCodes?: string[];
   equipmentLabel: string;
   clientAlias: string;
   assignedTechnicianAlias: string;
@@ -66,10 +83,12 @@ export interface ServiceOrderInboxThreadSummary {
   clientPhone: string | null;
   lastMessageText: string | null;
   lastMessageAt: string | null;
+  lastCustomerMessageAt?: string | null;
   lastMessageDirection: ServiceOrderInboxDirection | null;
   lastMessageAuthorRole: ServiceOrderInboxAuthorRole | null;
   unreadCount: number;
   contextToken: string;
+  orders?: ServiceOrderInboxThreadOrderSummary[];
 }
 
 export interface ServiceOrderInboxThreadMessagesResponse {

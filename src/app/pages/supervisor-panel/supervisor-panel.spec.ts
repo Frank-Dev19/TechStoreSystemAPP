@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { of } from 'rxjs';
+
 import {
   EquipmentType,
   RequestOrigin,
@@ -16,9 +18,7 @@ import {
   ServiceType,
 } from '../../models/service-orders/service-order';
 import { ProductsService } from '../../services/inventory/products.service';
-import {
-  ServiceOrderAgreementService,
-} from '../../services/service-orders/service-agreement.service';
+import { ServiceOrderAgreementService } from '../../services/service-orders/service-agreement.service';
 import { ServiceOrderDiagnosisService } from '../../services/service-orders/service-order-diagnosis.service';
 import { ServiceOrderInboxService } from '../../services/service-orders/service-order-inbox.service';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
@@ -27,27 +27,6 @@ import { SupervisorPanel } from './supervisor-panel';
 describe('SupervisorPanel', () => {
   let component: SupervisorPanel;
   let fixture: ComponentFixture<SupervisorPanel>;
-
-  const inboxThread = {
-    id: 9,
-    serviceOrderId: 22,
-    serviceOrderCode: 'OS-009',
-    equipmentLabel: 'Laptop',
-    clientAlias: 'Cliente Demo',
-    assignedTechnicianAlias: 'Técnico Demo',
-    operativeStatus: ServiceOrderOperativeStatus.CANCELADA,
-    technicalStatus: null,
-    commercialStatus: null,
-    economicStatus: null,
-    clientPhone: null,
-    lastMessageText: null,
-    lastMessageAt: null,
-    lastMessageDirection: null,
-    lastMessageAuthorRole: null,
-    unreadCount: 0,
-    contextToken: 'ctx-1',
-    orderStatus: ServiceOrderOperativeStatus.EN_PROCESO,
-  } as any;
 
   const agreementServiceStub = {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
@@ -68,11 +47,11 @@ describe('SupervisorPanel', () => {
   };
 
   const inboxServiceStub = {
-    listThreads: jasmine.createSpy('listThreads').and.returnValue(of({ data: [inboxThread], total: 1, page: 1, limit: 6 })),
-    getMessages: jasmine.createSpy('getMessages').and.returnValue(of({ thread: inboxThread, messages: [] })),
-    markRead: jasmine.createSpy('markRead').and.returnValue(of({ ok: true })),
-    sendMessage: jasmine.createSpy('sendMessage').and.returnValue(of({} as any)),
-    downloadAttachmentBlob: jasmine.createSpy('downloadAttachmentBlob').and.returnValue(of(new Blob())),
+    getThreadByOrder: jasmine.createSpy('getThreadByOrder').and.returnValue(of({ id: 17 } as any)),
+  };
+
+  const routerStub = {
+    navigate: jasmine.createSpy('navigate').and.returnValue(Promise.resolve(true)),
   };
 
   beforeEach(async () => {
@@ -85,6 +64,7 @@ describe('SupervisorPanel', () => {
         { provide: ServiceOrderDiagnosisService, useValue: diagnosisServiceStub },
         { provide: ProductsService, useValue: productsServiceStub },
         { provide: ServiceOrderInboxService, useValue: inboxServiceStub },
+        { provide: Router, useValue: routerStub },
       ],
     }).compileComponents();
 
@@ -95,24 +75,6 @@ describe('SupervisorPanel', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
-  });
-
-  it('renders inbox labels from operativeStatus instead of any legacy orderStatus value', () => {
-    component.setActiveSection('inbox');
-    fixture.detectChanges();
-
-    const compiled = fixture.nativeElement as HTMLElement;
-    const statusLabel = compiled.querySelector('.thread-item .risk')?.textContent?.trim();
-
-    expect(statusLabel).toBe('Cancelado');
-    expect(compiled.textContent).not.toContain('En progreso');
-  });
-
-  it('maps operative statuses with the inbox canonicity labels', () => {
-    expect(component.getInboxThreadOperativeStatusLabel(ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA)).toBe(
-      'Listo para entrega',
-    );
-    expect(component.getInboxThreadOperativeStatusLabel(null)).toBe('Abierto');
   });
 
   it('muestra siempre el concepto fijo de servicio técnico en los acuerdos', () => {
@@ -179,7 +141,7 @@ describe('SupervisorPanel', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
 
-    (component as any).setActiveSection('orders');
+    component.setActiveSection('orders');
     component.selectServiceOrder(createServiceOrder({ id: 51, code: 'SO-51', assignedToTechnicianName: 'Técnico Demo' }) as any);
     fixture.detectChanges();
 
@@ -223,22 +185,22 @@ describe('SupervisorPanel', () => {
     expect(component.paginatedServiceOrders.map((order) => order.code)).toEqual(['SO-3', 'SO-4']);
   });
 
-  it('uses inbox as a secondary shortcut from the order drawer', () => {
-    component.inboxThreads = [
-      inboxThread,
-      {
-        ...inboxThread,
-        id: 17,
-        serviceOrderId: 51,
-        serviceOrderCode: 'SO-51',
-      } as any,
-    ];
+  it('redirige el acceso general de chats al inbox dedicado', async () => {
+    component.openInboxWorkspace(null);
+    await Promise.resolve();
 
+    expect(routerStub.navigate).toHaveBeenCalledWith(['/service-order-inbox']);
+  });
+
+  it('redirige el shortcut al inbox dedicado en vez de usar la sección embebida', async () => {
     component.openInboxShortcut(createServiceOrder({ id: 51, code: 'SO-51' }));
+    await Promise.resolve();
 
-    expect(component.activeSection).toBe('inbox');
-    expect(component.selectedInboxThreadByOrder?.id).toBe(17);
-    expect(inboxServiceStub.listThreads).toHaveBeenCalled();
+    expect(inboxServiceStub.getThreadByOrder).toHaveBeenCalledWith(51);
+    expect(routerStub.navigate).toHaveBeenCalledWith(['/service-order-inbox'], {
+      queryParams: { threadId: 17, serviceOrderId: 51 },
+    });
+    expect(component.activeSection).toBe('orders');
   });
 });
 
@@ -248,96 +210,47 @@ function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder
     code: 'SO-BASE',
     operativeStatus: ServiceOrderOperativeStatus.ABIERTA,
     technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
-    commercialStatus: ServiceOrderCommercialStatus.NO_REQUIERE,
+    commercialStatus: ServiceOrderCommercialStatus.PENDIENTE_PROPUESTA,
     economicStatus: ServiceOrderEconomicStatus.PENDIENTE,
     priority: ServiceOrderPriority.MEDIUM,
-    requestOrigin: RequestOrigin.CLIENT,
-    clientId: 1,
-    createdBy: 1,
-    closedBy: null,
-    cancelledBy: null,
-    assignedToTechnicianId: 77,
-    assignedToTechnicianName: 'Tech 77',
-    contactName: 'Cliente Base',
-    contactPhone: '999999999',
-    contactEmail: 'cliente@test.com',
+    requestOrigin: RequestOrigin.INTERNAL,
+    serviceType: ServiceType.DIAGNOSIS,
     equipmentType: EquipmentType.LAPTOP,
     equipmentTypeOther: null,
-    serviceType: ServiceType.DIAGNOSIS,
+    clientId: 10,
     brand: 'Lenovo',
     model: 'ThinkPad',
-    serialNumber: 'SER-1',
+    serialNumber: 'SN-1',
+    password: null,
     accessories: null,
-    initialIssue: 'No enciende el equipo.',
-    estimatedRepairHours: null,
-    assignedAt: null,
-    receivedAt: '2026-04-01T10:00:00.000Z',
-    reviewStartedAt: null,
-    serviceStartedAt: null,
-    serviceCompletedAt: null,
-    readyForPickupAt: null,
-    estimatedDeliveryDate: null,
-    resolvedAt: null,
-    deliveredAt: null,
-    closedAt: null,
-    cancelledAt: null,
-    notes: null,
-    discount: 0,
-    cancellationReason: null,
-    rating: null,
-    ratingComment: null,
-    ratedAt: null,
-    createdAt: '2026-04-01T10:00:00.000Z',
-    updatedAt: '2026-04-01T10:00:00.000Z',
-    deletedAt: null,
-    montoComprometidoVigente: 0,
-    montoReconciliado: 0,
+    initialIssue: 'No enciende',
+    assignedToTechnicianId: 4,
+    assignedToTechnicianName: 'Técnico Demo',
+    createdAt: '2026-05-18T10:00:00.000Z',
+    updatedAt: '2026-05-18T10:00:00.000Z',
+    client: null,
+    billings: [],
+    timeMetrics: createTimeMetricsWithPending(),
+    sla: null,
     ...overrides,
-  };
+  } as ServiceOrder;
 }
 
-function createTimeMetrics(): ServiceOrderTimeMetrics {
-  const metric: ServiceOrderDerivedMetric = {
-    valueMinutes: 15,
+function createMetric(overrides: Partial<ServiceOrderDerivedMetric> = {}): ServiceOrderDerivedMetric {
+  return {
+    valueMinutes: 30,
     isComputable: true,
     missingTimestamps: [],
-  };
-
-  return {
-    timeToDiagnosis: { ...metric },
-    timeToServiceStart: { ...metric },
-    timeToService: { ...metric },
-    timeToResolution: { ...metric },
-    timeToDelivery: { ...metric },
-  };
+    ...overrides,
+  } as ServiceOrderDerivedMetric;
 }
 
 function createTimeMetricsWithPending(): ServiceOrderTimeMetrics {
   return {
-    timeToDiagnosis: {
-      valueMinutes: 9,
-      isComputable: true,
-      missingTimestamps: [],
-    },
-    timeToServiceStart: {
-      valueMinutes: null,
-      isComputable: false,
-      missingTimestamps: ['serviceStartedAt'],
-    },
-    timeToService: {
-      valueMinutes: null,
-      isComputable: false,
-      missingTimestamps: ['serviceStartedAt', 'serviceCompletedAt'],
-    },
-    timeToResolution: {
-      valueMinutes: null,
-      isComputable: false,
-      missingTimestamps: ['resolvedAt'],
-    },
-    timeToDelivery: {
-      valueMinutes: null,
-      isComputable: false,
-      missingTimestamps: ['deliveredAt'],
-    },
-  };
+    timeToDiagnosis: createMetric({ isComputable: false, missingTimestamps: ['diagnosisStartedAt'] }),
+    timeToServiceStart: createMetric({ valueMinutes: 45 }),
+    timeToService: createMetric({ valueMinutes: 90 }),
+    timeToResolution: createMetric({ valueMinutes: 120 }),
+    timeToDelivery: createMetric({ isComputable: false, missingTimestamps: ['deliveredAt'] }),
+  } as ServiceOrderTimeMetrics;
 }

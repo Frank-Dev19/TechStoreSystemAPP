@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { of, Subject } from 'rxjs';
 
@@ -79,11 +80,15 @@ describe('TechnicianPanel', () => {
   };
 
   const inboxServiceStub = {
-    ensureThreadByOrder: jasmine.createSpy('ensureThreadByOrder').and.returnValue(of(null)),
+    getThreadByOrder: jasmine.createSpy('getThreadByOrder').and.returnValue(of({ id: 901 } as any)),
     getMessages: jasmine.createSpy('getMessages').and.returnValue(of({ thread: null, messages: [] })),
     markRead: jasmine.createSpy('markRead').and.returnValue(of({ ok: true })),
     sendMessage: jasmine.createSpy('sendMessage').and.returnValue(of({})),
     downloadAttachmentBlob: jasmine.createSpy('downloadAttachmentBlob').and.returnValue(of(new Blob())),
+  };
+
+  const routerStub = {
+    navigate: jasmine.createSpy('navigate').and.returnValue(Promise.resolve(true)),
   };
 
   beforeEach(async () => {
@@ -107,6 +112,7 @@ describe('TechnicianPanel', () => {
         { provide: UsersApiService, useValue: usersApiStub },
         { provide: CurrentUserService, useValue: currentUserServiceStub },
         { provide: ServiceOrderInboxService, useValue: inboxServiceStub },
+        { provide: Router, useValue: routerStub },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -120,21 +126,16 @@ describe('TechnicianPanel', () => {
     expect(component).toBeTruthy();
   });
 
-  it('scrolls the inbox to the latest message when opening the thread', () => {
+  it('navega al inbox unificado en vez de abrir el modal legacy', async () => {
     const order = createServiceOrder({ id: 88, code: 'SO-88' });
-    const scheduleScrollSpy = spyOn<any>(component, 'scheduleInboxMessagesScrollToBottom');
-    const refreshTimerSpy = spyOn<any>(component, 'startInboxRefreshTimer');
-
-    inboxServiceStub.ensureThreadByOrder.and.returnValue(of({ id: 901 }));
-    inboxServiceStub.getMessages.and.returnValue(of({
-      thread: { id: 901, serviceOrderId: 88, serviceOrderCode: 'SO-88', clientAlias: 'Cliente', assignedTechnicianAlias: 'Técnico', equipmentLabel: 'Laptop', unreadCount: 0 },
-      messages: [{ id: 1, text: 'hola', attachments: [], createdAt: new Date(), authorRole: 'SYSTEM', authorDisplayName: null }],
-    }));
 
     component.openWhatsAppInbox(order);
+    await Promise.resolve();
 
-    expect(scheduleScrollSpy).toHaveBeenCalled();
-    expect(refreshTimerSpy).toHaveBeenCalled();
+    expect(inboxServiceStub.getThreadByOrder).toHaveBeenCalledWith(88);
+    expect(routerStub.navigate).toHaveBeenCalledWith(['/service-order-inbox'], {
+      queryParams: { threadId: 901, serviceOrderId: 88 },
+    });
   });
 
   it('segments orders into tabs by technical status', () => {
@@ -480,40 +481,6 @@ describe('TechnicianPanel', () => {
     expect(typeof payload.baseAgreementId).toBe('number');
   });
 
-  it('scrolls the inbox to the latest message after sending one', () => {
-    const scheduleScrollSpy = spyOn<any>(component, 'scheduleInboxMessagesScrollToBottom');
-    const activeThread = {
-      id: 901,
-      serviceOrderId: 88,
-      serviceOrderCode: 'SO-88',
-      clientAlias: 'Cliente',
-      assignedTechnicianAlias: 'Técnico',
-      equipmentLabel: 'Laptop',
-      operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO,
-      technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
-        commercialStatus: ServiceOrderCommercialStatus.PENDIENTE_PROPUESTA,
-      economicStatus: ServiceOrderEconomicStatus.PENDIENTE,
-      clientPhone: null,
-      lastMessageText: null,
-      lastMessageAt: null,
-      lastMessageDirection: null,
-      lastMessageAuthorRole: null,
-      unreadCount: 0,
-      contextToken: 'ctx-901',
-    };
-
-    component.inboxActiveThread = activeThread;
-    component.inboxDraftMessage = 'Mensaje nuevo';
-    inboxServiceStub.sendMessage.and.returnValue(of({ partialFailures: [] }));
-    inboxServiceStub.getMessages.and.returnValue(of({
-      thread: activeThread,
-      messages: [{ id: 2, text: 'Mensaje nuevo', attachments: [], createdAt: new Date(), authorRole: 'TECHNICIAN', authorDisplayName: 'Técnico' }],
-    }));
-
-    component.sendInboxMessage();
-
-    expect(scheduleScrollSpy).toHaveBeenCalled();
-  });
 
   it('confirms a derived agreement with explicit replacement messaging', () => {
     component.selectedServiceOrder = createServiceOrder({ id: 40 });
@@ -692,3 +659,4 @@ function createAgreementService(overrides: any = {}) {
     ...overrides,
   };
 }
+

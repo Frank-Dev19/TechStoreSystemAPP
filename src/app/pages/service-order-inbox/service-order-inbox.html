@@ -1,0 +1,226 @@
+<section class="inbox-page">
+  <header class="inbox-page__header">
+    <div>
+      <p class="eyebrow">WhatsApp</p>
+      <h1>Conversaciones unificadas</h1>
+      <p class="subtitle">Un hilo por cliente, con sus órdenes activas relacionadas.</p>
+    </div>
+    <div class="summary-pill" *ngIf="selectedThread as thread">
+      <i class="fab fa-whatsapp"></i>
+      <span>{{ thread.clientAlias }}</span>
+      <strong *ngIf="thread.activeServiceOrderIds?.length as activeCount">{{ activeCount }} activas</strong>
+    </div>
+  </header>
+
+  <div class="inbox-page__layout">
+    <aside class="inbox-column inbox-column--threads">
+      <label class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" [(ngModel)]="searchTerm" [placeholder]="searchPlaceholder" />
+      </label>
+
+      <div class="empty-state" *ngIf="isLoadingThreads">Cargando conversaciones...</div>
+      <div class="empty-state" *ngIf="!isLoadingThreads && threadError">{{ threadError }}</div>
+      <div class="empty-state" *ngIf="!isLoadingThreads && !threadError && !filteredThreads.length">No hay conversaciones para mostrar.</div>
+
+      <button
+        *ngFor="let thread of filteredThreads; trackBy: trackByThreadId"
+        type="button"
+        class="thread-card"
+        [class.active]="selectedThread?.id === thread.id"
+        (click)="selectThread(thread)"
+      >
+        <div class="thread-card__top">
+          <strong>{{ thread.clientAlias }}</strong>
+          <span class="thread-card__time">{{ thread.lastMessageAt | date: 'dd/MM HH:mm' }}</span>
+        </div>
+        <div class="thread-card__meta">
+          <span>{{ thread.serviceOrderCodes?.join(', ') || thread.serviceOrderCode || 'Sin orden' }}</span>
+          <span *ngIf="thread.unreadCount > 0" class="counter">{{ thread.unreadCount }}</span>
+        </div>
+        <p>{{ thread.lastMessageText || 'Sin mensajes todavía' }}</p>
+        <div class="thread-card__badges">
+          <span class="badge" *ngIf="(thread.orders?.length || thread.serviceOrderIds?.length || 0) > 1">Múltiples órdenes</span>
+          <span class="badge badge--warning" *ngIf="thread.orders?.length && !(thread.activeServiceOrderIds?.length || 0)">Sin orden activa</span>
+        </div>
+      </button>
+    </aside>
+
+    <main class="inbox-column inbox-column--timeline">
+      <ng-container *ngIf="selectedThread as thread; else emptyThreadState">
+        <header class="timeline-header">
+          <div>
+            <h2>{{ thread.clientAlias }}</h2>
+            <p>{{ getThreadSecondaryMeta(thread) }}</p>
+          </div>
+          <button
+            *ngIf="thread.serviceOrderId"
+            type="button"
+            class="btn-order-link"
+            [routerLink]="[orderDetailRoute]"
+            [queryParams]="{ serviceOrderId: thread.serviceOrderId }"
+          >
+            Ver orden
+          </button>
+        </header>
+
+        <div class="empty-state" *ngIf="isLoadingMessages">Cargando mensajes...</div>
+        <div class="empty-state" *ngIf="!isLoadingMessages && messageError">{{ messageError }}</div>
+        <div class="empty-state" *ngIf="!isLoadingMessages && !messageError && !messages.length">Aún no hay mensajes en esta conversación.</div>
+
+        <div class="timeline" *ngIf="!isLoadingMessages && messages.length">
+          <article
+            *ngFor="let message of messages; trackBy: trackByMessageId"
+            class="message-card"
+            [class.message-card--outbound]="message.direction === 'OUTBOUND'"
+          >
+            <header class="message-card__header">
+              <div>
+                <strong>{{ message.authorDisplayName || message.authorRole }}</strong>
+                <small>{{ message.createdAt | date: 'dd/MM HH:mm' }}</small>
+              </div>
+              <span class="status-pill" *ngIf="isMessagePendingAssociation(message)">Pendiente de asociación</span>
+            </header>
+
+            <p *ngIf="message.text">{{ message.text }}</p>
+
+            <div class="message-card__chips" *ngIf="getMessageOrders(message).length">
+              <span class="chip" *ngFor="let order of getMessageOrders(message); trackBy: trackByOrderId">
+                {{ order.code }}
+              </span>
+            </div>
+
+            <div class="message-card__attachments" *ngIf="message.attachments.length">
+              <button type="button" class="attachment-chip" *ngFor="let attachment of message.attachments" (click)="downloadAttachment(attachment)">
+                <i class="fas fa-paperclip"></i>
+                <span>{{ attachment.fileName }}</span>
+              </button>
+            </div>
+
+            <div class="message-card__association" *ngIf="threadOrders.length">
+              <ng-select
+                [items]="threadOrders"
+                bindLabel="code"
+                bindValue="id"
+                [multiple]="true"
+                [clearable]="true"
+                [ngModel]="message.serviceOrderIds || []"
+                (ngModelChange)="replaceMessageOrders(message, $event || [])"
+                placeholder="Asociar órdenes"
+              >
+                <ng-template ng-option-tmp let-item="item">
+                  <div class="order-option">
+                    <strong>{{ item.code }}</strong>
+                    <small>{{ item.equipmentLabel }}</small>
+                  </div>
+                </ng-template>
+              </ng-select>
+            </div>
+          </article>
+        </div>
+
+        <section class="composer">
+          <div class="composer__orders" *ngIf="threadOrders.length">
+            <label>Órdenes del mensaje</label>
+            <ng-select
+              [items]="threadOrders"
+              bindLabel="code"
+              bindValue="id"
+              [multiple]="true"
+              [clearable]="true"
+              [(ngModel)]="selectedComposerOrderIds"
+              placeholder="Seleccioná las órdenes a relacionar"
+            >
+              <ng-template ng-option-tmp let-item="item">
+                <div class="order-option">
+                  <strong>{{ item.code }}</strong>
+                  <small>{{ item.equipmentLabel }}</small>
+                </div>
+              </ng-template>
+            </ng-select>
+          </div>
+
+          <div class="window-warning" *ngIf="showClosedWindowWarning">{{ closedWindowMessage }}</div>
+
+          <textarea
+            [(ngModel)]="draftMessage"
+            rows="3"
+            placeholder="Escribí el mensaje para el cliente..."
+            [disabled]="!isCustomerServiceWindowOpen"
+          ></textarea>
+
+          <div class="draft-attachments" *ngIf="draftAttachments.length">
+            <div class="draft-attachment" *ngFor="let attachment of draftAttachments; let i = index">
+              <span>{{ attachment.file.name }}</span>
+              <button type="button" (click)="removeDraftAttachment(i)">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="composer__actions">
+            <label class="btn-secondary upload-btn" [class.upload-btn--disabled]="!isCustomerServiceWindowOpen">
+              <i class="fas fa-paperclip"></i>
+              Adjuntar
+              <input type="file" multiple hidden (change)="onFilesSelected($event)" [disabled]="!isCustomerServiceWindowOpen" />
+            </label>
+            <button type="button" class="btn-primary" [disabled]="isSendingMessage || !isCustomerServiceWindowOpen || (!draftMessage.trim() && !draftAttachments.length)" (click)="sendMessage()">
+              {{ isSendingMessage ? 'Enviando...' : 'Enviar' }}
+            </button>
+          </div>
+        </section>
+      </ng-container>
+    </main>
+
+    <aside class="inbox-column inbox-column--context">
+      <ng-container *ngIf="selectedThread as thread; else emptyContextState">
+        <section class="context-card">
+          <h3>{{ contextCardTitle }}</h3>
+          <dl>
+            <div>
+              <dt>Cliente</dt>
+              <dd>{{ thread.clientAlias }}</dd>
+            </div>
+            <div *ngIf="showSensitiveCustomerData">
+              <dt>Teléfono</dt>
+              <dd>{{ thread.clientPhone || 'Sin teléfono' }}</dd>
+            </div>
+            <div>
+              <dt>Último mensaje cliente</dt>
+              <dd>{{ thread.lastCustomerMessageAt ? (thread.lastCustomerMessageAt | date: 'dd/MM/yyyy HH:mm') : 'Sin registro' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="context-card">
+          <div class="context-card__header">
+            <h3>Órdenes vinculadas</h3>
+            <span class="badge" *ngIf="threadOrders.length > 1">Múltiples órdenes</span>
+          </div>
+          <div class="empty-state compact" *ngIf="!threadOrders.length">Este hilo todavía no tiene órdenes vinculadas.</div>
+          <button
+            type="button"
+            class="order-card"
+            *ngFor="let order of threadOrders; trackBy: trackByOrderId"
+            [routerLink]="[orderDetailRoute]"
+            [queryParams]="{ serviceOrderId: order.id }"
+          >
+            <strong>{{ order.code }}</strong>
+            <span>{{ order.equipmentLabel }}</span>
+            <small>{{ order.assignedTechnicianAlias }}</small>
+            <span class="badge" *ngIf="order.isActive">Activa</span>
+          </button>
+        </section>
+      </ng-container>
+    </aside>
+  </div>
+</section>
+
+<ng-template #emptyThreadState>
+  <div class="empty-state empty-state--main">Seleccioná una conversación para ver el detalle.</div>
+</ng-template>
+
+<ng-template #emptyContextState>
+  <div class="empty-state empty-state--main">Sin contexto cargado todavía.</div>
+</ng-template>
+

@@ -1,6 +1,7 @@
 // src/app/core/models/sales/enums.ts
 
 export enum DocumentType {
+    NOTA_PEDIDO = 'NOTA_PEDIDO',
     BOLETA = 'BOLETA',
     FACTURA = 'FACTURA',
     NOTA_CREDITO = 'NOTA_CREDITO',

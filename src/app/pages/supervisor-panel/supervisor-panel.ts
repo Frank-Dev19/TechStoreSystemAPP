@@ -1,4 +1,5 @@
 import { Component, OnInit } from "@angular/core"
+import { Router } from "@angular/router"
 import { catchError, finalize, of } from "rxjs"
 import { ServiceOrderAgreement, ServiceOrderAgreementStatus } from "../../models/service-orders/service-agreement"
 import {
@@ -16,21 +17,12 @@ import {
 import { ServiceOrderService } from "../../services/service-orders/service-order.service"
 import { ServiceOrderDiagnosisService } from "../../services/service-orders/service-order-diagnosis.service"
 import { ServiceOrderDiagnosis } from "../../models/service-orders/service-order-diagnosis"
-import {
-  ServiceOrderInboxAttachment,
-  ServiceOrderInboxMessage,
-  ServiceOrderInboxThreadSummary,
-} from "../../models/service-orders/service-order-inbox"
 import { Product } from "../../models/catalog/product"
 import { ProductsService } from "../../services/inventory/products.service"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
 
 const TECHNICAL_SERVICE_LABEL = "Servicio técnico"
 
-interface InboxDraftAttachment {
-  file: File
-  previewUrl: string | null
-}
 
 @Component({
   selector: "app-supervisor-panel",
@@ -39,7 +31,7 @@ interface InboxDraftAttachment {
   styleUrls: ["./supervisor-panel.scss"],
 })
 export class SupervisorPanel implements OnInit {
-  activeSection: "ranking" | "inbox" | "orders" = "orders"
+  activeSection: "ranking" | "orders" = "orders"
   activeTab: "open" | "answered" | "all" = "open"
   currentPage = 1
   itemsPerPage = 6
@@ -53,27 +45,16 @@ export class SupervisorPanel implements OnInit {
   selectedServiceOrder: ServiceOrder | null = null
   currentDiagnosis: ServiceOrderDiagnosis | null = null
   selectedOrderAgreements: ServiceOrderAgreement[] = []
-  selectedInboxThreadByOrder: ServiceOrderInboxThreadSummary | null = null
 
   orderSearchTerm = ""
   orderOperativeStatusFilter: ServiceOrderOperativeStatus | "ALL" = "ALL"
 
   products: Product[] = []
-  inboxThreads: ServiceOrderInboxThreadSummary[] = []
-  selectedInboxThread: ServiceOrderInboxThreadSummary | null = null
-  selectedInboxMessages: ServiceOrderInboxMessage[] = []
-  supervisorInboxDraft = ""
-  supervisorInboxDraftAttachments: InboxDraftAttachment[] = []
-  supervisorInboxAttachmentPreviewUrls: Record<number, string> = {}
   technicianRankings: TechnicianRevenueRanking[] = []
 
   isLoadingServiceOrderAgreements = false
   isLoadingDiagnosis = false
   isLoadingTechnicianRankings = false
-  isLoadingInboxThreads = false
-  isLoadingInboxMessages = false
-  isSendingInboxMessage = false
-  inboxTotalItems = 0
 
   showAlert = false
   alertType = ""
@@ -124,22 +105,19 @@ export class SupervisorPanel implements OnInit {
     private readonly diagnosticService: ServiceOrderDiagnosisService,
     private readonly productsService: ProductsService,
     private readonly serviceOrderInboxService: ServiceOrderInboxService,
+    private readonly router: Router,
   ) {}
 
   ngOnInit(): void {
     this.loadServiceOrderAgreements()
     this.loadServiceOrders()
     this.loadProducts()
-    this.loadInboxThreads()
     this.loadTechnicianRankings()
   }
 
-  setActiveSection(section: "ranking" | "inbox" | "orders"): void {
+  setActiveSection(section: "ranking" | "orders"): void {
     this.activeSection = section
     this.currentPage = 1
-    if (section === "inbox") {
-      this.loadInboxThreads()
-    }
   }
 
   setActiveTab(tab: "open" | "answered" | "all"): void {
@@ -147,100 +125,11 @@ export class SupervisorPanel implements OnInit {
     this.currentPage = 1
   }
 
-  private loadInboxThreads(preferredThreadId?: number | null): void {
-    this.isLoadingInboxThreads = true
-    this.serviceOrderInboxService
-      .listThreads({
-        page: this.currentPage,
-        limit: this.itemsPerPage,
-      })
-      .pipe(finalize(() => (this.isLoadingInboxThreads = false)))
-      .subscribe({
-        next: ({ data, total }) => {
-          this.inboxThreads = data ?? []
-          this.inboxTotalItems = total ?? this.inboxThreads.length
-
-          const targetThread =
-            this.inboxThreads.find((thread) => thread.id === preferredThreadId) ??
-            this.inboxThreads.find((thread) => thread.id === this.selectedInboxThread?.id) ??
-            this.inboxThreads[0] ??
-            null
-
-          if (targetThread) {
-            this.selectInboxThread(targetThread)
-            return
-          }
-
-          this.selectedInboxThread = null
-          this.selectedInboxMessages = []
-          this.clearSupervisorInboxAttachmentPreviews()
-        },
-        error: () => {
-          this.inboxThreads = []
-          this.inboxTotalItems = 0
-          this.selectedInboxThread = null
-          this.selectedInboxMessages = []
-          this.clearSupervisorInboxAttachmentPreviews()
-          this.showMessage("warning", "fas fa-comments", "No pudimos cargar las conversaciones.")
-        },
-      })
-  }
-
-  selectInboxThread(thread: ServiceOrderInboxThreadSummary): void {
-    this.selectedInboxThread = thread
-    this.isLoadingInboxMessages = true
-    this.serviceOrderInboxService
-      .getMessages(thread.id)
-      .pipe(finalize(() => (this.isLoadingInboxMessages = false)))
-      .subscribe({
-        next: (response) => {
-          this.selectedInboxThread = response.thread
-          this.selectedInboxMessages = response.messages ?? []
-          this.clearSupervisorInboxAttachmentPreviews()
-          this.hydrateSupervisorInboxAttachmentPreviews(this.selectedInboxMessages)
-          this.serviceOrderInboxService
-            .markRead(thread.id)
-            .pipe(catchError(() => of({ ok: false })))
-            .subscribe(() => {
-              this.inboxThreads = this.inboxThreads.map((item) =>
-                item.id === thread.id ? { ...item, unreadCount: 0 } : item,
-              )
-              if (this.selectedInboxThread?.id === thread.id) {
-                this.selectedInboxThread = { ...this.selectedInboxThread, unreadCount: 0 }
-              }
-            })
-        },
-        error: () => {
-          this.selectedInboxMessages = []
-          this.clearSupervisorInboxAttachmentPreviews()
-          this.showMessage("warning", "fas fa-comments", "No pudimos cargar el detalle de la conversación.")
-        },
-      })
-  }
-
-  getInboxAuthorLabel(message: ServiceOrderInboxMessage): string {
-    if (message.authorDisplayName?.trim()) {
-      return message.authorDisplayName.trim()
-    }
-
-    switch (message.authorRole) {
-      case "TECHNICIAN":
-        return this.selectedInboxThread?.assignedTechnicianAlias ?? "Técnico"
-      case "CLIENT":
-        return this.selectedInboxThread?.clientAlias ?? "Cliente"
-      case "RECEPTION":
-        return "Recepción"
-      case "SUPERVISOR":
-        return "Supervisor"
-      default:
-        return "Sistema"
-    }
-  }
-
   getInboxThreadOperativeStatusLabel(status?: ServiceOrderOperativeStatus | null): string {
     if (!status) return "Abierto"
     return this.operativeStatusLabels[status] ?? status
   }
+
 
   getServiceOrderSlaStageLabel(stage?: ServiceOrderSlaStage | null): string {
     if (!stage) return "Sin etapa"
@@ -376,8 +265,6 @@ export class SupervisorPanel implements OnInit {
     switch (this.activeSection) {
       case "ranking":
         return this.technicianRankings.length
-      case "inbox":
-        return this.inboxTotalItems
       case "orders":
         return this.filteredServiceOrders.length
       default:
@@ -394,9 +281,6 @@ export class SupervisorPanel implements OnInit {
     return this.technicianRankings.slice(start, start + this.itemsPerPage)
   }
 
-  get paginatedInboxThreads(): ServiceOrderInboxThreadSummary[] {
-    return this.inboxThreads
-  }
 
   get paginatedVisibleAgreements(): ServiceOrderAgreement[] {
     const visibleQuotes = this.getVisibleAgreements()
@@ -428,105 +312,15 @@ export class SupervisorPanel implements OnInit {
   prevPage(): void {
     if (this.currentPage > 1) {
       this.currentPage -= 1
-      if (this.activeSection === "inbox") {
-        this.loadInboxThreads()
-      }
     }
   }
 
   nextPage(): void {
     if (this.currentPage < this.totalPages) {
       this.currentPage += 1
-      if (this.activeSection === "inbox") {
-        this.loadInboxThreads()
-      }
     }
   }
 
-  sendSupervisorInboxMessage(): void {
-    const trimmedMessage = this.supervisorInboxDraft.trim()
-    if ((!trimmedMessage && !this.supervisorInboxDraftAttachments.length) || !this.selectedInboxThread || this.isSendingInboxMessage) {
-      return
-    }
-
-    this.isSendingInboxMessage = true
-    this.serviceOrderInboxService
-      .sendMessage(
-        this.selectedInboxThread.id,
-        trimmedMessage,
-        this.supervisorInboxDraftAttachments.map((attachment) => attachment.file),
-      )
-      .pipe(finalize(() => (this.isSendingInboxMessage = false)))
-      .subscribe({
-        next: (result) => {
-          const currentThreadId = this.selectedInboxThread?.id ?? null
-          this.supervisorInboxDraft = ""
-          this.clearSupervisorInboxDraftAttachments()
-          if (result.partialFailures?.length) {
-            this.showMessage("warning", "fas fa-exclamation-triangle", "El mensaje salió parcialmente: revisá los adjuntos fallidos antes de reenviar.")
-          }
-          this.loadInboxThreads(currentThreadId)
-        },
-        error: () => {
-          this.showMessage("danger", "fas fa-exclamation-circle", "No se pudo enviar el mensaje de WhatsApp.")
-        },
-      })
-  }
-
-  triggerSupervisorInboxAttachmentPicker(input: HTMLInputElement): void {
-    input.click()
-  }
-
-  onSupervisorInboxFilesSelected(event: Event): void {
-    const input = event.target as HTMLInputElement | null
-    const files = Array.from(input?.files ?? [])
-    if (!files.length) {
-      return
-    }
-
-    const nextAttachments = files.map((file) => ({
-      file,
-      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-    }))
-    this.supervisorInboxDraftAttachments = [...this.supervisorInboxDraftAttachments, ...nextAttachments]
-
-    if (input) {
-      input.value = ""
-    }
-  }
-
-  removeSupervisorInboxDraftAttachment(index: number): void {
-    const target = this.supervisorInboxDraftAttachments[index]
-    if (!target) {
-      return
-    }
-
-    if (target.previewUrl) {
-      URL.revokeObjectURL(target.previewUrl)
-    }
-
-    this.supervisorInboxDraftAttachments = this.supervisorInboxDraftAttachments.filter((_, itemIndex) => itemIndex !== index)
-  }
-
-  getSupervisorInboxAttachmentPreviewUrl(attachmentId: number): string | null {
-    return this.supervisorInboxAttachmentPreviewUrls[attachmentId] ?? null
-  }
-
-  downloadSupervisorInboxAttachment(attachment: ServiceOrderInboxAttachment): void {
-    this.serviceOrderInboxService.downloadAttachmentBlob(attachment.id).subscribe({
-      next: (blob) => {
-        const blobUrl = URL.createObjectURL(blob)
-        const anchor = document.createElement("a")
-        anchor.href = blobUrl
-        anchor.download = attachment.fileName
-        anchor.click()
-        URL.revokeObjectURL(blobUrl)
-      },
-      error: () => {
-        this.showMessage("warning", "fas fa-paperclip", "No se pudo descargar el adjunto.")
-      },
-    })
-  }
 
   formatMoney(value: number | null | undefined): string {
     return `S/ ${Number(value || 0).toFixed(2)}`
@@ -546,8 +340,6 @@ export class SupervisorPanel implements OnInit {
 
   selectServiceOrder(order: ServiceOrder): void {
     this.selectedServiceOrder = order
-    this.selectedInboxThreadByOrder =
-      this.inboxThreads.find((thread) => Number(thread.serviceOrderId) === Number(order.id)) ?? null
     this.loadOrderContext(order.id)
   }
 
@@ -562,7 +354,6 @@ export class SupervisorPanel implements OnInit {
     this.selectedServiceOrderAgreement = null
     this.selectedOrderAgreements = []
     this.currentDiagnosis = null
-    this.selectedInboxThreadByOrder = null
   }
 
   private loadOrderContext(serviceOrderId: number): void {
@@ -691,11 +482,28 @@ export class SupervisorPanel implements OnInit {
   }
 
   openInboxShortcut(order: ServiceOrder): void {
-    this.selectedInboxThreadByOrder =
-      this.inboxThreads.find((thread) => Number(thread.serviceOrderId) === Number(order.id)) ?? null
-    this.activeSection = "inbox"
-    this.currentPage = 1
-    this.loadInboxThreads(this.selectedInboxThreadByOrder?.id ?? null)
+    this.openInboxWorkspace(order)
+  }
+
+  openInboxWorkspace(order?: ServiceOrder | null): void {
+    if (order?.id) {
+      this.serviceOrderInboxService.getThreadByOrder(Number(order.id)).subscribe({
+        next: (thread) => {
+          void this.router.navigate(['/service-order-inbox'], {
+            queryParams: {
+              threadId: thread.id,
+              serviceOrderId: Number(order.id),
+            },
+          })
+        },
+        error: () => {
+          this.showMessage('danger', 'fas fa-exclamation-circle', 'No pudimos abrir la conversación del cliente.')
+        },
+      })
+      return
+    }
+
+    void this.router.navigate(['/service-order-inbox'])
   }
 
   hasActiveSlaBreach(order?: ServiceOrder | null): boolean {
@@ -713,39 +521,9 @@ export class SupervisorPanel implements OnInit {
     }, 4000)
   }
 
-  private hydrateSupervisorInboxAttachmentPreviews(messages: ServiceOrderInboxMessage[]): void {
-    messages.forEach((message) => {
-      message.attachments
-        .filter((attachment) => attachment.previewable)
-        .forEach((attachment) => {
-          if (this.supervisorInboxAttachmentPreviewUrls[attachment.id]) {
-            return
-          }
-
-          this.serviceOrderInboxService.downloadAttachmentBlob(attachment.id).subscribe({
-            next: (blob) => {
-              this.supervisorInboxAttachmentPreviewUrls[attachment.id] = URL.createObjectURL(blob)
-            },
-          })
-        })
-    })
-  }
-
-  private clearSupervisorInboxAttachmentPreviews(): void {
-    Object.values(this.supervisorInboxAttachmentPreviewUrls).forEach((previewUrl) => {
-      URL.revokeObjectURL(previewUrl)
-    })
-    this.supervisorInboxAttachmentPreviewUrls = {}
-  }
-
-  private clearSupervisorInboxDraftAttachments(): void {
-    this.supervisorInboxDraftAttachments.forEach((attachment) => {
-      if (attachment.previewUrl) {
-        URL.revokeObjectURL(attachment.previewUrl)
-      }
-    })
-    this.supervisorInboxDraftAttachments = []
-  }
 }
+
+
+
 
 

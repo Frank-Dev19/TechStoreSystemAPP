@@ -753,122 +753,6 @@
       </div>
     </div>
   }
-
-  @if (showInboxModal) {
-    <div class="modal-overlay inbox-overlay" (click)="closeInboxModal()">
-      <div class="modal-content inbox-modal" (click)="$event.stopPropagation()">
-        <div class="modal-header inbox-header">
-          <div>
-            <h2>Canal de mensajería del servicio</h2>
-            <p>Identidad del cliente protegida. Canal monitoreado para cumplimiento y calidad de atención.</p>
-          </div>
-          <div class="inbox-header-actions">
-            <span class="monitored-chip"><i class="fas fa-eye"></i> Supervisado</span>
-            <button class="btn-close" (click)="closeInboxModal()">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
-        </div>
-
-        <div class="inbox-layout">
-          <section class="inbox-main">
-            @if (isLoadingInbox) {
-              <p class="empty-text">Cargando conversación...</p>
-            } @else if (inboxActiveThread) {
-              <div class="inbox-thread-meta">
-                <div>
-                  <strong>{{ inboxActiveThread.serviceOrderCode }} . {{ inboxActiveThread.equipmentLabel }}</strong>
-                  <p>{{ inboxActiveThread.clientAlias }} . {{ inboxActiveThread.assignedTechnicianAlias }}</p>
-                </div>
-              </div>
-
-              <div class="inbox-messages" #inboxMessagesContainer>
-                @for (message of inboxMessages; track message.id) {
-                  <article
-                    class="message-row"
-                    [class.tech]="message.authorRole === 'TECHNICIAN'"
-                    [class.system]="message.authorRole === 'SYSTEM'"
-                  >
-                    <header>
-                      <strong>{{ getInboxAuthorLabel(message) }}</strong>
-                      <small>{{ message.createdAt | date: 'dd/MM HH:mm' }}</small>
-                    </header>
-                    @if (message.text) {
-                      <p>{{ message.text }}</p>
-                    }
-                    @if (message.attachments.length) {
-                      <div class="message-attachments">
-                        @for (attachment of message.attachments; track attachment.id) {
-                          <div class="message-attachment-card">
-                            @if (attachment.previewable && getInboxAttachmentPreviewUrl(attachment.id)) {
-                              <img
-                                class="message-attachment-image"
-                                [src]="getInboxAttachmentPreviewUrl(attachment.id)"
-                                [alt]="attachment.fileName"
-                              />
-                            } @else {
-                              <span class="message-attachment-icon">
-                                <i class="fas" [class.fa-image]="attachment.attachmentType === 'image'" [class.fa-file-pdf]="attachment.attachmentType === 'pdf'" [class.fa-file-audio]="attachment.attachmentType === 'audio'" [class.fa-file-lines]="attachment.attachmentType === 'document'"></i>
-                              </span>
-                            }
-                            <div class="message-attachment-meta">
-                              <strong>{{ attachment.fileName }}</strong>
-                              <small>{{ attachment.mimeType }} . {{ attachment.sizeBytes / 1024 | number: '1.0-0' }} KB</small>
-                            </div>
-                            <button type="button" class="btn btn-light btn-sm" (click)="downloadInboxAttachment(attachment)">
-                              Descargar
-                            </button>
-                          </div>
-                        }
-                      </div>
-                    }
-                  </article>
-                }
-              </div>
-
-              <div class="inbox-composer">
-                <textarea
-                  [value]="inboxDraftMessage"
-                  (input)="inboxDraftMessage = $any($event.target).value"
-                  rows="3"
-                  placeholder="Escribe un mensaje técnico para el cliente (sin datos personales)"
-                ></textarea>
-                <input #inboxFileInput type="file" multiple hidden (change)="onInboxFilesSelected($event)" />
-                @if (inboxDraftAttachments.length) {
-                  <div class="draft-attachments">
-                    @for (attachment of inboxDraftAttachments; track attachment.file.name + attachment.file.size) {
-                      <div class="draft-attachment-chip">
-                        @if (attachment.previewUrl) {
-                          <img [src]="attachment.previewUrl" [alt]="attachment.file.name" />
-                        } @else {
-                          <i class="fas fa-paperclip"></i>
-                        }
-                        <span>{{ attachment.file.name }}</span>
-                        <button type="button" (click)="removeInboxDraftAttachment($index)">
-                          <i class="fas fa-times"></i>
-                        </button>
-                      </div>
-                    }
-                  </div>
-                }
-                <div class="inbox-composer-actions">
-                  <button type="button" class="btn btn-outline-secondary" (click)="triggerInboxAttachmentPicker(inboxFileInput)">
-                    <i class="fas fa-paperclip"></i> Adjuntar
-                  </button>
-                  <button type="button" class="btn btn-success" [disabled]="isSendingInboxMessage" (click)="sendInboxMessage()">
-                    <i class="fab fa-whatsapp"></i> {{ isSendingInboxMessage ? 'Enviando...' : 'Enviar' }}
-                  </button>
-                </div>
-              </div>
-            } @else {
-              <p class="empty-text">Selecciona una conversación para comenzar.</p>
-            }
-          </section>
-        </div>
-      </div>
-    </div>
-  }
-
   @if (showDiagnosisModal) {
     <div class="modal-overlay" (click)="closeDiagnosisModal()">
       <div class="modal-content" (click)="$event.stopPropagation()">
@@ -950,4 +834,5 @@
     </div>
   </div>
 </div>
+
 

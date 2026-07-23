@@ -1,4 +1,4 @@
-﻿<div class="reception-panel-container">
+<div class="reception-panel-container">
   <div class="header-section">
     <div class="title-section">
       <h1 class="page-title">Panel de Recepción</h1>
@@ -277,7 +277,7 @@
                           type="button"
                           (click)="openReceptionInbox(serviceOrder, $event)"
                           [disabled]="!canOpenReceptionInbox(serviceOrder)"
-                          title="Coordinar con cliente"
+                          title="Abrir conversación del cliente"
                         >
                           <i class="fab fa-whatsapp"></i>
                         </button>
@@ -1139,191 +1139,205 @@
               <div class="section-header">
                 <h4>Acuerdo inicial</h4>
                 <p>
-                  Agrega productos y servicios para cada equipo. Este acuerdo se registrará
-                  automáticamente al crear la orden.
+                  La línea fija de servicio técnico ya está incluida. Agrega productos del pool
+                  si hace falta y este acuerdo se registrará automáticamente al crear la orden.
                 </p>
               </div>
 
-              <div class="summary-card initial-agreement-card">
-                  <div class="service-order-item-card-header">
-                    <div class="item-title">
-                      <i class="fas fa-file-invoice-dollar"></i>
-                      Equipo ·
-                      {{
-                        getEquipmentTypeLabel(
-                          getCreateServiceOrderControl('equipmentType')?.value,
-                          getCreateServiceOrderControl('equipmentTypeOther')?.value
-                        )
-                      }}
+              <div class="initial-agreement-card">
+                <section class="agreement-section agreement-required-card">
+                  <div class="agreement-required-strip">
+                    <span>Componente obligatorio</span>
+                    <span>Siempre incluido</span>
+                  </div>
+                  <div class="agreement-required-body">
+                    <div class="agreement-equipment-copy">
+                      <label>Equipo</label>
+                      <h3>
+                        {{
+                          getEquipmentTypeLabel(
+                            getCreateServiceOrderControl('equipmentType')?.value,
+                            getCreateServiceOrderControl('equipmentTypeOther')?.value
+                          )
+                        }}
+                      </h3>
+                      <p>
+                        Esta línea fija cubre la atención técnica base. Si el equipo requiere
+                        repuestos o accesorios, los agregás abajo como productos adicionales.
+                      </p>
                     </div>
-                    <div class="quote-chip-row">
-                      <button
-                        class="btn btn-sm btn-outline"
-                        type="button"
-                        (click)="addProductToCreateOrderItemAgreement(0)"
-                      >
-                        <i class="fas fa-box"></i> Agregar producto
-                      </button>
-                      <button
-                        class="btn btn-sm btn-outline"
-                        type="button"
-                        (click)="addServiceToCreateOrderItemAgreement(0)"
-                      >
-                        <i class="fas fa-tools"></i> Agregar servicio
-                      </button>
-                    </div>
+
+                    @if (getCreateOrderAgreementTechnicalServiceItem(0); as technicalServiceItem) {
+                      <div class="agreement-service-pricing">
+                        <label>Servicio técnico (PEN)</label>
+                        <div
+                          class="agreement-currency-input"
+                          [class.field-invalid]="!isTechnicalServiceLineAmountValid(technicalServiceItem)"
+                        >
+                          <span>S/</span>
+                          <input
+                            type="number"
+                            min="20"
+                            step="0.01"
+                            [class.input-error]="!isTechnicalServiceLineAmountValid(technicalServiceItem)"
+                            [ngModel]="technicalServiceItem.unitPrice"
+                            (ngModelChange)="updateTechnicalServiceAmount(technicalServiceItem, $event)"
+                            [ngModelOptions]="{ standalone: true }"
+                          />
+                        </div>
+                        <div
+                          class="agreement-minimum-copy"
+                          [class.invalid]="!isTechnicalServiceLineAmountValid(technicalServiceItem)"
+                          aria-live="polite"
+                        >
+                          @if (!isTechnicalServiceLineAmountValid(technicalServiceItem)) {
+                            <span>Debe ser al menos S/ {{ technicalServiceOption.price | number: '1.2-2' }}</span>
+                          } @else {
+                            <span>Mínimo coordinable: S/ {{ technicalServiceOption.price | number: '1.2-2' }}</span>
+                          }
+                        </div>
+                      </div>
+                    }
                   </div>
 
-                  @if (getCreateOrderAgreementItems(0).length === 0) {
-                    <div class="wizard-empty-quote-state">
-                      <i class="fas fa-file-circle-plus"></i>
-                      <p>Todavía no agregaste líneas para este equipo.</p>
+                  @if (getCreateOrderAgreementTechnicalServiceItem(0); as technicalServiceItem) {
+                    <div class="agreement-inline-note">
+                      <label>Notas del servicio técnico</label>
+                      <input
+                        type="text"
+                        placeholder="Observaciones para esta línea base"
+                        [(ngModel)]="technicalServiceItem.notes"
+                        [ngModelOptions]="{ standalone: true }"
+                      />
+                    </div>
+                  }
+                </section>
+
+                <section class="agreement-section agreement-products-section">
+                  <div class="agreement-section-header">
+                    <div class="agreement-section-title">
+                      <span>Productos adicionales</span>
+                      <p>Agregá repuestos o accesorios desde el mismo pool que usa el panel técnico.</p>
+                    </div>
+                    <button
+                      type="button"
+                      class="agreement-add-product-btn"
+                      (click)="addProductToCreateOrderItemAgreement(0)"
+                    >
+                      <span>+</span>
+                      Agregar producto
+                    </button>
+                  </div>
+
+                  @if (getCreateOrderAgreementProductItems(0).length === 0) {
+                    <div class="agreement-empty-state agreement-empty-state--compact">
+                      <strong>Sin productos adicionales</strong>
+                      <p>Puedes continuar solo con la línea técnica o sumar productos si hace falta.</p>
                     </div>
                   } @else {
-                    <div class="quote-items-list">
+                    <div class="quote-items">
                       @for (
-                        quoteItem of getCreateOrderAgreementItems(0);
+                        quoteItem of getCreateOrderAgreementProductItems(0);
                         let quoteIndex = $index;
                         track quoteItem.id
                       ) {
-                        <div class="quote-item-card">
-                          <div class="quote-item-card-header">
-                            <div class="pill">
-                              <i
-                                class="fas"
-                                [ngClass]="quoteItem.type === 'product' ? 'fa-box' : 'fa-tools'"
-                              ></i>
-                              {{ quoteItem.type === 'product' ? 'Producto' : 'Servicio' }}
-                            </div>
-                            <div class="item-actions">
-                              <span class="muted small">Item #{{ quoteIndex + 1 }}</span>
-                              <button
-                                type="button"
-                                class="btn-icon btn-delete"
-                                (click)="removeCreateOrderItemAgreement(0, quoteIndex)"
+                        <div class="agreement-item-card">
+                          <div class="agreement-item-header">
+                            <span class="agreement-item-label">Producto #{{ quoteIndex + 1 }}</span>
+                            <button
+                              type="button"
+                              class="btn-icon"
+                              aria-label="Eliminar producto adicional {{ quoteIndex + 1 }}"
+                              (click)="removeCreateOrderItemAgreement(0, getCreateOrderAgreementItems(0).indexOf(quoteItem))"
+                            >
+                              <i class="fas fa-trash"></i>
+                            </button>
+                          </div>
+
+                          <div class="agreement-product-grid">
+                            <div class="agreement-product-field agreement-product-field-name">
+                              <label>Producto</label>
+                              <ng-select
+                                [items]="products"
+                                bindValue="id"
+                                [searchFn]="productSearchFn"
+                                [clearable]="true"
+                                placeholder="Selecciona"
+                                [(ngModel)]="quoteItem.productId"
+                                (ngModelChange)="onCreateOrderProductSelected(0, quoteItem, $event)"
+                                [ngModelOptions]="{ standalone: true }"
                               >
-                                <i class="fas fa-trash"></i>
-                              </button>
+                                <ng-template ng-label-tmp let-product="item">
+                                  {{ product?.sku }} · {{ product?.name }}
+                                </ng-template>
+                                <ng-template ng-option-tmp let-product="item">
+                                  {{ product?.sku }} · {{ product?.name }}
+                                </ng-template>
+                              </ng-select>
+                            </div>
+                            <div class="agreement-product-field agreement-product-field-qty">
+                              <label>Cantidad</label>
+                              <input
+                                type="number"
+                                min="1"
+                                [(ngModel)]="quoteItem.quantity"
+                                (ngModelChange)="onCreateOrderProductQuantityChange(0, quoteItem, $event)"
+                                [ngModelOptions]="{ standalone: true }"
+                              />
+                            </div>
+                            <div class="agreement-product-field">
+                              <label>Precio</label>
+                              <div class="price-display">
+                                @if (isCreateOrderProductPriceLoading(0, quoteItem.id)) {
+                                  <span class="muted"><i class="fas fa-spinner fa-spin"></i> Calculando</span>
+                                } @else {
+                                  <strong>{{ quoteItem.unitPrice || 0 | number: '1.2-2' }} PEN</strong>
+                                }
+                              </div>
                             </div>
                           </div>
 
-                          @if (quoteItem.type === 'product') {
-                            <div class="quote-item-row">
-                              <div class="item-input full-width">
-                                <label>Producto</label>
-                                <ng-select
-                                  [items]="products"
-                                  bindValue="id"
-                                  [searchFn]="productSearchFn"
-                                  [clearable]="true"
-                                  placeholder="Selecciona"
-                                  [(ngModel)]="quoteItem.productId"
-                                  (ngModelChange)="onCreateOrderProductSelected(0, quoteItem, $event)"
-                                  [ngModelOptions]="{ standalone: true }"
-                                >
-                                  <ng-template ng-label-tmp let-product="item">
-                                    {{ product?.sku }} · {{ product?.name }}
-                                  </ng-template>
-                                  <ng-template ng-option-tmp let-product="item">
-                                    {{ product?.sku }} · {{ product?.name }}
-                                  </ng-template>
-                                </ng-select>
-                              </div>
-                            </div>
-                            <div class="quote-item-row">
-                              <div class="item-input compact">
-                                <label>Cant.</label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  [(ngModel)]="quoteItem.quantity"
-                                  (ngModelChange)="onCreateOrderProductQuantityChange(0, quoteItem, $event)"
-                                  [ngModelOptions]="{ standalone: true }"
-                                />
-                              </div>
-                              <div class="item-input price">
-                                <label>Precio</label>
-                                <div class="price-display">
-                                  @if (isCreateOrderProductPriceLoading(0, quoteItem.id)) {
-                                    <span class="muted"
-                                      ><i class="fas fa-spinner fa-spin"></i> Calculando</span
-                                    >
-                                  } @else {
-                                    <strong
-                                      >{{ quoteItem.unitPrice || 0 | number: '1.2-2' }} PEN</strong
-                                    >
-                                  }
-                                </div>
-                              </div>
-                            </div>
-                            <div class="quote-item-row">
-                              <div class="item-input full-width">
-                                <label>Notas</label>
-                                <input
-                                  type="text"
-                                  placeholder="Observaciones"
-                                  [(ngModel)]="quoteItem.notes"
-                                  [ngModelOptions]="{ standalone: true }"
-                                />
-                              </div>
-                            </div>
-                          }
+                          <div class="agreement-inline-note">
+                            <label>Notas</label>
+                            <input
+                              type="text"
+                              placeholder="Observaciones"
+                              [(ngModel)]="quoteItem.notes"
+                              [ngModelOptions]="{ standalone: true }"
+                            />
+                          </div>
 
-                          @if (quoteItem.type === 'service') {
-                            <div class="quote-item-row">
-                              <div class="item-input full-width">
-                                <label>Servicio</label>
-                                <ng-select
-                                  [items]="services"
-                                  bindValue="id"
-                                  [searchFn]="serviceSearchFn"
-                                  [clearable]="true"
-                                  placeholder="Selecciona"
-                                  [(ngModel)]="quoteItem.serviceId"
-                                  [ngModelOptions]="{ standalone: true }"
-                                >
-                                  <ng-template ng-label-tmp let-service="item">
-                                    {{ service?.code }} · {{ service?.name }} ·
-                                    {{ getServiceCategoryName(service?.categoryId) }}
-                                  </ng-template>
-                                  <ng-template ng-option-tmp let-service="item">
-                                    {{ service?.code }} · {{ service?.name }} ·
-                                    {{ getServiceCategoryName(service?.categoryId) }}
-                                  </ng-template>
-                                </ng-select>
-                              </div>
-                            </div>
-                            <div class="quote-item-row">
-                              <div class="item-input full-width">
-                                <label>Notas</label>
-                                <input
-                                  type="text"
-                                  placeholder="Observaciones"
-                                  [(ngModel)]="quoteItem.notes"
-                                  [ngModelOptions]="{ standalone: true }"
-                                />
-                              </div>
-                            </div>
-                          }
-
-                          <div class="quote-item-footer">
-                            <span class="muted">Subtotal</span>
-                            <strong
-                              >{{ calculateItemSubtotal(quoteItem) | number: '1.2-2' }} PEN</strong
-                            >
+                          <div class="agreement-subtotal-row">
+                            <span class="agreement-subtotal-label">Subtotal</span>
+                            <strong class="agreement-subtotal-value">
+                              {{ calculateItemSubtotal(quoteItem) | number: '1.2-2' }} PEN
+                            </strong>
                           </div>
                         </div>
                       }
                     </div>
                   }
+                </section>
 
-                  <div class="quote-item-footer">
-                    <span class="muted">Total del equipo</span>
-                    <strong
-                      >{{ calculateCreateOrderItemAgreementTotal(0) | number: '1.2-2' }} PEN</strong
-                    >
+                <section class="agreement-total-bar agreement-total-bar--embedded">
+                  <div class="agreement-total-main">
+                    <span>Total del equipo</span>
+                    <strong>
+                      <small>S/</small>
+                      {{ calculateCreateOrderItemAgreementTotal(0) | number: '1.2-2' }}
+                    </strong>
                   </div>
-                </div>
+                  <div class="agreement-total-meta">
+                    <span>Servicio: S/ {{ technicalServiceOption.price | number: '1.2-2' }}</span>
+                    @if (getCreateOrderAgreementProductItems(0).length > 0) {
+                      <span>
+                        Productos ({{ getCreateOrderAgreementProductItems(0).length }}): S/
+                        {{ calculateAgreementProductsTotal(getCreateOrderAgreementProductItems(0)) | number: '1.2-2' }}
+                      </span>
+                    }
+                  </div>
+                </section>
+              </div>
             </div>
           }
 
@@ -1509,7 +1523,7 @@
           @if (canAddAnotherCreateServiceOrderCandidate()) {
             <button class="btn btn-outline" type="button" (click)="beginAnotherCreateServiceOrderCandidate()">
               <i class="fas fa-plus"></i>
-              Agregar otro equipo
+              Agregar equipo
             </button>
           }
           @if (!isLastCreateServiceOrderStep()) {
@@ -1569,7 +1583,7 @@
             }
             @if (isWarrantyServiceOrderAgreementContext()) {
               <p class="muted">
-                Garantía: acuerdo no facturable (productos y servicios en S/ 0.00).
+                Garantía: acuerdo no facturable (productos y servicio técnico en S/ 0.00).
               </p>
             }
           </div>
@@ -1583,277 +1597,289 @@
           </div>
         </div>
 
-        <form [formGroup]="createServiceOrderAgreementForm" class="quote-shell">
-          <div class="quote-main">
-            <div class="quote-items-pane">
-              <div class="pane-header">
-                <div>
-                  <h4><i class="fas fa-layer-group"></i> Items del acuerdo</h4>
-                  <p class="muted">
-                    Agrega productos o servicios; los precios se calculan automáticamente.
-                  </p>
-                </div>
-                <div class="add-item-buttons">
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-info"
-                    (click)="addProductToServiceOrderAgreement()"
-                  >
-                    <i class="fas fa-box"></i> Producto
-                  </button>
-                  <a
-                    class="btn btn-sm btn-outline-secondary"
-                    [routerLink]="['/inventory']"
-                    [queryParams]="{ tab: 'products' }"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    <i class="fas fa-external-link-alt"></i> Abrir productos
-                  </a>
-                </div>
+        <form [formGroup]="createServiceOrderAgreementForm" class="quote-shell quote-shell--agreement">
+          <section class="agreement-section agreement-required-card">
+            <div class="agreement-required-strip">
+              <span>Componente obligatorio</span>
+              <span>Siempre incluido</span>
+            </div>
+            <div class="agreement-required-body">
+              <div class="agreement-equipment-copy">
+                <label>Equipo</label>
+                <h3>
+                  @if (selectedServiceOrder) {
+                    {{ getServiceOrderLabel(selectedServiceOrder) }}
+                  } @else {
+                    Selecciona un equipo desde la tabla principal.
+                  }
+                </h3>
+                <p>
+                  {{
+                    selectedServiceOrder?.initialIssue ||
+                      'Registra el problema inicial para contextualizar el acuerdo.'
+                  }}
+                </p>
+                @if (selectedServiceOrder?.serviceType === serviceTypeEnum.DIAGNOSIS) {
+                  <div class="agreement-context-card">
+                    <label>Diagnóstico del técnico</label>
+                    @if (isLoadingDiagnosis) {
+                      <p><i class="fas fa-spinner fa-spin"></i> Cargando diagnóstico...</p>
+                    } @else if (currentDiagnosis) {
+                      <p>{{ currentDiagnosis.summary }}</p>
+                      @if (currentDiagnosis.details) {
+                        <small>{{ currentDiagnosis.details }}</small>
+                      }
+                    } @else {
+                      <p>Sin diagnóstico registrado</p>
+                    }
+                  </div>
+                }
               </div>
 
-              @if (quoteItems.length === 0) {
-                <div class="empty-state-tall">
-                  <i class="fas fa-layer-group"></i>
-                  <p>Agrega productos o servicios para comenzar el acuerdo.</p>
-                </div>
-              } @else {
-                <div class="quote-items-list">
-                  @for (item of quoteItems; let i = $index; track item.id) {
-                    <div class="quote-item-card">
-                      <div class="quote-item-card-header">
-                        <div class="pill">
-                          <i
-                            class="fas"
-                            [ngClass]="item.type === 'product' ? 'fa-box' : 'fa-tools'"
-                          ></i>
-                          {{ item.type === 'product' ? 'Producto' : 'Servicio' }}
-                        </div>
-                        <div class="item-actions">
-                          <span class="muted small">Item #{{ i + 1 }}</span>
-                          @if (item.type === 'product') {
-                            <button
-                              type="button"
-                              class="btn-icon btn-delete"
-                              (click)="removeServiceOrderAgreementItem(i)"
-                              title="Eliminar"
-                            >
-                              <i class="fas fa-trash"></i>
-                            </button>
-                          }
-                        </div>
-                      </div>
-
-                      @if (item.type === 'product') {
-                        <div class="quote-item-row">
-                          <div class="item-input full-width">
-                            <label>Producto</label>
-                            <ng-select
-                              [items]="products"
-                              bindValue="id"
-                              [searchFn]="productSearchFn"
-                              [clearable]="true"
-                              placeholder="Selecciona"
-                              [(ngModel)]="item.productId"
-                              (ngModelChange)="onProductSelected(item, $event)"
-                              [ngModelOptions]="{ standalone: true }"
-                            >
-                              <ng-template ng-label-tmp let-product="item">
-                                {{ product?.sku }} · {{ product?.name }}
-                              </ng-template>
-                              <ng-template ng-option-tmp let-product="item">
-                                {{ product?.sku }} · {{ product?.name }}
-                              </ng-template>
-                            </ng-select>
-                          </div>
-                        </div>
-                        <div class="quote-item-row">
-                          <div class="item-input compact">
-                            <label>Cant.</label>
-                            <input
-                              type="number"
-                              min="1"
-                              [(ngModel)]="item.quantity"
-                              (ngModelChange)="onProductQuantityChange(item, $event)"
-                              [ngModelOptions]="{ standalone: true }"
-                            />
-                          </div>
-                          <div class="item-input price">
-                            <label>Precio</label>
-                            <div class="price-display">
-                              <strong
-                                >{{ item.unitPrice || 0 | number: '1.2-2' }}
-                                {{ createServiceOrderAgreementForm.get('currency')?.value }}</strong
-                              >
-                            </div>
-                          </div>
-                        </div>
-                        <div class="quote-item-row">
-                          <div class="item-input full-width">
-                            <label>Notas</label>
-                            <input
-                              type="text"
-                              placeholder="Observaciones"
-                              [(ngModel)]="item.notes"
-                              [ngModelOptions]="{ standalone: true }"
-                            />
-                          </div>
-                        </div>
+              @if (getQuoteTechnicalServiceItem(); as technicalServiceItem) {
+                <div class="agreement-service-pricing">
+                  <label>Servicio técnico ({{ createServiceOrderAgreementForm.get('currency')?.value }})</label>
+                  @if (isNonBillableServiceContext()) {
+                    <div class="agreement-currency-input agreement-currency-input-readonly">
+                      <span>S/</span>
+                      <input type="text" [value]="technicalServiceItem.unitPrice | number: '1.2-2'" readonly />
+                    </div>
+                    <div class="agreement-minimum-copy">
+                      <span>Línea no facturable por garantía.</span>
+                    </div>
+                  } @else {
+                    <div
+                      class="agreement-currency-input"
+                      [class.field-invalid]="!isTechnicalServiceLineAmountValid(technicalServiceItem)"
+                    >
+                      <span>S/</span>
+                      <input
+                        type="number"
+                        min="20"
+                        step="0.01"
+                        [class.input-error]="!isTechnicalServiceLineAmountValid(technicalServiceItem)"
+                        [ngModel]="technicalServiceItem.unitPrice"
+                        (ngModelChange)="updateTechnicalServiceAmount(technicalServiceItem, $event)"
+                        [ngModelOptions]="{ standalone: true }"
+                      />
+                    </div>
+                    <div
+                      class="agreement-minimum-copy"
+                      [class.invalid]="!isTechnicalServiceLineAmountValid(technicalServiceItem)"
+                      aria-live="polite"
+                    >
+                      @if (!isTechnicalServiceLineAmountValid(technicalServiceItem)) {
+                        <span>Debe ser al menos S/ {{ technicalServiceOption.price | number: '1.2-2' }}</span>
+                      } @else {
+                        <span>Mínimo coordinable: S/ {{ technicalServiceOption.price | number: '1.2-2' }}</span>
                       }
-
-                      @if (item.type === 'service') {
-                        <div class="quote-item-row">
-                          <div class="item-input full-width">
-                            <label>Servicio</label>
-                            <div class="selected-item highlight">
-                              {{ technicalServiceOption.name }}
-                            </div>
-                          </div>
-                        </div>
-                        <div class="quote-item-row" *ngIf="!isNonBillableServiceContext()">
-                          <div class="item-input compact">
-                            <label>Monto</label>
-                            <input
-                              type="number"
-                              min="20"
-                              step="0.01"
-                              [ngModel]="item.unitPrice"
-                              (ngModelChange)="updateTechnicalServiceAmount(item, $event)"
-                              [ngModelOptions]="{ standalone: true }"
-                            />
-                          </div>
-                          <div class="item-input price">
-                            <label>Mínimo</label>
-                            <div class="price-display">
-                              <strong>
-                                {{ technicalServiceOption.price | number: '1.2-2' }}
-                                {{ createServiceOrderAgreementForm.get('currency')?.value }}
-                              </strong>
-                            </div>
-                          </div>
-                        </div>
-                        <div class="quote-item-row">
-                          <div class="item-input full-width">
-                            <label>Notas</label>
-                            <input
-                              type="text"
-                              placeholder="Observaciones"
-                              [(ngModel)]="item.notes"
-                              [ngModelOptions]="{ standalone: true }"
-                            />
-                          </div>
-                        </div>
-                      }
-
-                      <div class="quote-item-footer">
-                        <span class="muted">Subtotal</span>
-                        <strong
-                          >{{ calculateItemSubtotal(item) | number: '1.2-2' }}
-                          {{ createServiceOrderAgreementForm.get('currency')?.value }}</strong
-                        >
-                      </div>
                     </div>
                   }
                 </div>
               }
             </div>
 
-            <div class="quote-summary-pane">
-              <div class="summary-card">
-                <h5>Datos generales</h5>
-                <div class="info-tile">
-                  <p class="muted small">
-                    {{
-                      selectedServiceOrder?.serviceType === serviceTypeEnum.STANDARD_SERVICE
-                        ? 'Detalle del servicio'
-                        : 'Problema inicial'
-                    }}
-                  </p>
-                  <p class="strong">
-                    {{ selectedServiceOrder?.initialIssue || 'Sin detalle registrado' }}
-                  </p>
-                </div>
-                @if (selectedServiceOrder?.serviceType === serviceTypeEnum.DIAGNOSIS) {
-                  <div class="info-tile">
-                    <p class="muted small">Diagnóstico del técnico</p>
-                    @if (isLoadingDiagnosis) {
-                      <p class="strong">
-                        <i class="fas fa-spinner fa-spin"></i> Cargando diagnóstico...
-                      </p>
-                    } @else if (currentDiagnosis) {
-                      <p class="strong">{{ currentDiagnosis.summary }}</p>
-                      @if (currentDiagnosis.details) {
-                        <p class="muted">{{ currentDiagnosis.details }}</p>
-                      }
-                    } @else {
-                      <p class="strong">Sin diagnóstico registrado</p>
-                    }
-                  </div>
-                }
-                <div class="field">
-                  <label>Equipo del acuerdo *</label>
-                  @if (selectedServiceOrder) {
-                    <div class="selected-item highlight">
-                      {{ getServiceOrderLabel(selectedServiceOrder) }}
-                    </div>
-                  } @else {
-                    <div class="selected-item empty">
-                      Selecciona un equipo desde la tabla principal.
-                    </div>
-                  }
-                </div>
-                <div class="field">
-                  <label for="currency">Moneda *</label>
-                  <select id="currency" class="form-control" formControlName="currency">
-                    <option value="PEN">PEN - Sol Peruano</option>
-                    <option value="USD">USD - Dólar</option>
-                    <option value="EUR">EUR - Euro</option>
-                  </select>
-                </div>
+            @if (getQuoteTechnicalServiceItem(); as technicalServiceItem) {
+              <div class="agreement-inline-note">
+                <label>Notas del servicio técnico</label>
+                <input
+                  type="text"
+                  placeholder="Observaciones para esta línea base"
+                  [(ngModel)]="technicalServiceItem.notes"
+                  [ngModelOptions]="{ standalone: true }"
+                />
               </div>
+            }
+          </section>
 
-              <div class="summary-card total-card">
-                <div class="summary-row">
-                  <span>Items</span>
-                  <strong>{{ quoteItems.length }}</strong>
-                </div>
-                <div class="summary-row">
-                  <span>Total</span>
-                  <strong class="highlight-total"
-                    >{{ calculateServiceOrderAgreementTotal() | number: '1.2-2' }}
-                    {{ createServiceOrderAgreementForm.get('currency')?.value }}</strong
-                  >
-                </div>
+          <section class="agreement-section agreement-products-section">
+            <div class="agreement-section-header">
+              <div class="agreement-section-title">
+                <span>Productos adicionales</span>
+                <p>El servicio técnico base ya está incluido. Suma productos del pool según haga falta.</p>
               </div>
-
-              <div class="summary-actions pb-4">
+              <div class="agreement-products-actions">
                 <button
-                  class="btn btn-secondary"
                   type="button"
-                  (click)="closeCreateServiceOrderAgreementModal()"
+                  class="agreement-add-product-btn"
+                  (click)="addProductToServiceOrderAgreement()"
                 >
-                  Cancelar
+                  <span>+</span>
+                  Agregar producto
                 </button>
-                <button
-                  class="btn btn-primary"
-                  type="button"
-                  (click)="submitCreateServiceOrderAgreement()"
-                  [disabled]="quoteItems.length === 0 || isCreatingServiceOrderAgreement"
+                <a
+                  class="agreement-open-products-link"
+                  [routerLink]="['/inventory']"
+                  [queryParams]="{ tab: 'products' }"
+                  target="_blank"
+                  rel="noopener"
                 >
-                  <i class="fas fa-check"></i>
-                  {{
-                    isEditingDraftServiceOrderAgreement
-                      ? 'Guardar borrador'
-                      : isResubmittingServiceOrderAgreement
-                        ? 'Actualizar acuerdo'
-                        : 'Crear acuerdo'
-                  }}
-                </button>
+                  <i class="fas fa-external-link-alt"></i> Abrir productos
+                </a>
               </div>
             </div>
-          </div>
+
+            @if (getQuoteProductItems().length === 0) {
+              <div class="agreement-empty-state">
+                <strong>Sin productos adicionales</strong>
+                <p>Puedes cerrar el acuerdo con la línea técnica o sumar repuestos si el servicio lo requiere.</p>
+              </div>
+            } @else {
+              <div class="quote-items">
+                @for (item of getQuoteProductItems(); let i = $index; track item.id) {
+                  <div class="agreement-item-card">
+                    <div class="agreement-item-header">
+                      <span class="agreement-item-label">Producto #{{ i + 1 }}</span>
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        aria-label="Eliminar producto adicional {{ i + 1 }}"
+                        (click)="removeServiceOrderAgreementItem(quoteItems.indexOf(item))"
+                        title="Eliminar"
+                      >
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+
+                    <div class="agreement-product-grid">
+                      <div class="agreement-product-field agreement-product-field-name">
+                        <label>Producto</label>
+                        <ng-select
+                          [items]="products"
+                          bindValue="id"
+                          [searchFn]="productSearchFn"
+                          [clearable]="true"
+                          placeholder="Selecciona"
+                          [(ngModel)]="item.productId"
+                          (ngModelChange)="onProductSelected(item, $event)"
+                          [ngModelOptions]="{ standalone: true }"
+                        >
+                          <ng-template ng-label-tmp let-product="item">
+                            {{ product?.sku }} · {{ product?.name }}
+                          </ng-template>
+                          <ng-template ng-option-tmp let-product="item">
+                            {{ product?.sku }} · {{ product?.name }}
+                          </ng-template>
+                        </ng-select>
+                      </div>
+                      <div class="agreement-product-field agreement-product-field-qty">
+                        <label>Cantidad</label>
+                        <input
+                          type="number"
+                          min="1"
+                          [(ngModel)]="item.quantity"
+                          (ngModelChange)="onProductQuantityChange(item, $event)"
+                          [ngModelOptions]="{ standalone: true }"
+                        />
+                      </div>
+                      <div class="agreement-product-field">
+                        <label>Precio</label>
+                        <div class="price-display">
+                          <strong>
+                            {{ item.unitPrice || 0 | number: '1.2-2' }}
+                            {{ createServiceOrderAgreementForm.get('currency')?.value }}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="agreement-inline-note">
+                      <label>Notas</label>
+                      <input
+                        type="text"
+                        placeholder="Observaciones"
+                        [(ngModel)]="item.notes"
+                        [ngModelOptions]="{ standalone: true }"
+                      />
+                    </div>
+
+                    <div class="agreement-subtotal-row">
+                      <span class="agreement-subtotal-label">Subtotal</span>
+                      <strong class="agreement-subtotal-value">
+                        {{ calculateItemSubtotal(item) | number: '1.2-2' }}
+                        {{ createServiceOrderAgreementForm.get('currency')?.value }}
+                      </strong>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </section>
+
+          <section class="agreement-section agreement-sidecar-grid">
+            <div class="summary-card agreement-context-summary">
+              <h5>Datos generales</h5>
+              <div class="field">
+                <label for="currency">Moneda *</label>
+                <select id="currency" class="form-control" formControlName="currency">
+                  <option value="PEN">PEN - Sol Peruano</option>
+                  <option value="USD">USD - Dólar</option>
+                  <option value="EUR">EUR - Euro</option>
+                </select>
+              </div>
+              @if ((isResubmittingServiceOrderAgreement || isEditingDraftServiceOrderAgreement) && selectedServiceOrderAgreementDetail) {
+                <div class="info-tile">
+                  <p class="muted small">Versión en edición</p>
+                  <p class="strong">#{{ selectedServiceOrderAgreementDetail.sequenceNumber }}</p>
+                </div>
+              }
+              @if (isWarrantyServiceOrderAgreementContext()) {
+                <div class="info-tile">
+                  <p class="muted small">Contexto</p>
+                  <p class="strong">Garantía no facturable</p>
+                </div>
+              }
+            </div>
+          </section>
+
+          <section class="agreement-total-bar">
+            <div class="agreement-total-main">
+              <span>Total del acuerdo</span>
+              <strong>
+                <small>S/</small>
+                {{ calculateServiceOrderAgreementTotal() | number: '1.2-2' }}
+              </strong>
+            </div>
+            <div class="agreement-total-meta">
+              @if (getQuoteTechnicalServiceItem(); as technicalServiceItem) {
+                <span>
+                  Servicio: S/
+                  {{ calculateItemSubtotal(technicalServiceItem) | number: '1.2-2' }}
+                </span>
+              }
+              <span>
+                Productos ({{ getQuoteProductItems().length }}): S/
+                {{ calculateAgreementProductsTotal(getQuoteProductItems()) | number: '1.2-2' }}
+              </span>
+            </div>
+          </section>
         </form>
+        <div class="modal-footer agreement-footer">
+          <button
+            class="btn agreement-cancel-btn"
+            type="button"
+            (click)="closeCreateServiceOrderAgreementModal()"
+          >
+            Cancelar
+          </button>
+          <div class="agreement-footer-actions">
+            <button
+              class="btn agreement-confirm-btn"
+              type="button"
+              (click)="submitCreateServiceOrderAgreement()"
+              [disabled]="quoteItems.length === 0 || isCreatingServiceOrderAgreement"
+            >
+              <i class="fas fa-check"></i>
+              {{
+                isEditingDraftServiceOrderAgreement
+                  ? 'Guardar borrador'
+                  : isResubmittingServiceOrderAgreement
+                    ? 'Actualizar acuerdo'
+                    : 'Crear acuerdo'
+              }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   }
@@ -2072,7 +2098,7 @@
                   class="detail-section"
                   *ngIf="selectedServiceOrderAgreementDetail.serviceItems?.length"
                 >
-                  <h5><i class="fas fa-tools"></i> Servicios</h5>
+                  <h5><i class="fas fa-tools"></i> Servicio técnico</h5>
                   <div class="detail-list">
                     @for (
                       service of selectedServiceOrderAgreementDetail.serviceItems;
@@ -2081,9 +2107,7 @@
                       <div class="detail-row">
                         <div>
                           <p class="detail-title">{{ getServiceLabel(service.serviceId) }}</p>
-                          <span class="muted">{{
-                            formatEstimatedDuration(service.estimatedHours)
-                          }}</span>
+                          <span class="muted">Línea fija del acuerdo</span>
                         </div>
                         <div class="detail-amount">
                           <span class="muted">Importe:</span>
@@ -2204,123 +2228,6 @@
       </div>
     </div>
   }
-
-  @if (showReceptionInboxModal) {
-    <div class="modal-overlay inbox-overlay" (click)="closeReceptionInboxModal()">
-      <div class="modal-content inbox-modal" (click)="$event.stopPropagation()">
-        <div class="modal-header inbox-header">
-          <div>
-            <p class="modal-eyebrow">Recepción</p>
-            <h2>Coordinación con cliente</h2>
-          </div>
-          <button class="btn-close" type="button" (click)="closeReceptionInboxModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-
-        <div class="inbox-layout inbox-layout-single">
-          <section class="inbox-main">
-            @if (isLoadingReceptionInbox) {
-              <p class="empty-text">Cargando conversación...</p>
-            } @else if (receptionInboxActiveThread) {
-              <div class="inbox-thread-meta">
-                <div>
-                  <strong>{{ receptionInboxActiveThread.serviceOrderCode }} · {{ receptionInboxActiveThread.equipmentLabel }}</strong>
-                  <p>{{ receptionInboxActiveThread.clientAlias }} · {{ receptionInboxActiveThread.assignedTechnicianAlias }}</p>
-                </div>
-              </div>
-
-              <div class="inbox-messages">
-                @for (message of receptionInboxMessages; track message.id) {
-                  <article
-                    class="message-bubble"
-                    [class.message-bubble-own]="message.authorRole === 'RECEPTION'"
-                  >
-                    <header>
-                      <strong>{{ getReceptionInboxAuthorLabel(message) }}</strong>
-                      <span>{{ message.createdAt | date: 'dd/MM HH:mm' }}</span>
-                    </header>
-                    @if (message.text) {
-                      <p>{{ message.text }}</p>
-                    }
-                    @if (message.attachments.length) {
-                      <div class="message-attachments">
-                        @for (attachment of message.attachments; track attachment.id) {
-                          <div class="message-attachment-card">
-                            @if (attachment.previewable && getReceptionInboxAttachmentPreviewUrl(attachment.id)) {
-                              <img
-                                class="message-attachment-image"
-                                [src]="getReceptionInboxAttachmentPreviewUrl(attachment.id)"
-                                [alt]="attachment.fileName"
-                              />
-                            } @else {
-                              <span class="message-attachment-icon">
-                                <i class="fas" [class.fa-image]="attachment.attachmentType === 'image'" [class.fa-file-pdf]="attachment.attachmentType === 'pdf'" [class.fa-file-audio]="attachment.attachmentType === 'audio'" [class.fa-file-lines]="attachment.attachmentType === 'document'"></i>
-                              </span>
-                            }
-                            <div class="message-attachment-meta">
-                              <strong>{{ attachment.fileName }}</strong>
-                              <small>{{ attachment.mimeType }} · {{ attachment.sizeBytes / 1024 | number: '1.0-0' }} KB</small>
-                            </div>
-                            <button class="btn btn-light btn-sm" type="button" (click)="downloadReceptionInboxAttachment(attachment)">
-                              Descargar
-                            </button>
-                          </div>
-                        }
-                      </div>
-                    }
-                  </article>
-                }
-              </div>
-
-              <div class="inbox-composer">
-                <textarea
-                  rows="3"
-                  [value]="receptionInboxDraftMessage"
-                  (input)="receptionInboxDraftMessage = $any($event.target).value"
-                  placeholder="Escribe el mensaje para coordinar con el cliente..."
-                ></textarea>
-                <input #receptionInboxFileInput type="file" multiple hidden (change)="onReceptionInboxFilesSelected($event)" />
-                @if (receptionInboxDraftAttachments.length) {
-                  <div class="draft-attachments">
-                    @for (attachment of receptionInboxDraftAttachments; track attachment.file.name + attachment.file.size) {
-                      <div class="draft-attachment-chip">
-                        @if (attachment.previewUrl) {
-                          <img [src]="attachment.previewUrl" [alt]="attachment.file.name" />
-                        } @else {
-                          <i class="fas fa-paperclip"></i>
-                        }
-                        <span>{{ attachment.file.name }}</span>
-                        <button type="button" (click)="removeReceptionInboxDraftAttachment($index)">
-                          <i class="fas fa-times"></i>
-                        </button>
-                      </div>
-                    }
-                  </div>
-                }
-                <div class="inbox-composer-actions">
-                  <button class="btn btn-outline-secondary" type="button" (click)="closeReceptionInboxModal()">
-                    Cerrar
-                  </button>
-                  <button class="btn btn-outline-secondary" type="button" (click)="triggerReceptionInboxAttachmentPicker(receptionInboxFileInput)">
-                    <i class="fas fa-paperclip"></i>
-                    Adjuntar
-                  </button>
-                  <button class="btn btn-success" type="button" [disabled]="isSendingReceptionInbox" (click)="sendReceptionInboxMessage()">
-                    <i class="fab fa-whatsapp"></i>
-                    {{ isSendingReceptionInbox ? 'Enviando...' : 'Enviar' }}
-                  </button>
-                </div>
-              </div>
-            } @else {
-              <p class="empty-text">No hay conversación disponible para esta orden.</p>
-            }
-          </section>
-        </div>
-      </div>
-    </div>
-  }
-
   <!-- Modal de edición de orden -->
   @if (showEditServiceOrderModal) {
     <div class="modal-overlay" (click)="closeEditServiceOrderModal()">
@@ -2537,3 +2444,4 @@
     </div>
   </div>
 </div>
+
