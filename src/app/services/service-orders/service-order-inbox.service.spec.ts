@@ -2,14 +2,20 @@ import { of } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 
 import { ServiceOrderInboxService } from './service-order-inbox.service';
+import { AuthSessionService } from '../auth-session.service';
 
 describe('ServiceOrderInboxService', () => {
   let service: ServiceOrderInboxService;
   let httpClientSpy: jasmine.SpyObj<HttpClient>;
+  let authSessionSpy: jasmine.SpyObj<AuthSessionService>;
 
   beforeEach(() => {
     httpClientSpy = jasmine.createSpyObj<HttpClient>('HttpClient', ['get', 'post', 'put']);
-    service = new ServiceOrderInboxService(httpClientSpy);
+    authSessionSpy = jasmine.createSpyObj<AuthSessionService>('AuthSessionService', [
+      'getAccessToken',
+      'refreshAccessToken',
+    ]);
+    service = new ServiceOrderInboxService(httpClientSpy, authSessionSpy);
   });
 
   it('uses the dedicated order-to-thread endpoint', () => {

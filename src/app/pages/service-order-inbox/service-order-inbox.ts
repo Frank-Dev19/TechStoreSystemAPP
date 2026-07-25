@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { catchError, finalize, forkJoin, of, Subscription } from 'rxjs';
+import { auditTime, catchError, finalize, forkJoin, of, Subscription } from 'rxjs';
 
 import {
   ServiceOrderInboxAttachment,
@@ -8,14 +8,99 @@ import {
   ServiceOrderInboxThreadOrderSummary,
   ServiceOrderInboxThreadSummary,
 } from '../../models/service-orders/service-order-inbox';
+import { ServiceOrderDiagnosis } from '../../models/service-orders/service-order-diagnosis';
+import { ServiceOrderAgreement } from '../../models/service-orders/service-agreement';
+import { ServiceOrder, ServiceType } from '../../models/service-orders/service-order';
 import { CurrentUserService } from '../../services/current-user.service';
+import { ServiceOrderAgreementService } from '../../services/service-orders/service-agreement.service';
+import { ServiceOrderDiagnosisService } from '../../services/service-orders/service-order-diagnosis.service';
 import { ServiceOrderInboxService } from '../../services/service-orders/service-order-inbox.service';
-import { hasAnyRole, SUPERVISOR_ROLE_NAMES, TECHNICIAN_ROLE_NAMES } from '../../utils/role.utils';
+import { ServiceOrderService } from '../../services/service-orders/service-order.service';
+import {
+  ADMIN_ROLE_NAMES,
+  hasAnyRole,
+  SUPERVISOR_ROLE_NAMES,
+  TECHNICIAN_ROLE_NAMES,
+} from '../../utils/role.utils';
 
 interface InboxDraftAttachment {
   file: File;
   previewUrl: string | null;
 }
+
+const SERVICE_ORDER_LABELS: Record<string, string> = {
+  ABIERTA: 'Abierta',
+  EN_PROCESO: 'En proceso',
+  LISTA_PARA_ENTREGA: 'Lista para entrega',
+  ENTREGADA: 'Entregada',
+  CANCELADA: 'Cancelada',
+  CERRADA_SIN_SOLUCION: 'Cerrada sin solución',
+  PENDIENTE_ASIGNACION: 'Pendiente de asignación',
+  ASIGNADA: 'Asignada',
+  EN_DIAGNOSTICO: 'En diagnóstico',
+  DIAGNOSTICADA: 'Diagnosticada',
+  PENDIENTE_DEFINICION_COMERCIAL: 'Pendiente de definición comercial',
+  AUTORIZADA_PARA_EJECUCION: 'Autorizada para ejecución',
+  EN_EJECUCION: 'En ejecución',
+  BLOQUEADA: 'Bloqueada',
+  ESPERANDO_REPUESTOS_O_TERCERO: 'Esperando repuestos o servicio externo',
+  RESUELTA: 'Resuelta',
+  SIN_SOLUCION: 'Sin solución',
+  NO_REQUIERE: 'No requiere',
+  PENDIENTE_PROPUESTA: 'Pendiente de propuesta',
+  PROPUESTA_EMITIDA: 'Propuesta emitida',
+  PENDIENTE_RESPUESTA_CLIENTE: 'Pendiente de respuesta del cliente',
+  AUTORIZADA: 'Autorizada',
+  RECHAZADA: 'Rechazada',
+  EXPIRADA: 'Expirada',
+  REEMPLAZADA: 'Reemplazada',
+  NO_APLICA: 'No aplica',
+  PENDIENTE: 'Pendiente',
+  PARCIAL: 'Parcial',
+  TOTAL: 'Pagada',
+  EXONERADO: 'Exonerado',
+  REVERTIDO: 'Revertido',
+  CURRENT: 'Vigente',
+  SUPERSEDED: 'Reemplazado',
+  REPAIRABLE: 'Reparable',
+  IRREPARABLE: 'Irreparable',
+  NOT_COST_EFFECTIVE: 'Reparación no conveniente',
+  NO_PARTS_AVAILABLE: 'Sin repuestos disponibles',
+  NO_FAULT_FOUND: 'No se encontró ninguna falla',
+  WARRANTY_APPLIES: 'Aplica garantía',
+  WARRANTY_REJECTED: 'Garantía rechazada',
+  DRAFT: 'Borrador',
+  CONFIRMED: 'Confirmado',
+  VOIDED: 'Anulado',
+  LOW: 'Baja',
+  MEDIUM: 'Media',
+  HIGH: 'Alta',
+  CLIENT: 'Cliente',
+  TECHNICIAN: 'Técnico',
+  RECEPTION: 'Recepción',
+  SUPERVISOR: 'Supervisor',
+  SYSTEM: 'Sistema',
+  QUEUED: 'En cola',
+  SENT: 'Enviado',
+  DELIVERED: 'Entregado',
+  READ: 'Leído',
+  RECEIVED: 'Recibido',
+  FAILED: 'Fallido',
+  SKIPPED: 'Omitido',
+};
+
+const EQUIPMENT_TYPE_LABELS: Record<string, string> = {
+  LAPTOP: 'Laptop',
+  DESKTOP_PC: 'Computadora de escritorio',
+  ALL_IN_ONE: 'Todo en uno',
+  PRINTER: 'Impresora',
+  SCANNER: 'Escáner',
+  PROJECTOR: 'Proyector',
+  MONITOR: 'Monitor',
+  SERVER: 'Servidor',
+  NETWORK_DEVICE: 'Equipo de red',
+  OTHER: 'Otro',
+};
 
 @Component({
   selector: 'app-service-order-inbox-page',
@@ -31,8 +116,14 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
   searchTerm = '';
   draftMessage = '';
   draftAttachments: InboxDraftAttachment[] = [];
-  selectedComposerOrderIds: number[] = [];
   attachmentPreviewUrls: Record<number, string> = {};
+  selectedOrderDetail: ServiceOrder | null = null;
+  selectedOrderDiagnoses: ServiceOrderDiagnosis[] = [];
+  selectedOrderAgreements: ServiceOrderAgreement[] = [];
+  orderDetailTab: 'general' | 'diagnosis' | 'agreement' = 'general';
+  isOrderDetailOpen = false;
+  isLoadingOrderDetail = false;
+  orderDetailError = '';
   isLoadingThreads = false;
   isLoadingMessages = false;
   isSendingMessage = false;
@@ -43,12 +134,16 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
 
   constructor(
     private readonly inboxService: ServiceOrderInboxService,
+    private readonly serviceOrderService: ServiceOrderService,
+    private readonly diagnosisService: ServiceOrderDiagnosisService,
+    private readonly agreementService: ServiceOrderAgreementService,
     private readonly currentUserService: CurrentUserService,
     private readonly route: ActivatedRoute,
     private readonly router: Router,
   ) {}
 
   ngOnInit(): void {
+    this.subscribeToInboxChanges();
     const queryMap = this.route.snapshot.queryParamMap;
     const serviceOrderId = Number(queryMap.get('serviceOrderId') ?? 0);
     const threadId = Number(queryMap.get('threadId') ?? 0);
@@ -72,17 +167,21 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
   }
 
   get showSensitiveCustomerData(): boolean {
-    return !this.isTechnicianViewer;
+    const roles = this.currentUserService.value?.roles;
+    return (
+      hasAnyRole(roles, SUPERVISOR_ROLE_NAMES) ||
+      hasAnyRole(roles, ADMIN_ROLE_NAMES)
+    );
   }
 
   get searchPlaceholder(): string {
-    return this.isTechnicianViewer
-      ? 'Buscar cliente, código o equipo...'
-      : 'Buscar cliente, código o teléfono...';
+    return this.showSensitiveCustomerData
+      ? 'Buscar cliente, código o teléfono...'
+      : 'Buscar cliente, código o equipo...';
   }
 
   get contextCardTitle(): string {
-    return this.isTechnicianViewer ? 'Contexto operativo' : 'Contexto del cliente';
+    return this.showSensitiveCustomerData ? 'Contexto del cliente' : 'Contexto operativo';
   }
 
   get isCustomerServiceWindowOpen(): boolean {
@@ -95,18 +194,6 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
 
   get closedWindowMessage(): string {
     return 'La ventana de 24h está cerrada. No se puede enviar texto libre.';
-  }
-
-  get orderDetailRoute(): string {
-    if (hasAnyRole(this.currentUserService.value?.roles, TECHNICIAN_ROLE_NAMES)) {
-      return '/technician-panel';
-    }
-
-    if (hasAnyRole(this.currentUserService.value?.roles, SUPERVISOR_ROLE_NAMES)) {
-      return '/supervisor-panel';
-    }
-
-    return '/reception-panel';
   }
 
   get filteredThreads(): ServiceOrderInboxThreadSummary[] {
@@ -191,7 +278,8 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
   }
 
   selectThread(thread: ServiceOrderInboxThreadSummary, syncRoute = true): void {
-    this.selectedThread = thread;
+    this.selectedThread = { ...thread, unreadCount: 0 };
+    this.clearThreadUnreadCount(thread.id);
     this.loadThreadDetail(thread.id, syncRoute);
   }
 
@@ -208,10 +296,8 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
 
     this.isSendingMessage = true;
     const attachments = this.draftAttachments.map((attachment) => attachment.file);
-    const selectedOrderIds = [...this.selectedComposerOrderIds];
-
     const request = this.inboxService
-      .sendMessage(this.selectedThread.id, text, attachments, selectedOrderIds)
+      .sendMessage(this.selectedThread.id, text, attachments)
       .pipe(finalize(() => (this.isSendingMessage = false)))
       .subscribe({
         next: () => {
@@ -223,21 +309,6 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
           this.messageError = error?.error?.message || 'No pudimos enviar el mensaje.';
         },
       });
-
-    this.subscriptions.add(request);
-  }
-
-  replaceMessageOrders(message: ServiceOrderInboxMessage, serviceOrderIds: number[]): void {
-    const request = this.inboxService.replaceMessageOrders(message.id, serviceOrderIds).subscribe({
-      next: (updatedMessage) => {
-        this.messages = this.messages.map((entry) =>
-          entry.id === message.id ? { ...entry, serviceOrderIds: updatedMessage.serviceOrderIds ?? [] } : entry,
-        );
-      },
-      error: () => {
-        this.messageError = 'No pudimos reasociar las órdenes del mensaje.';
-      },
-    });
 
     this.subscriptions.add(request);
   }
@@ -281,15 +352,6 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
     this.subscriptions.add(request);
   }
 
-  getMessageOrders(message: ServiceOrderInboxMessage): ServiceOrderInboxThreadOrderSummary[] {
-    const ids = new Set(message.serviceOrderIds ?? []);
-    return this.threadOrders.filter((order) => ids.has(order.id));
-  }
-
-  isMessagePendingAssociation(message: ServiceOrderInboxMessage): boolean {
-    return (message.serviceOrderIds ?? []).length === 0;
-  }
-
   getThreadSecondaryMeta(thread: ServiceOrderInboxThreadSummary): string {
     const parts = [thread.equipmentLabel || 'Sin equipo'];
     if (this.showSensitiveCustomerData) {
@@ -310,6 +372,96 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
     return order.id;
   }
 
+  getInitials(value: string | null | undefined): string {
+    const parts = String(value ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!parts.length) {
+      return 'CL';
+    }
+
+    return parts
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join('');
+  }
+
+  formatStatus(value: string | null | undefined): string {
+    if (!value) {
+      return 'Sin etapa';
+    }
+
+    return SERVICE_ORDER_LABELS[value] ?? 'Estado no reconocido';
+  }
+
+  openOrderDetail(order: ServiceOrderInboxThreadOrderSummary): void {
+    this.isOrderDetailOpen = true;
+    this.isLoadingOrderDetail = true;
+    this.orderDetailError = '';
+    this.orderDetailTab = 'general';
+    this.selectedOrderDetail = null;
+    this.selectedOrderDiagnoses = [];
+    this.selectedOrderAgreements = [];
+
+    const request = forkJoin({
+      order: this.serviceOrderService.findOne(order.id),
+      diagnoses: this.diagnosisService
+        .findAll({ serviceOrderId: order.id, page: 1, limit: 100 })
+        .pipe(catchError(() => of({ data: [], total: 0, page: 1, limit: 100 }))),
+      agreements: this.agreementService
+        .findAll({ serviceOrderId: order.id, page: 1, limit: 100 })
+        .pipe(catchError(() => of({ data: [], total: 0, page: 1, limit: 100 }))),
+    })
+      .pipe(finalize(() => (this.isLoadingOrderDetail = false)))
+      .subscribe({
+        next: ({ order: detail, diagnoses, agreements }) => {
+          this.selectedOrderDetail = detail;
+          this.selectedOrderDiagnoses = diagnoses.data ?? [];
+          this.selectedOrderAgreements = agreements.data ?? [];
+        },
+        error: () => {
+          this.orderDetailError = 'No pudimos cargar los detalles de la orden.';
+        },
+      });
+
+    this.subscriptions.add(request);
+  }
+
+  closeOrderDetail(): void {
+    this.isOrderDetailOpen = false;
+    this.selectedOrderDetail = null;
+    this.selectedOrderDiagnoses = [];
+    this.selectedOrderAgreements = [];
+    this.orderDetailError = '';
+  }
+
+  setOrderDetailTab(tab: 'general' | 'diagnosis' | 'agreement'): void {
+    this.orderDetailTab = tab;
+  }
+
+  get orderHasDiagnosisFlow(): boolean {
+    return this.selectedOrderDetail?.serviceType !== ServiceType.STANDARD_SERVICE;
+  }
+
+  formatServiceType(value: ServiceType | null | undefined): string {
+    const labels: Record<ServiceType, string> = {
+      [ServiceType.STANDARD_SERVICE]: 'Servicio estándar',
+      [ServiceType.DIAGNOSIS]: 'Diagnóstico',
+      [ServiceType.WARRANTY_SERVICE]: 'Garantía',
+      [ServiceType.ASSEMBLY]: 'Ensamblaje',
+      [ServiceType.CUSTOMER_SERVICE]: 'Atención al cliente',
+    };
+    return value ? labels[value] : 'Sin especificar';
+  }
+
+  formatEquipmentType(value: string | null | undefined, other?: string | null): string {
+    if (value === 'OTHER' && other?.trim()) {
+      return other.trim();
+    }
+    return value ? (EQUIPMENT_TYPE_LABELS[value] ?? 'Equipo no especificado') : 'Equipo no especificado';
+  }
+
   private loadThreadDetail(threadId: number, syncRoute: boolean): void {
     this.isLoadingMessages = true;
     this.messageError = '';
@@ -322,11 +474,10 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
       .pipe(finalize(() => (this.isLoadingMessages = false)))
       .subscribe({
         next: ({ response, orders }) => {
-          this.selectedThread = response.thread;
+          this.selectedThread = { ...response.thread, unreadCount: 0 };
           this.messages = response.messages ?? [];
           this.messageError = '';
           this.threadOrders = orders ?? response.thread.orders ?? [];
-          this.selectedComposerOrderIds = this.resolveDefaultComposerOrderIds(response.thread, this.threadOrders);
           this.threads = this.threads.map((thread) =>
             thread.id === response.thread.id ? { ...response.thread, unreadCount: 0 } : thread,
           );
@@ -354,19 +505,39 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
     this.subscriptions.add(request);
   }
 
-  private resolveDefaultComposerOrderIds(
-    thread: ServiceOrderInboxThreadSummary,
-    orders: ServiceOrderInboxThreadOrderSummary[],
-  ): number[] {
-    if (orders.length === 1) {
-      return [orders[0].id];
-    }
+  private subscribeToInboxChanges(): void {
+    const request = this.inboxService
+      .watchChanges()
+      .pipe(auditTime(250))
+      .subscribe(() => {
+        const selectedThreadId = this.selectedThread?.id ?? null;
+        const threadsRequest = this.inboxService
+          .listThreads({ page: 1, limit: 100 })
+          .subscribe(({ data }) => {
+            this.threads = (data ?? []).map((thread) =>
+              thread.id === selectedThreadId ? { ...thread, unreadCount: 0 } : thread,
+            );
+            if (selectedThreadId) {
+              const updatedSelection = this.threads.find((thread) => thread.id === selectedThreadId);
+              if (updatedSelection) {
+                this.selectedThread = updatedSelection;
+              }
+            }
+          });
+        this.subscriptions.add(threadsRequest);
 
-    if ((thread.activeServiceOrderIds ?? []).length === 1) {
-      return [thread.activeServiceOrderIds![0]];
-    }
+        if (selectedThreadId) {
+          this.loadThreadDetail(selectedThreadId, false);
+        }
+      });
 
-    return [];
+    this.subscriptions.add(request);
+  }
+
+  private clearThreadUnreadCount(threadId: number): void {
+    this.threads = this.threads.map((thread) =>
+      thread.id === threadId ? { ...thread, unreadCount: 0 } : thread,
+    );
   }
 
   private hydrateAttachmentPreviews(messages: ServiceOrderInboxMessage[]): void {
