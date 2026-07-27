@@ -2,6 +2,7 @@
 
 # Compiled output
 /dist
+dist-codex-*/
 /tmp
 /out-tsc
 /bazel-out

@@ -9,6 +9,7 @@ export interface CreateSaleItemDto {
     quantity: number
     baseUnitPrice?: number
     finalUnitPrice?: number
+    discountPct?: number
     serialIds?: number[]
     comboId?: number | null
     description?: string

@@ -397,7 +397,8 @@
                             <th>Total</th>
                             <th>Forma de Pago</th>
                             <th>Estado</th>
-                            <th width="150">Acciones</th>
+                            <th>SUNAT</th>
+                            <th width="180">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -405,8 +406,7 @@
                             <td>{{ sale.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
                             <td>
                                 <span class="doc-type-badge">
-                                    {{ sale.documentType === 'NOTA_PEDIDO' ? 'Nota Pedido' : (sale.documentType ===
-                                    'BOLETA' ? 'Boleta' : 'Factura') }}
+                                    {{ getDocumentTypeLabel(sale.documentType) }}
                                 </span>
                             </td>
                             <td><strong>{{ sale.series }}-{{ sale.number }}</strong></td>
@@ -421,12 +421,35 @@
                                     {{ getStatusLabel(sale.status) }}
                                 </span>
                             </td>
+                            <td>
+                                <span class="electronic-status-badge"
+                                    [ngClass]="getElectronicStatusClass(getElectronicDocumentForSale(sale)?.status)"
+                                    [title]="getElectronicDocumentForSale(sale)?.sunatDescription || getElectronicDocumentForSale(sale)?.errorMessage || 'Pendiente de emision electronica'">
+                                    <i class="fas"
+                                        [class.fa-clock]="!getElectronicDocumentForSale(sale) || getElectronicDocumentForSale(sale)?.status === 'PENDING'"
+                                        [class.fa-paper-plane]="getElectronicDocumentForSale(sale)?.status === 'SENT'"
+                                        [class.fa-check-circle]="getElectronicDocumentForSale(sale)?.status === 'ACCEPTED'"
+                                        [class.fa-times-circle]="getElectronicDocumentForSale(sale)?.status === 'REJECTED'"
+                                        [class.fa-exclamation-triangle]="getElectronicDocumentForSale(sale)?.status === 'ERROR'"></i>
+                                    {{ getElectronicStatusLabel(getElectronicDocumentForSale(sale)?.status) }}
+                                </span>
+                            </td>
                             <td class="actions">
                                 <button class="btn-icon" (click)="onViewSale(sale)" title="Ver detalle">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                <button class="btn-icon" (click)="onDownloadSalePdf(sale)" title="Descargar PDF">
+                                <button class="btn-icon" (click)="onDownloadSalePdf(sale)"
+                                    [disabled]="!canDownloadElectronicPdf(sale)"
+                                    [title]="canDownloadElectronicPdf(sale) ? 'Descargar PDF electronico' : 'Primero emita electronicamente'">
                                     <i class="fas fa-file-pdf"></i>
+                                </button>
+                                <button class="btn-icon success" (click)="onSendElectronicInvoice(sale)"
+                                    [disabled]="!canSendElectronicInvoice(sale)"
+                                    [title]="getElectronicDocumentForSale(sale)?.status === 'ACCEPTED' ? 'Ya aceptado por SUNAT' : 'Emitir electronicamente'">
+                                    <i class="fas"
+                                        [class.fa-spinner]="electronicBillingLoadingBySaleId[sale.id]"
+                                        [class.fa-spin]="electronicBillingLoadingBySaleId[sale.id]"
+                                        [class.fa-paper-plane]="!electronicBillingLoadingBySaleId[sale.id]"></i>
                                 </button>
                                 <!-- Nota de Credito y Guia de Remision temporalmente deshabilitados -->
                                 <button class="btn-icon danger" *ngIf="sale.status === 'CONFIRMED'"
@@ -437,7 +460,7 @@
                         </tr>
 
                         <tr *ngIf="sales.length === 0">
-                            <td colspan="8" class="empty-message">
+                            <td colspan="9" class="empty-message">
                                 <i class="fas fa-inbox"></i>
                                 <p>No se encontraron ventas</p>
                             </td>
@@ -939,8 +962,7 @@
                     <h3 class="section-title"><i class="fas fa-file-alt"></i> Comprobante</h3>
                     <div class="form-group">
                         <label>Tipo</label>
-                        <select [(ngModel)]="saleFormData.documentType" class="form-control">
-                            <option *ngIf="saleCreationMode === 'MANUAL_PRODUCT'" value="NOTA_PEDIDO">Nota de Pedido</option>
+                        <select [(ngModel)]="saleFormData.documentType" (change)="onSaleDocumentTypeChange()" class="form-control">
                             <option value="BOLETA">Boleta</option>
                             <option value="FACTURA">Factura</option>
                         </select>
@@ -1259,9 +1281,9 @@
                     <select class="form-control" [(ngModel)]="documentSeriesFilter.documentType"
                         (change)="onDocumentSeriesFilterChange()">
                         <option value="">Todos</option>
-                        <option value="BOLETA">Boleta</option>
-                        <option value="FACTURA">Factura</option>
-                        <option value="NOTA_PEDIDO">Nota de Pedido</option>
+                        <option *ngFor="let type of documentSeriesTypes" [ngValue]="type">
+                            {{ getDocumentTypeLabel(type) }}
+                        </option>
                     </select>
                 </div>
 
@@ -1450,9 +1472,9 @@
                         <label>Tipo de Documento *</label>
                         <select class="form-control" [(ngModel)]="documentSeriesForm.documentType"
                             [disabled]="documentSeriesEditMode">
-                            <option value="BOLETA">Boleta</option>
-                            <option value="FACTURA">Factura</option>
-                            <option value="NOTA_PEDIDO">Nota de Pedido</option>
+                            <option *ngFor="let type of documentSeriesTypes" [ngValue]="type">
+                                {{ getDocumentTypeLabel(type) }}
+                            </option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -1518,6 +1540,42 @@
             <div class="modal-footer">
                 <button class="btn-secondary" (click)="closeCancelModal()">Cancelar</button>
                 <button class="btn-primary" (click)="confirmCancelSale()">Anular Venta</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Electronic Invoice Confirmation Modal -->
+    <div class="modal-overlay" *ngIf="showElectronicInvoiceConfirmModal" (click)="closeElectronicInvoiceConfirmModal()">
+        <div class="modal-content modal-small" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3><i class="fas fa-paper-plane"></i> Emitir electronicamente</h3>
+                <button class="close-button" (click)="closeElectronicInvoiceConfirmModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    Emitir electronicamente
+                    <strong>{{ pendingElectronicInvoiceSale?.series }}-{{ pendingElectronicInvoiceSale?.number }}</strong>
+                    ante SUNAT?
+                </p>
+                <p class="modal-help">
+                    El comprobante se enviara a APIsPeru y se guardara la respuesta de SUNAT.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeElectronicInvoiceConfirmModal()"
+                    [disabled]="pendingElectronicInvoiceSale && electronicBillingLoadingBySaleId[pendingElectronicInvoiceSale.id]">
+                    Cancelar
+                </button>
+                <button class="btn-primary" (click)="confirmSendElectronicInvoice()"
+                    [disabled]="pendingElectronicInvoiceSale && electronicBillingLoadingBySaleId[pendingElectronicInvoiceSale.id]">
+                    <i class="fas"
+                        [class.fa-spinner]="pendingElectronicInvoiceSale && electronicBillingLoadingBySaleId[pendingElectronicInvoiceSale.id]"
+                        [class.fa-spin]="pendingElectronicInvoiceSale && electronicBillingLoadingBySaleId[pendingElectronicInvoiceSale.id]"
+                        [class.fa-paper-plane]="!pendingElectronicInvoiceSale || !electronicBillingLoadingBySaleId[pendingElectronicInvoiceSale.id]"></i>
+                    Emitir
+                </button>
             </div>
         </div>
     </div>
@@ -1625,13 +1683,16 @@
                 <div class="detail-row">
                     <span class="detail-label">Tipo:</span>
                     <span class="detail-value">
-                        {{ selectedSale.documentType === 'NOTA_PEDIDO' ? 'Nota de Pedido' : (selectedSale.documentType
-                        === 'BOLETA' ? 'Boleta' : 'Factura') }}
+                        {{ getDocumentTypeLabel(selectedSale.documentType) }}
                     </span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Fecha:</span>
-                    <span class="detail-value">{{ selectedSale.issueDate | date:'dd/MM/yyyy' }}</span>
+                    <span class="detail-value">{{ formatDateOnly(selectedSale.issueDate) }}</span>
+                </div>
+                <div class="detail-row" *ngIf="selectedSale.createdAt">
+                    <span class="detail-label">Registrado:</span>
+                    <span class="detail-value">{{ selectedSale.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Estado:</span>
@@ -1639,6 +1700,61 @@
                         [class]="'status-' + (selectedSale.status === 'CONFIRMED' ? 'emitido' : (selectedSale.status === 'CANCELLED' ? 'anulado' : 'pendiente'))">
                         {{ getStatusLabel(selectedSale.status) }}
                     </span>
+                </div>
+            </div>
+
+            <!-- Facturacion Electronica -->
+            <div class="detail-section">
+                <h4 class="detail-section-title">Facturacion Electronica</h4>
+                <div class="detail-row">
+                    <span class="detail-label">Estado SUNAT:</span>
+                    <span class="detail-value">
+                        <span class="electronic-status-badge"
+                            [ngClass]="getElectronicStatusClass(selectedElectronicDocument?.status)">
+                            {{ getElectronicStatusLabel(selectedElectronicDocument?.status) }}
+                        </span>
+                    </span>
+                </div>
+                <div class="detail-row" *ngIf="selectedElectronicDocument">
+                    <span class="detail-label">Respuesta:</span>
+                    <span class="detail-value">{{ selectedElectronicDocument.sunatDescription || selectedElectronicDocument.errorMessage || '-' }}</span>
+                </div>
+                <div class="detail-row" *ngIf="selectedElectronicDocument?.hash">
+                    <span class="detail-label">Hash:</span>
+                    <span class="detail-value electronic-hash">{{ selectedElectronicDocument?.hash }}</span>
+                </div>
+                <div class="detail-row" *ngIf="selectedElectronicDocument?.sentAt">
+                    <span class="detail-label">Enviado:</span>
+                    <span class="detail-value">{{ selectedElectronicDocument?.sentAt | date:'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+                <div class="electronic-notes" *ngIf="getElectronicNotes(selectedElectronicDocument).length">
+                    <strong>Notas SUNAT:</strong>
+                    <div *ngFor="let note of getElectronicNotes(selectedElectronicDocument)">{{ note }}</div>
+                </div>
+                <div class="detail-actions">
+                    <button class="btn-primary" (click)="onSendElectronicInvoice(selectedSale)"
+                        [disabled]="!canSendElectronicInvoice(selectedSale)">
+                        <i class="fas"
+                            [class.fa-spinner]="electronicBillingLoadingBySaleId[selectedSale.id]"
+                            [class.fa-spin]="electronicBillingLoadingBySaleId[selectedSale.id]"
+                            [class.fa-paper-plane]="!electronicBillingLoadingBySaleId[selectedSale.id]"></i>
+                        Emitir electronicamente
+                    </button>
+                    <button class="btn-secondary" (click)="onDownloadSalePdf(selectedSale)"
+                        [disabled]="!canDownloadElectronicPdf(selectedSale)">
+                        <i class="fas fa-file-pdf"></i>
+                        PDF
+                    </button>
+                    <button class="btn-secondary" (click)="onDownloadElectronicXml(selectedSale)"
+                        [disabled]="!hasElectronicDocumentFile(selectedSale, 'xml')">
+                        <i class="fas fa-code"></i>
+                        XML
+                    </button>
+                    <button class="btn-secondary" (click)="onDownloadElectronicCdr(selectedSale)"
+                        [disabled]="!hasElectronicDocumentFile(selectedSale, 'cdr')">
+                        <i class="fas fa-file-archive"></i>
+                        CDR
+                    </button>
                 </div>
             </div>
 

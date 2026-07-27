@@ -21,7 +21,7 @@
     /* nuevo */
     display: flex;
     flex-direction: column;
-    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
+    background: #0f3d22;
 }
 
 .sidebar-panel::before {

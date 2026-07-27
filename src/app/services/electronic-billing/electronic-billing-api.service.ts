@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { BaseService } from '../base.service';
 import { config } from '../../../environments/environment';
@@ -8,7 +9,10 @@ import { ElectronicDocument, SendInvoiceResponse } from '../../models/electronic
 export class ElectronicBillingApiService {
   private readonly baseUrl = config.electronicBilling.base;
 
-  constructor(private base: BaseService) {}
+  constructor(
+    private base: BaseService,
+    private http: HttpClient,
+  ) {}
 
   getInvoicePayload(saleId: number): Observable<unknown> {
     return this.base.get<unknown>(`${this.baseUrl}/sales/${saleId}/invoice-payload`);
@@ -21,6 +25,24 @@ export class ElectronicBillingApiService {
   getDocumentBySale(saleId: number): Observable<ElectronicDocument> {
     return this.base.get<ElectronicDocument>(`${this.baseUrl}/sales/${saleId}/document`, {
       withLoader: false,
+    });
+  }
+
+  downloadPdf(saleId: number): Observable<Blob> {
+    return this.downloadFile(`${this.baseUrl}/sales/${saleId}/pdf`);
+  }
+
+  downloadXml(saleId: number): Observable<Blob> {
+    return this.downloadFile(`${this.baseUrl}/sales/${saleId}/xml`);
+  }
+
+  downloadCdr(saleId: number): Observable<Blob> {
+    return this.downloadFile(`${this.baseUrl}/sales/${saleId}/cdr`);
+  }
+
+  private downloadFile(path: string): Observable<Blob> {
+    return this.http.get(`${config.endpointServices}${path}`, {
+      responseType: 'blob',
     });
   }
 }

@@ -2,7 +2,7 @@ import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
 import { SalesApiService } from '../../services/sales/sales-api.service';
 import { DocumentSeriesApiService } from '../../services/sales/document-series-api.service';
 import { ProductsApiService } from '../../services/products-api.service';
-import { lastValueFrom } from 'rxjs';
+import { catchError, forkJoin, lastValueFrom, of } from 'rxjs';
 import { CashFlowApiService } from '../../services/sales/cash-flow-api.service';
 import { ClientsApiService } from '../../services/clients-api.service';
 import { PricingStockApiService } from '../../services/pricing-stock-api.service';
@@ -20,6 +20,8 @@ import { ClientKind, ClientSaveRequest } from '../../models/clients-request';
 import { ClientResponse } from '../../models/clients-response';
 import { ServiceOrder } from '../../models/service-orders/service-order';
 import { SaleReceiptPdfService } from '../../services/sales/sale-receipt-pdf.service';
+import { ElectronicBillingApiService } from '../../services/electronic-billing/electronic-billing-api.service';
+import { ElectronicDocument, ElectronicDocumentStatus } from '../../models/electronic-billing/electronic-document.model';
 // ============================================
 // INTERFACES & TYPES (siguiendo exactamente el prompt)
 // ============================================
@@ -53,7 +55,7 @@ type NewCustomerForm = Partial<ClientSaveRequest> & {
   documentTypeId?: number | null
 }
 
-export type DocumentTypeCode = 'NOTA_PEDIDO' | 'BOLETA' | 'FACTURA'
+export type DocumentTypeCode = 'BOLETA' | 'FACTURA'
 // PAYMENT TYPES - Frontend values
 export type PaymentType = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO' | 'YAPE' | 'PLIN'
 
@@ -91,6 +93,8 @@ export interface SaleLine {
   productName: string
   quantity: number
   unitPrice: number
+  originalUnitPrice?: number
+  discountPct?: number
   lineTotal: number
   // Informacion de lote y seriales
   hasLot?: boolean
@@ -322,6 +326,7 @@ export class Ventas implements OnInit {
     private pricingQueryApi: PricingQueryApiService,
     private currentUser: CurrentUserService,
     private saleReceiptPdfService: SaleReceiptPdfService,
+    private electronicBillingApi: ElectronicBillingApiService,
   ) { }
 
   @ViewChild('productSearchInput') productSearchInput!: ElementRef<HTMLInputElement>
@@ -332,6 +337,9 @@ export class Ventas implements OnInit {
   // STATE
   sales: Sale[] = []
   selectedSale: Sale | null = null
+  electronicDocumentsBySaleId: { [saleId: number]: ElectronicDocument | null } = {}
+  selectedElectronicDocument: ElectronicDocument | null = null
+  electronicBillingLoadingBySaleId: { [saleId: number]: boolean } = {}
   isLoading = false
 
   // Cache para precios y stock de productos con informacion completa
@@ -365,6 +373,8 @@ export class Ventas implements OnInit {
   showDispatchGuideModal = false
   showCancelConfirmModal = false
   showLotSerialModal = false
+  showElectronicInvoiceConfirmModal = false
+  pendingElectronicInvoiceSale: Sale | null = null
   saleToCancel: Sale | null = null
   cancelReason: 'ERROR' | 'RETURN' = 'ERROR'
   //showDetailDrawer = false
@@ -467,7 +477,14 @@ export class Ventas implements OnInit {
   metrics = { totalSales: 0, totalEmitted: 0, totalCancelled: 0, totalAmount: 0 }
 
   // ENUMS FOR TEMPLATES
-  documentTypes: DocumentTypeCode[] = ['NOTA_PEDIDO', 'BOLETA', 'FACTURA']
+  documentTypes: DocumentTypeCode[] = ['BOLETA', 'FACTURA']
+  readonly documentSeriesTypes: DocumentType[] = [
+    DocumentType.BOLETA,
+    DocumentType.FACTURA,
+    DocumentType.NOTA_CREDITO,
+    DocumentType.NOTA_DEBITO,
+    DocumentType.GUIA_REMISION,
+  ];
   saleStatuses: SaleStatus[] = ['PENDIENTE', 'EMITIDO', 'ANULADO']
   paymentTypes: string[] = ['CASH', 'CARD', 'TRANSFER', 'YAPE', 'PLIN', 'CREDIT']
   paymentTypeLabels: { [key: string]: string } = {
@@ -590,14 +607,15 @@ export class Ventas implements OnInit {
           );
 
           if (priceCalc) {
+            const salePriceWithIgv = Number(priceCalc.salePriceWithIgv ?? priceCalc.salePrice ?? 0);
             this.productPriceStockMap[product.id] = {
               stock: stockMap[product.id] || 0,
               options: [],
               applied: {
                 priceListCode: '',
                 currency: 'PEN',
-                baseUnitPrice: priceCalc.salePrice,
-                finalUnitPrice: priceCalc.salePrice,
+                baseUnitPrice: salePriceWithIgv,
+                finalUnitPrice: salePriceWithIgv,
                 autoAppliedDiscounts: [],
               },
               discounts: [],
@@ -730,6 +748,7 @@ export class Ventas implements OnInit {
       next: (resp: any) => {
         this.sales = resp.data
         this.totalItems = resp.total
+        this.loadElectronicDocumentsForSales()
         this.loadMetrics()
         this.loadCashFlowData()
         this.isLoading = false
@@ -740,6 +759,29 @@ export class Ventas implements OnInit {
         this.showToast('error', 'Error cargando ventas')
       }
     })
+  }
+
+  private loadElectronicDocumentsForSales(): void {
+    this.electronicDocumentsBySaleId = {};
+
+    if (!this.sales.length) {
+      return;
+    }
+
+    const requests = this.sales.map((sale) =>
+      this.electronicBillingApi.getDocumentBySale(sale.id).pipe(
+        catchError(() => of(null))
+      )
+    );
+
+    forkJoin(requests).subscribe((documents) => {
+      documents.forEach((document, index) => {
+        const saleId = this.sales[index]?.id;
+        if (saleId) {
+          this.electronicDocumentsBySaleId[saleId] = document;
+        }
+      });
+    });
   }
 
   loadMetrics(): void {
@@ -1293,17 +1335,30 @@ export class Ventas implements OnInit {
       return false
     }
 
-    if (this.saleFormData?.documentType === 'FACTURA' && this.foundCustomer.kind !== ClientKind.COMPANY) {
-      this.showToast('error', 'La factura requiere un contribuyente empresa')
-      return false
-    }
-
-    if (this.saleFormData?.documentType === 'BOLETA' && this.foundCustomer.kind !== ClientKind.PERSON) {
-      this.showToast('error', 'La boleta requiere un contribuyente persona natural')
+    if (this.saleFormData?.documentType === 'FACTURA' && !this.isRucCustomer(this.foundCustomer)) {
+      this.showToast('error', 'Una factura requiere un contribuyente con RUC')
       return false
     }
 
     return true
+  }
+
+  onSaleDocumentTypeChange(): void {
+    if (this.saleFormData?.documentType === 'FACTURA' && this.foundCustomer && !this.isRucCustomer(this.foundCustomer)) {
+      this.showToast('warning', 'Para factura selecciona un contribuyente con RUC')
+    }
+  }
+
+  private isRucCustomer(customer: ClientResponse | null | undefined): boolean {
+    if (!customer) {
+      return false
+    }
+
+    const documentNumber = String(customer.documentNumber ?? '').replace(/\D+/g, '')
+    const documentType = this.documentTypesB.find((item) => Number(item.id) === Number(customer.documentTypeId))
+    const sunatCode = String((documentType as any)?.sunatCode ?? (documentType as any)?.sunatDocumentCode ?? '').trim()
+
+    return sunatCode === '6' || documentNumber.length === 11
   }
 
   selectProductOrPrice(p: any): void {
@@ -1314,6 +1369,7 @@ export class Ventas implements OnInit {
     const fallbackPrice =
       priceState?.applied?.finalUnitPrice
       ?? priceState?.options?.[0]?.finalUnitPrice
+      ?? priceState?.priceCalc?.salePriceWithIgv
       ?? p.salePrice
       ?? 0;
 
@@ -1345,6 +1401,8 @@ export class Ventas implements OnInit {
       .subscribe((priceCalc: PriceCalculation) => {
         if (!priceCalc) return;
 
+        const salePriceWithIgv = Number(priceCalc.salePriceWithIgv ?? priceCalc.salePrice ?? 0);
+
         this.currentSaleItem = {
           ...this.currentSaleItem,
           itemType: 'PRODUCT',
@@ -1353,8 +1411,8 @@ export class Ventas implements OnInit {
           productSku: p.sku,
           quantity,
           stock: this.productPriceStockMap[p.id]?.stock || 0,
-          unitPrice: priceCalc.salePrice,
-          originalUnitPrice: priceCalc.salePrice,
+          unitPrice: salePriceWithIgv,
+          originalUnitPrice: salePriceWithIgv,
           discountPct: 0,
           appliedPriceListCode: '',
           appliedDiscounts: [],
@@ -1408,6 +1466,7 @@ export class Ventas implements OnInit {
       const suggestedPrice =
         priceState?.applied?.finalUnitPrice
         ?? priceState?.options?.[0]?.finalUnitPrice
+        ?? priceState?.priceCalc?.salePriceWithIgv
         ?? product.salePrice
         ?? 0
 
@@ -1529,6 +1588,7 @@ export class Ventas implements OnInit {
         serviceId: null,
         quantity: line.quantity,
         finalUnitPrice: line.unitPrice,
+        discountPct: line.discountPct || 0,
         lotId: null,
         serialIds: [],
         comboId: null,
@@ -1570,6 +1630,7 @@ export class Ventas implements OnInit {
           const customer = response.data?.[0] ?? null
           if (customer) {
             this.foundCustomer = customer
+            this.onSaleDocumentTypeChange()
             this.showToast('success', 'Cliente encontrado')
             return
           }
@@ -1610,7 +1671,7 @@ export class Ventas implements OnInit {
 
     // Convertir unitPrice a numero (viene como string del backend)
     const unitPrice = Number(this.currentSaleItem.unitPrice) || 0;
-    const lineTotal = (this.currentSaleItem.quantity || 0) * unitPrice;
+    const lineTotal = this.roundMoney((this.currentSaleItem.quantity || 0) * unitPrice);
 
     let newLine: SaleLine
     const product = this.products.find(p => p.id === this.currentSaleItem.productId)
@@ -1630,6 +1691,8 @@ export class Ventas implements OnInit {
       productName: this.currentSaleItem.productName || '',
       quantity: this.currentSaleItem.quantity as number,
       unitPrice: unitPrice,
+      originalUnitPrice: Number(this.currentSaleItem.originalUnitPrice || unitPrice),
+      discountPct: Number(this.currentSaleItem.discountPct || 0),
       lineTotal: lineTotal,
       hasLot: hasLot,
       hasSerial: hasSerial,
@@ -1687,7 +1750,7 @@ export class Ventas implements OnInit {
 
   private calculateSaleTotals(): void {
     if (!this.saleFormData?.lines) return
-    const total = this.saleFormData.lines.reduce((sum, line) => sum + line.lineTotal, 0)
+    const total = this.roundMoney(this.saleFormData.lines.reduce((sum, line) => sum + this.roundMoney(line.lineTotal), 0))
     const fiscalBreakdown = this.splitTaxIncludedTotal(total)
     this.saleFormData.subtotal = fiscalBreakdown.subtotal
     this.saleFormData.igv = fiscalBreakdown.taxAmount
@@ -1742,6 +1805,10 @@ export class Ventas implements OnInit {
     const normalizedTaxRate = this.normalizeTaxRate(rate)
     const pct = Number((normalizedTaxRate * 100).toFixed(2))
     return Number.isInteger(pct) ? `${pct.toFixed(0)}%` : `${pct.toFixed(2)}%`
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   }
 
   // ============================================
@@ -1892,12 +1959,85 @@ export class Ventas implements OnInit {
           });
         }
         this.selectedSale = detail;
+        this.loadSelectedElectronicDocument(detail.id);
       },
       error: () => {
         // Fallback to list data if API fails
         this.selectedSale = sale;
+        this.loadSelectedElectronicDocument(sale.id);
         this.showToast('error', 'Error cargando detalles de venta');
       }
+    });
+  }
+
+  private loadSelectedElectronicDocument(saleId: number): void {
+    this.selectedElectronicDocument = this.electronicDocumentsBySaleId[saleId] ?? null;
+
+    this.electronicBillingApi.getDocumentBySale(saleId).pipe(
+      catchError(() => of(null))
+    ).subscribe((document) => {
+      this.selectedElectronicDocument = document;
+      this.electronicDocumentsBySaleId[saleId] = document;
+    });
+  }
+
+  onSendElectronicInvoice(sale: Sale | null): void {
+    if (!sale) {
+      return;
+    }
+
+    if (!this.canSendElectronicInvoice(sale)) {
+      return;
+    }
+
+    this.pendingElectronicInvoiceSale = sale;
+    this.showElectronicInvoiceConfirmModal = true;
+  }
+
+  closeElectronicInvoiceConfirmModal(): void {
+    if (this.pendingElectronicInvoiceSale && this.electronicBillingLoadingBySaleId[this.pendingElectronicInvoiceSale.id]) {
+      return;
+    }
+
+    this.showElectronicInvoiceConfirmModal = false;
+    this.pendingElectronicInvoiceSale = null;
+  }
+
+  confirmSendElectronicInvoice(): void {
+    const sale = this.pendingElectronicInvoiceSale;
+    if (!sale || !this.canSendElectronicInvoice(sale)) {
+      this.closeElectronicInvoiceConfirmModal();
+      return;
+    }
+
+    this.electronicBillingLoadingBySaleId[sale.id] = true;
+    this.electronicBillingApi.sendInvoice(sale.id).subscribe({
+      next: (response) => {
+        this.electronicDocumentsBySaleId[sale.id] = response.document;
+        if (this.selectedSale?.id === sale.id) {
+          this.selectedElectronicDocument = response.document;
+        }
+
+        if (response.document.status === 'ACCEPTED') {
+          this.showToast('success', response.document.sunatDescription || 'Comprobante aceptado por SUNAT');
+        } else if (response.document.status === 'REJECTED') {
+          this.showToast('error', response.document.errorMessage || response.document.sunatDescription || 'SUNAT rechazo el comprobante');
+        } else {
+          this.showToast('info', 'Comprobante enviado a APIsPeru');
+        }
+      },
+      error: (err) => {
+        const message = err?.error?.message || err?.message || 'Error al emitir comprobante electronico';
+        this.showToast('error', Array.isArray(message) ? message.join(', ') : message);
+        this.electronicBillingLoadingBySaleId[sale.id] = false;
+        this.showElectronicInvoiceConfirmModal = false;
+        this.pendingElectronicInvoiceSale = null;
+      },
+      complete: () => {
+        this.electronicBillingLoadingBySaleId[sale.id] = false;
+        this.showElectronicInvoiceConfirmModal = false;
+        this.pendingElectronicInvoiceSale = null;
+      },
     });
   }
 
@@ -1905,19 +2045,66 @@ export class Ventas implements OnInit {
     line.showDetails = !line.showDetails;
   }
 
-  onDownloadSalePdf(sale: Sale): void {
-    this.saleReceiptPdfService.downloadBySaleId(sale.id, 'full').subscribe({
-      next: (fileName) => {
-        this.showToast('success', `PDF descargado: ${fileName}`);
+  onDownloadSalePdf(sale: Sale | null): void {
+    if (!sale) {
+      return;
+    }
+
+    const document = this.getElectronicDocumentForSale(sale);
+    if (document?.status !== 'ACCEPTED') {
+      this.showToast('warning', 'Primero emita electronicamente el comprobante.');
+      return;
+    }
+
+    this.downloadElectronicFile(
+      this.electronicBillingApi.downloadPdf(sale.id),
+      this.buildElectronicFileName(sale, 'pdf'),
+      'PDF electronico descargado',
+    );
+  }
+
+  onDownloadElectronicXml(sale: Sale | null): void {
+    if (!sale || !this.hasElectronicDocumentFile(sale, 'xml')) {
+      this.showToast('warning', 'El XML estara disponible cuando el comprobante tenga XML registrado.');
+      return;
+    }
+
+    this.downloadElectronicFile(
+      this.electronicBillingApi.downloadXml(sale.id),
+      this.buildElectronicFileName(sale, 'xml'),
+      'XML descargado',
+    );
+  }
+
+  onDownloadElectronicCdr(sale: Sale | null): void {
+    if (!sale || !this.hasElectronicDocumentFile(sale, 'cdr')) {
+      this.showToast('warning', 'El CDR estara disponible cuando SUNAT acepte el comprobante.');
+      return;
+    }
+
+    this.downloadElectronicFile(
+      this.electronicBillingApi.downloadCdr(sale.id),
+      `R-${this.buildElectronicFileName(sale, 'zip')}`,
+      'CDR descargado',
+    );
+  }
+
+  private downloadElectronicFile(request$: any, filename: string, successMessage: string): void {
+    request$.subscribe({
+      next: (blob: Blob) => {
+        this.downloadBlob(blob, filename);
+        this.showToast('success', successMessage);
       },
-      error: () => {
-        this.showToast('error', 'Error al generar PDF');
-      }
+      error: (err: any) => {
+        const message = err?.error?.message || err?.message || 'No se pudo descargar el archivo electronico';
+        this.showToast('error', Array.isArray(message) ? message.join(', ') : message);
+      },
     });
   }
 
   closeDetailDrawer(): void {
     this.selectedSale = null
+    this.selectedElectronicDocument = null
   }
 
 
@@ -1928,15 +2115,25 @@ export class Ventas implements OnInit {
   getDateNDaysAgo(days: number): string {
     const date = new Date()
     date.setDate(date.getDate() - days)
-    return date.toISOString().split('T')[0]
+    return this.formatDate(date)
   }
 
   getToday(): string {
-    return new Date().toISOString().split('T')[0]
+    return this.formatDate(new Date())
   }
 
   formatDate(date: Date): string {
-    return date.toISOString().split('T')[0]
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  formatDateOnly(value?: string | null): string {
+    if (!value) return '-'
+    const [year, month, day] = value.slice(0, 10).split('-')
+    if (!year || !month || !day) return value
+    return `${day}/${month}/${year}`
   }
 
   getStatusLabel(status: string): string {
@@ -1949,6 +2146,75 @@ export class Ventas implements OnInit {
       'DRAFT': 'Borrador'
     }
     return labels[status] || status
+  }
+
+  getElectronicDocumentForSale(sale: Sale): ElectronicDocument | null {
+    return this.electronicDocumentsBySaleId[sale.id] ?? null;
+  }
+
+  getElectronicStatusLabel(status?: ElectronicDocumentStatus | null): string {
+    const labels: { [key: string]: string } = {
+      PENDING: 'Pendiente',
+      SENT: 'Enviado',
+      ACCEPTED: 'Aceptado',
+      REJECTED: 'Rechazado',
+      ERROR: 'Error',
+    };
+    return status ? labels[status] || status : 'Pendiente';
+  }
+
+  getElectronicStatusClass(status?: ElectronicDocumentStatus | null): string {
+    switch (status) {
+      case 'ACCEPTED':
+        return 'electronic-accepted';
+      case 'REJECTED':
+        return 'electronic-rejected';
+      case 'ERROR':
+        return 'electronic-error';
+      case 'SENT':
+        return 'electronic-sent';
+      case 'PENDING':
+      default:
+        return 'electronic-pending';
+    }
+  }
+
+  canSendElectronicInvoice(sale: Sale | null): boolean {
+    if (!sale) {
+      return false;
+    }
+
+    const document = this.getElectronicDocumentForSale(sale);
+    return sale.status === 'CONFIRMED'
+      && ['BOLETA', 'FACTURA'].includes(String(sale.documentType))
+      && document?.status !== 'ACCEPTED'
+      && !this.electronicBillingLoadingBySaleId[sale.id];
+  }
+
+  getElectronicNotes(document?: ElectronicDocument | null): string[] {
+    const notes = document?.sunatNotes;
+    return Array.isArray(notes) ? notes.map((note) => String(note)) : [];
+  }
+
+  canDownloadElectronicPdf(sale: Sale | null): boolean {
+    return !!sale && this.getElectronicDocumentForSale(sale)?.status === 'ACCEPTED';
+  }
+
+  hasElectronicDocumentFile(sale: Sale | null, fileType: 'xml' | 'cdr'): boolean {
+    if (!sale) {
+      return false;
+    }
+
+    const document = this.getElectronicDocumentForSale(sale);
+    return fileType === 'xml' ? !!document?.xml : !!document?.cdrZip;
+  }
+
+  private buildElectronicFileName(sale: Sale, extension: 'pdf' | 'xml' | 'zip'): string {
+    const document = this.getElectronicDocumentForSale(sale);
+    const payload = document?.payloadJson as any;
+    const ruc = payload?.company?.ruc || sale.companyId;
+    const sunatCode = document?.sunatDocumentTypeCode || (sale.documentType === 'FACTURA' ? '01' : '03');
+    return `${ruc}-${sunatCode}-${sale.series}-${sale.number}.${extension}`;
   }
 
   getTransactionTypeLabel(type: string): string {
@@ -1983,6 +2249,10 @@ export class Ventas implements OnInit {
 
   downloadFile(content: string, filename: string, mimeType: string): void {
     const blob = new Blob([content], { type: mimeType })
+    this.downloadBlob(blob, filename)
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -2077,24 +2347,7 @@ export class Ventas implements OnInit {
 
 
   selectProduct(product: Product): void {
-    this.currentSaleItem.productId = product.id
-    this.currentSaleItem.productSku = product.sku
-    this.currentSaleItem.productName = product.name
-    this.currentSaleItem.unitPrice = product.salePrice
-
-    // Por defecto cantidad 1 si no hay nada
-    this.currentSaleItem.quantity = this.currentSaleItem.quantity || 1
-
-    // Cerramos el dropdown
-    this.filteredProducts = []
-
-    // Pasar el foco al input de cantidad
-    setTimeout(() => {
-      if (this.quantityInput) {
-        this.quantityInput.nativeElement.focus()
-        this.quantityInput.nativeElement.select()
-      }
-    }, 0)
+    this.selectProductOrPrice(product)
   }
 
   onQuantityEnter(): void {
@@ -2599,14 +2852,18 @@ export class Ventas implements OnInit {
   }
 
   // Helper methods for templates
-  getDocumentTypeLabel(documentType: DocumentType): string {
+  getDocumentTypeLabel(documentType: DocumentType | string): string {
     switch (documentType) {
       case 'BOLETA':
         return 'Boleta';
       case 'FACTURA':
         return 'Factura';
-      case 'NOTA_PEDIDO':
-        return 'Nota de Pedido';
+      case 'NOTA_CREDITO':
+        return 'Nota de Credito';
+      case 'NOTA_DEBITO':
+        return 'Nota de Debito';
+      case 'GUIA_REMISION':
+        return 'Guia de Remision';
       default:
         return documentType;
     }
