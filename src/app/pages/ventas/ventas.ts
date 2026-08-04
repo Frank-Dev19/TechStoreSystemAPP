@@ -340,6 +340,7 @@ export class Ventas implements OnInit {
   electronicDocumentsBySaleId: { [saleId: number]: ElectronicDocument | null } = {}
   selectedElectronicDocument: ElectronicDocument | null = null
   electronicBillingLoadingBySaleId: { [saleId: number]: boolean } = {}
+  electronicEmailLoadingBySaleId: { [saleId: number]: boolean } = {}
   isLoading = false
 
   // Cache para precios y stock de productos con informacion completa
@@ -2089,6 +2090,28 @@ export class Ventas implements OnInit {
     );
   }
 
+  onSendElectronicDocumentEmail(sale: Sale | null): void {
+    if (!sale || !this.canSendElectronicDocumentEmail(sale)) {
+      this.showToast('warning', 'Primero emita y acepte el comprobante electronico.');
+      return;
+    }
+
+    this.electronicEmailLoadingBySaleId[sale.id] = true;
+    this.electronicBillingApi.sendDocumentEmail(sale.id).subscribe({
+      next: (response) => {
+        this.showToast('success', response.message || `Comprobante enviado a ${response.to}`);
+      },
+      error: (err: any) => {
+        const message = err?.error?.message || err?.message || 'No se pudo enviar el comprobante por correo';
+        this.showToast('error', Array.isArray(message) ? message.join(', ') : message);
+        this.electronicEmailLoadingBySaleId[sale.id] = false;
+      },
+      complete: () => {
+        this.electronicEmailLoadingBySaleId[sale.id] = false;
+      },
+    });
+  }
+
   private downloadElectronicFile(request$: any, filename: string, successMessage: string): void {
     request$.subscribe({
       next: (blob: Blob) => {
@@ -2198,6 +2221,12 @@ export class Ventas implements OnInit {
 
   canDownloadElectronicPdf(sale: Sale | null): boolean {
     return !!sale && this.getElectronicDocumentForSale(sale)?.status === 'ACCEPTED';
+  }
+
+  canSendElectronicDocumentEmail(sale: Sale | null): boolean {
+    return !!sale
+      && this.getElectronicDocumentForSale(sale)?.status === 'ACCEPTED'
+      && !this.electronicEmailLoadingBySaleId[sale.id];
   }
 
   hasElectronicDocumentFile(sale: Sale | null, fileType: 'xml' | 'cdr'): boolean {

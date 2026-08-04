@@ -3,7 +3,11 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { BaseService } from '../base.service';
 import { config } from '../../../environments/environment';
-import { ElectronicDocument, SendInvoiceResponse } from '../../models/electronic-billing/electronic-document.model';
+import {
+  ElectronicDocument,
+  SendElectronicDocumentEmailResponse,
+  SendInvoiceResponse,
+} from '../../models/electronic-billing/electronic-document.model';
 
 @Injectable({ providedIn: 'root' })
 export class ElectronicBillingApiService {
@@ -20,6 +24,12 @@ export class ElectronicBillingApiService {
 
   sendInvoice(saleId: number): Observable<SendInvoiceResponse> {
     return this.base.post<SendInvoiceResponse>(`${this.baseUrl}/sales/${saleId}/send-invoice`);
+  }
+
+  sendDocumentEmail(saleId: number, to?: string): Observable<SendElectronicDocumentEmailResponse> {
+    return this.base.post<SendElectronicDocumentEmailResponse>(`${this.baseUrl}/sales/${saleId}/email`, {
+      ...(to ? { to } : {}),
+    });
   }
 
   getDocumentBySale(saleId: number): Observable<ElectronicDocument> {

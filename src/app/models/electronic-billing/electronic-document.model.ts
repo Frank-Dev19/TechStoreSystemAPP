@@ -35,3 +35,10 @@ export interface SendInvoiceResponse {
   document: ElectronicDocument;
   response: unknown;
 }
+
+export interface SendElectronicDocumentEmailResponse {
+  ok: true;
+  saleId: number;
+  to: string;
+  message: string;
+}
