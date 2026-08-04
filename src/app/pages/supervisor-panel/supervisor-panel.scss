@@ -1740,6 +1740,269 @@ $bg-light: #f5f7fa;
   color: #6b7280;
 }
 
+.detail-cancellation-card {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid #eadfd5;
+  border-radius: 16px;
+  background: #fffaf6;
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+
+    h3 {
+      margin: 0.15rem 0 0;
+      color: #283445;
+      font-size: 1rem;
+    }
+
+    > span {
+      color: #7c6656;
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+  }
+
+  &__list {
+    display: grid;
+    gap: 0.65rem;
+  }
+}
+
+.detail-cancellation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem;
+  border: 1px solid #eee3da;
+  border-radius: 12px;
+  background: #fff;
+
+  > div:first-child {
+    display: grid;
+    min-width: 0;
+    gap: 0.25rem;
+  }
+
+  strong {
+    color: #263347;
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+  }
+
+  &__actions {
+    flex: 0 0 auto;
+  }
+}
+
+.detail-cancellation-state {
+  color: #768195;
+  font-size: 0.69rem;
+  font-weight: 700;
+
+  &--pending { color: #9a5a20; }
+  &--cancelled { color: #a33d3d; }
+}
+
+.detail-cancellation-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 34px;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #d9a5a0;
+  border-radius: 9px;
+  background: #fff;
+  color: #9d3737;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+
+  &:hover {
+    border-color: #b94949;
+    background: #fff4f3;
+  }
+
+  &--review {
+    border-color: #d7b47d;
+    color: #87551c;
+
+    &:hover {
+      border-color: #bd8439;
+      background: #fff8ec;
+    }
+  }
+}
+
+@media (max-width: 720px) {
+  .detail-cancellation-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .detail-cancellation-button {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+.detail-commercial-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #dce4ef;
+  border-radius: 14px;
+  background: #fff;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+
+    h3 {
+      margin: 3px 0 0;
+      color: #172033;
+      font-size: 1rem;
+    }
+
+    > span {
+      color: #234498;
+      font-weight: 800;
+    }
+  }
+
+  &__list {
+    display: grid;
+    gap: 9px;
+  }
+
+  &__note {
+    margin: 0;
+    padding: 9px 11px;
+    border-radius: 9px;
+    background: #fff8e8;
+    color: #78551e;
+    font-size: 0.72rem;
+    line-height: 1.45;
+  }
+}
+
+.detail-commercial-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #f8fafc;
+
+  > div:first-child {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+
+    strong {
+      overflow: hidden;
+      color: #263347;
+      font-size: 0.78rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span,
+    small {
+      color: #6b7c93;
+      font-size: 0.67rem;
+    }
+  }
+
+  &__action {
+    display: grid;
+    justify-items: end;
+    gap: 6px;
+
+    span {
+      color: #3157a4;
+      font-size: 0.66rem;
+      font-weight: 800;
+    }
+
+    button {
+      border: 1px solid #3157a4;
+      border-radius: 8px;
+      background: #fff;
+      padding: 7px 9px;
+      color: #3157a4;
+      font-size: 0.7rem;
+      font-weight: 750;
+      cursor: pointer;
+    }
+  }
+}
+
+.detail-commercial-lines {
+  display: grid;
+  flex: 1 0 100%;
+  gap: 5px;
+  padding-top: 9px;
+  border-top: 1px solid #e1e6ed;
+}
+
+.detail-commercial-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: #fff;
+
+  > div {
+    display: grid;
+    gap: 2px;
+  }
+
+  > div:last-child {
+    grid-auto-flow: column;
+    align-items: center;
+    text-align: right;
+  }
+
+  strong {
+    color: #2c394b;
+    font-size: 0.7rem;
+  }
+
+  span {
+    color: #778396;
+    font-size: 0.64rem;
+  }
+
+  > div:last-child span {
+    color: #a34f28;
+    font-weight: 800;
+  }
+}
+
+@media (max-width: 680px) {
+  .detail-commercial-item {
+    align-items: stretch;
+    flex-direction: column;
+
+    &__action {
+      justify-items: stretch;
+    }
+  }
+}
+
 // Visual refactor layer - keep system palette, improve hierarchy and responsiveness
 .supervisor-panel {
   min-height: 100dvh;

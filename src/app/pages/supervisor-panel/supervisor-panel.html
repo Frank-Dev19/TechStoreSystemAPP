@@ -219,6 +219,10 @@
                       {{ order.initialIssue }}
                     </p>
                   }
+                  <app-service-order-item-progress
+                    [order]="order"
+                    [compact]="true"
+                  ></app-service-order-item-progress>
                 </div>
               </div>
             }
@@ -243,6 +247,9 @@
           <div>
             <p class="detail-drawer-kicker">Detalle de orden</p>
             <h2>{{ selectedServiceOrder.code || 'Sin código' }}</h2>
+            <app-service-order-item-progress
+              [order]="selectedServiceOrder"
+            ></app-service-order-item-progress>
           </div>
           <button class="btn-close" type="button" aria-label="Cerrar detalle de orden" (click)="clearSelectedServiceOrder()">
             <i class="fas fa-times"></i>
@@ -322,6 +329,50 @@
             </div>
           </section>
 
+          @if (selectedServiceOrder.items?.length) {
+            <section class="detail-cancellation-card" aria-label="Cancelaciones por equipo">
+              <header class="detail-cancellation-card__header">
+                <div>
+                  <p class="detail-card-label">Gestión por equipo</p>
+                  <h3>Cancelaciones</h3>
+                </div>
+                <span>{{ selectedServiceOrder.items?.length }} equipo(s)</span>
+              </header>
+
+              <div class="detail-cancellation-card__list">
+                @for (item of selectedServiceOrder.items ?? []; track item.id) {
+                  <article class="detail-cancellation-item">
+                    <div>
+                      <strong>{{ getItemLabel(item) }}</strong>
+                      @if (getPendingItemCancellation(item); as pendingRequest) {
+                        <span class="detail-cancellation-state detail-cancellation-state--pending">
+                          Cancelación pendiente · {{ pendingRequest.requestedAt | date: 'dd/MM/yyyy HH:mm' }}
+                        </span>
+                      } @else if (item.operativeStatus === 'CANCELADA') {
+                        <span class="detail-cancellation-state detail-cancellation-state--cancelled">Equipo cancelado</span>
+                      } @else {
+                        <span class="detail-cancellation-state">{{ getInboxThreadOperativeStatusLabel(item.operativeStatus) }}</span>
+                      }
+                    </div>
+                    <div class="detail-cancellation-item__actions">
+                      @if (getPendingItemCancellation(item)) {
+                        <button type="button" class="detail-cancellation-button detail-cancellation-button--review" (click)="openCancellationResolution(selectedServiceOrder, item)">
+                          <i class="fas fa-user-shield"></i>
+                          Resolver
+                        </button>
+                      } @else if (canRequestItemCancellation(item)) {
+                        <button type="button" class="detail-cancellation-button" (click)="openItemCancellationModal(selectedServiceOrder, item)">
+                          <i class="fas fa-ban"></i>
+                          Cancelar
+                        </button>
+                      }
+                    </div>
+                  </article>
+                }
+              </div>
+            </section>
+          }
+
           @if (selectedServiceOrder.sla; as sla) {
             <section class="detail-sla-panel" [class.is-breached]="sla.breached" aria-label="SLA actual">
               <div class="detail-sla-hero">
@@ -390,6 +441,69 @@
             }
           </section>
 
+          @if (selectedServiceOrderAgreement?.items?.length) {
+            <section class="detail-commercial-card" aria-label="Decisiones comerciales por equipo">
+              <header class="detail-commercial-card__header">
+                <div>
+                  <p class="detail-card-label">Acuerdo #{{ selectedServiceOrderAgreement?.sequenceNumber }}</p>
+                  <h3>Decisiones del cliente</h3>
+                </div>
+                <span>{{ formatMoney(selectedServiceOrderAgreement?.totalAmount) }}</span>
+              </header>
+
+              <div class="detail-commercial-card__list">
+                @for (link of selectedServiceOrderAgreement?.items ?? []; track link.id) {
+                  <article class="detail-commercial-item">
+                    <div>
+                      <strong>{{ getCommercialItemLabel(link) }}</strong>
+                      <span>
+                        Versión #{{ link.commercialVersion?.versionNumber }} ·
+                        {{ formatMoney(link.commercialVersion?.totalAmount) }}
+                      </span>
+                      @if (getCommercialDecisionAuditLabel(link); as auditLabel) {
+                        <small>{{ auditLabel }}</small>
+                      }
+                    </div>
+                    <div class="detail-commercial-item__action">
+                      <span>{{ getCommercialVersionStatusLabel(link) }}</span>
+                      @if (canEditCommercialDiscounts(link)) {
+                        <button type="button" (click)="openLineDiscountModal(link)">
+                          <i class="fas fa-tag"></i>
+                          Editar descuentos
+                        </button>
+                      }
+                      @if (canRecordClientDecision(link)) {
+                        <button type="button" (click)="openClientDecisionModal(link)">Registrar decisión</button>
+                      }
+                    </div>
+                    @if (link.commercialVersion?.lines?.length) {
+                      <div class="detail-commercial-lines">
+                        @for (line of link.commercialVersion?.lines ?? []; track line.id) {
+                          <div class="detail-commercial-line">
+                            <div>
+                              <strong>{{ line.catalogNameSnapshot }}</strong>
+                              <span>{{ line.quantity | number: '1.0-2' }} × {{ formatMoney(line.unitPrice) }}</span>
+                            </div>
+                            <div>
+                              @if ((line.discountAmount || 0) > 0) {
+                                <span>-{{ line.discounts?.[0]?.percentage || 0 | number: '1.0-2' }}%</span>
+                              }
+                              <strong>{{ formatMoney(line.netAmount) }}</strong>
+                            </div>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </article>
+                }
+              </div>
+
+              <p class="detail-commercial-card__note">
+                El registro es manual y auditable. No envía mensajes ni plantillas de WhatsApp.
+              </p>
+            </section>
+          }
+
           <section class="detail-priority-banner" [class.is-breached]="hasActiveSlaBreach(selectedServiceOrder)">
             <span class="detail-priority-banner__icon">
               <i class="fas fa-laptop"></i>
@@ -412,6 +526,31 @@
       }
     </div>
   </div>
+  }
+
+  @if (clientDecisionTarget) {
+    <app-service-order-client-decision-modal
+      [target]="clientDecisionTarget"
+      (closed)="clientDecisionTarget = null"
+      (decisionRecorded)="handleClientDecisionRecorded($event)"
+    ></app-service-order-client-decision-modal>
+  }
+
+  @if (lineDiscountTarget) {
+    <app-service-order-line-discount-modal
+      [target]="lineDiscountTarget"
+      (closed)="lineDiscountTarget = null"
+      (revisionCreated)="handleLineDiscountRevisionCreated($event)"
+    ></app-service-order-line-discount-modal>
+  }
+
+
+  @if (itemCancellationTarget) {
+    <app-service-order-item-cancellation-modal
+      [target]="itemCancellationTarget"
+      (closed)="itemCancellationTarget = null"
+      (cancellationSaved)="handleItemCancellationSaved($event)"
+    ></app-service-order-item-cancellation-modal>
   }
 
   <div class="alert-container" [class.show]="showAlert">

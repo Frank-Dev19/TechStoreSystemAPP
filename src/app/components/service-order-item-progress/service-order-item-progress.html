@@ -1,0 +1,20 @@
+@if (order?.itemProgress) {
+  <div
+    class="item-progress"
+    [class.item-progress--compact]="compact"
+    [class.item-progress--partial]="delivered > 0 && delivered < active"
+    [class.item-progress--complete]="active > 0 && delivered === active"
+    role="group"
+    [attr.aria-label]="label"
+  >
+    <div class="item-progress__copy">
+      <span>{{ label }}</span>
+      @if (!compact && cancelled > 0) {
+        <small>{{ cancelled }} cancelado{{ cancelled === 1 ? '' : 's' }}</small>
+      }
+    </div>
+    <div class="item-progress__track" aria-hidden="true">
+      <span [style.width.%]="percentage"></span>
+    </div>
+  </div>
+}

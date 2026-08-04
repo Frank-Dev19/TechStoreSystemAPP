@@ -3,13 +3,14 @@ import { Observable, throwError } from "rxjs";
 import { BaseService } from "../base.service";
 import {
   ServiceOrder,
+  ServiceOrderItemCancellationResult,
   ServiceOrderTechnicalStatus,
   ServiceType,
 } from "../../models/service-orders/service-order";
 import {
-  ServiceOrderBatchCreateRequest,
-  ServiceOrderBatchCreateResponse,
   ServiceOrderSaveRequest,
+  RequestServiceOrderItemCancellationRequest,
+  ResolveServiceOrderItemCancellationRequest,
   ServiceOrderUpdateRequest,
 } from "../../models/service-orders/service-order-request";
 import { config } from "../../../environments/environment";
@@ -68,16 +69,19 @@ export class ServiceOrderService {
     return this.base.post<ServiceOrder>(config.serviceOrders.serviceOrders, payload);
   }
 
-  createBatch(payload: ServiceOrderBatchCreateRequest): Observable<ServiceOrderBatchCreateResponse> {
-    return this.base.post<ServiceOrderBatchCreateResponse>(`${config.serviceOrders.serviceOrders}/batch`, payload);
-  }
-
   update(id: number, payload: ServiceOrderUpdateRequest): Observable<ServiceOrder> {
     return this.base.patch<ServiceOrder>(`${config.serviceOrders.serviceOrders}/${id}`, payload);
   }
 
   markAsDelivered(id: number): Observable<ServiceOrder> {
     return this.base.patch<ServiceOrder>(`${config.serviceOrders.serviceOrders}/${id}/deliver`, {});
+  }
+
+  deliverItem(serviceOrderId: number, itemId: number): Observable<ServiceOrder> {
+    return this.base.patch<ServiceOrder>(
+      `${config.serviceOrders.serviceOrders}/${serviceOrderId}/items/${itemId}/deliver`,
+      {},
+    );
   }
 
   markPaid(id: number): Observable<ServiceOrder> {
@@ -99,6 +103,41 @@ export class ServiceOrderService {
     return this.base.patch<ServiceOrder>(
       `${config.serviceOrders.serviceOrders}/${id}/technical/${status}`,
       reason ? { reason } : {},
+    );
+  }
+
+  changeItemTechnicalStatus(
+    serviceOrderId: number,
+    itemId: number,
+    status: ServiceOrderTechnicalStatus,
+    reason?: string,
+  ): Observable<ServiceOrder> {
+    return this.base.patch<ServiceOrder>(
+      `${config.serviceOrders.serviceOrders}/${serviceOrderId}/items/${itemId}/technical/${status}`,
+      reason ? { reason } : {},
+    );
+  }
+
+  requestItemCancellation(
+    serviceOrderId: number,
+    itemId: number,
+    payload: RequestServiceOrderItemCancellationRequest,
+  ): Observable<ServiceOrderItemCancellationResult> {
+    return this.base.post<ServiceOrderItemCancellationResult>(
+      `${config.serviceOrders.serviceOrders}/${serviceOrderId}/items/${itemId}/cancellations`,
+      payload,
+    );
+  }
+
+  resolveItemCancellation(
+    serviceOrderId: number,
+    itemId: number,
+    requestId: number,
+    payload: ResolveServiceOrderItemCancellationRequest,
+  ): Observable<ServiceOrderItemCancellationResult> {
+    return this.base.patch<ServiceOrderItemCancellationResult>(
+      `${config.serviceOrders.serviceOrders}/${serviceOrderId}/items/${itemId}/cancellations/${requestId}/resolve`,
+      payload,
     );
   }
 

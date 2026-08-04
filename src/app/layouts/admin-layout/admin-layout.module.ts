@@ -26,6 +26,11 @@ import { ReceptionPanel } from "../../pages/reception-panel/reception-panel";
 import { ServiceOrderInboxPage } from "../../pages/service-order-inbox/service-order-inbox";
 import { SupervisorPanel } from "../../pages/supervisor-panel/supervisor-panel";
 import { PhoneInputComponent } from "../../components/phone-input/phone-input";
+import { ServiceOrderClientDecisionModalComponent } from "../../components/service-order-client-decision-modal/service-order-client-decision-modal";
+import { ServiceOrderLineDiscountModalComponent } from "../../components/service-order-line-discount-modal/service-order-line-discount-modal";
+import { ServiceOrderItemCancellationModalComponent } from "../../components/service-order-item-cancellation-modal/service-order-item-cancellation-modal";
+import { ServiceOrderItemDeliveryModalComponent } from "../../components/service-order-item-delivery-modal/service-order-item-delivery-modal";
+import { ServiceOrderItemProgressComponent } from "../../components/service-order-item-progress/service-order-item-progress";
 
 @NgModule({
     imports: [
@@ -58,6 +63,11 @@ import { PhoneInputComponent } from "../../components/phone-input/phone-input";
         ReceptionPanel,
         ServiceOrderInboxPage,
         SupervisorPanel,
+        ServiceOrderClientDecisionModalComponent,
+        ServiceOrderLineDiscountModalComponent,
+        ServiceOrderItemCancellationModalComponent,
+        ServiceOrderItemDeliveryModalComponent,
+        ServiceOrderItemProgressComponent,
     ],
     providers: [DatePipe],
     exports: [

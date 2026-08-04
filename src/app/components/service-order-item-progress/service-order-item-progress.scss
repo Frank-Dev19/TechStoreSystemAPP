@@ -1,0 +1,65 @@
+:host {
+  display: block;
+  min-width: 9rem;
+}
+
+.item-progress {
+  display: grid;
+  gap: 0.4rem;
+  color: #46515f;
+}
+
+.item-progress__copy {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.item-progress__copy small {
+  color: #7b8490;
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.item-progress__track {
+  height: 0.28rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4e7eb;
+}
+
+.item-progress__track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #718096;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 220ms ease;
+  transform-origin: left center;
+}
+
+.item-progress--partial .item-progress__copy {
+  color: #9a5b16;
+}
+
+.item-progress--partial .item-progress__track span {
+  background: #c17a25;
+}
+
+.item-progress--complete .item-progress__copy {
+  color: #23724d;
+}
+
+.item-progress--complete .item-progress__track span {
+  background: #2f855a;
+}
+
+.item-progress--compact {
+  gap: 0.3rem;
+}
+
+.item-progress--compact .item-progress__copy {
+  font-size: 0.7rem;
+}

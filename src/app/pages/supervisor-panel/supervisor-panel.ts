@@ -1,7 +1,14 @@
 import { Component, OnInit } from "@angular/core"
 import { Router } from "@angular/router"
 import { catchError, finalize, of } from "rxjs"
-import { ServiceOrderAgreement, ServiceOrderAgreementStatus } from "../../models/service-orders/service-agreement"
+import {
+  ServiceOrderAgreement,
+  ServiceOrderAgreementItemLink,
+  ServiceOrderAgreementStatus,
+  ServiceOrderClientDecisionResult,
+} from "../../models/service-orders/service-agreement"
+import { ServiceOrderClientDecisionTarget } from "../../components/service-order-client-decision-modal/service-order-client-decision-modal"
+import { ServiceOrderLineDiscountTarget } from "../../components/service-order-line-discount-modal/service-order-line-discount-modal"
 import {
   ServiceOrderAgreementService,
   TechnicianRevenueRanking,
@@ -10,6 +17,8 @@ import {
   EquipmentType,
   ServiceOrder,
   ServiceOrderDerivedMetric,
+  ServiceOrderItem,
+  ServiceOrderItemCancellationResult,
   ServiceOrderOperativeStatus,
   ServiceOrderSlaStage,
   ServiceType,
@@ -20,6 +29,7 @@ import { ServiceOrderDiagnosis } from "../../models/service-orders/service-order
 import { Product } from "../../models/catalog/product"
 import { ProductsService } from "../../services/inventory/products.service"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
+import { ServiceOrderItemCancellationTarget } from "../../components/service-order-item-cancellation-modal/service-order-item-cancellation-modal"
 
 const TECHNICAL_SERVICE_LABEL = "Servicio técnico"
 
@@ -45,6 +55,9 @@ export class SupervisorPanel implements OnInit {
   selectedServiceOrder: ServiceOrder | null = null
   currentDiagnosis: ServiceOrderDiagnosis | null = null
   selectedOrderAgreements: ServiceOrderAgreement[] = []
+  clientDecisionTarget: ServiceOrderClientDecisionTarget | null = null
+  lineDiscountTarget: ServiceOrderLineDiscountTarget | null = null
+  itemCancellationTarget: ServiceOrderItemCancellationTarget | null = null
 
   orderSearchTerm = ""
   orderOperativeStatusFilter: ServiceOrderOperativeStatus | "ALL" = "ALL"
@@ -85,7 +98,9 @@ export class SupervisorPanel implements OnInit {
   private readonly operativeStatusLabels: Record<ServiceOrderOperativeStatus, string> = {
     [ServiceOrderOperativeStatus.ABIERTA]: "Abierto",
     [ServiceOrderOperativeStatus.EN_PROCESO]: "En progreso",
+    [ServiceOrderOperativeStatus.CANCELACION_SOLICITADA]: "Cancelación solicitada",
     [ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA]: "Listo para entrega",
+    [ServiceOrderOperativeStatus.ENTREGA_PARCIAL]: "Entrega parcial",
     [ServiceOrderOperativeStatus.ENTREGADA]: "Entregado",
     [ServiceOrderOperativeStatus.CANCELADA]: "Cancelado",
     [ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION]: "Sin solución",
@@ -354,6 +369,102 @@ export class SupervisorPanel implements OnInit {
     this.selectedServiceOrderAgreement = null
     this.selectedOrderAgreements = []
     this.currentDiagnosis = null
+    this.clientDecisionTarget = null
+    this.lineDiscountTarget = null
+    this.itemCancellationTarget = null
+  }
+
+  canRecordClientDecision(link: ServiceOrderAgreementItemLink): boolean {
+    return link.commercialVersion?.status === "DRAFT" || link.commercialVersion?.status === "ISSUED"
+  }
+
+  canEditCommercialDiscounts(link: ServiceOrderAgreementItemLink): boolean {
+    return this.canRecordClientDecision(link) && Boolean(link.commercialVersion?.lines?.length)
+  }
+
+  getCommercialItemLabel(link: ServiceOrderAgreementItemLink): string {
+    const item = link.serviceOrderItem
+    const equipment = [item?.brand, item?.model].filter(Boolean).join(" ")
+    return [item?.code || `Equipo #${link.serviceOrderItemId}`, equipment].filter(Boolean).join(" · ")
+  }
+
+  getCommercialVersionStatusLabel(link: ServiceOrderAgreementItemLink): string {
+    const latestDecision = [...(link.commercialVersion?.decisions ?? [])].sort(
+      (left, right) => new Date(right.recordedAt).getTime() - new Date(left.recordedAt).getTime(),
+    )[0]
+    if (latestDecision?.decision === "CHANGES_REQUESTED") return "Cambios solicitados"
+    if (latestDecision?.decision === "ACCEPTED" || link.commercialVersion?.status === "ACCEPTED") return "Aceptado"
+    return "Pendiente de respuesta"
+  }
+
+  getCommercialDecisionAuditLabel(link: ServiceOrderAgreementItemLink): string | null {
+    const latestDecision = [...(link.commercialVersion?.decisions ?? [])].sort(
+      (left, right) => new Date(right.recordedAt).getTime() - new Date(left.recordedAt).getTime(),
+    )[0]
+    if (!latestDecision) return null
+    const channels: Record<string, string> = {
+      WHATSAPP: "WhatsApp",
+      PHONE: "Llamada telefónica",
+      IN_PERSON: "Presencial",
+      EMAIL: "Correo electrónico",
+      OTHER: "Otro canal",
+    }
+    const recorder = latestDecision.recordedByUser?.name || `usuario #${latestDecision.recordedByUserId}`
+    return `${channels[latestDecision.channel] ?? latestDecision.channel} · registrado por ${recorder}`
+  }
+
+  openClientDecisionModal(link: ServiceOrderAgreementItemLink): void {
+    if (!this.canRecordClientDecision(link) || !link.commercialVersion) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta versión ya no admite nuevas decisiones.")
+      return
+    }
+    this.clientDecisionTarget = {
+      commercialVersionId: Number(link.commercialVersionId),
+      itemLabel: this.getCommercialItemLabel(link),
+      versionNumber: Number(link.commercialVersion.versionNumber),
+      totalAmount: Number(link.commercialVersion.totalAmount),
+    }
+  }
+
+  openLineDiscountModal(link: ServiceOrderAgreementItemLink): void {
+    const version = link.commercialVersion
+    const serviceOrderId = this.selectedServiceOrderAgreement?.serviceOrderId
+    if (!this.canEditCommercialDiscounts(link) || !version || !serviceOrderId) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta versión no admite cambios de descuento.")
+      return
+    }
+    this.lineDiscountTarget = {
+      serviceOrderId: Number(serviceOrderId),
+      serviceOrderItemId: Number(link.serviceOrderItemId),
+      itemLabel: this.getCommercialItemLabel(link),
+      baseVersionId: Number(link.commercialVersionId),
+      versionNumber: Number(version.versionNumber),
+      notes: version.notes ?? null,
+      lines: version.lines,
+    }
+  }
+
+  handleLineDiscountRevisionCreated(agreement: ServiceOrderAgreement): void {
+    this.lineDiscountTarget = null
+    const orderId = Number(agreement.serviceOrderId || this.selectedServiceOrder?.id || 0)
+    if (orderId) this.loadOrderContext(orderId)
+    this.loadServiceOrderAgreements()
+    this.loadServiceOrders()
+    this.showMessage("success", "fas fa-check-circle", "Se creó una nueva versión con los descuentos actualizados.")
+  }
+
+  handleClientDecisionRecorded(result: ServiceOrderClientDecisionResult): void {
+    const message = result.decision.decision === "CHANGES_REQUESTED"
+      ? "Se registró que el cliente solicita cambios para este equipo."
+      : result.allAccepted
+        ? "Se registró la aceptación y el acuerdo consolidado quedó confirmado."
+        : "Se registró la aceptación de este equipo. Los demás equipos siguen pendientes."
+    this.clientDecisionTarget = null
+    const orderId = this.selectedServiceOrder?.id
+    if (orderId) this.loadOrderContext(Number(orderId))
+    this.loadServiceOrderAgreements()
+    this.loadServiceOrders()
+    this.showMessage("success", "fas fa-check-circle", message)
   }
 
   private loadOrderContext(serviceOrderId: number): void {
@@ -474,11 +585,74 @@ export class SupervisorPanel implements OnInit {
     return [
       ServiceOrderOperativeStatus.ABIERTA,
       ServiceOrderOperativeStatus.EN_PROCESO,
+      ServiceOrderOperativeStatus.CANCELACION_SOLICITADA,
       ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
       ServiceOrderOperativeStatus.ENTREGADA,
       ServiceOrderOperativeStatus.CANCELADA,
       ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION,
     ]
+  }
+
+  getPendingItemCancellation(item: ServiceOrderItem) {
+    return (item.cancellationRequests ?? []).find((request) =>
+      ["PENDING", "AWAITING_CLIENT_ACCEPTANCE"].includes(request.status),
+    ) ?? null
+  }
+
+  canRequestItemCancellation(item: ServiceOrderItem): boolean {
+    return ![
+      ServiceOrderOperativeStatus.CANCELADA,
+      ServiceOrderOperativeStatus.ENTREGADA,
+      ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION,
+    ].includes(item.operativeStatus) && !this.getPendingItemCancellation(item)
+  }
+
+  getItemLabel(item: ServiceOrderItem): string {
+    const equipment = [item.brand, item.model].filter(Boolean).join(" ")
+    return [item.code || `Equipo #${item.id}`, equipment].filter(Boolean).join(" · ")
+  }
+
+  openItemCancellationModal(order: ServiceOrder, item?: ServiceOrderItem): void {
+    const items = (order.items ?? []).filter((candidate) => this.canRequestItemCancellation(candidate))
+    if (!items.length) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta orden no tiene equipos disponibles para cancelar.")
+      return
+    }
+    this.itemCancellationTarget = {
+      mode: "REQUEST",
+      serviceOrderId: Number(order.id),
+      orderCode: order.code,
+      items,
+      selectedItemId: item?.id ?? items[0].id,
+    }
+  }
+
+  openCancellationResolution(order: ServiceOrder, item: ServiceOrderItem): void {
+    const request = this.getPendingItemCancellation(item)
+    if (!request) {
+      this.showMessage("warning", "fas fa-info-circle", "Este equipo no tiene una cancelación pendiente.")
+      return
+    }
+    this.itemCancellationTarget = {
+      mode: "RESOLVE",
+      serviceOrderId: Number(order.id),
+      orderCode: order.code,
+      items: [item],
+      selectedItemId: item.id,
+      cancellationRequestId: request.id,
+    }
+  }
+
+  handleItemCancellationSaved(result: ServiceOrderItemCancellationResult): void {
+    this.itemCancellationTarget = null
+    this.selectedServiceOrder = result.order
+    this.loadServiceOrders()
+    const message = result.request.status === "REJECTED"
+      ? "La solicitud fue rechazada y el equipo recuperó su estado anterior."
+      : result.request.status === "APPROVED"
+        ? "La cancelación del equipo quedó aprobada."
+        : "La cancelación quedó pendiente de revisión."
+    this.showMessage("success", "fas fa-check-circle", message)
   }
 
   openInboxShortcut(order: ServiceOrder): void {

@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -30,6 +31,7 @@ describe('SupervisorPanel', () => {
 
   const agreementServiceStub = {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
+    createRevision: jasmine.createSpy('createRevision').and.returnValue(of({ id: 1000 })),
     getTechnicianRevenueRankings: jasmine.createSpy('getTechnicianRevenueRankings').and.returnValue(of({ technicians: [] })),
   };
 
@@ -66,6 +68,7 @@ describe('SupervisorPanel', () => {
         { provide: ServiceOrderInboxService, useValue: inboxServiceStub },
         { provide: Router, useValue: routerStub },
       ],
+      schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SupervisorPanel);
@@ -80,6 +83,58 @@ describe('SupervisorPanel', () => {
   it('muestra siempre el concepto fijo de servicio técnico en los acuerdos', () => {
     expect(component.getServiceLabel(1)).toBe('Servicio técnico');
     expect(component.getServiceLabel(null)).toBe('Servicio técnico');
+  });
+
+  it('prepara la decisión manual con la versión comercial exacta del equipo', () => {
+    component.openClientDecisionModal({
+      id: 31,
+      serviceOrderAgreementId: 8,
+      serviceOrderItemId: 12,
+      commercialVersionId: 91,
+      serviceOrderItem: { id: 12, code: 'OS-03-08-2026-001-02', brand: 'Acer', model: 'Nitro V' },
+      commercialVersion: { id: 91, versionNumber: 4, status: 'DRAFT', totalAmount: 260 },
+    } as any);
+
+    expect(component.clientDecisionTarget).toEqual({
+      commercialVersionId: 91,
+      itemLabel: 'OS-03-08-2026-001-02 · Acer Nitro V',
+      versionNumber: 4,
+      totalAmount: 260,
+    });
+  });
+
+  it('prepara la edición supervisada de descuentos sobre la versión vigente', () => {
+    const link = {
+      id: 31,
+      serviceOrderAgreementId: 8,
+      serviceOrderItemId: 12,
+      commercialVersionId: 91,
+      serviceOrderItem: { id: 12, code: 'OS-03-08-2026-001-02', brand: 'Acer', model: 'Nitro V' },
+      commercialVersion: {
+        id: 91,
+        serviceOrderItemId: 12,
+        versionNumber: 4,
+        status: 'ISSUED',
+        totalAmount: 260,
+        notes: null,
+        lines: [{ id: 901, type: 'SERVICE', quantity: 1, unitPrice: 260 }],
+      },
+    } as any;
+    component.selectedServiceOrderAgreement = { id: 8, serviceOrderId: 70 } as any;
+
+    component.openLineDiscountModal(link);
+
+    expect(component.lineDiscountTarget).toEqual(jasmine.objectContaining({
+      serviceOrderId: 70,
+      serviceOrderItemId: 12,
+      baseVersionId: 91,
+      versionNumber: 4,
+      lines: link.commercialVersion.lines,
+    }));
+  });
+
+  it('bloquea la edición de descuentos en snapshots aceptados', () => {
+    expect(component.canEditCommercialDiscounts({ commercialVersion: { status: 'ACCEPTED' } } as any)).toBeFalse();
   });
 
   it('uses orders as the primary operational section instead of quotes', () => {
@@ -201,6 +256,31 @@ describe('SupervisorPanel', () => {
       queryParams: { threadId: 17, serviceOrderId: 51 },
     });
     expect(component.activeSection).toBe('orders');
+  });
+
+  it('abre la resolución supervisada sobre la solicitud pendiente exacta', () => {
+    const item = {
+      id: 12,
+      code: 'OS-03-08-2026-001-02',
+      operativeStatus: ServiceOrderOperativeStatus.CANCELACION_SOLICITADA,
+      cancellationRequests: [{ id: 91, status: 'PENDING' }],
+    } as any;
+    const order = createServiceOrder({ id: 70, code: 'OS-03-08-2026-001', items: [item] });
+
+    component.openCancellationResolution(order, item);
+
+    expect(component.itemCancellationTarget).toEqual(jasmine.objectContaining({
+      mode: 'RESOLVE',
+      serviceOrderId: 70,
+      selectedItemId: 12,
+      cancellationRequestId: 91,
+    }));
+  });
+
+  it('traduce el estado agregado de entrega parcial al español', () => {
+    expect(component.getInboxThreadOperativeStatusLabel(ServiceOrderOperativeStatus.ENTREGA_PARCIAL)).toBe(
+      'Entrega parcial',
+    );
   });
 });
 

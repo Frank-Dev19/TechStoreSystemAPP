@@ -1,8 +1,15 @@
 ﻿import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { BaseService } from '../base.service';
-import { ServiceOrderAgreement } from '../../models/service-orders/service-agreement';
-import { ServiceOrderAgreementRequest } from '../../models/service-orders/service-agreement-request';
+import {
+  ServiceOrderAgreement,
+  ServiceOrderClientDecisionResult,
+} from '../../models/service-orders/service-agreement';
+import {
+  ServiceOrderAgreementRequest,
+  ServiceOrderClientDecisionRequest,
+  ServiceOrderCommercialRevisionRequest,
+} from '../../models/service-orders/service-agreement-request';
 import { config } from '../../../environments/environment';
 
 export interface PaginatedResponse<T> {
@@ -51,6 +58,20 @@ export class ServiceOrderAgreementService {
 
   create(payload: ServiceOrderAgreementRequest): Observable<ServiceOrderAgreement> {
     return this.base.post<ServiceOrderAgreement>(config.serviceOrders.serviceOrderAgreements, payload);
+  }
+
+  createRevision(payload: ServiceOrderCommercialRevisionRequest): Observable<ServiceOrderAgreement> {
+    return this.base.post<ServiceOrderAgreement>(
+      `${config.serviceOrders.serviceOrderAgreements}/revisions`,
+      payload,
+    );
+  }
+
+  recordClientDecision(payload: ServiceOrderClientDecisionRequest): Observable<ServiceOrderClientDecisionResult> {
+    return this.base.post<ServiceOrderClientDecisionResult>(
+      `${config.serviceOrders.serviceOrderAgreements}/client-decisions`,
+      payload,
+    );
   }
 
   update(id: number, payload: ServiceOrderAgreementRequest): Observable<ServiceOrderAgreement> {

@@ -1,0 +1,81 @@
+<div class="decision-overlay" (click)="close()">
+  <section
+    class="decision-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="shared-client-decision-title"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="decision-header">
+      <div>
+        <span class="decision-eyebrow">Respuesta comunicada por el cliente</span>
+        <h2 id="shared-client-decision-title">Registrar decisión comercial</h2>
+        <p>{{ target.itemLabel }}</p>
+      </div>
+      <button type="button" class="decision-close" aria-label="Cerrar" [disabled]="isSaving" (click)="close()">
+        <i class="fas fa-times"></i>
+      </button>
+    </header>
+
+    <form [formGroup]="form" class="decision-body" (ngSubmit)="submit()">
+      <div class="decision-version">
+        <span>Versión exacta</span>
+        <strong>#{{ target.versionNumber }}</strong>
+        <span>Total</span>
+        <strong>S/ {{ target.totalAmount | number: '1.2-2' }}</strong>
+      </div>
+
+      <div class="decision-warning">
+        <i class="fas fa-info-circle"></i>
+        <span>Esta acción solo registra una respuesta que el cliente ya comunicó. No envía mensajes ni plantillas de WhatsApp.</span>
+      </div>
+
+      <label class="decision-field">
+        <span>Decisión informada</span>
+        <select formControlName="decision">
+          <option value="ACCEPTED">Aceptado</option>
+          <option value="CHANGES_REQUESTED">Solicita cambios</option>
+        </select>
+      </label>
+
+      <label class="decision-field">
+        <span>Canal por el que respondió</span>
+        <select formControlName="channel">
+          <option value="WHATSAPP">WhatsApp</option>
+          <option value="PHONE">Llamada telefónica</option>
+          <option value="IN_PERSON">Presencial</option>
+          <option value="EMAIL">Correo electrónico</option>
+          <option value="OTHER">Otro</option>
+        </select>
+      </label>
+
+      <label class="decision-field">
+        <span>Observación <small>(opcional)</small></span>
+        <textarea
+          formControlName="observation"
+          rows="4"
+          maxlength="1000"
+          placeholder="Ejemplo: pidió retirar un repuesto antes de aceptar."
+        ></textarea>
+      </label>
+
+      @if (errorMessage) {
+        <p class="decision-error" role="alert">{{ errorMessage }}</p>
+      }
+
+      <footer class="decision-actions">
+        <button type="button" class="decision-button decision-button--secondary" [disabled]="isSaving" (click)="close()">
+          Cancelar
+        </button>
+        <button type="submit" class="decision-button decision-button--primary" [disabled]="form.invalid || isSaving">
+          @if (isSaving) {
+            <i class="fas fa-spinner fa-spin"></i>
+            Guardando...
+          } @else {
+            Registrar decisión
+          }
+        </button>
+      </footer>
+    </form>
+  </section>
+</div>

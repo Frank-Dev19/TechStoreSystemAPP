@@ -1,0 +1,127 @@
+<div class="discount-overlay" (click)="close()">
+  <section
+    class="discount-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="line-discount-title"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="discount-header">
+      <div>
+        <span class="discount-eyebrow">Nueva versión comercial</span>
+        <h2 id="line-discount-title">Aplicar descuentos</h2>
+        <p>{{ target.itemLabel }} · Versión actual #{{ target.versionNumber }}</p>
+      </div>
+      <button type="button" class="discount-close" aria-label="Cerrar" [disabled]="isSaving" (click)="close()">
+        <i class="fas fa-times"></i>
+      </button>
+    </header>
+
+    <form [formGroup]="form" class="discount-body" (ngSubmit)="submit()">
+      <div class="discount-notice">
+        <i class="fas fa-history"></i>
+        <span>Al guardar se creará una nueva versión del equipo. Las versiones aceptadas y los demás equipos no se modificarán.</span>
+      </div>
+
+      <div formArrayName="lines" class="discount-lines">
+        @for (line of target.lines; track line.id; let index = $index) {
+          <article class="discount-line" [formGroupName]="index">
+            <div class="discount-line__heading">
+              <div>
+                <span>{{ line.type === 'PRODUCT' ? 'Producto' : 'Servicio' }}</span>
+                <strong>{{ line.catalogNameSnapshot }}</strong>
+                <small>{{ line.quantity | number: '1.0-2' }} × S/ {{ line.unitPrice | number: '1.2-2' }}</small>
+              </div>
+              <div class="discount-line__gross">
+                <span>Importe base</span>
+                <strong>S/ {{ line.grossAmount | number: '1.2-2' }}</strong>
+              </div>
+            </div>
+
+            <div class="discount-control">
+              <label [for]="'discount-percentage-' + line.id">Descuento porcentual</label>
+              <div class="discount-control__entry">
+                <input
+                  [id]="'discount-percentage-' + line.id"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  formControlName="percentage"
+                  (input)="setPercentage(index, $any($event.target).value)"
+                />
+                <span>%</span>
+              </div>
+              <div class="discount-presets" aria-label="Porcentajes rápidos">
+                @for (preset of [0, 5, 10, 15]; track preset) {
+                  <button
+                    type="button"
+                    [class.is-active]="getPercentage(index) === preset"
+                    (click)="setPercentage(index, preset)"
+                  >
+                    {{ preset }}%
+                  </button>
+                }
+              </div>
+            </div>
+
+            <div class="discount-line__totals">
+              <span>Descuento <strong>- S/ {{ getDiscountAmount(line, index) | number: '1.2-2' }}</strong></span>
+              <span>Neto <strong>S/ {{ getNetAmount(line, index) | number: '1.2-2' }}</strong></span>
+            </div>
+
+            @if (getPercentage(index) > 0) {
+              <label class="discount-reason">
+                <span>Motivo de autorización <small>(obligatorio solo si supera el límite)</small></span>
+                <textarea
+                  rows="2"
+                  maxlength="500"
+                  formControlName="overrideReason"
+                  placeholder="Ejemplo: descuento excepcional autorizado por supervisión."
+                ></textarea>
+                @if (line.discounts?.[0]?.maxAllowedPct !== undefined) {
+                  <small>El snapshot anterior registró un máximo de {{ line.discounts?.[0]?.maxAllowedPct | number: '1.0-2' }}%.</small>
+                } @else {
+                  <small>El límite vigente se validará al guardar.</small>
+                }
+              </label>
+            }
+          </article>
+        }
+      </div>
+
+      <section class="discount-summary" aria-label="Resumen de la nueva cotización">
+        <div>
+          <span>Descuento total</span>
+          <strong>- S/ {{ getTotalDiscount() | number: '1.2-2' }}</strong>
+        </div>
+        <div class="discount-summary__net">
+          <span>Nuevo total del equipo</span>
+          <strong>S/ {{ getNetTotal() | number: '1.2-2' }}</strong>
+        </div>
+      </section>
+
+      @if (errorMessage) {
+        <p class="discount-error" role="alert">{{ errorMessage }}</p>
+      }
+
+      <footer class="discount-actions">
+        <button type="button" class="discount-button discount-button--secondary" [disabled]="isSaving" (click)="close()">
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          class="discount-button discount-button--primary"
+          [disabled]="form.invalid || !hasChanges() || isSaving"
+        >
+          @if (isSaving) {
+            <i class="fas fa-spinner fa-spin"></i>
+            Guardando...
+          } @else {
+            Crear nueva versión
+          }
+        </button>
+      </footer>
+    </form>
+  </section>
+</div>

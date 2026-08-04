@@ -31,6 +31,7 @@ import { ServiceOrderBillingLinkService } from '../../services/service-orders/se
 import { ServiceOrderDiagnosisService } from '../../services/service-orders/service-order-diagnosis.service';
 import { ServiceOrderDocumentsService } from '../../services/service-orders/service-order-documents.service';
 import { ServiceOrderInboxService } from '../../services/service-orders/service-order-inbox.service';
+import { CurrentUserService } from '../../services/current-user.service';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
 import { DEFAULT_PHONE_COUNTRY } from '../../utils/phone.util';
 import { ReceptionPanel } from './reception-panel';
@@ -42,10 +43,15 @@ describe('ReceptionPanel', () => {
   const serviceOrderServiceStub = {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
       findOne: jasmine.createSpy('findOne').and.returnValue(of(createServiceOrder())),
-    create: jasmine.createSpy('create').and.returnValue(of({ id: 1, serviceType: ServiceType.DIAGNOSIS })),
-    createBatch: jasmine.createSpy('createBatch').and.returnValue(of({ createdOrders: [{ id: 1, serviceType: ServiceType.DIAGNOSIS }] })),
+    create: jasmine.createSpy('create').and.returnValue(of({
+      id: 1,
+      code: 'OS-03-08-2026-0001',
+      serviceType: ServiceType.DIAGNOSIS,
+      items: [{ id: 1 }],
+    })),
     update: jasmine.createSpy('update').and.returnValue(of({})),
     markAsDelivered: jasmine.createSpy('markAsDelivered').and.returnValue(of({})),
+    deliverItem: jasmine.createSpy('deliverItem').and.returnValue(of({})),
     changeTechnicalStatus: jasmine.createSpy('changeTechnicalStatus').and.returnValue(of({})),
     getTechnicianSuggestion: jasmine
       .createSpy('getTechnicianSuggestion')
@@ -64,6 +70,7 @@ describe('ReceptionPanel', () => {
 
   const agreementServiceStub = {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
+    createRevision: jasmine.createSpy('createRevision').and.returnValue(of({ id: 1000 })),
     createDiagnosisFeeAgreement: jasmine.createSpy('createDiagnosisFeeAgreement').and.returnValue(of({})),
     create: jasmine.createSpy('create').and.returnValue(of({})),
     supersedeVoidedAgreement: jasmine.createSpy('supersedeVoidedAgreement').and.returnValue(of({})),
@@ -118,7 +125,12 @@ describe('ReceptionPanel', () => {
     downloadAttachmentBlob: jasmine.createSpy('downloadAttachmentBlob').and.returnValue(of(new Blob())),
   };
 
+  const currentUserServiceStub = {
+    value: { id: 99 },
+  };
+
   beforeEach(async () => {
+    localStorage.removeItem('techstore:reception:create-service-order-draft:v2:1:99');
     saleReceiptPdfServiceStub.downloadBySaleId.and.returnValue(of('B001-001.pdf'));
 
     await TestBed.configureTestingModule({
@@ -138,6 +150,7 @@ describe('ReceptionPanel', () => {
         { provide: SalesApiService, useValue: salesApiStub },
         { provide: SaleReceiptPdfService, useValue: saleReceiptPdfServiceStub },
         { provide: ServiceOrderInboxService, useValue: inboxServiceStub },
+        { provide: CurrentUserService, useValue: currentUserServiceStub },
         { provide: Router, useValue: routerStub },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -150,6 +163,59 @@ describe('ReceptionPanel', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('prepara la decisión manual con la versión comercial exacta del equipo', () => {
+    component.openClientDecisionModal({
+      id: 31,
+      serviceOrderAgreementId: 8,
+      serviceOrderItemId: 12,
+      commercialVersionId: 91,
+      serviceOrderItem: { id: 12, code: 'OS-03-08-2026-001-02', brand: 'Acer', model: 'Nitro V' },
+      commercialVersion: { id: 91, versionNumber: 4, status: 'ISSUED', totalAmount: 260 },
+    } as any);
+
+    expect(component.clientDecisionTarget).toEqual({
+      commercialVersionId: 91,
+      itemLabel: 'OS-03-08-2026-001-02 · Acer Nitro V',
+      versionNumber: 4,
+      totalAmount: 260,
+    });
+  });
+
+  it('prepara la edición de descuentos con todas las líneas de la versión vigente', () => {
+    const link = {
+      id: 31,
+      serviceOrderAgreementId: 8,
+      serviceOrderItemId: 12,
+      commercialVersionId: 91,
+      serviceOrderItem: { id: 12, code: 'OS-03-08-2026-001-02', brand: 'Acer', model: 'Nitro V' },
+      commercialVersion: {
+        id: 91,
+        serviceOrderItemId: 12,
+        versionNumber: 4,
+        status: 'DRAFT',
+        totalAmount: 260,
+        notes: 'Cotización vigente',
+        lines: [{ id: 901, type: 'SERVICE', quantity: 1, unitPrice: 260 }],
+      },
+    } as any;
+    component.selectedServiceOrderAgreementDetail = { id: 8, serviceOrderId: 70 } as any;
+
+    component.openLineDiscountModal(link);
+
+    expect(component.lineDiscountTarget).toEqual(jasmine.objectContaining({
+      serviceOrderId: 70,
+      serviceOrderItemId: 12,
+      baseVersionId: 91,
+      versionNumber: 4,
+      notes: 'Cotización vigente',
+      lines: link.commercialVersion.lines,
+    }));
+  });
+
+  it('no permite editar descuentos de una versión aceptada', () => {
+    expect(component.canEditCommercialDiscounts({ commercialVersion: { status: 'ACCEPTED' } } as any)).toBeFalse();
   });
 
   it('navega al inbox unificado en vez de abrir el modal legacy', fakeAsync(() => {
@@ -176,6 +242,73 @@ describe('ReceptionPanel', () => {
 
   it('usa Perú por defecto en la captura telefónica del wizard', () => {
     expect(component.createServiceOrderForm.get('contactPhoneCountry')?.value).toEqual(DEFAULT_PHONE_COUNTRY);
+  });
+
+  it('muestra primero la asignación técnica y después el tipo de atención', () => {
+    const steps = component.getCreateServiceOrderSteps();
+
+    expect(steps[0].key).toBe('assignment');
+    expect(steps[0].label).toBe('Técnico');
+    expect(steps[1].key).toBe('workflow');
+    expect(steps[1].label).toBe('Tipo de atención');
+  });
+
+  it('conserva el técnico elegido cuando cambia el tipo de atención', () => {
+    component.createServiceOrderForm.patchValue({ assignedToTechnicianId: 10 });
+    serviceOrderServiceStub.getTechnicianSuggestion.and.returnValue(of({
+      suggestedTechnicianId: 20,
+      suggestedTechnicianName: 'Técnico sugerido',
+      activeCount: 0,
+      technicians: [
+        { technicianId: 10, technicianName: 'Técnico elegido', activeByType: [] },
+        { technicianId: 20, technicianName: 'Técnico sugerido', activeByType: [] },
+      ],
+    }));
+
+    component.onCreateWorkflowServiceTypeChange();
+
+    expect(component.createServiceOrderForm.get('assignedToTechnicianId')?.value).toBe(10);
+  });
+
+  it('recupera el avance del wizard después de cerrarlo', () => {
+    component.openCreateServiceOrderModal();
+    component.createServiceOrderForm.patchValue({ contactName: 'Cliente recuperado' });
+    component.createServiceOrderStep = 3;
+    component.createServiceOrderCandidates = [{
+      equipmentType: EquipmentType.LAPTOP,
+      equipmentTypeOther: null,
+      brand: 'Lenovo',
+      model: 'ThinkPad',
+      serialNumber: 'ABC-123',
+      accessories: 'Cargador',
+      initialIssue: 'No enciende',
+      priority: ServiceOrderPriority.LOW,
+      notes: null,
+      quoteItems: [],
+    }];
+
+    component.closeCreateServiceOrderModal();
+    component.openCreateServiceOrderModal();
+
+    expect(component.showCreateServiceOrderModal).toBeTrue();
+    expect(component.createServiceOrderStep).toBe(3);
+    expect(component.createServiceOrderForm.get('contactName')?.value).toBe('Cliente recuperado');
+    expect(component.createServiceOrderCandidates.length).toBe(1);
+    expect(component.createServiceOrderCandidates[0].serialNumber).toBe('ABC-123');
+  });
+
+  it('elimina el borrador cuando recepción decide descartarlo', () => {
+    component.openCreateServiceOrderModal();
+    component.createServiceOrderForm.patchValue({ contactName: 'No conservar' });
+    component.closeCreateServiceOrderModal();
+
+    component.openCreateServiceOrderModal();
+    component.discardCreateServiceOrderDraft();
+    component.openCreateServiceOrderModal();
+
+    expect(component.createServiceOrderForm.get('contactName')?.value).toBe('');
+    expect(component.createServiceOrderCandidates).toEqual([]);
+    expect(component.createServiceOrderStep).toBe(0);
   });
 
   it('filters orders by operative status', () => {
@@ -208,25 +341,33 @@ describe('ReceptionPanel', () => {
     );
   });
 
-  it('requires delivery status and billing evidence when the order is billable', () => {
-    const warrantyReady = createServiceOrder({
-      id: 10,
-      operativeStatus: ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
-      serviceType: ServiceType.WARRANTY_SERVICE,
-    });
-    const diagnosisReady = createServiceOrder({
+  it('abre la entrega dirigida al primer equipo listo aunque la cabecera ya sea parcial', () => {
+    const readyOrder = createServiceOrder({
       id: 11,
-      operativeStatus: ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+      operativeStatus: ServiceOrderOperativeStatus.ENTREGA_PARCIAL,
       serviceType: ServiceType.DIAGNOSIS,
       technicalStatus: ServiceOrderTechnicalStatus.RESUELTA,
+      economicStatus: ServiceOrderEconomicStatus.PARCIAL,
+      items: [
+        {
+          id: 111,
+          code: 'SO-11-01',
+          operativeStatus: ServiceOrderOperativeStatus.ENTREGADA,
+        },
+        {
+          id: 112,
+          code: 'SO-11-02',
+          operativeStatus: ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+        },
+      ] as any,
     });
 
     expect(component.canDeliverItem(createServiceOrder())).toBeFalse();
-    expect(component.canDeliverItem(warrantyReady)).toBeTrue();
-    expect(component.canDeliverItem(diagnosisReady)).toBeFalse();
+    expect(component.canDeliverItem(readyOrder)).toBeTrue();
 
-    component.saleLinksByOrderId[11] = [createBillingLink(11)];
-    expect(component.canDeliverItem(diagnosisReady)).toBeTrue();
+    component.deliverItem(readyOrder);
+
+    expect(component.itemDeliveryTarget).toEqual({ order: readyOrder, selectedItemId: 112 });
   });
 
   it('enables warranty actions only for delivered non-warranty orders with client data', () => {
@@ -290,7 +431,7 @@ describe('ReceptionPanel', () => {
     expect(component.canCreateBoletaFromOrder(warrantyOrder)).toBeFalse();
   });
 
-  it('sends contact data when creating a batch service order', fakeAsync(() => {
+  it('envía los datos de contacto al crear una orden agregada', fakeAsync(() => {
     clientsServiceStub.create.and.returnValue(
       of({
         id: 1,
@@ -315,19 +456,18 @@ describe('ReceptionPanel', () => {
       initialIssue: 'No enciende',
     });
 
-    (component as any).addCurrentEquipmentToCreateOrderBatch()
+    component.addCurrentEquipmentToCreateOrder()
     component.submitCreateServiceOrder();
     tick();
 
-    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
+    expect(serviceOrderServiceStub.create).toHaveBeenCalledWith(
       jasmine.objectContaining({
-        sharedContext: jasmine.objectContaining({
-          contactName: 'Cliente Test',
-          contactPhone: '+51999999999',
-          contactEmail: 'cliente@test.com',
-        }),
-        orders: [jasmine.objectContaining({
+        contactName: 'Cliente Test',
+        contactPhone: '+51999999999',
+        contactEmail: 'cliente@test.com',
+        items: [jasmine.objectContaining({
           initialIssue: 'No enciende',
+          priority: ServiceOrderPriority.MEDIUM,
         })],
       }),
     );
@@ -365,7 +505,7 @@ describe('ReceptionPanel', () => {
       initialIssue: 'No enciende',
     });
 
-    (component as any).addCurrentEquipmentToCreateOrderBatch()
+    component.addCurrentEquipmentToCreateOrder()
     component.submitCreateServiceOrder();
     tick();
 
@@ -383,17 +523,15 @@ describe('ReceptionPanel', () => {
         ],
       }),
     );
-    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
+    expect(serviceOrderServiceStub.create).toHaveBeenCalledWith(
       jasmine.objectContaining({
-        sharedContext: jasmine.objectContaining({
-          clientContactId: 55,
-          contactName: 'Ana Contacto',
-        }),
+        clientContactId: 55,
+        contactName: 'Ana Contacto',
       }),
     );
   }));
 
-  it('permite acumular mÃºltiples equipos candidatos antes del submit batch', () => {
+  it('permite acumular múltiples equipos antes de crear la orden', () => {
     component.createServiceOrderForm.patchValue({
       workflowServiceType: ServiceType.DIAGNOSIS,
       equipmentType: EquipmentType.LAPTOP,
@@ -401,7 +539,7 @@ describe('ReceptionPanel', () => {
       initialIssue: 'No enciende',
     })
 
-    component.addCurrentEquipmentToCreateOrderBatch()
+    component.addCurrentEquipmentToCreateOrder()
 
     component.createServiceOrderForm.patchValue({
       workflowServiceType: ServiceType.DIAGNOSIS,
@@ -410,13 +548,131 @@ describe('ReceptionPanel', () => {
       initialIssue: 'Atasco de papel',
     })
 
-    component.addCurrentEquipmentToCreateOrderBatch()
+    component.addCurrentEquipmentToCreateOrder()
 
     expect(component.createServiceOrderCandidates.length).toBe(2)
     expect(component.getCreateOrderSummaryItems().map((item) => item.equipmentTypeLabel)).toEqual([
       'Laptop',
       'Impresora',
     ])
+  })
+
+  it('crea una sola orden con prioridades y cotizaciones independientes por equipo', fakeAsync(() => {
+    serviceOrderServiceStub.create.calls.reset()
+    clientsServiceStub.create.and.returnValue(
+      of({
+        id: 31,
+        name: 'Cliente Múltiple',
+        kind: ClientKind.PERSON,
+        contacts: [],
+      } as any),
+    )
+    component.createServiceOrderForm.patchValue({
+      requestOrigin: RequestOrigin.CLIENT,
+      workflowServiceType: ServiceType.STANDARD_SERVICE,
+      documentNumber: '12345678',
+      documentTypeId: 1,
+      contactName: 'Cliente Múltiple',
+      contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
+      contactPhoneNationalNumber: '999999999',
+      assignedToTechnicianId: 10,
+      equipmentType: EquipmentType.LAPTOP,
+      initialIssue: 'No enciende',
+      priority: ServiceOrderPriority.LOW,
+    })
+    component.onCreateWorkflowServiceTypeChange()
+    component.createServiceOrderForm.patchValue({ assignedToTechnicianId: 10 })
+    component.addCurrentEquipmentToCreateOrder()
+
+    component.createServiceOrderForm.patchValue({
+      equipmentType: EquipmentType.PRINTER,
+      initialIssue: 'Atasca papel',
+      priority: ServiceOrderPriority.HIGH,
+    })
+    component.addCurrentEquipmentToCreateOrder()
+    ;(component as any).prepareCandidateCommercialDrafts()
+    component.getCreateOrderAgreementTechnicalServiceItem(0)!.unitPrice = 30
+    component.getCreateOrderAgreementTechnicalServiceItem(1)!.unitPrice = 45
+    component.createOrderAgreementItemsByItemIndex[1].push({
+      id: 999,
+      type: 'product',
+      productId: 77,
+      quantity: 2,
+      unitPrice: 12.5,
+      requiresPurchase: false,
+      notes: '',
+    })
+
+    component.submitCreateServiceOrder()
+    tick()
+
+    expect(serviceOrderServiceStub.create).toHaveBeenCalledTimes(1)
+    expect(serviceOrderServiceStub.create).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        serviceType: ServiceType.STANDARD_SERVICE,
+        assignedToTechnicianId: 10,
+        items: [
+          jasmine.objectContaining({
+            equipmentType: EquipmentType.LAPTOP,
+            priority: ServiceOrderPriority.LOW,
+            initialCommercial: jasmine.objectContaining({
+              lines: [jasmine.objectContaining({ type: 'SERVICE', unitPrice: 30 })],
+            }),
+          }),
+          jasmine.objectContaining({
+            equipmentType: EquipmentType.PRINTER,
+            priority: ServiceOrderPriority.HIGH,
+            initialCommercial: jasmine.objectContaining({
+              lines: [
+                jasmine.objectContaining({ type: 'SERVICE', unitPrice: 45 }),
+                jasmine.objectContaining({ type: 'PRODUCT', productId: 77, quantity: 2 }),
+              ],
+            }),
+          }),
+        ],
+      }),
+    )
+  }))
+
+  it('guarda y recupera un borrador v2 con todos los equipos del wizard', () => {
+    component.openCreateServiceOrderModal()
+    component.createServiceOrderForm.patchValue({
+      equipmentType: EquipmentType.LAPTOP,
+      initialIssue: 'No enciende',
+      priority: ServiceOrderPriority.HIGH,
+    })
+    component.addCurrentEquipmentToCreateOrder()
+    component.createServiceOrderStep = 3
+
+    ;(component as any).saveCreateServiceOrderDraft()
+    component.createServiceOrderCandidates = []
+    component.createServiceOrderStep = 0
+
+    expect((component as any).restoreCreateServiceOrderDraft()).toBeTrue()
+    expect(component.createServiceOrderCandidates).toEqual([
+      jasmine.objectContaining({
+        equipmentType: EquipmentType.LAPTOP,
+        priority: ServiceOrderPriority.HIGH,
+        initialIssue: 'No enciende',
+      }),
+    ])
+    expect(component.createServiceOrderStep).toBe(3)
+  })
+
+  it('descarta de forma segura un borrador con contrato legacy', () => {
+    const draftKey = 'techstore:reception:create-service-order-draft:v2:1:99'
+    localStorage.setItem(draftKey, JSON.stringify({
+      version: 1,
+      updatedAt: Date.now(),
+      step: 3,
+      formValue: {},
+      candidates: [{ serviceType: ServiceType.DIAGNOSIS }],
+      editingCandidateIndex: null,
+      agreementItemsByItemIndex: {},
+    }))
+
+    expect((component as any).restoreCreateServiceOrderDraft()).toBeFalse()
+    expect(localStorage.getItem(draftKey)).toBeNull()
   })
 
   it('permite guardar el primer equipo aunque accesorios quede vacío', () => {
@@ -435,7 +691,7 @@ describe('ReceptionPanel', () => {
     expect(component.createServiceOrderCandidates[0].accessories).toBeNull()
   })
 
-  it('guarda y expone la nota por equipo en el resumen del batch', () => {
+  it('guarda y expone la nota por equipo en el resumen de la orden', () => {
     component.createServiceOrderForm.patchValue({
       workflowServiceType: ServiceType.DIAGNOSIS,
       equipmentType: EquipmentType.LAPTOP,
@@ -444,7 +700,7 @@ describe('ReceptionPanel', () => {
       notes: 'Equipo con golpe lateral',
     })
 
-    component.addCurrentEquipmentToCreateOrderBatch()
+    component.addCurrentEquipmentToCreateOrder()
 
     expect(component.createServiceOrderCandidates[0].notes).toBe('Equipo con golpe lateral')
     expect(component.getCreateOrderSummaryItems()[0].notes).toBe('Equipo con golpe lateral')
@@ -705,19 +961,17 @@ describe('ReceptionPanel', () => {
     });
 
     component.onClientContactSelectionChange();
-    (component as any).addCurrentEquipmentToCreateOrderBatch();
+    component.addCurrentEquipmentToCreateOrder();
     component.submitCreateServiceOrder();
     tick();
 
-    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
+    expect(serviceOrderServiceStub.create).toHaveBeenCalledWith(
       jasmine.objectContaining({
-        sharedContext: jasmine.objectContaining({
-          clientId: 77,
-          clientContactId: 91,
-          contactName: 'Secundario',
-          contactPhone: '+51900000001',
-          contactEmail: 'sec@empresa.com',
-        }),
+        clientId: 77,
+        clientContactId: 91,
+        contactName: 'Secundario',
+        contactPhone: '+51900000001',
+        contactEmail: 'sec@empresa.com',
       }),
     );
   }));
@@ -802,7 +1056,7 @@ describe('ReceptionPanel', () => {
       initialIssue: 'No enciende',
     });
 
-    (component as any).addCurrentEquipmentToCreateOrderBatch();
+    component.addCurrentEquipmentToCreateOrder();
     component.submitCreateServiceOrder();
     tick();
 
@@ -818,14 +1072,12 @@ describe('ReceptionPanel', () => {
         ],
       }),
     );
-    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
+    expect(serviceOrderServiceStub.create).toHaveBeenCalledWith(
       jasmine.objectContaining({
-        sharedContext: jasmine.objectContaining({
-          clientId: 88,
-          clientContactId: 201,
-          contactName: 'Nuevo Contacto',
-          contactPhone: '+51987654321',
-        }),
+        clientId: 88,
+        clientContactId: 201,
+        contactName: 'Nuevo Contacto',
+        contactPhone: '+51987654321',
       }),
     );
   }));
@@ -833,7 +1085,7 @@ describe('ReceptionPanel', () => {
   it('bloquea la orden de empresa si el contacto inline está incompleto', fakeAsync(() => {
     const showMessageSpy = spyOn<any>(component, 'showMessage');
     clientsServiceStub.update.calls.reset();
-    serviceOrderServiceStub.createBatch.calls.reset();
+    serviceOrderServiceStub.create.calls.reset();
 
     component.clients = [
       {
@@ -868,12 +1120,12 @@ describe('ReceptionPanel', () => {
       initialIssue: 'No enciende',
     });
 
-    (component as any).addCurrentEquipmentToCreateOrderBatch();
+    component.addCurrentEquipmentToCreateOrder();
     component.submitCreateServiceOrder();
     tick();
 
     expect(clientsServiceStub.update).not.toHaveBeenCalled();
-    expect(serviceOrderServiceStub.createBatch).not.toHaveBeenCalled();
+    expect(serviceOrderServiceStub.create).not.toHaveBeenCalled();
     expect(component.createServiceOrderForm.get('contactName')?.invalid).toBeTrue();
     expect(component.createServiceOrderForm.get('contactPhone')?.invalid).toBeTrue();
     expect(showMessageSpy).not.toHaveBeenCalled();
@@ -933,7 +1185,7 @@ describe('ReceptionPanel', () => {
       initialIssue: 'Pantalla negra',
     });
 
-    (component as any).addCurrentEquipmentToCreateOrderBatch();
+    component.addCurrentEquipmentToCreateOrder();
     component.submitCreateServiceOrder();
     tick();
 
@@ -947,13 +1199,11 @@ describe('ReceptionPanel', () => {
         ],
       }),
     );
-    expect(serviceOrderServiceStub.createBatch).toHaveBeenCalledWith(
+    expect(serviceOrderServiceStub.create).toHaveBeenCalledWith(
       jasmine.objectContaining({
-        sharedContext: jasmine.objectContaining({
-          clientId: 90,
-          clientContactId: 303,
-          contactName: 'Contacto Nuevo',
-        }),
+        clientId: 90,
+        clientContactId: 303,
+        contactName: 'Contacto Nuevo',
       }),
     );
   }));
@@ -1139,8 +1389,14 @@ describe('ReceptionPanel', () => {
 
   it('renderiza el acuerdo inicial estándar sin CTA ni selector de servicios genéricos', () => {
     component.openCreateServiceOrderModal();
-    component.createServiceOrderForm.patchValue({ workflowServiceType: ServiceType.STANDARD_SERVICE });
+    component.createServiceOrderForm.patchValue({
+      workflowServiceType: ServiceType.STANDARD_SERVICE,
+      equipmentType: EquipmentType.LAPTOP,
+      initialIssue: 'No enciende',
+    });
     component.onCreateWorkflowServiceTypeChange();
+    component.addCurrentEquipmentToCreateOrder();
+    (component as any).prepareCandidateCommercialDrafts();
     component.createServiceOrderStep = component.getCreateServiceOrderSteps().findIndex(
       (step) => step.key === 'initialQuote',
     );
@@ -1156,6 +1412,26 @@ describe('ReceptionPanel', () => {
     expect(sectionText).not.toContain('Agregar servicio');
     expect(sectionText).toContain('Servicio técnico');
     expect(initialAgreementSection.querySelectorAll('ng-select').length).toBe(0);
+  });
+  it('prepara la cancelación sobre un equipo activo de la orden', () => {
+    const order = createServiceOrder({
+      id: 70,
+      code: 'OS-03-08-2026-001',
+      items: [{
+        id: 702,
+        code: 'OS-03-08-2026-001-02',
+        operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO,
+        cancellationRequests: [],
+      } as any],
+    });
+
+    component.openItemCancellationModal(order, undefined, order.items?.[0]);
+
+    expect(component.itemCancellationTarget).toEqual(jasmine.objectContaining({
+      mode: 'REQUEST',
+      serviceOrderId: 70,
+      selectedItemId: 702,
+    }));
   });
 });
 

@@ -21,4 +21,39 @@ export interface ServiceOrderAgreementProductRequest {
   notes?: string;
 }
 
+export interface ServiceOrderCommercialRevisionRequest {
+  serviceOrderId: number;
+  notes?: string;
+  items: ServiceOrderCommercialRevisionItemRequest[];
+}
+
+export interface ServiceOrderCommercialRevisionItemRequest {
+  serviceOrderItemId: number;
+  baseVersionId?: number;
+  notes?: string;
+  lines: ServiceOrderCommercialRevisionLineRequest[];
+}
+
+export interface ServiceOrderCommercialRevisionLineRequest {
+  type: 'PRODUCT' | 'SERVICE';
+  productId?: number;
+  serviceId?: number;
+  quantity: number;
+  unitPrice: number;
+  discountPct?: number;
+  discountOverrideReason?: string;
+  requiresPurchase?: boolean;
+  notes?: string;
+}
+
+export type ServiceOrderClientDecisionType = 'ACCEPTED' | 'CHANGES_REQUESTED';
+export type ServiceOrderClientDecisionChannel = 'WHATSAPP' | 'PHONE' | 'IN_PERSON' | 'EMAIL' | 'OTHER';
+
+export interface ServiceOrderClientDecisionRequest {
+  commercialVersionId: number;
+  decision: ServiceOrderClientDecisionType;
+  channel: ServiceOrderClientDecisionChannel;
+  observation?: string;
+}
+
 

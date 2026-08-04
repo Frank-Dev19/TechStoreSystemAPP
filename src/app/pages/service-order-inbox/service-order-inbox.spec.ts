@@ -146,6 +146,22 @@ describe('ServiceOrderInboxPage', () => {
     expect(inboxServiceStub.markRead).toHaveBeenCalledWith(7);
   });
 
+  it('distingue el contador de mensajes sin leer de las órdenes vinculadas', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+
+    component.threads = [{ ...thread, unreadCount: 4, serviceOrderIds: [11, 12] } as any];
+    component.selectedThread = null;
+
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.unread-count')?.textContent?.trim()).toBe('4');
+    expect(compiled.querySelector('.unread-count')?.getAttribute('aria-label')).toBe('4 mensajes sin leer');
+    expect(compiled.querySelector('.order-count')?.textContent?.trim()).toContain('2');
+    expect(compiled.querySelector('.order-count')?.getAttribute('aria-label')).toBe('2 órdenes vinculadas');
+  }));
+
   it('no repone el contador del hilo abierto durante una recarga en tiempo real', fakeAsync(() => {
     const unreadThread = { ...thread, unreadCount: 3 } as any;
     component.selectedThread = { ...unreadThread, unreadCount: 0 };

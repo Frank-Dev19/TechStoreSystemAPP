@@ -31,7 +31,9 @@ interface InboxDraftAttachment {
 const SERVICE_ORDER_LABELS: Record<string, string> = {
   ABIERTA: 'Abierta',
   EN_PROCESO: 'En proceso',
+  CANCELACION_SOLICITADA: 'Cancelación solicitada',
   LISTA_PARA_ENTREGA: 'Lista para entrega',
+  ENTREGA_PARCIAL: 'Entrega parcial',
   ENTREGADA: 'Entregada',
   CANCELADA: 'Cancelada',
   CERRADA_SIN_SOLUCION: 'Cerrada sin solución',

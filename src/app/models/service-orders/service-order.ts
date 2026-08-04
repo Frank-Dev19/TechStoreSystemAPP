@@ -88,15 +88,102 @@ export interface ServiceOrder {
   totalServiceOrderAgreedAmount?: number;
   sla?: ServiceOrderSla | null;
   timeMetrics?: ServiceOrderTimeMetrics | null;
+  items?: ServiceOrderItem[];
+  itemsCount?: number;
+  itemCodes?: string[];
+  itemProgress?: ServiceOrderItemProgress;
+}
+
+export interface ServiceOrderItemProgress {
+  total: number;
+  active: number;
+  resolved: number;
+  readyForPickup: number;
+  delivered: number;
+  cancelled: number;
+  cancellationPending: number;
+  isPartial: boolean;
+}
+
+export interface ServiceOrderItem {
+  id: number;
+  serviceOrderId: number;
+  position: number;
+  code: string;
+  equipmentType: EquipmentType;
+  equipmentTypeOther?: string | null;
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  accessories: string | null;
+  initialIssue: string;
+  notes: string | null;
+  priority: ServiceOrderPriority;
+  operativeStatus: ServiceOrderOperativeStatus;
+  technicalStatus: ServiceOrderTechnicalStatus;
+  commercialStatus: ServiceOrderCommercialStatus;
+  estimatedRepairHours: number | null;
+  estimatedDeliveryDate: string | null;
+  reviewStartedAt?: string | null;
+  serviceStartedAt?: string | null;
+  serviceCompletedAt?: string | null;
+  readyForPickupAt?: string | null;
+  resolvedAt?: string | null;
+  deliveredAt: string | null;
+  cancelledAt: string | null;
+  warrantySourceItemId: number | null;
+  cancellationReason?: string | null;
+  cancellationRequests?: ServiceOrderItemCancellationRequest[];
+}
+
+export interface ServiceOrderItemCancellationRequest {
+  id: number;
+  serviceOrderItemId: number;
+  status: ServiceOrderCancellationStatus;
+  resolution: ServiceOrderCancellationResolution | null;
+  channel: ServiceOrderCancellationChannel;
+  reason: string;
+  requestedByUserId: number;
+  requestedAt: string;
+  previousOperativeStatus: ServiceOrderOperativeStatus;
+  previousTechnicalStatus: ServiceOrderTechnicalStatus;
+  resolvedByUserId: number | null;
+  resolvedAt: string | null;
+  resolutionReason: string | null;
+  chargeAmount: number | null;
+  commercialVersionId: number | null;
+}
+
+export interface ServiceOrderItemCancellationResult {
+  request: ServiceOrderItemCancellationRequest;
+  order: ServiceOrder;
 }
 
 export enum ServiceOrderOperativeStatus {
   ABIERTA = 'ABIERTA',
   EN_PROCESO = 'EN_PROCESO',
+  CANCELACION_SOLICITADA = 'CANCELACION_SOLICITADA',
   LISTA_PARA_ENTREGA = 'LISTA_PARA_ENTREGA',
+  ENTREGA_PARCIAL = 'ENTREGA_PARCIAL',
   ENTREGADA = 'ENTREGADA',
   CANCELADA = 'CANCELADA',
   CERRADA_SIN_SOLUCION = 'CERRADA_SIN_SOLUCION',
+}
+
+export enum ServiceOrderCancellationChannel {
+  WHATSAPP = 'WHATSAPP',
+  PHONE = 'PHONE',
+  IN_PERSON = 'IN_PERSON',
+  EMAIL = 'EMAIL',
+  OTHER = 'OTHER',
+}
+
+export type ServiceOrderCancellationStatus = 'PENDING' | 'AWAITING_CLIENT_ACCEPTANCE' | 'APPROVED' | 'REJECTED';
+
+export enum ServiceOrderCancellationResolution {
+  APPROVED_WITHOUT_CHARGE = 'APPROVED_WITHOUT_CHARGE',
+  APPROVED_WITH_CHARGE = 'APPROVED_WITH_CHARGE',
+  REJECTED = 'REJECTED',
 }
 
 export enum ServiceOrderTechnicalStatus {

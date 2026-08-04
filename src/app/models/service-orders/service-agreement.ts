@@ -1,5 +1,5 @@
 import type { Product } from '../catalog/product';
-import type { ServiceOrder } from './service-order';
+import type { ServiceOrder, ServiceOrderItem } from './service-order';
 
 export interface ServiceOrderAgreement {
   id: number;
@@ -17,6 +17,7 @@ export interface ServiceOrderAgreement {
   notes: string | null;
   productItems: ServiceOrderAgreementProduct[];
   serviceItems: ServiceOrderAgreementService[];
+  items?: ServiceOrderAgreementItemLink[];
   agreedAt: Date | null;
   agreedByUserId?: number | null;
   sentToClientAt?: Date | null;
@@ -94,6 +95,92 @@ export enum ServiceOrderAgreementStatus {
 }
 
 export type AgreementLineProvenance = 'INHERITED' | 'NEW';
+
+export type ServiceOrderCommercialLineType = 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT';
+export type ServiceOrderItemCommercialVersionStatus = 'DRAFT' | 'ISSUED' | 'ACCEPTED' | 'REPLACED' | 'VOIDED';
+
+export interface ServiceOrderItemCommercialLine {
+  id: number;
+  commercialVersionId: number;
+  type: ServiceOrderCommercialLineType;
+  productId: number | null;
+  serviceId: number | null;
+  catalogCodeSnapshot: string;
+  catalogNameSnapshot: string;
+  catalogDescriptionSnapshot: string | null;
+  quantity: number;
+  unitPrice: number;
+  grossAmount: number;
+  discountAmount: number;
+  netAmount: number;
+  requiresPurchase: boolean;
+  notes: string | null;
+  discounts?: ServiceOrderLineDiscount[];
+}
+
+export interface ServiceOrderLineDiscount {
+  id: number;
+  commercialLineId: number;
+  pricingConfigId: number | null;
+  ruleName: string;
+  type: 'PERCENTAGE';
+  percentage: number;
+  amount: number;
+  maxAllowedPct: number;
+  wasLimitOverridden: boolean;
+  overrideReason: string | null;
+  appliedByUserId: number;
+  authorizedByUserId: number | null;
+  createdAt: string;
+}
+
+export interface ServiceOrderItemCommercialVersion {
+  id: number;
+  serviceOrderItemId: number;
+  derivedFromVersionId: number | null;
+  versionNumber: number;
+  status: ServiceOrderItemCommercialVersionStatus;
+  totalAmount: number;
+  notes: string | null;
+  lines: ServiceOrderItemCommercialLine[];
+  decisions?: ServiceOrderClientDecision[];
+}
+
+export interface ServiceOrderClientDecision {
+  id: number;
+  commercialVersionId: number;
+  decision: 'ACCEPTED' | 'CHANGES_REQUESTED';
+  channel: 'WHATSAPP' | 'PHONE' | 'IN_PERSON' | 'EMAIL' | 'OTHER';
+  observation: string | null;
+  recordedByUserId: number;
+  recordedAt: string;
+  recordedByUser?: { id: number; name: string } | null;
+}
+
+export interface ServiceOrderAgreementItemLink {
+  id: number;
+  serviceOrderAgreementId: number;
+  serviceOrderItemId: number;
+  commercialVersionId: number;
+  serviceOrderItem?: ServiceOrderItem | null;
+  commercialVersion?: ServiceOrderItemCommercialVersion | null;
+}
+
+export interface ServiceOrderClientDecisionResult {
+  decision: {
+    id: number;
+    commercialVersionId: number;
+    decision: 'ACCEPTED' | 'CHANGES_REQUESTED';
+    channel: 'WHATSAPP' | 'PHONE' | 'IN_PERSON' | 'EMAIL' | 'OTHER';
+    observation: string | null;
+    recordedByUserId: number;
+    recordedAt: string;
+  };
+  agreement: ServiceOrderAgreement;
+  item: ServiceOrderItem;
+  order: ServiceOrder;
+  allAccepted: boolean;
+}
 
 export interface AgreementLineUiMeta {
   provenance: AgreementLineProvenance;

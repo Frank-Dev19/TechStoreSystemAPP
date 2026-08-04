@@ -7,6 +7,9 @@ import {
   EquipmentType,
   ServiceOrderDerivedMetric,
   ServiceOrder,
+  ServiceOrderItem,
+  ServiceOrderItemCancellationResult,
+  ServiceOrderCommercialStatus,
   ServiceOrderOperativeStatus,
   ServiceOrderSlaStage,
   ServiceOrderTechnicalStatus,
@@ -24,10 +27,18 @@ import {
   AgreementLineProvenance,
   AgreementLineUiMeta,
   ServiceOrderAgreement,
+  ServiceOrderAgreementItemLink,
   ServiceOrderAgreementProduct,
   ServiceOrderAgreementService as ServiceOrderAgreementServiceItem,
   ServiceOrderAgreementStatus,
+  ServiceOrderClientDecision,
+  ServiceOrderItemCommercialVersion,
 } from "../../models/service-orders/service-agreement"
+import {
+  ServiceOrderClientDecisionChannel,
+  ServiceOrderClientDecisionType,
+  ServiceOrderCommercialRevisionLineRequest,
+} from "../../models/service-orders/service-agreement-request"
 import { ServiceOrderAgreementService } from "../../services/service-orders/service-agreement.service"
 import { ProductsService } from "../../services/inventory/products.service"
 import { Product } from "../../models/catalog/product"
@@ -38,6 +49,7 @@ import { CurrentUserService } from "../../services/current-user.service"
 import { User } from "../../models/user/user"
 import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
+import { ServiceOrderItemCancellationTarget } from "../../components/service-order-item-cancellation-modal/service-order-item-cancellation-modal"
 
 interface AgreementProductComposer {
   id: number
@@ -47,6 +59,8 @@ interface AgreementProductComposer {
   productNameSnapshot: string
   quantity: number
   unitPrice: number
+  discountPct?: number
+  discountOverrideReason?: string
   requiresPurchase: boolean
   notes: string
   permissions: AgreementLineUiMeta
@@ -59,6 +73,8 @@ interface AgreementServiceComposer {
   serviceCodeSnapshot: string | null
   serviceNameSnapshot: string
   unitPrice: number
+  discountPct?: number
+  discountOverrideReason?: string
   notes: string
   permissions: AgreementLineUiMeta
 }
@@ -144,16 +160,22 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   repairedOrders: ServiceOrder[] = []
   allOrders: ServiceOrder[] = []
   selectedServiceOrder: ServiceOrder | null = null
+  selectedDiagnosisItemId: number | null = null
+  selectedAgreementItemId: number | null = null
+  itemCancellationTarget: ServiceOrderItemCancellationTarget | null = null
 
   showDiagnosisModal = false
   diagnosisForm: FormGroup
   showAgreementModal = false
   agreementForm: FormGroup
+  showClientDecisionModal = false
+  clientDecisionForm: FormGroup
   diagnosticHistory: ServiceOrderDiagnosis[] = []
   agreementSummary: ServiceOrderAgreement | null = null
   agreementHistory: ServiceOrderAgreement[] = []
   isLoadingServiceOrderAgreement = false
   isSavingAgreement = false
+  isSavingClientDecision = false
   agreementBaseVersion: ServiceOrderAgreement | null = null
   agreementInheritedItems: AgreementComposerItem[] = []
   agreementEditableTechnicalService: AgreementServiceComposer | null = null
@@ -172,6 +194,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   isSavingDiagnosis = false
   private currentUser: User | null = null
   private techniciansMap = new Map<number, string>()
+  isViewingAgreementHistory = false
   liveElapsedSeconds = 0
   private liveTimer: ReturnType<typeof setInterval> | null = null
 
@@ -210,6 +233,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   ) {
     this.diagnosisForm = this.createDiagnosisForm()
     this.agreementForm = this.createAgreementForm()
+    this.clientDecisionForm = this.createClientDecisionForm()
   }
 
   ngOnInit(): void {
@@ -249,6 +273,14 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     return this.formBuilder.group({
       notes: ["", Validators.maxLength(500)],
       currency: ["PEN", Validators.required],
+    })
+  }
+
+  private createClientDecisionForm(): FormGroup {
+    return this.formBuilder.group({
+      decision: ["ACCEPTED" as ServiceOrderClientDecisionType, Validators.required],
+      channel: ["WHATSAPP" as ServiceOrderClientDecisionChannel, Validators.required],
+      observation: ["", Validators.maxLength(1000)],
     })
   }
 
@@ -468,6 +500,12 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   getOrderBadgeClass(order: ServiceOrder): string {
+    if (order.operativeStatus === ServiceOrderOperativeStatus.ENTREGA_PARCIAL) {
+      return "badge badge-waiting"
+    }
+    if (order.operativeStatus === ServiceOrderOperativeStatus.CANCELACION_SOLICITADA) {
+      return "badge badge-waiting"
+    }
     switch (order.technicalStatus) {
       case ServiceOrderTechnicalStatus.EN_DIAGNOSTICO:
         return "badge badge-diagnosis"
@@ -488,6 +526,12 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   getOrderStatusPillLabel(order: ServiceOrder): string {
+    if (order.operativeStatus === ServiceOrderOperativeStatus.ENTREGA_PARCIAL) {
+      return "Entrega parcial"
+    }
+    if (order.operativeStatus === ServiceOrderOperativeStatus.CANCELACION_SOLICITADA) {
+      return "Cancelación solicitada"
+    }
     switch (order.technicalStatus) {
       case ServiceOrderTechnicalStatus.DIAGNOSTICADA:
         return "Diagnosticado"
@@ -521,6 +565,14 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   getOrderStageLabel(order: ServiceOrder): string {
+    if (order.operativeStatus === ServiceOrderOperativeStatus.ENTREGA_PARCIAL) {
+      const delivered = order.itemProgress?.delivered ?? 0
+      const active = order.itemProgress?.active ?? order.items?.length ?? 0
+      return `${delivered} de ${active} equipos entregados`
+    }
+    if (order.operativeStatus === ServiceOrderOperativeStatus.CANCELACION_SOLICITADA) {
+      return "Esperando revisión de supervisión"
+    }
     if (order.technicalStatus === ServiceOrderTechnicalStatus.DIAGNOSTICADA) {
       return "Esperando coordinación"
     }
@@ -593,6 +645,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     }
     if (!this.selectedServiceOrder) return
     if (!this.isDiagnosisService(this.selectedServiceOrder)) return
+    const eligibleItems = this.diagnosisEligibleItems
+    this.selectedDiagnosisItemId = eligibleItems.length === 1 ? Number(eligibleItems[0].id) : null
     this.showDiagnosisModal = true
     this.diagnosisForm.reset({
       summary: "",
@@ -603,6 +657,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   closeDiagnosisModal(): void {
     this.showDiagnosisModal = false
+    this.selectedDiagnosisItemId = null
     this.diagnosisForm.reset({
       summary: "",
       details: "",
@@ -614,6 +669,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     event?.stopPropagation()
     this.selectServiceOrder(order)
     this.showAgreementModal = true
+    this.isViewingAgreementHistory = false
     this.resetAgreementComposerState()
     this.agreementForm.reset({ notes: "", currency: "PEN" })
     this.isLoadingServiceOrderAgreement = true
@@ -632,6 +688,22 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           this.diagnosticHistory = diagnoses.data ?? []
           const list = agreements.data ?? []
           this.agreementHistory = list
+
+          if (this.usesItemCommercialComposer(order)) {
+            this.agreementSummary = this.resolveLatestAgreement(list)
+            const eligibleItems = this.getAgreementEligibleItems()
+            const preferredItem = eligibleItems.find((item) => !this.isAgreementItemLocked(item) && [
+              ServiceOrderCommercialStatus.PENDIENTE_PROPUESTA,
+              ServiceOrderCommercialStatus.RECHAZADA,
+              ServiceOrderCommercialStatus.PENDIENTE_RESPUESTA_CLIENTE,
+              ServiceOrderCommercialStatus.PROPUESTA_EMITIDA,
+            ].includes(item.commercialStatus))
+              ?? eligibleItems.find((item) => !this.isAgreementItemLocked(item))
+              ?? eligibleItems[0]
+            this.selectAgreementItem(preferredItem?.id ?? null, true)
+            return
+          }
+
           const context = this.resolveAgreementModalContext(order, list)
           this.agreementSummary = context.summary
           this.agreementBaseVersion = context.baseAgreement
@@ -660,8 +732,23 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     if (!this.selectedServiceOrder) return
 
     this.showAgreementModal = true
+    this.isViewingAgreementHistory = true
     this.resetAgreementComposerState()
     this.agreementSummary = agreement
+
+    if (this.usesItemCommercialComposer()) {
+      const firstLinkedItem = agreement.items?.find((link) =>
+        this.getAgreementEligibleItems().some((item) => Number(item.id) === Number(link.serviceOrderItemId)),
+      )
+      this.selectedAgreementItemId = this.toNumericId(firstLinkedItem?.serviceOrderItemId)
+      this.agreementForm.reset({
+        notes: firstLinkedItem?.commercialVersion?.notes ?? agreement.notes ?? "",
+        currency: agreement.currency ?? "PEN",
+      })
+      this.hydrateItemCommercialVersion(firstLinkedItem?.commercialVersion ?? null)
+      return
+    }
+
     this.agreementBaseVersion = this.resolveAgreementBaseById(agreement.derivedFromAgreementId ?? null, this.agreementHistory)
     this.isDerivedAgreementComposerActive = this.isDerivedAgreement(agreement)
     this.agreementInheritedNotes = this.agreementBaseVersion?.notes ?? ""
@@ -674,9 +761,89 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   closeAgreementModal(): void {
     this.showAgreementModal = false
+    this.closeClientDecisionModal()
     this.agreementForm.reset({ notes: "", currency: "PEN" })
     this.resetAgreementComposerState()
     this.productPriceLoading = {}
+  }
+
+  canRecordClientDecision(): boolean {
+    const status = this.getSelectedAgreementVersionLink()?.commercialVersion?.status
+    return this.usesItemCommercialComposer()
+      && !this.isViewingAgreementHistory
+      && (status === "DRAFT" || status === "ISSUED")
+  }
+
+  openClientDecisionModal(): void {
+    const version = this.getSelectedAgreementVersionLink()?.commercialVersion
+    if (!version) {
+      this.showMessage("warning", "fas fa-info-circle", "Primero guarda una versión comercial para este equipo.")
+      return
+    }
+    if (!this.canRecordClientDecision()) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta versión ya no admite nuevas decisiones.")
+      return
+    }
+
+    this.clientDecisionForm.reset({
+      decision: "ACCEPTED",
+      channel: "WHATSAPP",
+      observation: "",
+    })
+    this.showClientDecisionModal = true
+  }
+
+  closeClientDecisionModal(): void {
+    this.showClientDecisionModal = false
+    this.clientDecisionForm.reset({
+      decision: "ACCEPTED",
+      channel: "WHATSAPP",
+      observation: "",
+    })
+  }
+
+  submitClientDecision(): void {
+    if (this.clientDecisionForm.invalid) {
+      this.markFormGroupAsTouched(this.clientDecisionForm)
+      return
+    }
+    const versionId = this.toNumericId(this.getSelectedAgreementVersionLink()?.commercialVersionId)
+    if (!versionId) {
+      this.showMessage("warning", "fas fa-info-circle", "No pudimos identificar la versión comercial del equipo.")
+      return
+    }
+
+    const decision = this.clientDecisionForm.get("decision")?.value as ServiceOrderClientDecisionType
+    const channel = this.clientDecisionForm.get("channel")?.value as ServiceOrderClientDecisionChannel
+    const observation = String(this.clientDecisionForm.get("observation")?.value ?? "").trim()
+    this.isSavingClientDecision = true
+    this.agreementService.recordClientDecision({
+      commercialVersionId: versionId,
+      decision,
+      channel,
+      ...(observation ? { observation } : {}),
+    })
+      .pipe(finalize(() => (this.isSavingClientDecision = false)))
+      .subscribe({
+        next: (result) => {
+          const message = decision === "CHANGES_REQUESTED"
+            ? "Se registró que el cliente solicita cambios para este equipo."
+            : result.allAccepted
+              ? "Se registró la aceptación y el acuerdo consolidado quedó confirmado."
+              : "Se registró la aceptación de este equipo. Los demás equipos siguen pendientes."
+          this.closeClientDecisionModal()
+          this.closeAgreementModal()
+          this.showMessage("success", "fas fa-check-circle", message)
+          this.loadTechnicianOrders()
+        },
+        error: (error) => {
+          const backendMessage = error?.error?.message
+          const message = Array.isArray(backendMessage)
+            ? backendMessage.join(" ")
+            : backendMessage || "No pudimos registrar la decisión del cliente."
+          this.showMessage("danger", "fas fa-times-circle", message)
+        },
+      })
   }
 
   addAgreementProduct(): void {
@@ -689,6 +856,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       productNameSnapshot: "",
       quantity: 1,
       unitPrice: 0,
+      discountPct: 0,
+      discountOverrideReason: "",
       requiresPurchase: true,
       notes: "",
       permissions: this.buildUiMeta("NEW", true, true),
@@ -740,11 +909,25 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       })
   }
 
-  calculateAgreementItemSubtotal(item: AgreementComposerItem): number {
+  calculateAgreementItemGross(item: AgreementComposerItem): number {
     if (item.type === "product") {
       return Number(item.quantity ?? 0) * Number(item.unitPrice ?? 0)
     }
     return Number(item.unitPrice ?? TECHNICAL_SERVICE_OPTION.price)
+  }
+
+  calculateAgreementItemDiscount(item: AgreementComposerItem): number {
+    const gross = this.calculateAgreementItemGross(item)
+    const percentage = Math.min(100, Math.max(0, Number(item.discountPct ?? 0)))
+    return Number((gross * percentage / 100).toFixed(2))
+  }
+
+  calculateAgreementItemSubtotal(item: AgreementComposerItem): number {
+    return Number((this.calculateAgreementItemGross(item) - this.calculateAgreementItemDiscount(item)).toFixed(2))
+  }
+
+  updateAgreementItemDiscount(item: AgreementComposerItem, value: unknown): void {
+    item.discountPct = Math.min(100, Math.max(0, Number(value) || 0))
   }
 
   calculateAgreementTotal(): number {
@@ -768,6 +951,11 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     }
     if (!this.isTechnicalServiceAmountValid()) {
       this.showMessage("warning", "fas fa-exclamation-circle", "El servicio técnico debe ser de al menos S/20.")
+      return
+    }
+
+    if (this.usesItemCommercialComposer(order)) {
+      this.submitItemCommercialRevision(order)
       return
     }
 
@@ -877,12 +1065,15 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   submitDiagnosis(): void {
-    if (this.diagnosisForm.invalid || !this.selectedServiceOrder) {
+    if (this.diagnosisForm.invalid || !this.selectedServiceOrder || !this.canSubmitDiagnosis) {
       this.markFormGroupAsTouched(this.diagnosisForm)
       return
     }
 
-    const wasInService = this.selectedServiceOrder.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION
+    const selectedItem = this.selectedDiagnosisItem
+    const wasInService =
+      selectedItem?.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION ||
+      (!selectedItem && this.selectedServiceOrder.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION)
     const orderId = Number(this.selectedServiceOrder.id)
     const selectedOutcome =
       (this.diagnosisForm.get("outcome")?.value as ServiceOrderDiagnosisOutcome | null) ??
@@ -891,7 +1082,9 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     const waivesCharge = selectedOutcome === ServiceOrderDiagnosisOutcome.NO_FAULT_FOUND
 
     const payload: ServiceOrderDiagnosisSaveRequest = {
-      serviceOrderId: orderId,
+      ...(selectedItem
+        ? { serviceOrderItemId: Number(selectedItem.id) }
+        : { serviceOrderId: orderId }),
       summary: this.diagnosisForm.get("summary")?.value,
       details: this.diagnosisForm.get("details")?.value,
       outcome: selectedOutcome,
@@ -932,6 +1125,37 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         },
         error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar el diagnóstico."),
       })
+  }
+
+  getAgreementDiscountTotal(): number {
+    return this.getAgreementComposerItems().reduce(
+      (total, item) => total + this.calculateAgreementItemDiscount(item),
+      0,
+    )
+  }
+
+  get diagnosisEligibleItems(): ServiceOrderItem[] {
+    const items = this.selectedServiceOrder?.items ?? []
+    return items.filter((item) =>
+      [ServiceOrderTechnicalStatus.EN_DIAGNOSTICO, ServiceOrderTechnicalStatus.EN_EJECUCION].includes(
+        item.technicalStatus,
+      ),
+    )
+  }
+
+  get selectedDiagnosisItem(): ServiceOrderItem | null {
+    if (!this.selectedDiagnosisItemId) return null
+    return this.diagnosisEligibleItems.find((item) => Number(item.id) === Number(this.selectedDiagnosisItemId)) ?? null
+  }
+
+  get canSubmitDiagnosis(): boolean {
+    const items = this.selectedServiceOrder?.items ?? []
+    return items.length === 0 || this.selectedDiagnosisItem !== null
+  }
+
+  getDiagnosisItemLabel(item: ServiceOrderItem): string {
+    const equipment = [item.brand, item.model].filter(Boolean).join(' ')
+    return `${item.code}${equipment ? ` · ${equipment}` : ''}`
   }
 
   submitDiagnosisAsNoSolution(): void {
@@ -1034,10 +1258,23 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   isAgreementEditable(): boolean {
+    if (this.usesItemCommercialComposer()) {
+      const selectedItem = this.getSelectedAgreementItem()
+      return !this.isViewingAgreementHistory && selectedItem !== null && !this.isAgreementItemLocked(selectedItem)
+    }
     return !this.agreementSummary || this.agreementSummary.status === ServiceOrderAgreementStatus.DRAFT
   }
 
   getAgreementModalMessage(): string | null {
+    if (this.usesItemCommercialComposer()) {
+      if (this.getSelectedAgreementItem() && this.isAgreementItemLocked(this.getSelectedAgreementItem()!)) {
+        return "Esta versión ya fue aceptada y permanece bloqueada. Selecciona un equipo pendiente para preparar cambios."
+      }
+      return this.getSelectedAgreementVersionLink()?.commercialVersion
+        ? "Estás preparando una nueva versión comercial para el equipo seleccionado. Los demás equipos conservarán su versión vigente."
+        : "Estás preparando la primera versión comercial del equipo seleccionado."
+    }
+
     if (this.isDerivedAgreementComposer()) {
       return 'Estás preparando una nueva versión derivada. Al confirmar, este acuerdo reemplaza al acuerdo activo anterior.'
     }
@@ -1325,6 +1562,339 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     this.ensureTechnicalServiceItem()
   }
 
+  getPendingItemCancellation(item: ServiceOrderItem) {
+    return (item.cancellationRequests ?? []).find((request) =>
+      ["PENDING", "AWAITING_CLIENT_ACCEPTANCE"].includes(request.status),
+    ) ?? null
+  }
+
+  canRequestItemCancellation(item: ServiceOrderItem): boolean {
+    return ![
+      ServiceOrderOperativeStatus.CANCELADA,
+      ServiceOrderOperativeStatus.ENTREGADA,
+      ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION,
+    ].includes(item.operativeStatus) && !this.getPendingItemCancellation(item)
+  }
+
+  canRequestAnyItemCancellation(order: ServiceOrder): boolean {
+    return (order.items ?? []).some((item) => this.canRequestItemCancellation(item))
+  }
+
+  openItemCancellationModal(order: ServiceOrder, event?: Event, item?: ServiceOrderItem): void {
+    event?.stopPropagation()
+    const items = (order.items ?? []).filter((candidate) => this.canRequestItemCancellation(candidate))
+    if (!items.length) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta orden no tiene equipos disponibles para cancelar.")
+      return
+    }
+    this.itemCancellationTarget = {
+      mode: "REQUEST",
+      serviceOrderId: Number(order.id),
+      orderCode: order.code,
+      items,
+      selectedItemId: item?.id ?? items[0].id,
+    }
+  }
+
+  handleItemCancellationSaved(result: ServiceOrderItemCancellationResult): void {
+    this.itemCancellationTarget = null
+    this.selectedServiceOrder = result.order
+    this.loadTechnicianOrders()
+    const pending = ["PENDING", "AWAITING_CLIENT_ACCEPTANCE"].includes(result.request.status)
+    this.showMessage(
+      "success",
+      "fas fa-check-circle",
+      pending
+        ? "La cancelación quedó pendiente de revisión por supervisión."
+        : "El equipo quedó cancelado correctamente.",
+    )
+  }
+
+  usesItemCommercialComposer(order: ServiceOrder | null = this.selectedServiceOrder): boolean {
+    return Boolean(order?.items?.length)
+  }
+
+  getAgreementEligibleItems(): ServiceOrderItem[] {
+    const terminalStatuses = new Set<ServiceOrderOperativeStatus>([
+      ServiceOrderOperativeStatus.CANCELADA,
+      ServiceOrderOperativeStatus.ENTREGADA,
+      ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION,
+    ])
+    return (this.selectedServiceOrder?.items ?? [])
+      .filter((item) => !terminalStatuses.has(item.operativeStatus))
+      .sort((left, right) => Number(left.position) - Number(right.position))
+  }
+
+  getSelectedAgreementItem(): ServiceOrderItem | null {
+    const selectedId = Number(this.selectedAgreementItemId ?? 0)
+    return this.getAgreementEligibleItems().find((item) => Number(item.id) === selectedId) ?? null
+  }
+
+  getAgreementItemLabel(item: ServiceOrderItem): string {
+    const equipment = [item.brand, item.model].filter(Boolean).join(" ") || this.equipmentTypeLabels[item.equipmentType]
+    return `${item.code} · ${equipment}`
+  }
+
+  selectAgreementItem(value: unknown, allowLocked = false): void {
+    const itemId = this.toNumericId(value)
+    const item = this.getAgreementEligibleItems().find((entry) => Number(entry.id) === Number(itemId))
+    if (item && this.isAgreementItemLocked(item) && !allowLocked && !this.isViewingAgreementHistory) {
+      return
+    }
+    this.selectedAgreementItemId = item?.id ?? null
+
+    if (!item) {
+      this.hydrateItemCommercialVersion(null)
+      this.agreementForm.patchValue({ notes: "" })
+      return
+    }
+
+    const version = this.getSelectedAgreementVersionLink()?.commercialVersion ?? null
+    this.agreementForm.patchValue({ notes: version?.notes ?? "" })
+    this.hydrateItemCommercialVersion(version)
+  }
+
+  getSelectedAgreementVersionLink(): ServiceOrderAgreementItemLink | null {
+    return this.getAgreementVersionLinkForItem(this.selectedAgreementItemId)
+  }
+
+  getAgreementVersionLinkForItem(value: unknown): ServiceOrderAgreementItemLink | null {
+    const itemId = Number(value ?? 0)
+    if (!itemId) return null
+
+    const agreements = [
+      ...(this.agreementSummary ? [this.agreementSummary] : []),
+      ...this.agreementHistory.filter((agreement) => Number(agreement.id) !== Number(this.agreementSummary?.id)),
+    ].sort((left, right) => {
+      const bySequence = Number(right.sequenceNumber ?? 0) - Number(left.sequenceNumber ?? 0)
+      return bySequence || Number(right.id ?? 0) - Number(left.id ?? 0)
+    })
+
+    for (const agreement of agreements) {
+      const link = agreement.items?.find((entry) => Number(entry.serviceOrderItemId) === itemId)
+      if (link) return link
+    }
+    return null
+  }
+
+  isAgreementItemLocked(item: ServiceOrderItem): boolean {
+    return this.getAgreementVersionLinkForItem(item.id)?.commercialVersion?.status === "ACCEPTED"
+  }
+
+  getAgreementItemVersionLabel(item: ServiceOrderItem): string {
+    const version = this.getAgreementVersionLinkForItem(item.id)?.commercialVersion
+    if (!version) return "Sin propuesta"
+    const latestDecision = this.getAgreementItemLatestDecision(item)
+    if (latestDecision?.decision === "CHANGES_REQUESTED") return "Cambios solicitados"
+    if (latestDecision?.decision === "ACCEPTED") return "Aceptado"
+    if (item.commercialStatus === ServiceOrderCommercialStatus.RECHAZADA) return "Cambios solicitados"
+    if (
+      version.status === "DRAFT"
+      && [
+        ServiceOrderCommercialStatus.PROPUESTA_EMITIDA,
+        ServiceOrderCommercialStatus.PENDIENTE_RESPUESTA_CLIENTE,
+      ].includes(item.commercialStatus)
+    ) {
+      return "Pendiente de respuesta"
+    }
+    const labels: Record<string, string> = {
+      DRAFT: "Borrador",
+      ISSUED: "Pendiente de respuesta",
+      ACCEPTED: "Aceptado",
+      REPLACED: "Reemplazado",
+      VOIDED: "Anulado",
+    }
+    return labels[version.status] ?? version.status
+  }
+
+  getAgreementItemVersionNumber(item: ServiceOrderItem): number | null {
+    return this.getAgreementVersionLinkForItem(item.id)?.commercialVersion?.versionNumber ?? null
+  }
+
+  getAgreementItemVersionTotal(item: ServiceOrderItem): number {
+    return Number(this.getAgreementVersionLinkForItem(item.id)?.commercialVersion?.totalAmount ?? 0)
+  }
+
+  getAgreementItemLatestDecision(item: ServiceOrderItem): ServiceOrderClientDecision | null {
+    const decisions = this.getAgreementVersionLinkForItem(item.id)?.commercialVersion?.decisions ?? []
+    return [...decisions].sort(
+      (left, right) => new Date(right.recordedAt).getTime() - new Date(left.recordedAt).getTime(),
+    )[0] ?? null
+  }
+
+  getAgreementItemDecisionAuditLabel(item: ServiceOrderItem): string | null {
+    const decision = this.getAgreementItemLatestDecision(item)
+    if (!decision) return null
+    const channels: Record<ServiceOrderClientDecisionChannel, string> = {
+      WHATSAPP: "WhatsApp",
+      PHONE: "Llamada telefónica",
+      IN_PERSON: "Presencial",
+      EMAIL: "Correo electrónico",
+      OTHER: "Otro canal",
+    }
+    const recorder = decision.recordedByUser?.name || `usuario #${decision.recordedByUserId}`
+    return `${channels[decision.channel]} · registrado por ${recorder}`
+  }
+
+  private hydrateItemCommercialVersion(version: ServiceOrderItemCommercialVersion | null): void {
+    this.agreementInheritedItems = []
+    this.agreementNewItems = []
+    this.agreementEditableTechnicalService = null
+    this.agreementBaseVersion = null
+    this.agreementInheritedNotes = ""
+    this.isDerivedAgreementComposerActive = false
+
+    for (const line of version?.lines ?? []) {
+      if (line.type === "PRODUCT") {
+        this.agreementNewItems.push({
+          id: Number(line.id),
+          type: "product",
+          productId: line.productId,
+          productCodeSnapshot: line.catalogCodeSnapshot,
+          productNameSnapshot: line.catalogNameSnapshot,
+          quantity: Number(line.quantity),
+          unitPrice: Number(line.unitPrice),
+          discountPct: Number(line.discounts?.[0]?.percentage ?? 0),
+          discountOverrideReason: line.discounts?.[0]?.overrideReason ?? "",
+          requiresPurchase: Boolean(line.requiresPurchase),
+          notes: line.notes ?? "",
+          permissions: this.buildUiMeta("NEW", true, true),
+        })
+        continue
+      }
+
+      if (line.type === "SERVICE" && !this.agreementEditableTechnicalService) {
+        this.agreementEditableTechnicalService = {
+          id: Number(line.id),
+          type: "service",
+          serviceId: line.serviceId,
+          serviceCodeSnapshot: line.catalogCodeSnapshot,
+          serviceNameSnapshot: line.catalogNameSnapshot,
+          unitPrice: Number(line.unitPrice),
+          discountPct: Number(line.discounts?.[0]?.percentage ?? 0),
+          discountOverrideReason: line.discounts?.[0]?.overrideReason ?? "",
+          notes: line.notes ?? "",
+          permissions: this.buildUiMeta("NEW", true, false),
+        }
+        continue
+      }
+
+      if (line.type === "SERVICE") {
+        this.agreementInheritedItems.push({
+          id: Number(line.id),
+          type: "service",
+          serviceId: line.serviceId,
+          serviceCodeSnapshot: line.catalogCodeSnapshot,
+          serviceNameSnapshot: line.catalogNameSnapshot,
+          unitPrice: Number(line.unitPrice),
+          discountPct: Number(line.discounts?.[0]?.percentage ?? 0),
+          discountOverrideReason: line.discounts?.[0]?.overrideReason ?? "",
+          notes: line.notes ?? "",
+          permissions: this.buildUiMeta("INHERITED", false, false),
+        })
+      }
+    }
+
+    this.ensureTechnicalServiceItem()
+  }
+
+  private submitItemCommercialRevision(order: ServiceOrder): void {
+    const selectedItem = this.getSelectedAgreementItem()
+    if (!selectedItem) {
+      this.showMessage("warning", "fas fa-exclamation-circle", "Selecciona el equipo que deseas cotizar.")
+      return
+    }
+
+    const notes = String(this.agreementForm.get("notes")?.value ?? "").trim()
+    const lines: ServiceOrderCommercialRevisionLineRequest[] = []
+    const technicalService = this.getTechnicalServiceItem()
+    if (technicalService) {
+      const discountPct = Number(technicalService.discountPct ?? 0)
+      const discountOverrideReason = String(technicalService.discountOverrideReason ?? "").trim()
+      lines.push({
+        type: "SERVICE",
+        ...(technicalService.serviceId ? { serviceId: Number(technicalService.serviceId) } : {}),
+        quantity: 1,
+        unitPrice: Number(Number(technicalService.unitPrice).toFixed(2)),
+        ...(discountPct > 0 ? { discountPct } : {}),
+        ...(discountOverrideReason ? { discountOverrideReason } : {}),
+        ...(technicalService.notes ? { notes: technicalService.notes } : {}),
+      })
+    }
+
+    for (const service of this.agreementInheritedItems.filter((item): item is AgreementServiceComposer => item.type === "service")) {
+      const discountPct = Number(service.discountPct ?? 0)
+      const discountOverrideReason = String(service.discountOverrideReason ?? "").trim()
+      lines.push({
+        type: "SERVICE",
+        ...(service.serviceId ? { serviceId: Number(service.serviceId) } : {}),
+        quantity: 1,
+        unitPrice: Number(Number(service.unitPrice).toFixed(2)),
+        ...(discountPct > 0 ? { discountPct } : {}),
+        ...(discountOverrideReason ? { discountOverrideReason } : {}),
+        ...(service.notes ? { notes: service.notes } : {}),
+      })
+    }
+
+    for (const product of this.getAgreementProductItems()) {
+      const productId = this.toNumericId(product.productId)
+      if (!productId) continue
+      const discountPct = Number(product.discountPct ?? 0)
+      const discountOverrideReason = String(product.discountOverrideReason ?? "").trim()
+      lines.push({
+        type: "PRODUCT",
+        productId,
+        quantity: Math.max(1, Number(product.quantity) || 1),
+        unitPrice: Number(Number(product.unitPrice).toFixed(2)),
+        ...(discountPct > 0 ? { discountPct } : {}),
+        ...(discountOverrideReason ? { discountOverrideReason } : {}),
+        requiresPurchase: Boolean(product.requiresPurchase),
+        ...(product.notes ? { notes: product.notes } : {}),
+      })
+    }
+
+    const currentLink = this.getSelectedAgreementVersionLink()
+    const payload = {
+      serviceOrderId: Number(order.id),
+      ...(notes ? { notes } : {}),
+      items: [{
+        serviceOrderItemId: Number(selectedItem.id),
+        ...(currentLink?.commercialVersionId ? { baseVersionId: Number(currentLink.commercialVersionId) } : {}),
+        ...(notes ? { notes } : {}),
+        lines,
+      }],
+    }
+
+    this.isSavingAgreement = true
+    this.agreementService.createRevision(payload)
+      .pipe(finalize(() => (this.isSavingAgreement = false)))
+      .subscribe({
+        next: () => {
+          this.showMessage(
+            "success",
+            "fas fa-check-circle",
+            "Revisión comercial guardada. Falta registrar la decisión del cliente para cada equipo.",
+          )
+          this.closeAgreementModal()
+          this.loadTechnicianOrders()
+        },
+        error: (error) => {
+          const backendMessage = error?.error?.message
+          const message = Array.isArray(backendMessage)
+            ? backendMessage.join(" ")
+            : backendMessage || "No pudimos guardar la revisión comercial."
+          this.showMessage("danger", "fas fa-times-circle", message)
+        },
+      })
+  }
+
+  private resolveLatestAgreement(agreements: ServiceOrderAgreement[]): ServiceOrderAgreement | null {
+    return [...agreements].sort((left, right) => {
+      const bySequence = Number(right.sequenceNumber ?? 0) - Number(left.sequenceNumber ?? 0)
+      return bySequence || Number(right.id ?? 0) - Number(left.id ?? 0)
+    })[0] ?? null
+  }
+
   private hydrateDerivedAgreementComposer(baseAgreement: ServiceOrderAgreement, draftAgreement: ServiceOrderAgreement): void {
     baseAgreement.productItems?.forEach((product) => {
       this.agreementInheritedItems.push(this.mapAgreementProductToComposer(product, "INHERITED", false, false))
@@ -1474,6 +2044,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       serviceCodeSnapshot: TECHNICAL_SERVICE_OPTION.code,
       serviceNameSnapshot: TECHNICAL_SERVICE_OPTION.name,
       unitPrice: TECHNICAL_SERVICE_OPTION.price,
+      discountPct: 0,
+      discountOverrideReason: "",
       notes: "",
       permissions: this.buildUiMeta(this.isDerivedAgreementComposer() ? "INHERITED" : "NEW", true, false),
     }
@@ -1493,6 +2065,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       productNameSnapshot: product.productNameSnapshot ?? this.getProductName(product),
       quantity: product.quantity,
       unitPrice: product.unitPrice,
+      discountPct: 0,
+      discountOverrideReason: "",
       requiresPurchase: product.requiresPurchase,
       notes: product.notes || "",
       permissions: this.buildUiMeta(provenance, product.canEdit ?? canEdit, product.canDelete ?? canDelete, product.derivedFromItemId ?? null),
@@ -1513,6 +2087,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       serviceCodeSnapshot: service.serviceCodeSnapshot ?? TECHNICAL_SERVICE_OPTION.code,
       serviceNameSnapshot: service.serviceNameSnapshot || this.getServiceName(service),
       unitPrice: Number(unitPriceOverride ?? service.unitPrice ?? TECHNICAL_SERVICE_OPTION.price),
+      discountPct: 0,
+      discountOverrideReason: "",
       notes: service.notes || "",
       permissions: this.buildUiMeta(provenance, service.canEdit ?? canEdit, service.canDelete ?? canDelete, service.derivedFromItemId ?? null),
     }
@@ -1541,6 +2117,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   private resetAgreementComposerState(): void {
     this.agreementSummary = null
+    this.selectedAgreementItemId = null
     this.agreementBaseVersion = null
     this.agreementInheritedItems = []
     this.agreementEditableTechnicalService = null

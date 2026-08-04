@@ -1,0 +1,129 @@
+<div class="cancellation-overlay" (click)="close()">
+  <section
+    class="cancellation-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="item-cancellation-title"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="cancellation-header">
+      <div>
+        <span class="cancellation-eyebrow">{{ isResolution ? 'Revisión supervisada' : 'Solicitud del cliente' }}</span>
+        <h2 id="item-cancellation-title">
+          {{ isResolution ? 'Resolver cancelación' : 'Cancelar un equipo' }}
+        </h2>
+        <p>Orden {{ target.orderCode }}</p>
+      </div>
+      <button type="button" class="cancellation-close" aria-label="Cerrar" [disabled]="isSaving" (click)="close()">
+        <i class="fas fa-times"></i>
+      </button>
+    </header>
+
+    <form [formGroup]="form" class="cancellation-body" (ngSubmit)="submit()">
+      <label class="cancellation-field">
+        <span>Equipo</span>
+        <select formControlName="itemId">
+          @for (item of target.items; track item.id) {
+            <option [ngValue]="item.id">{{ getItemLabel(item) }}</option>
+          }
+        </select>
+      </label>
+
+      @if (!isResolution) {
+        <div class="cancellation-impact" [class.is-late]="willRequireSupervision">
+          <i [class]="willRequireSupervision ? 'fas fa-user-shield' : 'fas fa-check-circle'"></i>
+          <div>
+            <strong>{{ willRequireSupervision ? 'Requiere aprobación de supervisión' : 'Cancelación inmediata' }}</strong>
+            <span>
+              {{
+                willRequireSupervision
+                  ? 'El trabajo ya comenzó. El equipo quedará pendiente hasta que supervisión resuelva la solicitud.'
+                  : 'El trabajo aún no comenzó. La cancelación se aprobará al guardar.'
+              }}
+            </span>
+          </div>
+        </div>
+
+        <label class="cancellation-field">
+          <span>Canal de la solicitud</span>
+          <select formControlName="channel">
+            @for (option of channelOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+      } @else {
+        <fieldset class="cancellation-resolution">
+          <legend>Decisión de supervisión</legend>
+          <label>
+            <input
+              type="radio"
+              formControlName="resolution"
+              [value]="'APPROVED_WITHOUT_CHARGE'"
+            />
+            <span><strong>Aprobar sin cobro</strong><small>El equipo quedará cancelado.</small></span>
+          </label>
+          <label>
+            <input type="radio" formControlName="resolution" [value]="'APPROVED_WITH_CHARGE'" />
+            <span>
+              <strong>Aprobar con cobro</strong>
+              <small>Se creará un ajuste que debe aceptar el cliente antes de cancelar.</small>
+            </span>
+          </label>
+          <label>
+            <input type="radio" formControlName="resolution" [value]="'REJECTED'" />
+            <span><strong>Rechazar solicitud</strong><small>El equipo volverá a su estado operativo anterior.</small></span>
+          </label>
+        </fieldset>
+
+        @if (requiresCharge) {
+          <label class="cancellation-field">
+            <span>Monto por trabajo realizado (S/)</span>
+            <input
+              type="number"
+              formControlName="chargeAmount"
+              min="0.01"
+              step="0.01"
+              inputmode="decimal"
+              placeholder="0.00"
+            />
+            <small>El equipo seguirá pendiente hasta registrar la aceptación del cliente.</small>
+          </label>
+        }
+      }
+
+      <label class="cancellation-field">
+        <span>{{ isResolution ? 'Motivo de la decisión' : 'Motivo comunicado por el cliente' }}</span>
+        <textarea
+          formControlName="reason"
+          rows="4"
+          maxlength="1000"
+          [placeholder]="isResolution ? 'Explica por qué se aprueba o rechaza.' : 'Describe claramente la solicitud del cliente.'"
+        ></textarea>
+      </label>
+
+      <div class="cancellation-safety">
+        <i class="fas fa-receipt"></i>
+        <span>Si existe una venta confirmada, la cancelación final se bloqueará hasta que esa venta sea anulada o revertida.</span>
+      </div>
+
+      @if (errorMessage) {
+        <p class="cancellation-error" role="alert">{{ errorMessage }}</p>
+      }
+
+      <footer class="cancellation-actions">
+        <button type="button" class="cancellation-button cancellation-button--secondary" [disabled]="isSaving" (click)="close()">
+          Volver
+        </button>
+        <button type="submit" class="cancellation-button cancellation-button--danger" [disabled]="form.invalid || isSaving">
+          @if (isSaving) {
+            <i class="fas fa-spinner fa-spin"></i>
+            Guardando...
+          } @else {
+            {{ isResolution ? 'Guardar decisión' : 'Registrar cancelación' }}
+          }
+        </button>
+      </footer>
+    </form>
+  </section>
+</div>

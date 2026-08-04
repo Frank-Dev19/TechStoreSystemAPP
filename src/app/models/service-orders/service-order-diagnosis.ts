@@ -1,6 +1,11 @@
+import { ServiceOrderItem } from './service-order';
+
 export interface ServiceOrderDiagnosis {
   id: number;
-  serviceOrderId: number;
+  serviceOrderItemId: number;
+  serviceOrderItem?: ServiceOrderItem;
+  /** Compatibilidad de lectura con respuestas anteriores. */
+  serviceOrderId?: number;
   sequenceNumber: number;
   status: ServiceOrderDiagnosisStatus;
   outcome: ServiceOrderDiagnosisOutcome;

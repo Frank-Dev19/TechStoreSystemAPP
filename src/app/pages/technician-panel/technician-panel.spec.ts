@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { NgSelectModule } from '@ng-select/ng-select';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 
 import {
   resolveLatestActiveAgreement,
@@ -23,6 +23,7 @@ import {
   EquipmentType,
   RequestOrigin,
   ServiceOrder,
+  ServiceOrderItem,
   ServiceOrderCommercialStatus,
   ServiceOrderEconomicStatus,
   ServiceOrderOperativeStatus,
@@ -55,6 +56,8 @@ describe('TechnicianPanel', () => {
 
   const agreementServiceStub = {
     create: jasmine.createSpy('create').and.returnValue(of({ id: 999 })),
+    createRevision: jasmine.createSpy('createRevision').and.returnValue(of({ id: 1000 })),
+    recordClientDecision: jasmine.createSpy('recordClientDecision').and.returnValue(of({ allAccepted: false })),
     update: jasmine.createSpy('update').and.returnValue(of({ id: 999 })),
     confirm: jasmine.createSpy('confirm').and.returnValue(of({ id: 999 })),
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
@@ -93,10 +96,13 @@ describe('TechnicianPanel', () => {
 
   beforeEach(async () => {
     agreementServiceStub.create.calls.reset();
+    agreementServiceStub.createRevision.calls.reset();
+    agreementServiceStub.recordClientDecision.calls.reset();
     agreementServiceStub.update.calls.reset();
     agreementServiceStub.confirm.calls.reset();
     agreementServiceStub.findAll.calls.reset();
     diagnosisServiceStub.findAll.calls.reset();
+    diagnosisServiceStub.create.calls.reset();
     agreementServiceStub.findAll.and.returnValue(of({ data: [] }));
     diagnosisServiceStub.findAll.and.returnValue(of({ data: [] }));
 
@@ -124,6 +130,45 @@ describe('TechnicianPanel', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('exige seleccionar un equipo cuando la orden tiene varios pendientes de diagnóstico', () => {
+    const order = createServiceOrder({
+      id: 32,
+      serviceType: ServiceType.DIAGNOSIS,
+      technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+    });
+    order.items = [
+      createServiceOrderItem(order, { id: 321, position: 1, code: 'SO-32-01' }),
+      createServiceOrderItem(order, { id: 322, position: 2, code: 'SO-32-02' }),
+    ];
+
+    component.openDiagnosisModal(order);
+
+    expect(component.selectedDiagnosisItemId).toBeNull();
+    expect(component.canSubmitDiagnosis).toBeFalse();
+  });
+
+  it('envía el diagnóstico con serviceOrderItemId y no con serviceOrderId', () => {
+    const order = createServiceOrder({
+      id: 32,
+      serviceType: ServiceType.DIAGNOSIS,
+      technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+    });
+    order.items = [createServiceOrderItem(order, { id: 321, code: 'SO-32-01' })];
+    component.openDiagnosisModal(order);
+    component.diagnosisForm.setValue({
+      summary: 'Falla en la fuente',
+      details: 'La fuente no entrega voltaje estable.',
+      outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE,
+    });
+
+    component.submitDiagnosis();
+
+    expect(diagnosisServiceStub.create).toHaveBeenCalledWith(
+      jasmine.objectContaining({ serviceOrderItemId: 321 }),
+    );
+    expect(diagnosisServiceStub.create.calls.mostRecent().args[0].serviceOrderId).toBeUndefined();
   });
 
   it('navega al inbox unificado en vez de abrir el modal legacy', async () => {
@@ -403,6 +448,7 @@ describe('TechnicianPanel', () => {
     component.diagnosticHistory = [
       {
         id: 444,
+        serviceOrderItemId: 321,
         serviceOrderId: 32,
         sequenceNumber: 2,
         status: ServiceOrderDiagnosisStatus.CURRENT,
@@ -440,6 +486,285 @@ describe('TechnicianPanel', () => {
     expect(payload.products).toBeUndefined();
   });
 
+  it('creates a consolidated revision for only the selected equipment and keeps sibling versions untouched', () => {
+    const order = createServiceOrder({ id: 70, technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
+    const firstItem = createServiceOrderItem(order, {
+      id: 701,
+      position: 1,
+      code: 'OS-03-08-2026-0001-01',
+      commercialStatus: ServiceOrderCommercialStatus.AUTORIZADA,
+    });
+    const secondItem = createServiceOrderItem(order, {
+      id: 702,
+      position: 2,
+      code: 'OS-03-08-2026-0001-02',
+      brand: 'HP',
+      model: 'ProBook',
+      commercialStatus: ServiceOrderCommercialStatus.RECHAZADA,
+    });
+    order.items = [firstItem, secondItem];
+
+    const agreement = createAgreement({
+      id: 90,
+      serviceOrderId: 70,
+      sequenceNumber: 3,
+      status: ServiceOrderAgreementStatus.DRAFT,
+      items: [
+        {
+          id: 901,
+          serviceOrderAgreementId: 90,
+          serviceOrderItemId: 701,
+          commercialVersionId: 801,
+          serviceOrderItem: firstItem,
+          commercialVersion: {
+            id: 801,
+            serviceOrderItemId: 701,
+            derivedFromVersionId: null,
+            versionNumber: 1,
+            status: 'ACCEPTED',
+            totalAmount: 80,
+            notes: null,
+            lines: [],
+          },
+        },
+        {
+          id: 902,
+          serviceOrderAgreementId: 90,
+          serviceOrderItemId: 702,
+          commercialVersionId: 802,
+          serviceOrderItem: secondItem,
+          commercialVersion: {
+            id: 802,
+            serviceOrderItemId: 702,
+            derivedFromVersionId: 799,
+            versionNumber: 2,
+            status: 'DRAFT',
+            totalAmount: 145,
+            notes: 'Cambiar alcance',
+            lines: [
+              {
+                id: 1,
+                commercialVersionId: 802,
+                type: 'SERVICE',
+                productId: null,
+                serviceId: 1,
+                catalogCodeSnapshot: 'TECHNICAL_SERVICE',
+                catalogNameSnapshot: 'Servicio técnico',
+                catalogDescriptionSnapshot: null,
+                quantity: 1,
+                unitPrice: 85,
+                grossAmount: 85,
+                discountAmount: 0,
+                netAmount: 85,
+                requiresPurchase: false,
+                notes: null,
+              },
+            ],
+          },
+        },
+      ],
+    });
+    agreementServiceStub.findAll.and.returnValue(of({ data: [agreement] }));
+
+    component.openAgreementModal(order);
+    fixture.detectChanges();
+
+    expect(component.selectedAgreementItemId).toBe(702);
+    expect(component.isAgreementItemLocked(firstItem)).toBeTrue();
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Aceptado');
+    expect(compiled.textContent).toContain('Bloqueado');
+    expect(compiled.textContent).toContain('OS-03-08-2026-0001-02');
+
+    component.selectAgreementItem(701);
+    expect(component.selectedAgreementItemId).toBe(702);
+
+    component.agreementForm.patchValue({ notes: 'Cliente solicita otra alternativa' });
+    component.agreementNewItems = [
+      {
+        id: 2,
+        type: 'product',
+        productId: 9,
+        productCodeSnapshot: 'SSD-500',
+        productNameSnapshot: 'SSD 500 GB',
+        quantity: 1,
+        unitPrice: 60,
+        requiresPurchase: false,
+        notes: 'Disponible en almacén',
+        permissions: { provenance: 'NEW', canEdit: true, canDelete: true },
+      },
+    ];
+
+    component.submitAgreement(false);
+
+    expect(agreementServiceStub.createRevision).toHaveBeenCalledWith({
+      serviceOrderId: 70,
+      notes: 'Cliente solicita otra alternativa',
+      items: [
+        {
+          serviceOrderItemId: 702,
+          baseVersionId: 802,
+          notes: 'Cliente solicita otra alternativa',
+          lines: [
+            { type: 'SERVICE', serviceId: 1, quantity: 1, unitPrice: 85 },
+            {
+              type: 'PRODUCT',
+              productId: 9,
+              quantity: 1,
+              unitPrice: 60,
+              requiresPurchase: false,
+              notes: 'Disponible en almacén',
+            },
+          ],
+        },
+      ],
+    });
+    expect(agreementServiceStub.create).not.toHaveBeenCalled();
+    expect(agreementServiceStub.update).not.toHaveBeenCalled();
+    expect(agreementServiceStub.confirm).not.toHaveBeenCalled();
+  });
+
+  it('records a manual client decision for the exact selected commercial version and channel', () => {
+    const order = createServiceOrder({ id: 71, technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
+    const item = createServiceOrderItem(order, {
+      id: 711,
+      code: 'OS-03-08-2026-0002-01',
+      commercialStatus: ServiceOrderCommercialStatus.PENDIENTE_RESPUESTA_CLIENTE,
+    });
+    order.items = [item];
+    agreementServiceStub.findAll.and.returnValue(of({
+      data: [createAgreement({
+        id: 91,
+        serviceOrderId: order.id,
+        items: [{
+          id: 912,
+          serviceOrderAgreementId: 91,
+          serviceOrderItemId: item.id,
+          commercialVersionId: 812,
+          serviceOrderItem: item,
+          commercialVersion: {
+            id: 812,
+            serviceOrderItemId: item.id,
+            derivedFromVersionId: null,
+            versionNumber: 1,
+            status: 'DRAFT',
+            totalAmount: 85,
+            notes: null,
+            lines: [],
+          },
+        }],
+      })],
+    }));
+
+    component.openAgreementModal(order);
+    component.openClientDecisionModal();
+    component.clientDecisionForm.patchValue({
+      decision: 'CHANGES_REQUESTED',
+      channel: 'WHATSAPP',
+      observation: 'Solicita retirar el repuesto',
+    });
+    component.submitClientDecision();
+
+    expect(agreementServiceStub.recordClientDecision).toHaveBeenCalledWith({
+      commercialVersionId: 812,
+      decision: 'CHANGES_REQUESTED',
+      channel: 'WHATSAPP',
+      observation: 'Solicita retirar el repuesto',
+    });
+    expect(component.showClientDecisionModal).toBeFalse();
+  });
+
+  it('envía descuentos por línea y muestra importe base, descuento y neto', () => {
+    const order = createServiceOrder({ id: 72, technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
+    const item = createServiceOrderItem(order, {
+      id: 721,
+      code: 'OS-03-08-2026-0003-01',
+      commercialStatus: ServiceOrderCommercialStatus.PENDIENTE_PROPUESTA,
+    });
+    order.items = [item];
+    component.selectedServiceOrder = order;
+    component.selectedAgreementItemId = item.id;
+    component['agreementEditableTechnicalService'] = {
+      id: 1,
+      type: 'service',
+      serviceId: 1,
+      serviceCodeSnapshot: 'TECHNICAL_SERVICE',
+      serviceNameSnapshot: 'Servicio técnico',
+      unitPrice: 100,
+      discountPct: 5,
+      discountOverrideReason: '',
+      notes: '',
+      permissions: { provenance: 'NEW', canEdit: true, canDelete: false },
+    };
+    component.agreementNewItems = [{
+      id: 2,
+      type: 'product',
+      productId: 9,
+      productCodeSnapshot: 'SSD-500',
+      productNameSnapshot: 'SSD 500 GB',
+      quantity: 2,
+      unitPrice: 50,
+      discountPct: 10,
+      discountOverrideReason: 'Promoción autorizada por supervisión.',
+      requiresPurchase: false,
+      notes: '',
+      permissions: { provenance: 'NEW', canEdit: true, canDelete: true },
+    }];
+
+    expect(component.calculateAgreementItemGross(component.agreementNewItems[0])).toBe(100);
+    expect(component.calculateAgreementItemDiscount(component.agreementNewItems[0])).toBe(10);
+    expect(component.calculateAgreementItemSubtotal(component.agreementNewItems[0])).toBe(90);
+    expect(component.calculateAgreementTotal()).toBe(185);
+
+    component.submitAgreement(false);
+
+    expect(agreementServiceStub.createRevision).toHaveBeenCalledWith({
+      serviceOrderId: 72,
+      items: [{
+        serviceOrderItemId: 721,
+        lines: [
+          { type: 'SERVICE', serviceId: 1, quantity: 1, unitPrice: 100, discountPct: 5 },
+          {
+            type: 'PRODUCT',
+            productId: 9,
+            quantity: 2,
+            unitPrice: 50,
+            discountPct: 10,
+            discountOverrideReason: 'Promoción autorizada por supervisión.',
+            requiresPurchase: false,
+          },
+        ],
+      }],
+    });
+  });
+
+  it('conserva y muestra el mensaje backend cuando el descuento requiere autorización de supervisión', () => {
+    agreementServiceStub.createRevision.and.returnValue(throwError(() => ({
+      error: { message: 'El descuento supera el máximo permitido y requiere autorización de supervisión' },
+    })));
+    const order = createServiceOrder({ id: 73, technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
+    const item = createServiceOrderItem(order, { id: 731 });
+    order.items = [item];
+    component.selectedServiceOrder = order;
+    component.selectedAgreementItemId = item.id;
+    component['agreementEditableTechnicalService'] = {
+      id: 1,
+      type: 'service',
+      serviceId: 1,
+      serviceCodeSnapshot: 'TECHNICAL_SERVICE',
+      serviceNameSnapshot: 'Servicio técnico',
+      unitPrice: 100,
+      discountPct: 20,
+      discountOverrideReason: '',
+      notes: '',
+      permissions: { provenance: 'NEW', canEdit: true, canDelete: false },
+    };
+
+    component.submitAgreement(false);
+
+    expect(component.alertMessage).toContain('requiere autorización de supervisión');
+  });
+
   it('forces baseAgreementId to be numeric when the inherited agreement id arrives as string', () => {
     const order = createServiceOrder({ id: 32, technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
 
@@ -460,6 +785,7 @@ describe('TechnicianPanel', () => {
     component.diagnosticHistory = [
       {
         id: 444,
+        serviceOrderItemId: 321,
         serviceOrderId: 32,
         sequenceNumber: 2,
         status: ServiceOrderDiagnosisStatus.CURRENT,
@@ -533,6 +859,37 @@ describe('TechnicianPanel', () => {
     expect(component.getAgreementProductItems().map((item) => item.productNameSnapshot)).toEqual(['Flex nuevo']);
     expect(component.getTechnicalServiceItem()?.unitPrice).toBe(85);
   });
+  it('permite al técnico solicitar la cancelación de un equipo activo exacto', () => {
+    const order = createServiceOrder({ id: 30 });
+    const item = createServiceOrderItem(order, { id: 321, cancellationRequests: [] });
+    order.items = [item];
+
+    component.openItemCancellationModal(order, undefined, item);
+
+    expect(component.itemCancellationTarget).toEqual(jasmine.objectContaining({
+      mode: 'REQUEST',
+      serviceOrderId: 30,
+      selectedItemId: 321,
+    }));
+  });
+  it('presenta la entrega parcial como progreso de equipos', () => {
+    const order = createServiceOrder({
+      operativeStatus: ServiceOrderOperativeStatus.ENTREGA_PARCIAL,
+      itemProgress: {
+        total: 3,
+        active: 3,
+        resolved: 3,
+        readyForPickup: 3,
+        delivered: 1,
+        cancelled: 0,
+        cancellationPending: 0,
+        isPartial: true,
+      },
+    });
+
+    expect(component.getOrderStatusPillLabel(order)).toBe('Entrega parcial');
+    expect(component.getOrderStageLabel(order)).toBe('1 de 3 equipos entregados');
+  });
 });
 
 function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder {
@@ -585,6 +942,41 @@ function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder
     deletedAt: null,
     montoComprometidoVigente: 0,
     montoReconciliado: 0,
+    ...overrides,
+  };
+}
+
+function createServiceOrderItem(
+  order: ServiceOrder,
+  overrides: Partial<ServiceOrderItem> = {},
+): ServiceOrderItem {
+  return {
+    id: 101,
+    serviceOrderId: Number(order.id),
+    position: 1,
+    code: `${order.code}-01`,
+    equipmentType: EquipmentType.LAPTOP,
+    equipmentTypeOther: null,
+    brand: 'Lenovo',
+    model: 'ThinkPad',
+    serialNumber: 'SER-1',
+    accessories: null,
+    initialIssue: 'No enciende',
+    notes: null,
+    priority: ServiceOrderPriority.LOW,
+    operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO,
+    technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+    commercialStatus: ServiceOrderCommercialStatus.NO_REQUIERE,
+    estimatedRepairHours: null,
+    estimatedDeliveryDate: null,
+    reviewStartedAt: null,
+    serviceStartedAt: null,
+    serviceCompletedAt: null,
+    readyForPickupAt: null,
+    resolvedAt: null,
+    deliveredAt: null,
+    cancelledAt: null,
+    warrantySourceItemId: null,
     ...overrides,
   };
 }

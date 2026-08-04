@@ -77,6 +77,10 @@
                 <i [class]="getOrderStageIcon(order)"></i>
                 {{ getOrderStageLabel(order) }}
               </span>
+              <app-service-order-item-progress
+                [order]="order"
+                [compact]="true"
+              ></app-service-order-item-progress>
             </div>
           </div>
         }
@@ -106,6 +110,9 @@
             <div>
               <p>Detalle de orden</p>
               <h2>{{ selectedServiceOrder.code || 'Orden de servicio' }}</h2>
+              <app-service-order-item-progress
+                [order]="selectedServiceOrder"
+              ></app-service-order-item-progress>
             </div>
           </div>
 
@@ -369,6 +376,9 @@
                         <article class="history-card history-card-elevated panel-card">
                           <div class="history-header">
                             <span class="history-number">DX #{{ dx.sequenceNumber }}</span>
+                            @if (dx.serviceOrderItem) {
+                              <span class="timeline-secondary-badge">{{ dx.serviceOrderItem.code }}</span>
+                            }
                             @if (dx.status === 'CURRENT') {
                               <span class="timeline-current-badge">Actual</span>
                             } @else {
@@ -469,13 +479,65 @@
             </div>
           }
 
-          @if (isDerivedAgreementComposer()) {
+          @if (usesItemCommercialComposer()) {
+            <section class="agreement-section agreement-item-selector">
+              <div class="agreement-item-selector__copy">
+                <span class="agreement-item-selector__eyebrow">Alcance de la revisión</span>
+                <label for="agreement-service-order-item">Equipo que deseas cotizar</label>
+                <p>La revisión se aplicará únicamente a este equipo. Los demás conservarán su versión comercial vigente.</p>
+              </div>
+              <select
+                id="agreement-service-order-item"
+                [ngModel]="selectedAgreementItemId"
+                (ngModelChange)="selectAgreementItem($event)"
+                [ngModelOptions]="{ standalone: true }"
+                [disabled]="isSavingAgreement || isViewingAgreementHistory"
+              >
+                @for (item of getAgreementEligibleItems(); track item.id) {
+                  <option [ngValue]="item.id" [disabled]="isAgreementItemLocked(item)">
+                    {{ getAgreementItemLabel(item) }} — {{ getAgreementItemVersionLabel(item) }}
+                  </option>
+                }
+              </select>
+              <div class="agreement-item-overview" aria-label="Resumen comercial de los equipos">
+                @for (item of getAgreementEligibleItems(); track item.id) {
+                  <button
+                    type="button"
+                    class="agreement-item-overview__card"
+                    [class.is-active]="selectedAgreementItemId === item.id"
+                    [class.is-locked]="isAgreementItemLocked(item)"
+                    [disabled]="isSavingAgreement || isViewingAgreementHistory || isAgreementItemLocked(item)"
+                    (click)="selectAgreementItem(item.id)"
+                  >
+                    <span class="agreement-item-overview__code">{{ item.code }}</span>
+                    <span class="agreement-item-overview__state">
+                      {{ getAgreementItemVersionLabel(item) }}
+                      @if (isAgreementItemLocked(item)) {
+                        <span aria-label="Versión bloqueada">· Bloqueado</span>
+                      }
+                    </span>
+                    <span class="agreement-item-overview__meta">
+                      @if (getAgreementItemVersionNumber(item); as versionNumber) {
+                        Versión {{ versionNumber }} ·
+                      }
+                      S/ {{ getAgreementItemVersionTotal(item) | number: '1.2-2' }}
+                    </span>
+                    @if (getAgreementItemDecisionAuditLabel(item); as decisionAuditLabel) {
+                      <span class="agreement-item-overview__audit">{{ decisionAuditLabel }}</span>
+                    }
+                  </button>
+                }
+              </div>
+            </section>
+          }
+
+          @if (!usesItemCommercialComposer() && isDerivedAgreementComposer()) {
             <section class="agreement-section agreement-derived-hero">
               <div class="agreement-derived-hero__eyebrow">Versionado coordinado</div>
               <div class="agreement-derived-hero__body">
                 <div>
                   <h3>Nueva versión derivada</h3>
-                  <p>Estás editando una continuidad del acuerdo vigente. Lo heredado queda protegido y solo podés sumar nuevos agregados o ajustar el monto del servicio técnico.</p>
+                  <p>Estás editando una continuidad del acuerdo vigente. Lo heredado queda protegido y solo puedes sumar nuevos agregados o ajustar el monto del servicio técnico.</p>
                 </div>
                 @if (agreementBaseVersion) {
                   <div class="agreement-derived-hero__chip">Base #{{ agreementBaseVersion.sequenceNumber }}</div>
@@ -484,7 +546,7 @@
             </section>
           }
 
-          @if (isDerivedAgreementComposer()) {
+          @if (!usesItemCommercialComposer() && isDerivedAgreementComposer()) {
             <section class="agreement-section agreement-legacy-section">
               <div class="agreement-section-header agreement-section-header--stacked">
                 <div class="agreement-section-title">
@@ -588,8 +650,13 @@
               <div class="agreement-required-body">
                 <div class="agreement-equipment-copy">
                   <label>Equipo</label>
-                  <h3>{{ getAgreementEquipmentName(selectedServiceOrder) }}</h3>
-                  <p>{{ getAgreementEquipmentDescription(selectedServiceOrder) }}</p>
+                  @if (getSelectedAgreementItem(); as selectedAgreementItem) {
+                    <h3>{{ getAgreementItemLabel(selectedAgreementItem) }}</h3>
+                    <p>{{ selectedAgreementItem.initialIssue }}</p>
+                  } @else {
+                    <h3>{{ getAgreementEquipmentName(selectedServiceOrder) }}</h3>
+                    <p>{{ getAgreementEquipmentDescription(selectedServiceOrder) }}</p>
+                  }
                 </div>
                 <div class="agreement-service-pricing">
                   <label>Servicio técnico (PEN)</label>
@@ -616,6 +683,40 @@
                     }
                     <span>Mínimo permitido: S/ 20.00</span>
                   </div>
+                  @if (usesItemCommercialComposer()) {
+                    <div class="agreement-discount-editor">
+                      <label>Descuento de la línea</label>
+                      <div class="agreement-discount-editor__input">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          [disabled]="!isAgreementEditable()"
+                          [ngModel]="technicalServiceItem.discountPct || 0"
+                          (ngModelChange)="updateAgreementItemDiscount(technicalServiceItem, $event)"
+                          [ngModelOptions]="{ standalone: true }"
+                        />
+                        <span>%</span>
+                      </div>
+                      <div class="agreement-discount-editor__totals">
+                        <span>Base <strong>S/ {{ calculateAgreementItemGross(technicalServiceItem) | number: '1.2-2' }}</strong></span>
+                        <span>Descuento <strong>- S/ {{ calculateAgreementItemDiscount(technicalServiceItem) | number: '1.2-2' }}</strong></span>
+                        <span>Neto <strong>S/ {{ calculateAgreementItemSubtotal(technicalServiceItem) | number: '1.2-2' }}</strong></span>
+                      </div>
+                      @if ((technicalServiceItem.discountPct || 0) > 0) {
+                        <input
+                          class="agreement-discount-editor__reason"
+                          type="text"
+                          maxlength="500"
+                          [disabled]="!isAgreementEditable()"
+                          [(ngModel)]="technicalServiceItem.discountOverrideReason"
+                          [ngModelOptions]="{ standalone: true }"
+                          placeholder="Motivo si requiere autorización de supervisión"
+                        />
+                      }
+                    </div>
+                  }
                 </div>
               </div>
             </section>
@@ -624,8 +725,8 @@
           <section class="agreement-section agreement-products-section">
             <div class="agreement-section-header">
               <div class="agreement-section-title">
-                <span>{{ isDerivedAgreementComposer() ? 'Nuevos agregados' : 'Productos adicionales' }}</span>
-                <p>{{ isDerivedAgreementComposer() ? 'Solo lo que sumes acá viajará como delta de la nueva versión.' : 'Agrega repuestos o accesorios si el servicio los requiere.' }}</p>
+                <span>{{ usesItemCommercialComposer() ? 'Productos de esta versión' : (isDerivedAgreementComposer() ? 'Nuevos agregados' : 'Productos adicionales') }}</span>
+                <p>{{ usesItemCommercialComposer() ? 'Puedes ajustar los repuestos de este equipo sin modificar las versiones de los demás.' : (isDerivedAgreementComposer() ? 'Solo lo que agregues aquí formará parte del cambio de la nueva versión.' : 'Agrega repuestos o accesorios si el servicio los requiere.') }}</p>
               </div>
               <button type="button" class="agreement-add-product-btn" [disabled]="!isAgreementEditable()" (click)="addAgreementProduct()">
                 <span>+</span>
@@ -693,11 +794,48 @@
                         <input type="text" [value]="item.unitPrice | number: '1.2-2'" readonly tabindex="-1" />
                       </div>
                     </div>
+                    @if (usesItemCommercialComposer()) {
+                      <div class="agreement-product-field agreement-product-field-discount">
+                        <label>Descuento</label>
+                        <div class="agreement-discount-editor__input">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            [disabled]="!isAgreementEditable()"
+                            [ngModel]="item.discountPct || 0"
+                            (ngModelChange)="updateAgreementItemDiscount(item, $event)"
+                            [ngModelOptions]="{ standalone: true }"
+                          />
+                          <span>%</span>
+                        </div>
+                      </div>
+                    }
                   </div>
-                  <div class="agreement-subtotal-row">
-                    <span class="agreement-subtotal-label">Subtotal</span>
-                    <span class="agreement-subtotal-value">S/ {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }}</span>
-                  </div>
+                  @if (usesItemCommercialComposer()) {
+                    @if ((item.discountPct || 0) > 0) {
+                      <input
+                        class="agreement-discount-editor__reason agreement-discount-editor__reason--product"
+                        type="text"
+                        maxlength="500"
+                        [disabled]="!isAgreementEditable()"
+                        [(ngModel)]="item.discountOverrideReason"
+                        [ngModelOptions]="{ standalone: true }"
+                        placeholder="Motivo si requiere autorización de supervisión"
+                      />
+                    }
+                    <div class="agreement-line-ledger">
+                      <span>Base <strong>S/ {{ calculateAgreementItemGross(item) | number: '1.2-2' }}</strong></span>
+                      <span>Descuento <strong>- S/ {{ calculateAgreementItemDiscount(item) | number: '1.2-2' }}</strong></span>
+                      <span class="agreement-line-ledger__net">Neto <strong>S/ {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }}</strong></span>
+                    </div>
+                  } @else {
+                    <div class="agreement-subtotal-row">
+                      <span class="agreement-subtotal-label">Subtotal</span>
+                      <span class="agreement-subtotal-value">S/ {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }}</span>
+                    </div>
+                  }
                 </div>
               }
               </div>
@@ -706,16 +844,16 @@
 
           <section class="agreement-section agreement-notes-section">
             <div class="agreement-section-title">
-              <span>{{ isDerivedAgreementComposer() ? 'Notas de esta nueva versión' : 'Notas del acuerdo' }}</span>
+              <span>{{ usesItemCommercialComposer() ? 'Notas de esta versión del equipo' : (isDerivedAgreementComposer() ? 'Notas de esta nueva versión' : 'Notas del acuerdo') }}</span>
             </div>
             <div class="form-group">
-              <textarea formControlName="notes" rows="3" [readonly]="!isAgreementEditable()" [placeholder]="isDerivedAgreementComposer() ? 'Escribí acá solo lo nuevo o lo renegociado en esta versión. No se copian automáticamente las notas heredadas.' : 'Resumen de lo coordinado con el cliente, garantías, tiempos de entrega...' "></textarea>
+              <textarea formControlName="notes" rows="3" [readonly]="!isAgreementEditable()" [placeholder]="usesItemCommercialComposer() ? 'Resume lo coordinado para este equipo.' : (isDerivedAgreementComposer() ? 'Escribe aquí solo lo nuevo o renegociado en esta versión. Las notas heredadas no se copian automáticamente.' : 'Resumen de lo coordinado con el cliente, garantías, tiempos de entrega...')"></textarea>
             </div>
           </section>
 
           <section class="agreement-total-bar">
             <div class="agreement-total-main">
-              <span>Total del acuerdo</span>
+              <span>{{ usesItemCommercialComposer() ? 'Total de la versión del equipo' : 'Total del acuerdo' }}</span>
               <strong>
                 <small>S/</small>
                 {{ calculateAgreementTotal() | number: '1.2-2' }}
@@ -725,6 +863,9 @@
               <span>Servicio: S/ {{ getAgreementTechnicalServiceAmount() | number: '1.2-2' }}</span>
               @if (getAgreementProductItems().length > 0) {
                 <span>Productos ({{ getAgreementProductItems().length }}): S/ {{ getAgreementProductsTotal() | number: '1.2-2' }}</span>
+              }
+              @if (usesItemCommercialComposer() && getAgreementDiscountTotal() > 0) {
+                <span>Descuento total: - S/ {{ getAgreementDiscountTotal() | number: '1.2-2' }}</span>
               }
               @if (isDerivedAgreementComposer() && agreementBaseVersion) {
                 <span>Al confirmar, la versión #{{ agreementBaseVersion.sequenceNumber }} queda reemplazada.</span>
@@ -737,18 +878,91 @@
         <div class="modal-footer agreement-footer">
           <button type="button" class="btn agreement-cancel-btn" (click)="closeAgreementModal()">Cancelar</button>
           <div class="agreement-footer-actions">
-            @if (selectedServiceOrder && isDiagnosisService(selectedServiceOrder) && canManageAgreement(selectedServiceOrder) && isAgreementEditable()) {
+            @if (!usesItemCommercialComposer() && selectedServiceOrder && isDiagnosisService(selectedServiceOrder) && canManageAgreement(selectedServiceOrder) && isAgreementEditable()) {
               <button type="button" class="btn agreement-outline-danger-btn" [disabled]="isSavingAgreement" (click)="markNoAgreement(selectedServiceOrder)">
                 Cerrar sin acuerdo
               </button>
             }
-            <button type="button" class="btn agreement-outline-primary-btn" [disabled]="!isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement" (click)="submitAgreement(false)">
-              Guardar borrador
-            </button>
-            <button type="button" class="btn btn-primary agreement-confirm-btn" [disabled]="!isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement" (click)="submitAgreement(true)">
-              {{ isDerivedAgreementComposer() ? 'Confirmar nueva versión' : 'Confirmar acuerdo' }}
-            </button>
+            @if (usesItemCommercialComposer()) {
+              @if (canRecordClientDecision()) {
+                <button type="button" class="btn agreement-outline-primary-btn" [disabled]="isSavingAgreement || isSavingClientDecision" (click)="openClientDecisionModal()">
+                  Registrar decisión del cliente
+                </button>
+
+                <button
+                  class="btn btn-outline-danger primary-action-btn"
+                  *ngIf="canRequestAnyItemCancellation(selectedServiceOrder)"
+                  title="Cancelar equipo"
+                  aria-label="Cancelar equipo"
+                  (click)="openItemCancellationModal(selectedServiceOrder, $event)"
+                >
+                  <i class="fas fa-ban"></i>
+                  <span class="action-btn__label">Cancelar equipo</span>
+                </button>
+              }
+              <button type="button" class="btn btn-primary agreement-confirm-btn" [disabled]="!isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement" (click)="submitAgreement(false)">
+                Guardar revisión comercial
+              </button>
+            } @else {
+              <button type="button" class="btn agreement-outline-primary-btn" [disabled]="!isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement" (click)="submitAgreement(false)">
+                Guardar borrador
+              </button>
+              <button type="button" class="btn btn-primary agreement-confirm-btn" [disabled]="!isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement" (click)="submitAgreement(true)">
+                {{ isDerivedAgreementComposer() ? 'Confirmar nueva versión' : 'Confirmar acuerdo' }}
+              </button>
+            }
           </div>
+        </div>
+      </div>
+    </div>
+  }
+  @if (showClientDecisionModal && getSelectedAgreementItem(); as decisionItem) {
+    <div class="modal-overlay client-decision-overlay" (click)="closeClientDecisionModal()">
+      <div class="modal-content client-decision-modal" role="dialog" aria-modal="true" aria-labelledby="client-decision-title" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <span class="client-decision-eyebrow">Respuesta comunicada por el cliente</span>
+            <h2 id="client-decision-title">Registrar decisión comercial</h2>
+            <p>{{ getAgreementItemLabel(decisionItem) }}</p>
+          </div>
+          <button class="btn-close" type="button" aria-label="Cerrar" (click)="closeClientDecisionModal()">×</button>
+        </div>
+
+        <form [formGroup]="clientDecisionForm" class="modal-body client-decision-body">
+          <div class="info-banner client-decision-warning" aria-live="polite">
+            <span>Esta acción registra una respuesta que el cliente ya comunicó. No envía mensajes ni plantillas por WhatsApp.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="client-decision-type">Decisión informada</label>
+            <select id="client-decision-type" formControlName="decision">
+              <option value="ACCEPTED">Aceptado</option>
+              <option value="CHANGES_REQUESTED">Solicita cambios</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="client-decision-channel">Canal por el que respondió</label>
+            <select id="client-decision-channel" formControlName="channel">
+              <option value="WHATSAPP">WhatsApp</option>
+              <option value="PHONE">Llamada telefónica</option>
+              <option value="IN_PERSON">Presencial</option>
+              <option value="EMAIL">Correo electrónico</option>
+              <option value="OTHER">Otro</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="client-decision-observation">Observación <span>(opcional)</span></label>
+            <textarea id="client-decision-observation" formControlName="observation" rows="4" placeholder="Ejemplo: confirmó por WhatsApp luego de revisar el PDF."></textarea>
+          </div>
+        </form>
+
+        <div class="modal-footer client-decision-footer">
+          <button type="button" class="btn agreement-cancel-btn" [disabled]="isSavingClientDecision" (click)="closeClientDecisionModal()">Cancelar</button>
+          <button type="button" class="btn btn-primary agreement-confirm-btn" [disabled]="clientDecisionForm.invalid || isSavingClientDecision" (click)="submitClientDecision()">
+            {{ isSavingClientDecision ? 'Registrando...' : 'Registrar decisión' }}
+          </button>
         </div>
       </div>
     </div>
@@ -764,6 +978,31 @@
         </div>
 
         <form [formGroup]="diagnosisForm" (ngSubmit)="submitDiagnosis()" class="modal-body">
+          @if (diagnosisEligibleItems.length > 1) {
+            <div class="form-group">
+              <label for="diagnosis-item">Equipo a diagnosticar *</label>
+              <select
+                id="diagnosis-item"
+                class="form-control"
+                name="diagnosisItemId"
+                [(ngModel)]="selectedDiagnosisItemId"
+                [ngModelOptions]="{ standalone: true }"
+              >
+                <option [ngValue]="null" disabled>Selecciona un equipo</option>
+                @for (item of diagnosisEligibleItems; track item.id) {
+                  <option [ngValue]="item.id">{{ getDiagnosisItemLabel(item) }}</option>
+                }
+              </select>
+            </div>
+          } @else if (selectedDiagnosisItem) {
+            <div class="info-banner mb-3">
+              Equipo: {{ getDiagnosisItemLabel(selectedDiagnosisItem) }}
+            </div>
+          } @else if ((selectedServiceOrder?.items?.length || 0) > 0) {
+            <div class="info-banner mb-3">
+              No hay equipos en una etapa que permita registrar diagnóstico.
+            </div>
+          }
           @if (isAdditionalDiagnosisFlow()) {
             <div class="info-banner mb-3">
               Registra aquí el hallazgo adicional. No sobrescribas el diagnóstico anterior; este nuevo diagnóstico quedará en el historial y reabrirá la coordinación para un nuevo acuerdo.
@@ -811,17 +1050,25 @@
               type="button"
               class="btn btn-outline-danger"
               (click)="submitDiagnosisAsNoSolution()"
-              [disabled]="diagnosisForm.invalid || isSavingDiagnosis"
+              [disabled]="diagnosisForm.invalid || !canSubmitDiagnosis || isSavingDiagnosis"
             >
               <i class="fas fa-times-circle"></i> Sin arreglo
             </button>
           }
-          <button type="button" class="btn btn-primary" (click)="submitDiagnosis()" [disabled]="diagnosisForm.invalid || isSavingDiagnosis">
+          <button type="button" class="btn btn-primary" (click)="submitDiagnosis()" [disabled]="diagnosisForm.invalid || !canSubmitDiagnosis || isSavingDiagnosis">
             <i class="fas fa-save"></i> Guardar diagnóstico
           </button>
         </div>
       </div>
     </div>
+  }
+
+  @if (itemCancellationTarget) {
+    <app-service-order-item-cancellation-modal
+      [target]="itemCancellationTarget"
+      (closed)="itemCancellationTarget = null"
+      (cancellationSaved)="handleItemCancellationSaved($event)"
+    ></app-service-order-item-cancellation-modal>
   }
 
   <div class="alert-container" [class.show]="showAlert">

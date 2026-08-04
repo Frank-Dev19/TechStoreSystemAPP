@@ -2,8 +2,8 @@ import { Component, HostListener, OnDestroy, OnInit, ChangeDetectorRef } from "@
 import { Router } from "@angular/router"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { Observable, Subscription } from "rxjs"
-import { catchError, finalize, map, switchMap, tap } from "rxjs/operators"
-import { forkJoin, of, throwError } from "rxjs"
+import { catchError, debounceTime, finalize, map, switchMap, tap } from "rxjs/operators"
+import { of, throwError } from "rxjs"
 import { ClientsApiService } from "../../services/clients-api.service"
 import { ClientContactResponse, ClientResponse } from "../../models/clients-response"
 import { ClientContactRequest, ClientKind, ClientSaveRequest } from "../../models/clients-request"
@@ -16,6 +16,8 @@ import {
   EquipmentType,
   RequestOrigin,
   ServiceOrder,
+  ServiceOrderItem,
+  ServiceOrderItemCancellationResult,
   ServiceOrderCommercialStatus,
   ServiceOrderEconomicStatus,
   ServiceOrderOperativeStatus,
@@ -23,7 +25,11 @@ import {
   ServiceOrderTechnicalStatus,
   ServiceType,
 } from "../../models/service-orders/service-order"
-import { ServiceOrderSaveRequest, ServiceOrderBatchCreateRequest, ServiceOrderUpdateRequest } from "../../models/service-orders/service-order-request"
+import {
+  ServiceOrderInitialCommercialRequest,
+  ServiceOrderSaveRequest,
+  ServiceOrderUpdateRequest,
+} from "../../models/service-orders/service-order-request"
 import { ProductsService } from "../../services/inventory/products.service"
 import { Product } from "../../models/catalog/product"
 import { ServiceOrderAgreementService } from "../../services/service-orders/service-agreement.service"
@@ -31,8 +37,14 @@ import { ServiceOrderAgreementRequest } from "../../models/service-orders/servic
 import {
   ServiceOrderAgreementSource,
   ServiceOrderAgreement,
+  ServiceOrderAgreementItemLink,
   ServiceOrderAgreementStatus,
+  ServiceOrderClientDecisionResult,
 } from "../../models/service-orders/service-agreement"
+import { ServiceOrderClientDecisionTarget } from "../../components/service-order-client-decision-modal/service-order-client-decision-modal"
+import { ServiceOrderLineDiscountTarget } from "../../components/service-order-line-discount-modal/service-order-line-discount-modal"
+import { ServiceOrderItemCancellationTarget } from "../../components/service-order-item-cancellation-modal/service-order-item-cancellation-modal"
+import { ServiceOrderItemDeliveryTarget } from "../../components/service-order-item-delivery-modal/service-order-item-delivery-modal"
 import { ServiceOrderDiagnosisService } from "../../services/service-orders/service-order-diagnosis.service"
 import { ServiceOrderDiagnosis } from "../../models/service-orders/service-order-diagnosis"
 import { config } from "../../../environments/environment"
@@ -48,6 +60,7 @@ import { ServiceOrderBillingLink } from "../../models/service-orders/service-ord
 import { Sale } from "../../models/sales/sale.model"
 import { SaleReceiptPdfService } from "../../services/sales/sale-receipt-pdf.service"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
+import { CurrentUserService } from "../../services/current-user.service"
 import {
   buildPhoneFormValue,
   DEFAULT_PHONE_COUNTRY,
@@ -132,12 +145,26 @@ interface CreateServiceOrderCandidateDraft {
   serialNumber: string | null
   accessories: string | null
   initialIssue: string
-  serviceType: ServiceType
+  priority: ServiceOrderPriority
   notes: string | null
   quoteItems: ServiceOrderAgreementComposerItem[]
 }
 
+const CREATE_SERVICE_ORDER_DRAFT_KEY_PREFIX = "techstore:reception:create-service-order-draft:v2"
+const CREATE_SERVICE_ORDER_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
+
+interface CreateServiceOrderDraft {
+  version: 2
+  updatedAt: number
+  step: number
+  formValue: Record<string, any>
+  candidates: CreateServiceOrderCandidateDraft[]
+  editingCandidateIndex: number | null
+  agreementItemsByItemIndex: Record<number, ServiceOrderAgreementComposerItem[]>
+}
+
 interface EquipmentDraftSnapshot {
+  priority: ServiceOrderPriority
   equipmentType: EquipmentType
   equipmentTypeOther: string
   brand: string
@@ -151,7 +178,9 @@ interface EquipmentDraftSnapshot {
 const SERVICE_ORDER_OPERATIVE_STATUS_LABELS: Record<ServiceOrderOperativeStatus, string> = {
   [ServiceOrderOperativeStatus.ABIERTA]: "Abierto",
   [ServiceOrderOperativeStatus.EN_PROCESO]: "En progreso",
+  [ServiceOrderOperativeStatus.CANCELACION_SOLICITADA]: "Cancelación solicitada",
   [ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA]: "Listo para entrega",
+  [ServiceOrderOperativeStatus.ENTREGA_PARCIAL]: "Entrega parcial",
   [ServiceOrderOperativeStatus.ENTREGADA]: "Entregado",
   [ServiceOrderOperativeStatus.CANCELADA]: "Cancelado",
   [ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION]: "Sin solución",
@@ -270,6 +299,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   agreementServiceOrder: ServiceOrder | null = null
   serviceOrderAgreementsServiceOrder: ServiceOrder | null = null
   selectedServiceOrderAgreementDetail: ServiceOrderAgreement | null = null
+  clientDecisionTarget: ServiceOrderClientDecisionTarget | null = null
+  lineDiscountTarget: ServiceOrderLineDiscountTarget | null = null
+  itemCancellationTarget: ServiceOrderItemCancellationTarget | null = null
+  itemDeliveryTarget: ServiceOrderItemDeliveryTarget | null = null
   quoteDetailError = ""
   showWarrantyActionModal = false
   isLoadingWarrantyLines = false
@@ -307,6 +340,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   actionMenuStyle: Record<string, string> | null = null
 
   private readonly subscriptions = new Subscription()
+  private isRestoringCreateServiceOrderDraft = false
 
   constructor(
     private readonly formBuilder: FormBuilder,
@@ -322,6 +356,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     private readonly serviceOrderBillingLinks: ServiceOrderBillingLinkService,
     private readonly saleReceiptPdfService: SaleReceiptPdfService,
     private readonly serviceOrderInboxService: ServiceOrderInboxService,
+    private readonly currentUserService: CurrentUserService,
     private readonly router: Router,
     private readonly cdr: ChangeDetectorRef,
   ) {
@@ -335,6 +370,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     if (partnerChanges) {
       this.subscriptions.add(partnerChanges)
     }
+    this.subscriptions.add(
+      this.createServiceOrderForm.valueChanges.pipe(debounceTime(300)).subscribe(() => {
+        if (this.showCreateServiceOrderModal && !this.isRestoringCreateServiceOrderDraft) {
+          this.saveCreateServiceOrderDraft()
+        }
+      }),
+    )
   }
 
   @HostListener("document:click")
@@ -353,10 +395,19 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.loadClients()
     this.loadCatalogData()
     this.loadDocumentTypes()
+    if (this.hasValidCreateServiceOrderDraft()) {
+      this.openCreateServiceOrderModal()
+    }
   }
 
   ngOnDestroy(): void {
+    this.saveCreateServiceOrderDraft()
     this.subscriptions.unsubscribe()
+  }
+
+  @HostListener("window:beforeunload")
+  persistCreateServiceOrderDraftBeforeUnload(): void {
+    this.saveCreateServiceOrderDraft()
   }
 
   private createServiceOrderFormGroup(): FormGroup {
@@ -375,7 +426,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       contactPhoneCountry: [DEFAULT_PHONE_COUNTRY],
       contactPhoneNationalNumber: [""],
       contactEmail: ["", Validators.email],
-      priority: [ServiceOrderPriority.MEDIUM, Validators.required],
+      priority: [ServiceOrderPriority.LOW, Validators.required],
       assignedToTechnicianId: [null, Validators.required],
       notes: [""],
       equipmentType: [EquipmentType.LAPTOP, Validators.required],
@@ -997,7 +1048,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   hasPendingDeliveryItems(serviceOrder: ServiceOrder): boolean {
-    return serviceOrder.operativeStatus === ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA
+    return [
+      ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+      ServiceOrderOperativeStatus.ENTREGA_PARCIAL,
+    ].includes(serviceOrder.operativeStatus)
   }
 
   canMarkClientApproved(serviceOrder: ServiceOrder): boolean {
@@ -1011,15 +1065,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   canDeliverItem(serviceOrder: ServiceOrder): boolean {
-    if (serviceOrder.operativeStatus !== ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA) {
-      return false
-    }
-
-    if (!this.canCreateBoletaFromOrder(serviceOrder)) {
-      return true
-    }
-
-    return this.hasLinkedSaleDocument(serviceOrder)
+    return (serviceOrder.items ?? []).some(
+      (item) => item.operativeStatus === ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+    )
   }
 
   canReassignTechnician(serviceOrder?: ServiceOrder | null): boolean {
@@ -1054,14 +1102,26 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   deliverItem(serviceOrder: ServiceOrder, event?: Event): void {
     event?.stopPropagation()
-    if (!serviceOrder?.id) return
-    this.serviceOrderService.markAsDelivered(Number(serviceOrder.id)).subscribe({
-      next: () => {
-        this.showMessage("success", "fas fa-check-circle", "Entrega registrada.")
-        this.loadServiceOrders()
-      },
-      error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar la entrega."),
-    })
+    const firstReadyItem = (serviceOrder.items ?? []).find(
+      (item) => item.operativeStatus === ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+    )
+    if (!firstReadyItem) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta orden no tiene equipos listos para entregar.")
+      return
+    }
+    this.itemDeliveryTarget = { order: serviceOrder, selectedItemId: firstReadyItem.id }
+  }
+
+  handleItemDeliverySaved(order: ServiceOrder): void {
+    this.itemDeliveryTarget = null
+    this.replaceServiceOrderInState(order)
+    this.showMessage(
+      "success",
+      "fas fa-check-circle",
+      order.operativeStatus === ServiceOrderOperativeStatus.ENTREGADA
+        ? "Todos los equipos activos fueron entregados."
+        : "Entrega del equipo registrada. La orden continúa con entrega parcial.",
+    )
   }
 
   canOpenWarrantyAction(serviceOrder: ServiceOrder): boolean {
@@ -1196,6 +1256,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       this.warrantyActionError = "Selecciona al menos una línea vigente para continuar."
       return
     }
+    const assignedToTechnicianId = this.toNumericId(this.warrantySourceServiceOrder.assignedToTechnicianId)
+    if (!assignedToTechnicianId) {
+      this.warrantyActionError = "La orden origen no tiene un técnico asignado. Asígnalo antes de registrar la garantía."
+      return
+    }
 
     const selectedLines = this.warrantyCoverageLines.filter((line) => this.selectedWarrantyLineIds.has(line.id))
     const warrantyNotes = selectedLines.map((line) => `- ${line.label}`).join("\n")
@@ -1204,16 +1269,19 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const payload: ServiceOrderSaveRequest = {
       requestOrigin: RequestOrigin.CLIENT,
       clientId: Number(sourceOrder.clientId),
-      priority: sourceOrder.priority,
-      notes: `Garantía derivada de ${sourceOrder.code}\nLíneas:\n${warrantyNotes}`,
-      equipmentType: sourceOrder.equipmentType,
-      equipmentTypeOther: sourceOrder.equipmentTypeOther ?? null,
+      assignedToTechnicianId,
       serviceType: ServiceType.WARRANTY_SERVICE,
-      brand: sourceOrder.brand,
-      model: sourceOrder.model,
-      serialNumber: sourceOrder.serialNumber,
-      initialIssue: `Garantía de ${sourceOrder.code}`,
-      accessories: sourceOrder.accessories,
+      notes: `Garantía derivada de ${sourceOrder.code}\nLíneas:\n${warrantyNotes}`,
+      items: [{
+        priority: sourceOrder.priority,
+        equipmentType: sourceOrder.equipmentType,
+        equipmentTypeOther: sourceOrder.equipmentTypeOther ?? null,
+        brand: sourceOrder.brand,
+        model: sourceOrder.model,
+        serialNumber: sourceOrder.serialNumber,
+        initialIssue: `Garantía de ${sourceOrder.code}`,
+        accessories: sourceOrder.accessories,
+      }],
     }
 
     this.isCreatingWarrantyOrder = true
@@ -1258,7 +1326,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       contactPhone: "",
       contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
       contactPhoneNationalNumber: "",
-      priority: ServiceOrderPriority.MEDIUM,
+      priority: ServiceOrderPriority.LOW,
       assignedToTechnicianId: null,
       notes: "",
       equipmentType: EquipmentType.LAPTOP,
@@ -1278,10 +1346,19 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.createOrderProductPriceLoadingByItemIndex = {}
     this.setCustomerFieldsEnabled(true)
     this.syncDocumentNumberAvailability()
-    this.loadTechnicianAssignmentSuggestion()
+    const restoredDraft = this.restoreCreateServiceOrderDraft()
+    this.loadTechnicianAssignmentSuggestion(restoredDraft)
+    if (restoredDraft) {
+      this.showMessage("info", "fas fa-history", "Recuperamos el borrador de la orden que estabas registrando.")
+    }
   }
 
-  closeCreateServiceOrderModal(): void {
+  closeCreateServiceOrderModal(preserveDraft = true): void {
+    if (preserveDraft) {
+      this.saveCreateServiceOrderDraft()
+    } else {
+      this.clearCreateServiceOrderDraft()
+    }
     this.showCreateServiceOrderModal = false
     this.createServiceOrderStep = 0
     this.createServiceOrderCandidates = []
@@ -1301,7 +1378,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       contactPhone: "",
       contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
       contactPhoneNationalNumber: "",
-      priority: ServiceOrderPriority.MEDIUM,
+      priority: ServiceOrderPriority.LOW,
       assignedToTechnicianId: null,
       notes: "",
       equipmentType: EquipmentType.LAPTOP,
@@ -1321,6 +1398,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.createOrderProductPriceLoadingByItemIndex = {}
     this.setCustomerFieldsEnabled(true)
     this.syncDocumentNumberAvailability()
+  }
+
+  discardCreateServiceOrderDraft(): void {
+    this.closeCreateServiceOrderModal(false)
   }
 
   private applyClientContact(partnerId: number | null): void {
@@ -1348,7 +1429,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.syncPhoneControls(this.createServiceOrderForm)
     // Validate shared context fields only (equipment is already captured in candidates)
     const sharedContextFields = [
-      "requestOrigin", "workflowServiceType", "priority", "assignedToTechnicianId",
+      "requestOrigin", "workflowServiceType", "assignedToTechnicianId",
       "contactName", "contactPhone", "contactEmail", "documentTypeId",
     ]
     if (!this.areControlsValid(sharedContextFields)) {
@@ -1361,10 +1442,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
 
-    // Add current equipment to batch if not already added
+    // Capture the current equipment if it has not been added to the order yet.
     if (this.editingCreateServiceOrderCandidateIndex === null || this.createServiceOrderCandidates.length === 0) {
       if (this.areCurrentCreateOrderItemControlsValid() && this.validateCreateServiceOrderInitialAgreement()) {
-        this.addCurrentEquipmentToCreateOrderBatch()
+        this.addCurrentEquipmentToCreateOrder()
       }
     }
 
@@ -1377,19 +1458,17 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.resolveClientId(formValue)
       .pipe(
         switchMap(({ clientId, clientContactId }) => {
-          // Build batch payload
-          const batchPayload: ServiceOrderBatchCreateRequest = {
-            sharedContext: {
-              requestOrigin: formValue.requestOrigin,
-              clientId: clientId || null,
-              clientContactId: clientContactId ?? null,
-              priority: formValue.priority,
-              assignedToTechnicianId: this.toNumericId(formValue.assignedToTechnicianId) ?? null,
-              contactName: String(formValue.contactName ?? '').trim(),
-              contactPhone: normalizeOptionalPhone(formValue.contactPhone),
-              contactEmail: String(formValue.contactEmail ?? '').trim() || null,
-            },
-            orders: this.createServiceOrderCandidates.map((candidate) => ({
+          this.syncCandidateCommercialDrafts()
+          const payload: ServiceOrderSaveRequest = {
+            requestOrigin: formValue.requestOrigin,
+            clientId: clientId || null,
+            clientContactId: clientContactId ?? null,
+            assignedToTechnicianId: this.toNumericId(formValue.assignedToTechnicianId)!,
+            serviceType: formValue.workflowServiceType,
+            contactName: String(formValue.contactName ?? '').trim(),
+            contactPhone: normalizeOptionalPhone(formValue.contactPhone),
+            contactEmail: String(formValue.contactEmail ?? '').trim() || null,
+            items: this.createServiceOrderCandidates.map((candidate) => ({
               equipmentType: candidate.equipmentType,
               equipmentTypeOther: candidate.equipmentTypeOther,
               brand: candidate.brand,
@@ -1397,29 +1476,29 @@ export class ReceptionPanel implements OnInit, OnDestroy {
               serialNumber: candidate.serialNumber,
               accessories: candidate.accessories,
               initialIssue: candidate.initialIssue,
-              serviceType: candidate.serviceType,
+              priority: candidate.priority,
               notes: candidate.notes,
+              initialCommercial: this.buildInitialCommercialRequest(candidate),
             })),
           }
-          return this.serviceOrderService.createBatch(batchPayload)
+          return this.serviceOrderService.create(payload)
         }),
         finalize(() => (this.isCreatingServiceOrder = false)),
       )
       .subscribe({
         next: (response) => {
-          const ordersCount = response.createdOrders.length
+          const itemsCount = response.items?.length ?? response.itemsCount ?? this.createServiceOrderCandidates.length
           this.showMessage(
             "success",
             "fas fa-check-circle",
-            ordersCount > 1
-              ? `${ordersCount} órdenes de servicio creadas correctamente.`
-              : "Orden de servicio creada correctamente.",
+            `Orden ${response.code} creada correctamente con ${itemsCount} ${itemsCount === 1 ? "equipo" : "equipos"}.`,
           )
-          this.closeCreateServiceOrderModal()
+          this.closeCreateServiceOrderModal(false)
           this.loadServiceOrders()
         },
         error: () => {
-          this.showMessage("danger", "fas fa-times-circle", "No pudimos crear las órdenes.")
+          this.saveCreateServiceOrderDraft()
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos crear la orden. Conservamos tu borrador para reintentar.")
         },
       })
   }
@@ -1950,6 +2029,98 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       })
   }
 
+  canRecordClientDecision(link: ServiceOrderAgreementItemLink): boolean {
+    return link.commercialVersion?.status === "DRAFT" || link.commercialVersion?.status === "ISSUED"
+  }
+
+  canEditCommercialDiscounts(link: ServiceOrderAgreementItemLink): boolean {
+    return this.canRecordClientDecision(link) && Boolean(link.commercialVersion?.lines?.length)
+  }
+
+  getCommercialItemLabel(link: ServiceOrderAgreementItemLink): string {
+    const item = link.serviceOrderItem
+    const equipment = [item?.brand, item?.model].filter(Boolean).join(" ")
+    return [item?.code || `Equipo #${link.serviceOrderItemId}`, equipment].filter(Boolean).join(" · ")
+  }
+
+  getCommercialVersionStatusLabel(link: ServiceOrderAgreementItemLink): string {
+    const latestDecision = [...(link.commercialVersion?.decisions ?? [])].sort(
+      (left, right) => new Date(right.recordedAt).getTime() - new Date(left.recordedAt).getTime(),
+    )[0]
+    if (latestDecision?.decision === "CHANGES_REQUESTED") return "Cambios solicitados"
+    if (latestDecision?.decision === "ACCEPTED" || link.commercialVersion?.status === "ACCEPTED") return "Aceptado"
+    return "Pendiente de respuesta"
+  }
+
+  getCommercialDecisionAuditLabel(link: ServiceOrderAgreementItemLink): string | null {
+    const latestDecision = [...(link.commercialVersion?.decisions ?? [])].sort(
+      (left, right) => new Date(right.recordedAt).getTime() - new Date(left.recordedAt).getTime(),
+    )[0]
+    if (!latestDecision) return null
+    const channels: Record<string, string> = {
+      WHATSAPP: "WhatsApp",
+      PHONE: "Llamada telefónica",
+      IN_PERSON: "Presencial",
+      EMAIL: "Correo electrónico",
+      OTHER: "Otro canal",
+    }
+    const recorder = latestDecision.recordedByUser?.name || `usuario #${latestDecision.recordedByUserId}`
+    return `${channels[latestDecision.channel] ?? latestDecision.channel} · registrado por ${recorder}`
+  }
+
+  openClientDecisionModal(link: ServiceOrderAgreementItemLink): void {
+    if (!this.canRecordClientDecision(link) || !link.commercialVersion) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta versión ya no admite nuevas decisiones.")
+      return
+    }
+    this.clientDecisionTarget = {
+      commercialVersionId: Number(link.commercialVersionId),
+      itemLabel: this.getCommercialItemLabel(link),
+      versionNumber: Number(link.commercialVersion.versionNumber),
+      totalAmount: Number(link.commercialVersion.totalAmount),
+    }
+  }
+
+  openLineDiscountModal(link: ServiceOrderAgreementItemLink): void {
+    const version = link.commercialVersion
+    const serviceOrderId = this.selectedServiceOrderAgreementDetail?.serviceOrderId
+    if (!this.canEditCommercialDiscounts(link) || !version || !serviceOrderId) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta versión no admite cambios de descuento.")
+      return
+    }
+    this.lineDiscountTarget = {
+      serviceOrderId: Number(serviceOrderId),
+      serviceOrderItemId: Number(link.serviceOrderItemId),
+      itemLabel: this.getCommercialItemLabel(link),
+      baseVersionId: Number(link.commercialVersionId),
+      versionNumber: Number(version.versionNumber),
+      notes: version.notes ?? null,
+      lines: version.lines,
+    }
+  }
+
+  handleLineDiscountRevisionCreated(agreement: ServiceOrderAgreement): void {
+    this.lineDiscountTarget = null
+    this.refreshServiceOrderAgreementsForCurrentItem()
+    this.refreshServiceOrderAgreementDetail(agreement.id)
+    this.loadServiceOrders()
+    this.showMessage("success", "fas fa-check-circle", "Se creó una nueva versión con los descuentos actualizados.")
+  }
+
+  handleClientDecisionRecorded(result: ServiceOrderClientDecisionResult): void {
+    const message = result.decision.decision === "CHANGES_REQUESTED"
+      ? "Se registró que el cliente solicita cambios para este equipo."
+      : result.allAccepted
+        ? "Se registró la aceptación y el acuerdo consolidado quedó confirmado."
+        : "Se registró la aceptación de este equipo. Los demás equipos siguen pendientes."
+    this.clientDecisionTarget = null
+    this.lineDiscountTarget = null
+    const agreementId = this.selectedServiceOrderAgreementDetail?.id
+    if (agreementId) this.refreshServiceOrderAgreementDetail(agreementId)
+    this.loadServiceOrders()
+    this.showMessage("success", "fas fa-check-circle", message)
+  }
+
   applyServiceOrderAgreementStatusFromError(quoteId: number, error: any): boolean {
     const rawMessage = error?.error?.message ?? error?.message ?? ""
     const message =
@@ -1980,6 +2151,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.serviceOrderAgreementsServiceOrder = null
     this.selectedServiceOrderAgreementDetail = null
     this.quoteDetailError = ""
+    this.clientDecisionTarget = null
   }
 
   getPriorityBadgeClass(priority: ServiceOrderPriority): string {
@@ -2262,7 +2434,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       this.setCustomerFieldsEnabled(true)
     }
     this.createOrderAgreementItemsByItemIndex[0] = this.buildDefaultAgreementItemsForServiceType(serviceType)
-    this.loadTechnicianAssignmentSuggestion()
+    this.loadTechnicianAssignmentSuggestion(true)
   }
 
   onCreateRequestOriginChange(): void {
@@ -2281,14 +2453,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   getCreateServiceOrderSteps(): CreateServiceOrderStep[] {
     const steps: CreateServiceOrderStep[] = [
       {
+        key: "assignment",
+        label: "Técnico",
+        description: "Selecciona al técnico que recibirá al cliente y atenderá la orden.",
+      },
+      {
         key: "workflow",
         label: "Tipo de atención",
         description: "Define el flujo general y el origen de la orden.",
-      },
-      {
-        key: "assignment",
-        label: "Técnico",
-        description: "Confirma el técnico sugerido antes de registrar los datos del equipo.",
       },
       {
         key: "client",
@@ -2338,7 +2510,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       this.showMessage("warning", "fas fa-exclamation-circle", "Completa los campos obligatorios antes de agregar otro equipo.")
       return
     }
-    this.addCurrentEquipmentToCreateOrderBatch()
+    this.addCurrentEquipmentToCreateOrder()
     this.resetCreateServiceOrderItemDraft()
     this.createServiceOrderStep = 3
   }
@@ -2360,6 +2532,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private areCurrentCreateOrderItemControlsValid(): boolean {
     this.markControlsAsTouched([
+      "priority",
       "equipmentType",
       "equipmentTypeOther",
       "brand",
@@ -2369,6 +2542,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       "accessories",
     ])
     return this.areControlsValid([
+      "priority",
       "equipmentType",
       "equipmentTypeOther",
       "brand",
@@ -2379,7 +2553,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     ])
   }
 
-  addCurrentEquipmentToCreateOrderBatch(): void {
+  addCurrentEquipmentToCreateOrder(): void {
     if (!this.areCurrentCreateOrderItemControlsValid()) {
       return
     }
@@ -2404,9 +2578,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       serialNumber: formValue.serialNumber || null,
       accessories: formValue.accessories || null,
       initialIssue: formValue.initialIssue,
-      serviceType: formValue.workflowServiceType,
+      priority: formValue.priority ?? ServiceOrderPriority.LOW,
       notes: formValue.notes || null,
-      quoteItems: this.createOrderAgreementItemsByItemIndex[0] || [],
+      quoteItems: (this.createOrderAgreementItemsByItemIndex[0] || []).map((item) => ({ ...item })),
     }
   }
 
@@ -2422,6 +2596,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       serialNumber: candidate.serialNumber || "",
       accessories: candidate.accessories || "",
       initialIssue: candidate.initialIssue,
+      priority: candidate.priority,
       notes: candidate.notes || "",
     })
     this.createOrderAgreementItemsByItemIndex[0] = candidate.quoteItems.map(item => ({ ...item }))
@@ -2469,6 +2644,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     index: number
     equipmentTypeLabel: string
     serviceTypeLabel: string
+    priorityLabel: string
     description: string
     brand: string | null
     model: string | null
@@ -2482,7 +2658,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return this.createServiceOrderCandidates.map((candidate, index) => ({
       index,
       equipmentTypeLabel: this.getEquipmentTypeLabel(candidate.equipmentType),
-      serviceTypeLabel: this.getServiceTypeLabel(candidate.serviceType),
+      serviceTypeLabel: this.getServiceTypeLabel(this.getSelectedWorkflowServiceType()),
+      priorityLabel: this.getPriorityLabel(candidate.priority),
       description: candidate.initialIssue,
       brand: candidate.brand,
       model: candidate.model,
@@ -2515,15 +2692,161 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   nextCreateServiceOrderStep(): void {
     const steps = this.getCreateServiceOrderSteps()
+    const currentStep = this.getCurrentCreateServiceOrderStep().key
     if (!this.validateCurrentCreateServiceOrderStep()) {
       return
     }
+    if (currentStep === "items" && this.requiresCreateServiceOrderInitialAgreementStep()) {
+      this.prepareCandidateCommercialDrafts()
+    } else if (currentStep === "initialQuote") {
+      this.syncCandidateCommercialDrafts()
+    }
     const nextStep = Math.min(this.createServiceOrderStep + 1, steps.length - 1)
     this.createServiceOrderStep = nextStep
+    this.saveCreateServiceOrderDraft()
+  }
+
+  getPendingItemCancellation(item: ServiceOrderItem) {
+    return (item.cancellationRequests ?? []).find((request) =>
+      ["PENDING", "AWAITING_CLIENT_ACCEPTANCE"].includes(request.status),
+    ) ?? null
+  }
+
+  canRequestItemCancellation(item: ServiceOrderItem): boolean {
+    return ![
+      ServiceOrderOperativeStatus.CANCELADA,
+      ServiceOrderOperativeStatus.ENTREGADA,
+      ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION,
+    ].includes(item.operativeStatus) && !this.getPendingItemCancellation(item)
+  }
+
+  canRequestAnyItemCancellation(order: ServiceOrder): boolean {
+    return (order.items ?? []).some((item) => this.canRequestItemCancellation(item))
+  }
+
+  openItemCancellationModal(order: ServiceOrder, event?: Event, item?: ServiceOrderItem): void {
+    event?.stopPropagation()
+    const items = (order.items ?? []).filter((candidate) => this.canRequestItemCancellation(candidate))
+    if (!items.length) {
+      this.showMessage("warning", "fas fa-info-circle", "Esta orden no tiene equipos disponibles para cancelar.")
+      return
+    }
+    this.itemCancellationTarget = {
+      mode: "REQUEST",
+      serviceOrderId: Number(order.id),
+      orderCode: order.code,
+      items,
+      selectedItemId: item?.id ?? items[0].id,
+    }
+  }
+
+  handleItemCancellationSaved(result: ServiceOrderItemCancellationResult): void {
+    this.itemCancellationTarget = null
+    this.selectedServiceOrder = result.order
+    this.loadServiceOrders()
+    if (this.showServiceOrderAgreementsModal && this.serviceOrderAgreementsServiceOrder?.id === result.order.id) {
+      this.serviceOrderAgreementsServiceOrder = result.order
+    }
+    const pending = ["PENDING", "AWAITING_CLIENT_ACCEPTANCE"].includes(result.request.status)
+    this.showMessage(
+      "success",
+      "fas fa-check-circle",
+      pending
+        ? "La cancelación quedó pendiente de revisión por supervisión."
+        : "El equipo quedó cancelado correctamente.",
+    )
   }
 
   previousCreateServiceOrderStep(): void {
+    if (this.getCurrentCreateServiceOrderStep().key === "initialQuote") {
+      this.syncCandidateCommercialDrafts()
+    }
     this.createServiceOrderStep = Math.max(this.createServiceOrderStep - 1, 0)
+    this.saveCreateServiceOrderDraft()
+  }
+
+  private saveCreateServiceOrderDraft(): void {
+    if (!this.showCreateServiceOrderModal || this.isRestoringCreateServiceOrderDraft) {
+      return
+    }
+
+    const draft: CreateServiceOrderDraft = {
+      version: 2,
+      updatedAt: Date.now(),
+      step: this.createServiceOrderStep,
+      formValue: this.createServiceOrderForm.getRawValue(),
+      candidates: this.createServiceOrderCandidates,
+      editingCandidateIndex: this.editingCreateServiceOrderCandidateIndex,
+      agreementItemsByItemIndex: this.createOrderAgreementItemsByItemIndex,
+    }
+
+    try {
+      localStorage.setItem(this.getCreateServiceOrderDraftKey(), JSON.stringify(draft))
+    } catch {
+      // El almacenamiento puede estar deshabilitado; el wizard debe seguir funcionando.
+    }
+  }
+
+  private restoreCreateServiceOrderDraft(): boolean {
+    const draft = this.readCreateServiceOrderDraft()
+    if (!draft) {
+      return false
+    }
+
+    this.isRestoringCreateServiceOrderDraft = true
+    try {
+      this.createServiceOrderForm.patchValue(draft.formValue, { emitEvent: false })
+      this.createServiceOrderCandidates = draft.candidates ?? []
+      this.editingCreateServiceOrderCandidateIndex = draft.editingCandidateIndex ?? null
+      this.createOrderAgreementItemsByItemIndex = draft.agreementItemsByItemIndex ?? {}
+      this.createServiceOrderStep = Math.min(
+        Math.max(Number(draft.step) || 0, 0),
+        this.getCreateServiceOrderSteps().length - 1,
+      )
+      this.setCustomerFieldsEnabled(!this.isInternalRequestOrigin())
+      return true
+    } finally {
+      this.isRestoringCreateServiceOrderDraft = false
+    }
+  }
+
+  private hasValidCreateServiceOrderDraft(): boolean {
+    return Boolean(this.readCreateServiceOrderDraft())
+  }
+
+  private readCreateServiceOrderDraft(): CreateServiceOrderDraft | null {
+    try {
+      const serialized = localStorage.getItem(this.getCreateServiceOrderDraftKey())
+      if (!serialized) {
+        return null
+      }
+      const draft = JSON.parse(serialized) as CreateServiceOrderDraft
+      if (
+        draft?.version !== 2 ||
+        !Number.isFinite(draft.updatedAt) ||
+        Date.now() - draft.updatedAt > CREATE_SERVICE_ORDER_DRAFT_TTL_MS
+      ) {
+        this.clearCreateServiceOrderDraft()
+        return null
+      }
+      return draft
+    } catch {
+      this.clearCreateServiceOrderDraft()
+      return null
+    }
+  }
+
+  private clearCreateServiceOrderDraft(): void {
+    try {
+      localStorage.removeItem(this.getCreateServiceOrderDraftKey())
+    } catch {
+      // Sin acción: el almacenamiento puede estar deshabilitado.
+    }
+  }
+
+  private getCreateServiceOrderDraftKey(): string {
+    const userId = Number(this.currentUserService.value?.id) || "anonymous"
+    return `${CREATE_SERVICE_ORDER_DRAFT_KEY_PREFIX}:${this.companyId}:${userId}`
   }
 
   isLastCreateServiceOrderStep(): boolean {
@@ -2531,7 +2854,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   requiresCreateServiceOrderInitialAgreementStep(): boolean {
-    return this.getSelectedWorkflowServiceType() === ServiceType.STANDARD_SERVICE
+    return [ServiceType.STANDARD_SERVICE, ServiceType.ASSEMBLY].includes(
+      this.getSelectedWorkflowServiceType(),
+    )
   }
 
   getSelectedWorkflowServiceType(): ServiceType {
@@ -2589,8 +2914,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     )
   }
 
-  loadTechnicianAssignmentSuggestion(): void {
+  loadTechnicianAssignmentSuggestion(preserveSelectedTechnician = false): void {
     const serviceType = this.getSelectedWorkflowServiceType()
+    const selectedTechnicianId = preserveSelectedTechnician
+      ? this.toNumericId(this.createServiceOrderForm.get("assignedToTechnicianId")?.value)
+      : null
     this.isLoadingAssignmentSuggestion = true
     this.assignmentSuggestionError = ""
     this.assignmentSuggestion = null
@@ -2601,8 +2929,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       .subscribe({
         next: (suggestion) => {
           this.assignmentSuggestion = suggestion
+          const selectedTechnicianStillAvailable = suggestion.technicians?.some(
+            (entry) => Number(entry.technicianId) === Number(selectedTechnicianId),
+          )
           this.createServiceOrderForm.patchValue({
-            assignedToTechnicianId: suggestion.suggestedTechnicianId,
+            assignedToTechnicianId: selectedTechnicianStillAvailable
+              ? selectedTechnicianId
+              : suggestion.suggestedTechnicianId,
           })
         },
         error: () => {
@@ -2913,8 +3246,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   private validateCurrentCreateServiceOrderStep(): boolean {
     const step = this.getCurrentCreateServiceOrderStep().key
     if (step === "workflow") {
-      this.markControlsAsTouched(["workflowServiceType", "requestOrigin", "priority"])
-      return this.areControlsValid(["workflowServiceType", "requestOrigin", "priority"])
+      this.markControlsAsTouched(["workflowServiceType", "requestOrigin"])
+      return this.areControlsValid(["workflowServiceType", "requestOrigin"])
     }
 
     if (step === "assignment") {
@@ -2946,26 +3279,32 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return true
     }
 
-    const quoteItems = this.getCreateOrderAgreementItems(0)
-    if (!quoteItems.length) {
-      this.showMessage("warning", "fas fa-exclamation-circle", "Completa la cotización inicial del equipo.")
-      return false
-    }
-
-    const hasInvalidItem = quoteItems.some((entry) => {
-      if (entry.type === "product") {
-        return !this.toNumericId(entry.productId) || Number(entry.quantity) <= 0
+    for (let index = 0; index < this.createServiceOrderCandidates.length; index += 1) {
+      const quoteItems = this.getCreateOrderAgreementItems(index)
+      if (!quoteItems.length) {
+        this.showMessage(
+          "warning",
+          "fas fa-exclamation-circle",
+          `Completa la cotización inicial del equipo ${index + 1}.`,
+        )
+        return false
       }
-      return !this.toNumericId(entry.serviceId) || Number(entry.unitPrice ?? 0) < TECHNICAL_SERVICE_OPTION.price
-    })
 
-    if (hasInvalidItem) {
-      this.showMessage(
-        "warning",
-        "fas fa-exclamation-circle",
-        "Revisa la línea de servicio técnico y los productos del acuerdo inicial.",
-      )
-      return false
+      const hasInvalidItem = quoteItems.some((entry) => {
+        if (entry.type === "product") {
+          return !this.toNumericId(entry.productId) || Number(entry.quantity) <= 0
+        }
+        return Number(entry.unitPrice ?? 0) < TECHNICAL_SERVICE_OPTION.price
+      })
+
+      if (hasInvalidItem) {
+        this.showMessage(
+          "warning",
+          "fas fa-exclamation-circle",
+          `Revisa la línea de servicio técnico y los productos del equipo ${index + 1}.`,
+        )
+        return false
+      }
     }
 
     return true
@@ -3008,6 +3347,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   private getCurrentEquipmentDraftSnapshot(): EquipmentDraftSnapshot {
     const formValue = this.createServiceOrderForm.getRawValue()
     return {
+      priority: formValue.priority ?? ServiceOrderPriority.LOW,
       equipmentType: formValue.equipmentType ?? EquipmentType.LAPTOP,
       equipmentTypeOther: this.normalizeEquipmentDraftText(formValue.equipmentTypeOther),
       brand: this.normalizeEquipmentDraftText(formValue.brand),
@@ -3021,6 +3361,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private getEmptyEquipmentDraftSnapshot(): EquipmentDraftSnapshot {
     return {
+      priority: ServiceOrderPriority.LOW,
       equipmentType: EquipmentType.LAPTOP,
       equipmentTypeOther: "",
       brand: "",
@@ -3036,32 +3377,55 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return value == null ? "" : String(value).trim()
   }
 
-  private createInitialAgreementsForStandardService(serviceOrder: ServiceOrder) {
+  private prepareCandidateCommercialDrafts(): void {
+    this.createOrderAgreementItemsByItemIndex = Object.fromEntries(
+      this.createServiceOrderCandidates.map((candidate, index) => [
+        index,
+        candidate.quoteItems.map((item) => ({ ...item })),
+      ]),
+    )
+  }
+
+  private syncCandidateCommercialDrafts(): void {
     if (!this.requiresCreateServiceOrderInitialAgreementStep()) {
-      return of(serviceOrder)
+      return
     }
+    this.createServiceOrderCandidates = this.createServiceOrderCandidates.map((candidate, index) => ({
+      ...candidate,
+      quoteItems: (this.createOrderAgreementItemsByItemIndex[index] ?? candidate.quoteItems).map((item) => ({
+        ...item,
+      })),
+    }))
+  }
 
-    const quoteItems = this.getCreateOrderAgreementItems(0)
-    if (!quoteItems.length) {
-      return of(serviceOrder)
+  private buildInitialCommercialRequest(
+    candidate: CreateServiceOrderCandidateDraft,
+  ): ServiceOrderInitialCommercialRequest | undefined {
+    if (!this.requiresCreateServiceOrderInitialAgreementStep()) {
+      return undefined
     }
-
-    const quoteRequests = [
-      this.agreementService.create(
-        this.buildServiceOrderAgreementPayload(
-          Number(serviceOrder.id),
-          serviceOrder.serviceType,
-          quoteItems,
-          this.createServiceOrderForm.get("notes")?.value,
-        ),
-      ),
-    ]
-
-    if (!quoteRequests.length) {
-      return of(serviceOrder)
+    return {
+      notes: candidate.notes || undefined,
+      lines: candidate.quoteItems.map((item) => {
+        if (item.type === "product") {
+          return {
+            type: "PRODUCT" as const,
+            productId: this.toNumericId(item.productId)!,
+            quantity: Math.max(1, Number(item.quantity) || 1),
+            unitPrice: Number(item.unitPrice) || 0,
+            requiresPurchase: item.requiresPurchase,
+            notes: item.notes || undefined,
+          }
+        }
+        return {
+          type: "SERVICE" as const,
+          serviceId: this.toNumericId(item.serviceId) ?? undefined,
+          quantity: 1,
+          unitPrice: Number(item.unitPrice) || 0,
+          notes: item.notes || undefined,
+        }
+      }),
     }
-
-    return forkJoin(quoteRequests).pipe(map(() => serviceOrder))
   }
 
   private buildServiceOrderAgreementPayload(

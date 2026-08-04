@@ -49,14 +49,19 @@
                 class="order-count"
                 *ngIf="(thread.orders?.length || thread.serviceOrderIds?.length || 0) as orderCount"
                 [attr.aria-label]="orderCount + ' órdenes vinculadas'"
+                title="Órdenes vinculadas"
               >
+                <i class="fas fa-link" aria-hidden="true"></i>
                 {{ orderCount }}
               </span>
               <span
-                class="unread-dot"
+                class="unread-count"
                 *ngIf="thread.unreadCount > 0"
                 [attr.aria-label]="thread.unreadCount + ' mensajes sin leer'"
-              ></span>
+                title="Mensajes sin leer"
+              >
+                {{ thread.unreadCount > 99 ? '99+' : thread.unreadCount }}
+              </span>
             </span>
           </span>
           <span class="thread-row__order">
@@ -349,6 +354,7 @@
           <article class="history-entry" *ngFor="let diagnosis of selectedOrderDiagnoses">
             <header>
               <strong>Diagnóstico {{ diagnosis.sequenceNumber }}</strong>
+              <span *ngIf="diagnosis.serviceOrderItem">{{ diagnosis.serviceOrderItem.code }}</span>
               <span>{{ formatStatus(diagnosis.status) }}</span>
             </header>
             <h3>{{ diagnosis.summary }}</h3>

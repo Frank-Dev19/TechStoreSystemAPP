@@ -6,6 +6,47 @@ Definir las restricciones visuales y reglas de renderizado para el componente de
 
 ## Requirements
 
+### Requirement: Technician Assignment Before Service Flow
+
+The reception wizard MUST request the technician assignment before asking for the service type, request origin, and priority. Changing the service flow afterward MUST preserve the technician explicitly selected by reception while that technician remains available.
+
+#### Scenario: Starting a client reception
+
+- GIVEN reception opens the new service-order wizard
+- WHEN the first step is displayed
+- THEN the wizard MUST display the technician assignment step
+- AND the service-flow step MUST be displayed immediately afterward
+
+#### Scenario: Preserving the selected technician
+
+- GIVEN reception selected an available technician in the first step
+- WHEN reception changes the service type in the second step
+- THEN the assignment recommendation MAY be recalculated
+- AND the selected technician MUST remain selected while present in the refreshed candidate list
+
+### Requirement: Recoverable Service Order Draft
+
+The reception wizard MUST persist an unfinished service-order draft locally for up to 24 hours, including the current step, shared form data, equipment candidates, and initial agreement items. Navigation, reload, tab closure, or accidental modal closure MUST NOT discard the draft.
+
+#### Scenario: Recovering interrupted reception work
+
+- GIVEN reception has started a service-order wizard
+- AND entered data or added one or more equipment candidates
+- WHEN the page is reloaded or reception returns to the panel within 24 hours
+- THEN the wizard MUST reopen with the saved step and captured information
+
+#### Scenario: Completing or discarding a draft
+
+- GIVEN a saved draft exists
+- WHEN all orders are created successfully or reception explicitly selects `Descartar borrador`
+- THEN the saved draft MUST be removed
+
+#### Scenario: Closing without discarding
+
+- GIVEN reception closes an unfinished wizard using `Guardar y cerrar` or the close icon
+- WHEN the wizard is opened again within 24 hours
+- THEN the previous progress MUST be restored
+
 ### Requirement: Flat Admin Styling
 
 El sistema MUST renderizar los elementos `.wizard-hero`, `.wizard-step` y `.wizard-empty-quote-state` usando estilos planos, evitando explícitamente el uso de gradientes y sombras expansivas.
