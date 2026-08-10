@@ -98,6 +98,16 @@ interface FixedTechnicalServiceOption {
   price: number
 }
 
+interface ItemTransitionContext {
+  order: ServiceOrder
+  nextStatus: ServiceOrderTechnicalStatus
+  sourceStatuses: ServiceOrderTechnicalStatus[]
+  title: string
+  description: string
+  confirmLabel: string
+  successMessage: string
+}
+
 type TechnicianPanelTab = "todo" | "diagnosis" | "pending_approval" | "repair" | "repaired" | "all"
 type TechnicianDetailTab = "equipment" | "sla" | "history" | "agreements"
 
@@ -163,6 +173,10 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   selectedDiagnosisItemId: number | null = null
   selectedAgreementItemId: number | null = null
   itemCancellationTarget: ServiceOrderItemCancellationTarget | null = null
+  showItemTransitionModal = false
+  selectedItemTransitionId: number | null = null
+  itemTransitionContext: ItemTransitionContext | null = null
+  isSavingItemTransition = false
 
   showDiagnosisModal = false
   diagnosisForm: FormGroup
@@ -622,10 +636,18 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   startDiagnosis(order: ServiceOrder): void {
-    this.transitionWorkflow(
+    if (![ServiceType.DIAGNOSIS, ServiceType.WARRANTY_SERVICE].includes(order.serviceType)) return
+    const isWarranty = this.isWarrantyService(order)
+    this.requestItemTransition(
       order,
       ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
-      this.isWarrantyService(order) ? "Revision de garantia iniciada correctamente." : "Diagnostico iniciado correctamente.",
+      [ServiceOrderTechnicalStatus.ASIGNADA],
+      isWarranty ? "Seleccionar equipo para iniciar revisión" : "Seleccionar equipo para iniciar diagnóstico",
+      isWarranty
+        ? "Elige el equipo cuya revisión de garantía deseas iniciar."
+        : "Elige el equipo cuyo diagnóstico deseas iniciar.",
+      isWarranty ? "Iniciar revisión" : "Iniciar diagnóstico",
+      isWarranty ? "Revisión de garantía iniciada correctamente." : "Diagnóstico iniciado correctamente.",
     )
   }
 
@@ -1173,27 +1195,137 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   startRepair(order: ServiceOrder): void {
-    if (order.technicalStatus !== ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION) {
-      this.showMessage(
-        "warning",
-        "fas fa-exclamation-circle",
-        "La orden debe estar aprobada para iniciar el servicio.",
-      )
-      return
-    }
-    this.transitionWorkflow(order, ServiceOrderTechnicalStatus.EN_EJECUCION, "Servicio iniciado.")
+    this.requestItemTransition(
+      order,
+      ServiceOrderTechnicalStatus.EN_EJECUCION,
+      [ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION],
+      "Seleccionar equipo para iniciar servicio",
+      "Elige el equipo cuya atención deseas iniciar.",
+      "Iniciar servicio",
+      "Servicio iniciado correctamente.",
+      "No hay equipos autorizados para iniciar el servicio.",
+    )
   }
 
   markRepaired(order: ServiceOrder): void {
-    if (order.technicalStatus !== ServiceOrderTechnicalStatus.EN_EJECUCION) {
-      return
-    }
-    this.transitionWorkflow(order, ServiceOrderTechnicalStatus.RESUELTA, "Equipo marcado como reparado.")
+    this.requestItemTransition(
+      order,
+      ServiceOrderTechnicalStatus.RESUELTA,
+      [ServiceOrderTechnicalStatus.EN_EJECUCION],
+      "Seleccionar equipo para finalizar servicio",
+      "Elige el equipo que terminó su atención técnica.",
+      "Finalizar servicio",
+      "Equipo marcado como reparado.",
+      "No hay equipos en ejecución que puedan finalizarse.",
+    )
   }
 
   canFinishRepair(order?: ServiceOrder | null): boolean {
     if (!order) return false
-    return order.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION
+    return this.hasItemInTechnicalStatus(order, [ServiceOrderTechnicalStatus.EN_EJECUCION])
+  }
+
+  get itemTransitionEligibleItems(): ServiceOrderItem[] {
+    if (!this.itemTransitionContext) return []
+    return this.getItemsInTechnicalStatuses(
+      this.itemTransitionContext.order,
+      this.itemTransitionContext.sourceStatuses,
+    )
+  }
+
+  confirmItemTransition(): void {
+    const context = this.itemTransitionContext
+    const item = this.itemTransitionEligibleItems.find(
+      (entry) => Number(entry.id) === Number(this.selectedItemTransitionId),
+    )
+    if (!context || !item || this.isSavingItemTransition) return
+    this.executeItemTransition(context, item)
+  }
+
+  closeItemTransitionModal(): void {
+    if (this.isSavingItemTransition) return
+    this.showItemTransitionModal = false
+    this.selectedItemTransitionId = null
+    this.itemTransitionContext = null
+  }
+
+  private requestItemTransition(
+    order: ServiceOrder,
+    nextStatus: ServiceOrderTechnicalStatus,
+    sourceStatuses: ServiceOrderTechnicalStatus[],
+    title: string,
+    description: string,
+    confirmLabel: string,
+    successMessage: string,
+    emptyMessage = "No hay equipos en una etapa que permita realizar esta acción.",
+  ): void {
+    const context: ItemTransitionContext = {
+      order,
+      nextStatus,
+      sourceStatuses,
+      title,
+      description,
+      confirmLabel,
+      successMessage,
+    }
+    const items = order.items ?? []
+
+    if (items.length === 0) {
+      if (!sourceStatuses.includes(order.technicalStatus)) {
+        this.showMessage("warning", "fas fa-exclamation-circle", emptyMessage)
+        return
+      }
+      this.transitionWorkflow(order, nextStatus, successMessage)
+      return
+    }
+
+    const eligibleItems = this.getItemsInTechnicalStatuses(order, sourceStatuses)
+    if (eligibleItems.length === 0) {
+      this.showMessage("warning", "fas fa-exclamation-circle", emptyMessage)
+      return
+    }
+    if (eligibleItems.length === 1) {
+      this.executeItemTransition(context, eligibleItems[0])
+      return
+    }
+
+    this.itemTransitionContext = context
+    this.selectedItemTransitionId = null
+    this.showItemTransitionModal = true
+  }
+
+  private executeItemTransition(context: ItemTransitionContext, item: ServiceOrderItem): void {
+    this.isSavingItemTransition = true
+    this.serviceOrderService
+      .changeItemTechnicalStatus(Number(context.order.id), Number(item.id), context.nextStatus)
+      .pipe(finalize(() => (this.isSavingItemTransition = false)))
+      .subscribe({
+        next: () => {
+          this.showItemTransitionModal = false
+          this.selectedItemTransitionId = null
+          this.itemTransitionContext = null
+          this.showMessage("success", "fas fa-check-circle", context.successMessage)
+          this.loadTechnicianOrders()
+        },
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos actualizar el estado del equipo."),
+      })
+  }
+
+  private getItemsInTechnicalStatuses(
+    order: ServiceOrder,
+    statuses: ServiceOrderTechnicalStatus[],
+  ): ServiceOrderItem[] {
+    return (order.items ?? []).filter((item) => statuses.includes(item.technicalStatus))
+  }
+
+  private hasItemInTechnicalStatus(
+    order: ServiceOrder,
+    statuses: ServiceOrderTechnicalStatus[],
+  ): boolean {
+    const items = order.items ?? []
+    return items.length > 0
+      ? items.some((item) => statuses.includes(item.technicalStatus))
+      : statuses.includes(order.technicalStatus)
   }
 
   acceptWarrantyReview(order: ServiceOrder): void {
@@ -1243,13 +1375,22 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   canStartDiagnosis(order: ServiceOrder): boolean {
-    return order.technicalStatus === ServiceOrderTechnicalStatus.ASIGNADA &&
-      [ServiceType.DIAGNOSIS, ServiceType.WARRANTY_SERVICE].includes(order.serviceType)
+    return [ServiceType.DIAGNOSIS, ServiceType.WARRANTY_SERVICE].includes(order.serviceType) &&
+      this.hasItemInTechnicalStatus(order, [ServiceOrderTechnicalStatus.ASIGNADA])
   }
 
   canOpenRediagnosis(order: ServiceOrder | null): boolean {
     if (!order) return false
-    return order.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION && order.serviceType === ServiceType.DIAGNOSIS
+    return order.serviceType === ServiceType.DIAGNOSIS &&
+      this.hasItemInTechnicalStatus(order, [ServiceOrderTechnicalStatus.EN_EJECUCION])
+  }
+
+  canRegisterDiagnosis(order: ServiceOrder | null): boolean {
+    if (!order || !this.isDiagnosisService(order)) return false
+    return this.hasItemInTechnicalStatus(order, [
+      ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+      ServiceOrderTechnicalStatus.EN_EJECUCION,
+    ])
   }
 
   canManageAgreement(order: ServiceOrder | null): boolean {
@@ -1298,12 +1439,14 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   isAdditionalDiagnosisFlow(): boolean {
-    return this.selectedServiceOrder?.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION
+    return this.selectedDiagnosisItem?.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION ||
+      (!this.selectedDiagnosisItem &&
+        this.selectedServiceOrder?.technicalStatus === ServiceOrderTechnicalStatus.EN_EJECUCION)
   }
 
   canStartRepairDirectly(order: ServiceOrder): boolean {
     return (
-      order.technicalStatus === ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION &&
+      this.hasItemInTechnicalStatus(order, [ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION]) &&
       !this.isStandardService(order)
     )
   }
@@ -1321,7 +1464,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   canStartStandardService(order: ServiceOrder): boolean {
-    return this.isStandardService(order) && order.technicalStatus === ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION
+    return this.isStandardService(order) &&
+      this.hasItemInTechnicalStatus(order, [ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION])
   }
 
 

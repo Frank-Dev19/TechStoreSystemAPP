@@ -47,6 +47,7 @@ describe('TechnicianPanel', () => {
   const serviceOrderServiceStub = {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
     changeTechnicalStatus: jasmine.createSpy('changeTechnicalStatus').and.returnValue(of({})),
+    changeItemTechnicalStatus: jasmine.createSpy('changeItemTechnicalStatus').and.returnValue(of({})),
   };
 
   const diagnosisServiceStub = {
@@ -103,6 +104,8 @@ describe('TechnicianPanel', () => {
     agreementServiceStub.findAll.calls.reset();
     diagnosisServiceStub.findAll.calls.reset();
     diagnosisServiceStub.create.calls.reset();
+    serviceOrderServiceStub.changeTechnicalStatus.calls.reset();
+    serviceOrderServiceStub.changeItemTechnicalStatus.calls.reset();
     agreementServiceStub.findAll.and.returnValue(of({ data: [] }));
     diagnosisServiceStub.findAll.and.returnValue(of({ data: [] }));
 
@@ -130,6 +133,132 @@ describe('TechnicianPanel', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('inicia el diagnóstico mediante la transición del único equipo', () => {
+    const order = createServiceOrder({
+      id: 31,
+      serviceType: ServiceType.DIAGNOSIS,
+      technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+    });
+    order.items = [
+      createServiceOrderItem(order, {
+        id: 311,
+        technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+      }),
+    ];
+
+    component.startDiagnosis(order);
+
+    expect(serviceOrderServiceStub.changeItemTechnicalStatus).toHaveBeenCalledOnceWith(
+      31,
+      311,
+      ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+    );
+    expect(serviceOrderServiceStub.changeTechnicalStatus).not.toHaveBeenCalled();
+  });
+
+  it('solicita seleccionar un equipo cuando varios pueden iniciar diagnóstico', () => {
+    const order = createServiceOrder({
+      id: 32,
+      serviceType: ServiceType.DIAGNOSIS,
+      technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+    });
+    order.items = [
+      createServiceOrderItem(order, {
+        id: 321,
+        position: 1,
+        code: 'SO-32-01',
+        technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+      }),
+      createServiceOrderItem(order, {
+        id: 322,
+        position: 2,
+        code: 'SO-32-02',
+        technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+      }),
+    ];
+
+    component.startDiagnosis(order);
+
+    expect(component.showItemTransitionModal).toBeTrue();
+    expect(component.itemTransitionEligibleItems.map((item) => item.id)).toEqual([321, 322]);
+    expect(serviceOrderServiceStub.changeItemTechnicalStatus).not.toHaveBeenCalled();
+
+    component.selectedItemTransitionId = 322;
+    component.confirmItemTransition();
+
+    expect(serviceOrderServiceStub.changeItemTechnicalStatus).toHaveBeenCalledOnceWith(
+      32,
+      322,
+      ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+    );
+    expect(serviceOrderServiceStub.changeTechnicalStatus).not.toHaveBeenCalled();
+  });
+
+  it('inicia y finaliza el servicio mediante transiciones del equipo', () => {
+    const authorizedOrder = createServiceOrder({
+      id: 41,
+      serviceType: ServiceType.STANDARD_SERVICE,
+      technicalStatus: ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION,
+    });
+    authorizedOrder.items = [
+      createServiceOrderItem(authorizedOrder, {
+        id: 411,
+        technicalStatus: ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION,
+      }),
+    ];
+
+    component.startStandardService(authorizedOrder);
+
+    expect(serviceOrderServiceStub.changeItemTechnicalStatus).toHaveBeenCalledWith(
+      41,
+      411,
+      ServiceOrderTechnicalStatus.EN_EJECUCION,
+    );
+
+    const executingOrder = createServiceOrder({
+      id: 42,
+      serviceType: ServiceType.STANDARD_SERVICE,
+      technicalStatus: ServiceOrderTechnicalStatus.EN_EJECUCION,
+    });
+    executingOrder.items = [
+      createServiceOrderItem(executingOrder, {
+        id: 421,
+        technicalStatus: ServiceOrderTechnicalStatus.EN_EJECUCION,
+      }),
+    ];
+
+    component.markRepaired(executingOrder);
+
+    expect(serviceOrderServiceStub.changeItemTechnicalStatus).toHaveBeenCalledWith(
+      42,
+      421,
+      ServiceOrderTechnicalStatus.RESUELTA,
+    );
+    expect(serviceOrderServiceStub.changeTechnicalStatus).not.toHaveBeenCalled();
+  });
+
+  it('mantiene disponibles las acciones según los estados de los equipos', () => {
+    const order = createServiceOrder({
+      id: 51,
+      serviceType: ServiceType.DIAGNOSIS,
+      technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+    });
+    order.items = [
+      createServiceOrderItem(order, {
+        id: 511,
+        technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+      }),
+      createServiceOrderItem(order, {
+        id: 512,
+        technicalStatus: ServiceOrderTechnicalStatus.EN_EJECUCION,
+      }),
+    ];
+
+    expect(component.canStartDiagnosis(order)).toBeTrue();
+    expect(component.canOpenRediagnosis(order)).toBeTrue();
+    expect(component.canFinishRepair(order)).toBeTrue();
   });
 
   it('exige seleccionar un equipo cuando la orden tiene varios pendientes de diagnóstico', () => {
