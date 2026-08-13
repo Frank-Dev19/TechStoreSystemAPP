@@ -1,10 +1,13 @@
 import { Component, OnInit, ElementRef, OnDestroy, HostListener } from '@angular/core';
-import { Usuario } from '../../models/user';
 import { ROUTES } from '../sidebar/sidebar';
 import { Location } from '@angular/common';
 import { LoginService } from '../../services/login-service.service';
 import { Router } from '@angular/router';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
+import { Subscription } from 'rxjs';
+import { CurrentUserService } from '../../services/current-user.service';
+import { ProfileService } from '../../services/profile.service';
+import { User } from '../../models/user/user';
 
 @Component({
   selector: 'app-navbar',
@@ -13,9 +16,11 @@ import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
   styleUrls: ['./navbar.css']
 })
 export class Navbar implements OnInit, OnDestroy {
-  authenticatedUser: Usuario;
+  authenticatedUser: User | null = null;
   private listTitles: any[] = [];
   private sidebarVisible = false;
+  private userSub?: Subscription;
+  private routerSub?: Subscription;
 
   isDropdownOpen = false;
 
@@ -24,18 +29,35 @@ export class Navbar implements OnInit, OnDestroy {
     private element: ElementRef,
     private router: Router,
     private modalService: NgbModal,
-    private loginService: LoginService
+    private loginService: LoginService,
+    private currentUserService: CurrentUserService,
+    private profileService: ProfileService
   ) { }
 
   ngOnInit(): void {
-    // this.currentUser();
+    this.currentUserService.restoreFromStorage();
+    this.userSub = this.currentUserService.user$.subscribe((user) => {
+      this.authenticatedUser = user;
+    });
+
+    if (!this.currentUserService.value) {
+      this.profileService.getMe().subscribe({
+        next: (user) => this.currentUserService.set(user),
+        error: () => this.currentUserService.clear(),
+      });
+    }
+
     this.listTitles = ROUTES.filter(t => t);
 
     // Cierra sidebar/overlay al navegar
-    this.router.events.subscribe(() => this.sidebarCloseIfAny());
+    this.routerSub = this.router.events.subscribe(() => this.sidebarCloseIfAny());
   }
 
-  ngOnDestroy(): void { this.sidebarCloseIfAny(); }
+  ngOnDestroy(): void {
+    this.userSub?.unsubscribe();
+    this.routerSub?.unsubscribe();
+    this.sidebarCloseIfAny();
+  }
 
   /* ===== Dropdown usuario ===== */
   toggleUserDropdown(): void { this.isDropdownOpen = !this.isDropdownOpen; }
@@ -109,7 +131,7 @@ export class Navbar implements OnInit, OnDestroy {
     this.router.navigateByUrl('/login');
   }
 
-  // private currentUser(): void {
-  //   this.authenticatedUser = this.loginService.isUserLoggedIn();
-  // }
+  getCurrentUserDisplayName(): string {
+    return this.authenticatedUser?.name || this.authenticatedUser?.email || 'Usuario';
+  }
 }

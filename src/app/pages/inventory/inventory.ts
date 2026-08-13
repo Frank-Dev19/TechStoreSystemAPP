@@ -1450,7 +1450,7 @@ export class Inventory implements OnInit, OnDestroy {
       return;
     }
     try {
-      const updated = await this.countsSvc.review(this.selectedCount.id).toPromise();
+      const updated = await this.countsSvc.review(this.selectedCount.id, this.currentUserName).toPromise();
       await this.refreshCount(updated);               // recarga cabecera + snaps/entries
       await this.loadPersistedDifferences(updated.id); // lee lo persistido
       this.showToast('info', 'Diferencias calculadas y guardadas');
@@ -1472,7 +1472,7 @@ export class Inventory implements OnInit, OnDestroy {
     if (!confirm('¿Publicar los ajustes?')) return;
 
     try {
-      const updated = await this.countsSvc.post(this.selectedCount.id).toPromise();
+      const updated = await this.countsSvc.post(this.selectedCount.id, this.currentUserName).toPromise();
       await Promise.all([this.refreshCount(updated), this.loadStock(), this.loadKardex()]);
       this.isLocked = false;
       this.showToast('success', 'Ajustes publicados');
@@ -2789,20 +2789,18 @@ export class Inventory implements OnInit, OnDestroy {
   formatLocalDate(raw: string | null | undefined): string {
     if (!raw) return '-';
 
-    // caso típico: "2025-10-27T16:52:22.000Z" o "2025-10-27T16:52:22.000"
-    // 1. quitamos la Z si viene con Z para que el browser NO haga conversión de zona
-    const sanitized = raw.endsWith('Z') ? raw.replace(/Z$/, '') : raw;
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return raw;
 
-    // 2. creamos un Date como si fuera "local time", no UTC
-    //    truco: dividir a mano en partes en vez de usar new Date() directo
-    const m = sanitized.match(
-      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/
-    );
-    if (!m) return raw; // fallback
-
-    const [_, y, mo, d, h, mi] = m;
-    // armamos string "dd/MM/yyyy HH:mm"
-    return `${d}/${mo}/${y} ${h}:${mi}`;
+    return new Intl.DateTimeFormat('es-PE', {
+      timeZone: 'America/Lima',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
   }
 
 

@@ -20,14 +20,15 @@
                     <path fill="currentColor"
                         d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5" />
                 </svg>
-                <span class="user-name">{{ authenticatedUser?.username }}</span>
+                <span class="user-name">{{ getCurrentUserDisplayName() }}</span>
             </button>
 
             <div class="dropdown-menu dropdown-menu-right" *ngIf="isDropdownOpen">
                 <div class="dropdown-header">
                     <div class="user-profile">
                         <img alt="User Profile" class="avatar" src="assets/img/user.png" />
-                        <h5 class="user-name">{{ authenticatedUser?.username }}</h5>
+                        <h5 class="user-name">{{ getCurrentUserDisplayName() }}</h5>
+                        <p class="user-email" *ngIf="authenticatedUser?.email">{{ authenticatedUser?.email }}</p>
                     </div>
                 </div>
                 <div class="dropdown-divider"></div>

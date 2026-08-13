@@ -36,8 +36,13 @@ export class CountsHttpService {
 
     freeze(id: number): Observable<Count> { return this.baseSvc.put<CountApi>(`${this.base}/${id}/freeze`, {} as any).pipe(map(mapCountFromApi)); }
     start(id: number): Observable<Count> { return this.baseSvc.put<CountApi>(`${this.base}/${id}/start`, {} as any).pipe(map(mapCountFromApi)); }
-    review(id: number): Observable<Count> { return this.baseSvc.put<CountApi>(`${this.base}/${id}/review`, {} as any).pipe(map(mapCountFromApi)); }
-    post(id: number): Observable<Count> { return this.baseSvc.put<CountApi>(`${this.base}/${id}/post`, {} as any).pipe(map(mapCountFromApi)); }
+    review(id: number, user?: string): Observable<Count> {
+        return this.baseSvc.put<CountApi>(`${this.base}/${id}/review`, { user } as any).pipe(map(mapCountFromApi));
+    }
+
+    post(id: number, user?: string): Observable<Count> {
+        return this.baseSvc.put<CountApi>(`${this.base}/${id}/post`, { user } as any).pipe(map(mapCountFromApi));
+    }
     cancel(id: number): Observable<Count> { return this.baseSvc.put<CountApi>(`${this.base}/${id}/cancel`, {} as any).pipe(map(mapCountFromApi)); }
 
     // counts.service.ts
@@ -60,6 +65,7 @@ export class CountsHttpService {
 
     addEntriesBulk(id: number, entries: { product_id: number; lot_id?: number | null; qty_counted: number; user?: string }[]) {
         const payload = {
+            user: entries.find(e => !!e.user)?.user ?? null,
             entries: (entries || []).map(e => ({
                 product_id: e.product_id,
                 lot_id: e.lot_id ?? null,
