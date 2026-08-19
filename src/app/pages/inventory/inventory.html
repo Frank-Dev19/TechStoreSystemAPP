@@ -23,7 +23,8 @@
     <div class="lock-banner" *ngIf="isLocked">
         <i class="fas fa-exclamation-triangle"></i>
         <span>ALMACÉN DETENIDO PARA CONTEO - Las operaciones de entrada/salida/ajuste están bloqueadas</span>
-        <button class="btn-success btn-sm" (click)="unlockInventory()" style="margin-left: auto;">
+        <button *ngIf="canManageInventory" class="btn-success btn-sm" (click)="unlockInventory()"
+            style="margin-left: auto;">
             <i class="fas fa-lock-open"></i>
             Activar Almacén
         </button>
@@ -31,27 +32,33 @@
 
     <!-- Tabs Navigation  -->
     <div class="tabs-navigation">
-        <button class="tab-button" [class.active]="activeTab == 'operations'" (click)="activeTab = 'operations'">
+        <button *ngIf="canManageInventory" class="tab-button" [class.active]="activeTab == 'operations'"
+            (click)="activeTab = 'operations'">
             <i class="fas fa-exchange-alt"></i>
             Operaciones
         </button>
-        <button class="tab-button" [class.active]="activeTab == 'stock'" (click)="activeTab = 'stock'">
+        <button *ngIf="canManageInventory" class="tab-button" [class.active]="activeTab == 'stock'"
+            (click)="activeTab = 'stock'">
             <i class="fas fa-chart-bar"></i>
             Stock
         </button>
-        <button class="tab-button" [class.active]="activeTab == 'counts'" (click)="activeTab = 'counts'">
+        <button *ngIf="canManageInventory" class="tab-button" [class.active]="activeTab == 'counts'"
+            (click)="activeTab = 'counts'">
             <i class="fas fa-clipboard-check"></i>
             Conteos
         </button>
-        <button class="tab-button" [class.active]="activeTab == 'kardex'" (click)="activeTab = 'kardex'">
+        <button *ngIf="canViewKardex" class="tab-button" [class.active]="activeTab == 'kardex'"
+            (click)="activeTab = 'kardex'">
             <i class="fas fa-book"></i>
             Kardex
         </button>
-        <button class="tab-button" [class.active]="activeTab == 'catalogs'" (click)="activeTab = 'catalogs'">
+        <button *ngIf="canManageInventory" class="tab-button" [class.active]="activeTab == 'catalogs'"
+            (click)="activeTab = 'catalogs'">
             <i class="fas fa-database"></i>
             Catálogos
         </button>
-        <button class="tab-button" [class.active]="activeTab == 'products'" (click)="activeTab = 'products'">
+        <button *ngIf="canManageInventory" class="tab-button" [class.active]="activeTab == 'products'"
+            (click)="activeTab = 'products'">
             <i class="fas fa-database"></i>
             Productos
         </button>

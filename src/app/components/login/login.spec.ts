@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { Login } from './login';
 import { LoginService } from '../../services/login-service.service';
 import { TriggerService } from '../../services/trigger-service.service';
+import { RoleLandingService } from '../../services/role-landing.service';
 
 describe('Login', () => {
   let component: Login;
@@ -19,6 +20,10 @@ describe('Login', () => {
       'fireShowLoader',
       'fireHideLoader',
     ]);
+    const roleLandingServiceSpy = jasmine.createSpyObj<RoleLandingService>('RoleLandingService', [
+      'getDefaultRoute',
+    ]);
+    roleLandingServiceSpy.getDefaultRoute.and.returnValue('/supervisor-panel');
 
     await TestBed.configureTestingModule({
       declarations: [Login],
@@ -26,6 +31,7 @@ describe('Login', () => {
       providers: [
         { provide: LoginService, useValue: loginServiceSpy },
         { provide: TriggerService, useValue: triggerServiceSpy },
+        { provide: RoleLandingService, useValue: roleLandingServiceSpy },
       ],
     })
     .compileComponents();

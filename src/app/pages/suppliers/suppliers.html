@@ -19,7 +19,7 @@
                     <select id="status-filter" class="select-control" [(ngModel)]="statusFilter"
                         (change)="onStatusFilterChange()">
                         <option value="active">Vigentes</option>
-                        <option value="deleted">Eliminados</option>
+                        <option *ngIf="canRestore" value="deleted">Eliminados</option>
                     </select>
                 </div>
             </div>
@@ -37,7 +37,7 @@
     </div>
 
     <div class="panel-card table-card">
-        <div class="bulk-actions" *ngIf="selectedPartnerIds.length > 0">
+        <div class="bulk-actions" *ngIf="selectedPartnerIds.length > 0 && canManageSelectedStatus">
             <div class="selected-info">
                 <span>{{selectedPartnerIds.length}} proveedor(es) seleccionado(s)</span>
             </div>
@@ -55,7 +55,7 @@
                 <table class="data-table partners-table">
                     <thead>
                         <tr>
-                            <th class="checkbox-column">
+                            <th *ngIf="canManageSelectedStatus" class="checkbox-column">
                                 <input type="checkbox" [checked]="isAllSelected()" [indeterminate]="isIndeterminate()"
                                     (change)="toggleSelectAll()" class="checkbox-input">
                             </th>
@@ -73,7 +73,7 @@
                     </thead>
                     <tbody>
                         <tr *ngFor="let partner of visiblePartners" [class.selected]="isSelected(partner.id)">
-                            <td class="checkbox-column">
+                            <td *ngIf="canManageSelectedStatus" class="checkbox-column">
                                 <input type="checkbox" [checked]="isSelected(partner.id)"
                                     (change)="toggleSelect(partner.id)" class="checkbox-input">
                             </td>
@@ -99,13 +99,13 @@
                                 <button class="btn-icon btn-edit" (click)="openEditModal(partner)" title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <ng-container *ngIf="!isDeletedView; else restoreButton">
+                                <ng-container *ngIf="!isDeletedView && canDelete; else restoreButton">
                                     <button class="btn-icon btn-delete" (click)="confirmDelete(partner)" title="Eliminar">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </ng-container>
                                 <ng-template #restoreButton>
-                                    <button class="btn-icon btn-restore" (click)="confirmRestore(partner)" title="Restaurar">
+                                    <button *ngIf="isDeletedView && canRestore" class="btn-icon btn-restore" (click)="confirmRestore(partner)" title="Restaurar">
                                         <i class="fas fa-undo"></i>
                                     </button>
                                 </ng-template>

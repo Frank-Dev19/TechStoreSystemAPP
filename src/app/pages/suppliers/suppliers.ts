@@ -6,6 +6,7 @@ import { SupplierResponse } from '../../models/suppliers-response';
 import { SupplierSaveRequest, SupplierUpdateRequest } from '../../models/suppliers-request';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { DocumentTypeResponse } from '../../models/document-types/document-types-response';
+import { CurrentUserService } from '../../services/current-user.service';
 
 @Component({
   selector: 'app-suppliers',
@@ -40,6 +41,8 @@ export class Suppliers implements OnInit {
   confirmModalMode: 'delete' | 'restore' = 'delete';
   showRestoreSuggestion = false;
   restoreSuggestionData: SupplierResponse | null = null;
+  canDelete = false;
+  canRestore = false;
   documentDigitsHint: number | null = null;
   Math = Math;
   readonly pageTitle = 'Proveedores';
@@ -53,11 +56,15 @@ export class Suppliers implements OnInit {
     private readonly formBuilder: FormBuilder,
     private readonly suppliersApi: SuppliersApiService,
     private readonly documentTypesApi: DocumentTypesApiService,
+    private readonly currentUser: CurrentUserService,
   ) {
     this.partnerForm = this.createForm();
   }
 
   ngOnInit(): void {
+    this.currentUser.restoreFromStorage();
+    this.canDelete = this.currentUser.hasPermission('suppliers.delete');
+    this.canRestore = this.currentUser.hasPermission('suppliers.restore');
     this.loadDocumentTypes();
     this.observeDocumentTypeChanges();
     this.fetchPartners();
@@ -69,6 +76,10 @@ export class Suppliers implements OnInit {
 
   get isRestoreConfirm(): boolean {
     return this.confirmModalMode === 'restore';
+  }
+
+  get canManageSelectedStatus(): boolean {
+    return this.isDeletedView ? this.canRestore : this.canDelete;
   }
 
   private createForm(): FormGroup {
@@ -297,6 +308,10 @@ export class Suppliers implements OnInit {
           const deleted = !!err?.error?.deleted;
           const candidate = err?.error?.data as SupplierResponse | undefined;
           if (deleted && candidate) {
+            if (!this.canRestore) {
+              this.showMessage('error', 'fas fa-exclamation-circle', 'El proveedor ya existe y solo un administrador puede restaurarlo.');
+              return;
+            }
             this.openRestoreSuggestion(candidate);
             return;
           }
@@ -307,6 +322,7 @@ export class Suppliers implements OnInit {
   }
 
   confirmDelete(partner: SupplierResponse): void {
+    if (!this.canDelete) return;
     this.confirmMessage = `¿Estás seguro de que deseas eliminar al proveedor "${partner.name}"?`;
     this.confirmAction = () => this.deletePartner(partner.id);
     this.confirmModalMode = 'delete';
@@ -314,6 +330,7 @@ export class Suppliers implements OnInit {
   }
 
   confirmBulkDelete(): void {
+    if (!this.canDelete) return;
     const count = this.selectedPartnerIds.length;
     if (!count) return;
     this.confirmMessage = `¿Estás seguro de que deseas eliminar ${count} proveedor${count > 1 ? 'es' : ''}?`;
@@ -323,6 +340,7 @@ export class Suppliers implements OnInit {
   }
 
   confirmRestore(partner: SupplierResponse): void {
+    if (!this.canRestore) return;
     this.confirmMessage = `¿Estás seguro de que deseas restaurar al proveedor "${partner.name}"?`;
     this.confirmAction = () => this.restorePartner(partner.id);
     this.confirmModalMode = 'restore';
@@ -330,6 +348,7 @@ export class Suppliers implements OnInit {
   }
 
   confirmBulkRestore(): void {
+    if (!this.canRestore) return;
     const count = this.selectedPartnerIds.length;
     if (!count) return;
     this.confirmMessage = `¿Estás seguro de que deseas restaurar ${count} proveedor${count > 1 ? 'es' : ''}?`;

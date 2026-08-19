@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { DocumentTypeResponse, DocumentTypesPaginatedResponse } from '../../models/document-types/document-types-response';
 import { DocumentTypeKind, DocumentTypeSaveRequest, DocumentTypeUpdateRequest } from '../../models/document-types/document-types-request';
+import { CurrentUserService } from '../../services/current-user.service';
 
 @Component({
   selector: 'app-document-types',
@@ -42,17 +43,23 @@ export class DocumentTypes implements OnInit {
   confirmModalMode: 'delete' | 'restore' = 'delete';
   showRestoreSuggestion = false;
   restoreSuggestionData: DocumentTypeResponse | null = null;
+  canDelete = false;
+  canRestore = false;
 
   Math = Math;
 
   constructor(
     private readonly formBuilder: FormBuilder,
     private readonly documentTypesApi: DocumentTypesApiService,
+    private readonly currentUser: CurrentUserService,
   ) {
     this.documentTypeForm = this.createForm();
   }
 
   ngOnInit(): void {
+    this.currentUser.restoreFromStorage();
+    this.canDelete = this.currentUser.hasPermission('document-type.delete');
+    this.canRestore = this.currentUser.hasPermission('document-type.restore');
     this.fetchDocumentTypes();
   }
 
@@ -62,6 +69,10 @@ export class DocumentTypes implements OnInit {
 
   get isRestoreConfirm(): boolean {
     return this.confirmModalMode === 'restore';
+  }
+
+  get canManageSelectedStatus(): boolean {
+    return this.isDeletedView ? this.canRestore : this.canDelete;
   }
 
   private createForm(): FormGroup {
@@ -267,6 +278,10 @@ export class DocumentTypes implements OnInit {
         if (!this.isEditMode && err?.status === 409) {
           if (err?.error?.deleted && err?.error?.data) {
             const candidate = err.error.data as DocumentTypeResponse;
+            if (!this.canRestore) {
+              this.showMessage("error", "fas fa-exclamation-circle", "El tipo de documento ya existe y solo un administrador puede restaurarlo.");
+              return;
+            }
             this.openRestoreSuggestion(candidate);
             return;
           }
@@ -284,6 +299,7 @@ export class DocumentTypes implements OnInit {
   }
 
   confirmDelete(documentType: DocumentTypeResponse): void {
+    if (!this.canDelete) return;
     this.confirmMessage = `¿Estás seguro de que deseas eliminar el tipo de documento "${documentType.name}"?`;
 
     this.confirmAction = () => this.deleteDocumentType(documentType.id);
@@ -292,6 +308,7 @@ export class DocumentTypes implements OnInit {
   }
 
   confirmRestore(documentType: DocumentTypeResponse): void {
+    if (!this.canRestore) return;
     this.confirmMessage = `¿Estás seguro de que deseas restaurar el tipo de documento "${documentType.name}"?`;
 
     this.confirmAction = () => this.restoreDocumentType(documentType.id);
@@ -300,6 +317,7 @@ export class DocumentTypes implements OnInit {
   }
 
   confirmBulkDelete(): void {
+    if (!this.canDelete) return;
     const count = this.selectedDocumentTypes.length;
     if (!count) {
       return;
@@ -312,6 +330,7 @@ export class DocumentTypes implements OnInit {
   }
 
   confirmBulkRestore(): void {
+    if (!this.canRestore) return;
     const count = this.selectedDocumentTypes.length;
     if (!count) {
       return;

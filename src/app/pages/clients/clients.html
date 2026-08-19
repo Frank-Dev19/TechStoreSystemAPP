@@ -28,7 +28,7 @@
             (change)="onStatusFilterChange()"
           >
             <option value="active">Vigentes</option>
-            <option value="deleted">Eliminados</option>
+            <option *ngIf="canRestoreClients" value="deleted">Eliminados</option>
           </select>
         </div>
         <div class="filter-control">
@@ -62,7 +62,8 @@
   </div>
 
   <div class="panel-card table-card">
-    <div class="bulk-actions" *ngIf="selectedPartnerIds.length > 0">
+    <div class="bulk-actions"
+      *ngIf="selectedPartnerIds.length > 0 && (canDeleteClients || canRestoreClients)">
       <div class="selected-info">
         <span>{{ selectedPartnerIds.length }} Cliente(s) seleccionado(s)</span>
       </div>
@@ -83,7 +84,7 @@
         <table class="data-table partners-table">
           <thead>
             <tr>
-              <th class="checkbox-column">
+              <th class="checkbox-column" *ngIf="canDeleteClients || canRestoreClients">
                 <input
                   type="checkbox"
                   [checked]="isAllSelected()"
@@ -106,7 +107,7 @@
           </thead>
           <tbody>
             <tr *ngFor="let partner of visiblePartners" [class.selected]="isSelected(partner.id)">
-              <td class="checkbox-column">
+              <td class="checkbox-column" *ngIf="canDeleteClients || canRestoreClients">
                 <input
                   type="checkbox"
                   [checked]="isSelected(partner.id)"
@@ -144,7 +145,7 @@
                   >
                     <i class="fas fa-address-book"></i>
                   </button>
-                  <ng-container *ngIf="!isDeletedView; else restoreButton">
+                  <ng-container *ngIf="!isDeletedView && canDeleteClients">
                     <button
                       class="btn-icon btn-delete"
                       (click)="confirmDelete(partner)"
@@ -153,7 +154,7 @@
                       <i class="fas fa-trash"></i>
                     </button>
                   </ng-container>
-                  <ng-template #restoreButton>
+                  <ng-container *ngIf="isDeletedView && canRestoreClients">
                     <button
                       class="btn-icon btn-restore"
                       (click)="confirmRestore(partner)"
@@ -161,7 +162,7 @@
                     >
                       <i class="fas fa-undo"></i>
                     </button>
-                  </ng-template>
+                  </ng-container>
                 </div>
               </td>
             </tr>
@@ -950,7 +951,9 @@
     </div>
   </div>
 
-  <div class="modal-overlay" *ngIf="showConfirmModal" (click)="closeConfirmModal()">
+  <div class="modal-overlay"
+    *ngIf="showConfirmModal && (canDeleteClients || canRestoreClients)"
+    (click)="closeConfirmModal()">
     <div class="modal-container confirm-modal" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h2>{{ isRestoreConfirm ? 'Confirmar restauración' : 'Confirmar eliminación' }}</h2>
@@ -979,7 +982,9 @@
     </div>
   </div>
 
-  <div class="modal-overlay" *ngIf="showRestoreSuggestion" (click)="closeRestoreSuggestion()">
+  <div class="modal-overlay"
+    *ngIf="showRestoreSuggestion && canRestoreClients"
+    (click)="closeRestoreSuggestion()">
     <div class="modal-container restore-suggestion-modal" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h2>Restaurar cliente</h2>

@@ -18,7 +18,9 @@
                     <select id="status-filter" class="select-control" [(ngModel)]="statusFilter"
                         (change)="onStatusFilterChange()">
                         <option value="active">Vigentes</option>
-                        <option value="deleted">Eliminados</option>
+                        @if (canRestore) {
+                            <option value="deleted">Eliminados</option>
+                        }
                     </select>
                 </div>
             </div>
@@ -36,7 +38,7 @@
     </div>
 
     <div class="panel-card table-card">
-        @if (selectedDocumentTypes.length > 0) {
+        @if (selectedDocumentTypes.length > 0 && canManageSelectedStatus) {
         <div class="bulk-actions">
             <div class="selected-info">
                 <span>{{selectedDocumentTypes.length}} tipo(s) de documento seleccionados</span>
@@ -56,10 +58,12 @@
                 <table class="data-table document-types-table">
                     <thead>
                         <tr>
+                            @if (canManageSelectedStatus) {
                             <th class="checkbox-column">
                                 <input type="checkbox" [checked]="isAllSelected()" [indeterminate]="isIndeterminate()"
                                     (change)="toggleSelectAll()" class="checkbox-input">
                             </th>
+                            }
                             <th>Nombre</th>
                             <th>Código SUNAT</th>
                             <th>Tipo</th>
@@ -72,10 +76,12 @@
                     <tbody>
                         @for (documentType of filteredDocumentTypes; track $index) {
                             <tr [class.selected]="isSelected(documentType.id)">
+                                @if (canManageSelectedStatus) {
                                 <td class="checkbox-column">
                                     <input type="checkbox" [checked]="isSelected(documentType.id)"
                                         (change)="toggleSelect(documentType.id)" class="checkbox-input">
                                 </td>
+                                }
                                 <td class="name-cell">
                                     <div class="document-type-name">{{documentType.name}}</div>
                                 </td>
@@ -92,12 +98,12 @@
                                             title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        @if (!isDeletedView) {
+                                        @if (!isDeletedView && canDelete) {
                                             <button class="btn-icon btn-delete" (click)="confirmDelete(documentType)"
                                                 title="Eliminar">
                                                 <i class="fas fa-trash"></i>
                                             </button>
-                                        } @else {
+                                        } @else if (isDeletedView && canRestore) {
                                             <button class="btn-icon btn-restore" (click)="confirmRestore(documentType)"
                                                 title="Restaurar">
                                                 <i class="fas fa-undo"></i>

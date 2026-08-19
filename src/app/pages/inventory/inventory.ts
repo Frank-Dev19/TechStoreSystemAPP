@@ -49,6 +49,8 @@ export class Inventory implements OnInit, OnDestroy {
   // UI STATE
   // -----------------------------
   activeTab: string = 'operations';
+  canManageInventory = false;
+  canViewKardex = false;
   activeOperation: string = 'entry';
 
   // Helper properties for template type checking
@@ -350,6 +352,17 @@ export class Inventory implements OnInit, OnDestroy {
   // INIT
   // =========================================================
   async ngOnInit(): Promise<void> {
+    this.currentUser.restoreFromStorage();
+    this.canManageInventory = this.currentUser.hasPermission('navigation.inventory-manage');
+    this.canViewKardex = this.currentUser.hasPermission('navigation.inventory-kardex')
+      || this.canManageInventory;
+
+    if (!this.canManageInventory) {
+      this.activeTab = 'kardex';
+      await Promise.all([this.loadProducts(), this.loadKardex()]);
+      return;
+    }
+
     await Promise.all([
       this.loadProducts(),
       this.loadCategories(),

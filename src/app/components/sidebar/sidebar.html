@@ -17,8 +17,8 @@
             <!-- Reemplazando todos los iconos tim-icons con SVG inline -->
             <!-- Enhanced navigation container with better visual hierarchy -->
             <div class="nav-container">
-                <ul class="nav">
-                    <li class="nav-item" *ngIf="authenticatedUser?.roles">
+                <ul class="nav main-nav">
+                    <li class="nav-item" *ngIf="canAny('navigation.admin', 'navigation.document-types')">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('modulo1a')">
                             <div class="nav-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -39,22 +39,24 @@
                                     <i class="submenu-dot"></i>Dashboard
                                 </a>
                             </li> -->
-                            <li><a class="nav-link submenu-link" routerLink="/tipos-documento">
+                            <li *ngIf="can('navigation.document-types')"><a class="nav-link submenu-link"
+                                    routerLink="/tipos-documento">
                                     <i class="submenu-dot"></i>Tipo de Documentos
                                 </a>
                             </li>
-                            <li><a class="nav-link submenu-link" routerLink="/rbac">
+                            <li *ngIf="can('navigation.admin')"><a class="nav-link submenu-link" routerLink="/rbac">
                                     <i class="submenu-dot"></i>RBAC
                                 </a>
                             </li>
-                            <li><a class="nav-link submenu-link" routerLink="/configuracion-empresa">
+                            <li *ngIf="can('navigation.admin')"><a class="nav-link submenu-link"
+                                    routerLink="/configuracion-empresa">
                                     <i class="submenu-dot"></i>Empresa Emisora
                                 </a>
                             </li>
                         </ul>
                     </li>
 
-                    <li class="nav-item">
+                    <li class="nav-item" *ngIf="can('profile.manage-own')">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo1')">
                             <div class="nav-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -78,7 +80,7 @@
                         </ul>
                     </li>
 
-                    <li class="nav-item">
+                    <li class="nav-item" *ngIf="canAny('navigation.clients', 'navigation.suppliers')">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo2')">
                             <div class="nav-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -96,17 +98,19 @@
                             </svg>
                         </a>
                         <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo2')">
-                            <li><a class="nav-link submenu-link" routerLink="/clientes">
+                            <li *ngIf="can('navigation.clients')"><a class="nav-link submenu-link"
+                                    routerLink="/clientes">
                                     <i class="submenu-dot"></i>Clientes
                                 </a></li>
-                            <li><a class="nav-link submenu-link" routerLink="/proveedores">
+                            <li *ngIf="can('navigation.suppliers')"><a class="nav-link submenu-link"
+                                    routerLink="/proveedores">
                                     <i class="submenu-dot"></i>Proveedores
                                 </a></li>
                         </ul>
                     </li>
 
 
-                    <li class="nav-item">
+                    <li class="nav-item" *ngIf="canAny('navigation.inventory-kardex', 'navigation.inventory-manage')">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo3')">
                             <div class="nav-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -132,7 +136,7 @@
                     </li>
 
 
-                    <li class="nav-item">
+                    <li class="nav-item" *ngIf="can('navigation.sales')">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo4')">
                             <div class="nav-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -153,14 +157,14 @@
                             <li><a class="nav-link submenu-link" routerLink="/ventas">
                                     <i class="submenu-dot"></i>Realizar Ventas
                                 </a></li>
-                            <li><a class="nav-link submenu-link" routerLink="/ventasver">
+                            <!-- <li><a class="nav-link submenu-link" routerLink="/ventasver">
                                     <i class="submenu-dot"></i>Ver Ventas
-                                </a></li>
+                                </a></li> -->
                         </ul>
                     </li>
 
                     <!-- MÓDULO PRECIOS -->
-                    <li class="nav-item">
+                    <li class="nav-item" *ngIf="can('navigation.admin')">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('ModuloPrecios')">
                             <div class="nav-icon-wrapper">
                                 <!-- Icono tipo etiqueta de precio -->
@@ -188,7 +192,8 @@
                     </li>
 
 
-                    <li class="nav-item">
+                    <li class="nav-item"
+                        *ngIf="canAny('navigation.reception', 'navigation.technician', 'navigation.admin') || isSupervisor()">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo5')">
                             <div class="nav-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -209,16 +214,18 @@
                             <li *ngIf="isSupervisor()"><a class="nav-link submenu-link" routerLink="/supervisor-panel">
                                     <i class="submenu-dot"></i>Panel de supervisor
                                 </a></li>
-                            <li *ngIf="isReceptionist()"><a class="nav-link submenu-link" routerLink="/reception-panel">
+                            <li *ngIf="can('navigation.reception')"><a class="nav-link submenu-link"
+                                    routerLink="/reception-panel">
                                     <i class="submenu-dot"></i>Panel de recepción
                                 </a></li>
-                            <li *ngIf="isTechnician()"><a class="nav-link submenu-link" routerLink="/technician-panel">
+                            <li *ngIf="can('navigation.technician')"><a class="nav-link submenu-link"
+                                    routerLink="/technician-panel">
                                     <i class="submenu-dot"></i>Panel de técnico
                                 </a></li>
                         </ul>
                     </li>
 
-                    <li class="nav-item">
+                    <li class="nav-item" *ngIf="can('navigation.admin')">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('ModuloAuditoria')">
                             <div class="nav-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">

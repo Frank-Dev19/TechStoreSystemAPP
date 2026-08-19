@@ -18,6 +18,7 @@ export interface User {
     documentNumber: string | null;
     isActive: boolean;
     roles: UserRole[];
+    effectivePermissions?: string[];
     createdAt: string | Date;
     updatedAt: string | Date;
 }

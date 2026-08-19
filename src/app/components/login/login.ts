@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { LoginService } from '../../services/login-service.service';
 import { TriggerService } from '../../services/trigger-service.service';
+import { RoleLandingService } from '../../services/role-landing.service';
 
 @Component({
   selector: 'app-login',
@@ -18,7 +19,8 @@ export class Login {
     private fb: FormBuilder,
     private loginService: LoginService,
     private router: Router,
-    private triggerService: TriggerService
+    private triggerService: TriggerService,
+    private roleLandingService: RoleLandingService,
   ) {
     this.loginForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
@@ -32,9 +34,9 @@ export class Login {
 
     this.triggerService.fireShowLoader();
     this.loginService.login(email, password).subscribe({
-      next: () => {
+      next: (response) => {
         this.triggerService.fireHideLoader();
-        this.router.navigate(['/rbac']);
+        this.router.navigateByUrl(this.roleLandingService.getDefaultRoute(response.user));
       },
       error: () => {
         this.errorMessage = 'Credenciales inválidas o servicio no disponible';

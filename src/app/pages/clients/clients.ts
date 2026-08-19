@@ -162,6 +162,14 @@ export class Clients implements OnInit {
     return this.importUserPermissions.has('clients.import');
   }
 
+  get canDeleteClients(): boolean {
+    return this.importUserPermissions.has('clients.delete');
+  }
+
+  get canRestoreClients(): boolean {
+    return this.importUserPermissions.has('clients.restore');
+  }
+
   get importReadyCount(): number {
     return this.importRows.filter((row) => row.status === 'ready').length;
   }
@@ -892,6 +900,7 @@ export class Clients implements OnInit {
   }
 
   confirmDelete(partner: ClientResponse): void {
+    if (!this.canDeleteClients) return;
     this.confirmMessage = `¿Estás seguro de que deseas eliminar al cliente "${partner.name}"?`;
     this.confirmAction = () => this.deletePartner(partner.id);
     this.confirmModalMode = 'delete';
@@ -899,6 +908,7 @@ export class Clients implements OnInit {
   }
 
   confirmBulkDelete(): void {
+    if (!this.canDeleteClients) return;
     const count = this.selectedPartnerIds.length;
     if (!count) {
       return;
@@ -910,6 +920,7 @@ export class Clients implements OnInit {
   }
 
   confirmRestore(partner: ClientResponse): void {
+    if (!this.canRestoreClients) return;
     this.confirmMessage = `¿Estás seguro de que deseas restaurar al cliente "${partner.name}"?`;
     this.confirmAction = () => this.restorePartner(partner.id);
     this.confirmModalMode = 'restore';
@@ -917,6 +928,7 @@ export class Clients implements OnInit {
   }
 
   confirmBulkRestore(): void {
+    if (!this.canRestoreClients) return;
     const count = this.selectedPartnerIds.length;
     if (!count) {
       return;
@@ -1381,9 +1393,10 @@ export class Clients implements OnInit {
 
   private restorePermissions(): void {
     this.currentUserService.restoreFromStorage();
-    const user = this.currentUserService.value;
-    const codes = (user?.roles ?? []).flatMap((role) => role.permissions ?? []);
-    this.importUserPermissions = new Set(codes);
+    this.importUserPermissions = this.currentUserService.getPermissionCodes();
+    if (!this.canRestoreClients && this.statusFilter === 'deleted') {
+      this.statusFilter = 'active';
+    }
   }
 
   private buildImportRowsFromSheet(
@@ -1878,6 +1891,14 @@ export class Clients implements OnInit {
   }
 
   openRestoreSuggestion(data: ClientResponse): void {
+    if (!this.canRestoreClients) {
+      this.showMessage(
+        'error',
+        'fas fa-exclamation-circle',
+        'El cliente existe pero está eliminado. Solicita su restauración a un administrador.',
+      );
+      return;
+    }
     const docTypeId = Number(data.documentTypeId ?? data.documentType?.id ?? 0);
     this.restoreSuggestionData = {
       ...data,
@@ -1894,7 +1915,7 @@ export class Clients implements OnInit {
   }
 
   confirmRestoreSuggestion(): void {
-    if (!this.restoreSuggestionData) {
+    if (!this.restoreSuggestionData || !this.canRestoreClients) {
       return;
     }
     const id = Number(this.restoreSuggestionData.id);

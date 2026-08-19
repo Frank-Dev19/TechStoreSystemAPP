@@ -22,5 +22,28 @@ export class CurrentUserService {
         }
     }
 
+    getPermissionCodes(user: User | null = this.value): Set<string> {
+        if (user?.effectivePermissions) {
+            return new Set(user.effectivePermissions);
+        }
+
+        const rolePermissions = (user?.roles ?? []).flatMap((role) => role.permissions ?? []);
+        return new Set(rolePermissions);
+    }
+
+    hasPermission(permission: string, user: User | null = this.value): boolean {
+        return this.getPermissionCodes(user).has(permission);
+    }
+
+    hasAllPermissions(permissions: readonly string[], user: User | null = this.value): boolean {
+        const granted = this.getPermissionCodes(user);
+        return permissions.every((permission) => granted.has(permission));
+    }
+
+    hasAnyPermission(permissions: readonly string[], user: User | null = this.value): boolean {
+        const granted = this.getPermissionCodes(user);
+        return permissions.some((permission) => granted.has(permission));
+    }
+
     clear() { this.set(null); }
 }
