@@ -1,11 +1,12 @@
 import { Component, EventEmitter, inject, Input, OnChanges, Output } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { finalize, Observable } from 'rxjs';
 import {
   ServiceOrderCancellationChannel,
   ServiceOrderCancellationResolution,
   ServiceOrderItem,
   ServiceOrderItemCancellationResult,
+  ServiceOrderItemsCancellationResult,
   ServiceOrderTechnicalStatus,
 } from '../../models/service-orders/service-order';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
@@ -16,6 +17,8 @@ export interface ServiceOrderItemCancellationTarget {
   orderCode: string;
   items: ServiceOrderItem[];
   selectedItemId?: number | null;
+  selectedItemIds?: number[];
+  selectionLocked?: boolean;
   cancellationRequestId?: number | null;
 }
 
@@ -30,7 +33,9 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
 
   @Input({ required: true }) target!: ServiceOrderItemCancellationTarget;
   @Output() readonly closed = new EventEmitter<void>();
-  @Output() readonly cancellationSaved = new EventEmitter<ServiceOrderItemCancellationResult>();
+  @Output() readonly cancellationSaved = new EventEmitter<
+    ServiceOrderItemCancellationResult | ServiceOrderItemsCancellationResult
+  >();
 
   readonly channelOptions = [
     { value: ServiceOrderCancellationChannel.WHATSAPP, label: 'WhatsApp' },
@@ -41,7 +46,7 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
   ];
 
   readonly form = new FormGroup({
-    itemId: new FormControl<number | null>(null, Validators.required),
+    itemIds: new FormControl<number[]>([], { nonNullable: true }),
     channel: new FormControl(ServiceOrderCancellationChannel.WHATSAPP, {
       nonNullable: true,
       validators: Validators.required,
@@ -51,6 +56,7 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
       validators: Validators.required,
     }),
     chargeAmount: new FormControl<number | null>(null, [Validators.min(0.01)]),
+    customerChargeAcknowledged: new FormControl(false, { nonNullable: true }),
     reason: new FormControl('', {
       nonNullable: true,
       validators: [Validators.required, Validators.minLength(3), Validators.maxLength(1000)],
@@ -65,8 +71,27 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
   }
 
   get selectedItem(): ServiceOrderItem | null {
-    const itemId = Number(this.form.controls.itemId.value ?? 0);
+    const itemId = Number(this.target?.selectedItemId ?? this.form.controls.itemIds.value[0] ?? 0);
     return this.target?.items?.find((item) => Number(item.id) === itemId) ?? null;
+  }
+
+  get selectedItems(): ServiceOrderItem[] {
+    const selectedIds = new Set(this.form.controls.itemIds.value.map(Number));
+    return (this.target?.items ?? []).filter((item) => selectedIds.has(Number(item.id)));
+  }
+
+  get chargedItems(): ServiceOrderItem[] {
+    return this.selectedItems.filter((item) => this.hasDiagnosisStarted(item));
+  }
+
+  get chargeTotal(): number {
+    return this.chargedItems.length * 20;
+  }
+
+  get canSubmit(): boolean {
+    if (this.form.invalid || this.isSaving) return false;
+    if (this.isResolution) return Boolean(this.selectedItem) && (!this.requiresCharge || Boolean(this.form.controls.chargeAmount.value));
+    return this.selectedItems.length > 0 && (!this.chargedItems.length || this.form.controls.customerChargeAcknowledged.value);
   }
 
   get requiresCharge(): boolean {
@@ -89,16 +114,20 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
   }
 
   ngOnChanges(): void {
-    const selectedId = Number(this.target?.selectedItemId ?? this.target?.items?.[0]?.id ?? 0) || null;
+    const selectedId = Number(this.target?.selectedItemId ?? 0) || null;
+    const selectedIds = this.target?.selectedItemIds?.length
+      ? this.target.selectedItemIds.map(Number)
+      : selectedId
+        ? [selectedId]
+        : [];
     this.form.reset({
-      itemId: selectedId,
+      itemIds: selectedIds,
       channel: ServiceOrderCancellationChannel.WHATSAPP,
       resolution: ServiceOrderCancellationResolution.APPROVED_WITHOUT_CHARGE,
       chargeAmount: null,
+      customerChargeAcknowledged: false,
       reason: '',
     });
-    if (this.isResolution) this.form.controls.itemId.disable({ emitEvent: false });
-    else this.form.controls.itemId.enable({ emitEvent: false });
     this.errorMessage = '';
   }
 
@@ -107,19 +136,53 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
     return [item.code || `Equipo #${item.id}`, equipment].filter(Boolean).join(' · ');
   }
 
+  getItemDetail(item: ServiceOrderItem): string {
+    const serial = item.serialNumber ? `Serie ${item.serialNumber}` : 'Sin serie registrada';
+    return `${serial} · ${this.hasDiagnosisStarted(item) ? 'Genera cargo de S/ 20.00' : 'Sin cargo'}`;
+  }
+
+  getItemTitle(item: ServiceOrderItem): string {
+    return [item.brand, item.model].filter(Boolean).join(' ') || `Equipo ${item.position || item.id}`;
+  }
+
+  isItemSelected(item: ServiceOrderItem): boolean {
+    return this.form.controls.itemIds.value.map(Number).includes(Number(item.id));
+  }
+
+  toggleItem(item: ServiceOrderItem): void {
+    const ids = this.form.controls.itemIds.value.map(Number);
+    const itemId = Number(item.id);
+    this.form.controls.itemIds.setValue(
+      ids.includes(itemId) ? ids.filter((id) => id !== itemId) : [...ids, itemId],
+    );
+    this.form.controls.customerChargeAcknowledged.setValue(false);
+  }
+
+  selectAll(): void {
+    this.form.controls.itemIds.setValue((this.target?.items ?? []).map((item) => Number(item.id)));
+    this.form.controls.customerChargeAcknowledged.setValue(false);
+  }
+
+  deselectAll(): void {
+    this.form.controls.itemIds.setValue([]);
+    this.form.controls.customerChargeAcknowledged.setValue(false);
+  }
+
   close(): void {
     if (!this.isSaving) this.closed.emit();
   }
 
   submit(): void {
-    if (this.form.invalid || !this.selectedItem || (this.isResolution && this.requiresCharge && !this.form.controls.chargeAmount.value)) {
+    if (!this.canSubmit) {
       this.form.markAllAsTouched();
       return;
     }
 
     const reason = this.form.controls.reason.value.trim();
-    const itemId = Number(this.selectedItem.id);
-    const request = this.isResolution
+    const itemId = Number(this.selectedItem?.id ?? 0);
+    const request: Observable<
+      ServiceOrderItemCancellationResult | ServiceOrderItemsCancellationResult
+    > = this.isResolution
       ? this.serviceOrderService.resolveItemCancellation(
           this.target.serviceOrderId,
           itemId,
@@ -130,9 +193,11 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
             reason,
           },
         )
-      : this.serviceOrderService.requestItemCancellation(this.target.serviceOrderId, itemId, {
+      : this.serviceOrderService.requestItemsCancellation(this.target.serviceOrderId, {
+          itemIds: this.selectedItems.map((item) => Number(item.id)),
           channel: this.form.controls.channel.value,
           reason,
+          customerChargeAcknowledged: this.form.controls.customerChargeAcknowledged.value,
         });
 
     this.errorMessage = '';
@@ -141,6 +206,13 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
       next: (result) => this.cancellationSaved.emit(result),
       error: (error: unknown) => (this.errorMessage = this.resolveErrorMessage(error)),
     });
+  }
+
+  hasDiagnosisStarted(item: ServiceOrderItem): boolean {
+    return ![
+      ServiceOrderTechnicalStatus.PENDIENTE_ASIGNACION,
+      ServiceOrderTechnicalStatus.ASIGNADA,
+    ].includes(item.technicalStatus);
   }
 
   private resolveErrorMessage(error: unknown): string {

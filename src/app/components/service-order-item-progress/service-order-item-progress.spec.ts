@@ -12,7 +12,7 @@ describe('ServiceOrderItemProgressComponent', () => {
     component = fixture.componentInstance;
   });
 
-  it('muestra el progreso parcial n de m sin contar equipos cancelados', () => {
+  it('muestra el progreso físico n de m incluyendo equipos cancelados pendientes de devolución', () => {
     component.order = {
       itemProgress: {
         total: 4,
@@ -28,8 +28,8 @@ describe('ServiceOrderItemProgressComponent', () => {
 
     fixture.detectChanges();
 
-    expect(component.label).toBe('Entrega parcial: 1 de 3');
-    expect(component.percentage).toBe(33);
+    expect(component.label).toBe('Entrega parcial: 1 de 4');
+    expect(component.percentage).toBe(25);
     expect(fixture.nativeElement.textContent).toContain('1 cancelado');
   });
 });

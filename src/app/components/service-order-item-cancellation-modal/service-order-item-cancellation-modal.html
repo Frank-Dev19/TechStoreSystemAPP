@@ -10,7 +10,7 @@
       <div>
         <span class="cancellation-eyebrow">{{ isResolution ? 'Revisión supervisada' : 'Solicitud del cliente' }}</span>
         <h2 id="item-cancellation-title">
-          {{ isResolution ? 'Resolver cancelación' : 'Cancelar un equipo' }}
+          {{ isResolution ? 'Resolver cancelación anterior' : 'Cancelar equipos' }}
         </h2>
         <p>Orden {{ target.orderCode }}</p>
       </div>
@@ -20,29 +20,85 @@
     </header>
 
     <form [formGroup]="form" class="cancellation-body" (ngSubmit)="submit()">
-      <label class="cancellation-field">
-        <span>Equipo</span>
-        <select formControlName="itemId">
-          @for (item of target.items; track item.id) {
-            <option [ngValue]="item.id">{{ getItemLabel(item) }}</option>
-          }
-        </select>
-      </label>
-
       @if (!isResolution) {
-        <div class="cancellation-impact" [class.is-late]="willRequireSupervision">
-          <i [class]="willRequireSupervision ? 'fas fa-user-shield' : 'fas fa-check-circle'"></i>
-          <div>
-            <strong>{{ willRequireSupervision ? 'Requiere aprobación de supervisión' : 'Cancelación inmediata' }}</strong>
-            <span>
-              {{
-                willRequireSupervision
-                  ? 'El trabajo ya comenzó. El equipo quedará pendiente hasta que supervisión resuelva la solicitud.'
-                  : 'El trabajo aún no comenzó. La cancelación se aprobará al guardar.'
-              }}
-            </span>
+        @if (!target.selectionLocked) {
+          <section class="cancellation-picker" aria-labelledby="cancellation-picker-title">
+            <div class="cancellation-picker__header">
+              <div>
+                <strong id="cancellation-picker-title">Equipos de la orden</strong>
+                <span>{{ selectedItems.length }} de {{ target.items.length }} seleccionados</span>
+              </div>
+              <div class="cancellation-picker__tools">
+                <button type="button" (click)="selectAll()">Seleccionar todos</button>
+                <button type="button" (click)="deselectAll()">Deseleccionar todos</button>
+              </div>
+            </div>
+            <div class="cancellation-picker__list">
+              @for (item of target.items; track item.id) {
+                <label class="cancellation-choice" [class.is-selected]="isItemSelected(item)">
+                  <input
+                    type="checkbox"
+                    [checked]="isItemSelected(item)"
+                    (change)="toggleItem(item)"
+                  />
+                  <span class="cancellation-choice__check"><i class="fas fa-check"></i></span>
+                  <span class="cancellation-choice__content">
+                    <strong>{{ getItemLabel(item) }}</strong>
+                    <small>{{ getItemDetail(item) }}</small>
+                  </span>
+                  <span class="cancellation-choice__charge" [class.has-charge]="hasDiagnosisStarted(item)">
+                    {{ hasDiagnosisStarted(item) ? 'S/ 20.00' : 'Sin cargo' }}
+                  </span>
+                </label>
+              }
+            </div>
+          </section>
+        } @else {
+          <section class="cancellation-confirmation-summary" aria-label="Equipos seleccionados">
+            <div class="cancellation-confirmation-summary__header">
+              <span class="cancellation-confirmation-summary__heading">
+                <strong>{{ selectedItems.length === 1 ? 'Equipo seleccionado' : 'Equipos seleccionados' }}</strong>
+                <small>
+                  {{ selectedItems.length }} {{ selectedItems.length === 1 ? 'equipo' : 'equipos' }} · Revisa el detalle antes de confirmar.
+                </small>
+              </span>
+            </div>
+            <ul class="cancellation-confirmation-summary__list">
+              @for (item of selectedItems; track item.id) {
+                <li class="cancellation-equipment-summary">
+                  <div class="cancellation-equipment-summary__identity">
+                    <strong>{{ getItemTitle(item) }}</strong>
+                    <span class="cancellation-equipment-summary__code">{{ item.code }}</span>
+                    <span class="cancellation-equipment-summary__serial">
+                      {{ item.serialNumber ? 'Serie: ' + item.serialNumber : 'Serie no registrada' }}
+                    </span>
+                  </div>
+                  <strong class="cancellation-equipment-summary__charge" [class.has-charge]="hasDiagnosisStarted(item)">
+                    {{ hasDiagnosisStarted(item) ? 'S/ 20.00' : 'Sin cargo' }}
+                  </strong>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
+        @if (selectedItems.length) {
+          <div class="cancellation-impact" [class.is-late]="chargedItems.length > 0">
+            <i [class]="chargedItems.length ? 'fas fa-receipt' : 'fas fa-check-circle'"></i>
+            <div>
+              <strong>
+                {{ chargedItems.length ? 'La cancelación generará un cargo' : 'Cancelación inmediata sin cargo' }}
+              </strong>
+              <span>
+                @if (chargedItems.length) {
+                  {{ chargedItems.length }} equipo(s) ya iniciaron diagnóstico. Total pendiente: S/ {{ chargeTotal.toFixed(2) }}.
+                } @else {
+                  Ninguno de los equipos seleccionados inició el diagnóstico.
+                }
+              </span>
+            </div>
           </div>
-        </div>
+        }
 
         <label class="cancellation-field">
           <span>Canal de la solicitud</span>
@@ -52,7 +108,21 @@
             }
           </select>
         </label>
+
+        @if (chargedItems.length) {
+          <label class="cancellation-acknowledgement">
+            <input type="checkbox" formControlName="customerChargeAcknowledged" />
+            <span>
+              <strong>Confirmo que el cliente fue informado</strong>
+              <small>Se cobrarán S/ 20.00 por cada equipo cuyo diagnóstico ya inició.</small>
+            </span>
+          </label>
+        }
       } @else {
+        <div class="cancellation-legacy-item">
+          <span>Equipo</span>
+          <strong>{{ selectedItem ? getItemLabel(selectedItem) : 'No disponible' }}</strong>
+        </div>
         <fieldset class="cancellation-resolution">
           <legend>Decisión de supervisión</legend>
           <label>
@@ -115,12 +185,12 @@
         <button type="button" class="cancellation-button cancellation-button--secondary" [disabled]="isSaving" (click)="close()">
           Volver
         </button>
-        <button type="submit" class="cancellation-button cancellation-button--danger" [disabled]="form.invalid || isSaving">
+        <button type="submit" class="cancellation-button cancellation-button--danger" [disabled]="!canSubmit">
           @if (isSaving) {
             <i class="fas fa-spinner fa-spin"></i>
             Guardando...
           } @else {
-            {{ isResolution ? 'Guardar decisión' : 'Registrar cancelación' }}
+            {{ isResolution ? 'Guardar decisión' : 'Cancelar equipos seleccionados' }}
           }
         </button>
       </footer>

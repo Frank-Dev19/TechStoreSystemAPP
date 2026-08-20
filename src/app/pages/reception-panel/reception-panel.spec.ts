@@ -370,6 +370,25 @@ describe('ReceptionPanel', () => {
     expect(component.itemDeliveryTarget).toEqual({ order: readyOrder, selectedItemId: 112 });
   });
 
+  it('abre la entrega para un equipo cancelado que todavía no fue devuelto', () => {
+    const cancelledOrder = createServiceOrder({
+      id: 12,
+      operativeStatus: ServiceOrderOperativeStatus.CANCELADA,
+      items: [{
+        id: 121,
+        code: 'SO-12-01',
+        operativeStatus: ServiceOrderOperativeStatus.CANCELADA,
+        deliveredAt: null,
+      }] as any,
+    });
+
+    expect(component.canDeliverItem(cancelledOrder)).toBeTrue();
+
+    component.deliverItem(cancelledOrder);
+
+    expect(component.itemDeliveryTarget).toEqual({ order: cancelledOrder, selectedItemId: 121 });
+  });
+
   it('enables warranty actions only for delivered non-warranty orders with client data', () => {
     const deliveredStandard = createServiceOrder({
       operativeStatus: ServiceOrderOperativeStatus.ENTREGADA,
@@ -1413,25 +1432,73 @@ describe('ReceptionPanel', () => {
     expect(sectionText).toContain('Servicio técnico');
     expect(initialAgreementSection.querySelectorAll('ng-select').length).toBe(0);
   });
-  it('prepara la cancelación sobre un equipo activo de la orden', () => {
+  it('selecciona varios equipos desde el modal y prepara una sola cancelación', () => {
     const order = createServiceOrder({
       id: 70,
       code: 'OS-03-08-2026-001',
-      items: [{
-        id: 702,
-        code: 'OS-03-08-2026-001-02',
+      items: [702, 703].map((id) => ({
+        id,
+        code: `OS-03-08-2026-001-${id}`,
         operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO,
         cancellationRequests: [],
-      } as any],
+      } as any)),
     });
 
-    component.openItemCancellationModal(order, undefined, order.items?.[0]);
+    component.equipmentDetailOrder = order;
+    component.selectAllCancellableEquipment();
+    component.openSelectedEquipmentCancellation();
 
     expect(component.itemCancellationTarget).toEqual(jasmine.objectContaining({
       mode: 'REQUEST',
       serviceOrderId: 70,
-      selectedItemId: 702,
+      selectedItemIds: [702, 703],
+      selectionLocked: true,
     }));
+  });
+
+  it('retira las columnas de prioridad y equipo y muestra los equipos en un modal', () => {
+    const order = createServiceOrder({
+      id: 81,
+      code: 'SO-15-08-2026-0001',
+      items: [{
+        id: 811,
+        serviceOrderId: 81,
+        position: 1,
+        code: 'SO-15-08-2026-0001-01',
+        equipmentType: EquipmentType.LAPTOP,
+        equipmentTypeOther: null,
+        brand: 'Lenovo',
+        model: 'ThinkPad',
+        serialNumber: 'SN-811',
+        accessories: 'Cargador',
+        initialIssue: 'No enciende',
+        notes: null,
+        priority: ServiceOrderPriority.HIGH,
+        operativeStatus: ServiceOrderOperativeStatus.ABIERTA,
+        technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+        commercialStatus: ServiceOrderCommercialStatus.NO_REQUIERE,
+      } as any],
+    });
+    serviceOrderServiceStub.findOne.and.returnValue(of(order));
+
+    fixture.detectChanges();
+    const headers = Array.from(fixture.nativeElement.querySelectorAll('table th')).map(
+      (cell: Element) => cell.textContent?.trim(),
+    );
+    expect(headers).not.toContain('Prioridad');
+    expect(headers).not.toContain('Equipo');
+    expect(headers).not.toContain('Avance');
+
+    component.openEquipmentDetails(order);
+    fixture.detectChanges();
+
+    const modal = fixture.nativeElement.querySelector('.equipment-detail-modal') as HTMLElement;
+    expect(modal).toBeTruthy();
+    expect(modal.textContent).toContain('SO-15-08-2026-0001-01');
+    expect(modal.textContent).toContain('Prioridad alta');
+    expect(modal.textContent).toContain('SN-811');
+    serviceOrderServiceStub.findOne.calls.reset();
+    serviceOrderServiceStub.findOne.and.returnValue(of(createServiceOrder()));
   });
 });
 
@@ -1443,7 +1510,6 @@ function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder
     technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
     commercialStatus: ServiceOrderCommercialStatus.NO_REQUIERE,
     economicStatus: ServiceOrderEconomicStatus.PENDIENTE,
-    priority: ServiceOrderPriority.MEDIUM,
     requestOrigin: RequestOrigin.CLIENT,
     clientId: 1,
     createdBy: 1,

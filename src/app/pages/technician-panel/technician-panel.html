@@ -328,38 +328,37 @@
           }
 
           @if (activeDetailTab === 'sla') {
-            @if (selectedServiceOrder.sla || selectedServiceOrder.timeMetrics) {
+            @if (selectedServiceOrder.items?.length) {
               <section class="detail-panel-section">
-                @if (selectedServiceOrder.sla; as sla) {
-                  <div class="service-order-metrics-panel">
-                    <div class="service-order-sla-summary" [class.is-breached]="sla.breached">
-                      <div class="service-order-sla-main">
-                        <span class="service-order-metrics-label">Etapa SLA actual</span>
-                        <strong>{{ getServiceOrderSlaStageLabel(sla.stage) }}</strong>
-                      </div>
-                      <div class="service-order-sla-stats">
-                        <div class="metric-tile metric-tile--live">
-                          <span>
-                            <span class="live-dot" aria-hidden="true"></span>
-                            Transcurrido
-                          </span>
-                          <strong class="live-counter">{{ formatLiveTime(liveElapsedSeconds) }}</strong>
+                @for (item of selectedServiceOrder.items ?? []; track item.id) {
+                  @if (item.sla; as sla) {
+                    <div class="service-order-metrics-panel">
+                      <div class="service-order-sla-summary" [class.is-breached]="sla.breached">
+                        <div class="service-order-sla-main">
+                          <span class="service-order-metrics-label">{{ item.code }} · SLA del equipo</span>
+                          <strong>{{ getServiceOrderSlaStageLabel(sla.stage) }}</strong>
                         </div>
-                        <div class="metric-tile">
-                          <span>Restante</span>
-                          <strong>{{ formatMinutes(sla.remainingMinutes) }}</strong>
-                        </div>
-                        <div class="metric-tile">
-                          <span>Brecha</span>
-                          <strong>{{ sla.breached ? 'Sí' : 'No' }}</strong>
+                        <div class="service-order-sla-stats">
+                          <div class="metric-tile">
+                            <span>Transcurrido</span>
+                            <strong>{{ formatMinutes(sla.elapsedMinutes) }}</strong>
+                          </div>
+                          <div class="metric-tile">
+                            <span>Restante</span>
+                            <strong>{{ formatMinutes(sla.remainingMinutes) }}</strong>
+                          </div>
+                          <div class="metric-tile">
+                            <span>Brecha</span>
+                            <strong>{{ sla.breached ? 'Sí' : 'No' }}</strong>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  }
                 }
               </section>
             } @else {
-              <div class="empty-text detail-empty-text">No hay métricas SLA disponibles para esta orden.</div>
+              <div class="empty-text detail-empty-text">No hay equipos con métricas SLA disponibles.</div>
             }
           }
 

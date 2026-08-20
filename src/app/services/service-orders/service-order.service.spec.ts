@@ -62,6 +62,18 @@ describe('ServiceOrderService', () => {
     expect(baseServiceSpy.patch).toHaveBeenCalledWith('/service-orders/9/items/91/deliver', {});
   });
 
+  it('entrega varios equipos mediante el endpoint atómico', () => {
+    baseServiceSpy.patch.and.returnValue(
+      throwError(() => new Error('stub response should not be consumed in this test')),
+    );
+
+    service.deliverItems(9, [91, 92]);
+
+    expect(baseServiceSpy.patch).toHaveBeenCalledWith('/service-orders/9/item-deliveries', {
+      itemIds: [91, 92],
+    });
+  });
+
   it('usa el endpoint por item para una transición técnica independiente', () => {
     baseServiceSpy.patch.and.returnValue(
       throwError(() => new Error('stub response should not be consumed in this test')),
@@ -82,6 +94,20 @@ describe('ServiceOrderService', () => {
     service.requestItemCancellation(9, 91, payload);
 
     expect(baseServiceSpy.post).toHaveBeenCalledWith('/service-orders/9/items/91/cancellations', payload);
+  });
+
+  it('registra una cancelación múltiple atómica', () => {
+    baseServiceSpy.post.and.returnValue(throwError(() => new Error('stub')));
+    const payload = {
+      itemIds: [91, 92],
+      channel: ServiceOrderCancellationChannel.WHATSAPP,
+      reason: 'Cliente desistió.',
+      customerChargeAcknowledged: true,
+    };
+
+    service.requestItemsCancellation(9, payload);
+
+    expect(baseServiceSpy.post).toHaveBeenCalledWith('/service-orders/9/item-cancellations', payload);
   });
 
   it('resuelve una cancelación tardía sobre su solicitud exacta', () => {

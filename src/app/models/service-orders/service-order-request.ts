@@ -68,7 +68,6 @@ export interface ServiceOrderUpdateRequest {
   requestOrigin?: RequestOrigin;
   clientId?: number | null;
   clientContactId?: number | null;
-  priority?: ServiceOrderPriority;
   equipmentType?: EquipmentType;
   equipmentTypeOther?: string | null;
   brand?: string | null;

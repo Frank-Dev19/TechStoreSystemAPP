@@ -4,6 +4,8 @@ import { BaseService } from "../base.service";
 import {
   ServiceOrder,
   ServiceOrderItemCancellationResult,
+  ServiceOrderItemsCancellationResult,
+  RequestServiceOrderItemsCancellationRequest,
   ServiceOrderTechnicalStatus,
   ServiceType,
 } from "../../models/service-orders/service-order";
@@ -84,6 +86,13 @@ export class ServiceOrderService {
     );
   }
 
+  deliverItems(serviceOrderId: number, itemIds: number[]): Observable<ServiceOrder> {
+    return this.base.patch<ServiceOrder>(
+      `${config.serviceOrders.serviceOrders}/${serviceOrderId}/item-deliveries`,
+      { itemIds },
+    );
+  }
+
   markPaid(id: number): Observable<ServiceOrder> {
     return throwError(() => new Error(`markPaid(${id}) fue eliminado: el estado económico depende solo de comprobantes vinculados.`));
   }
@@ -125,6 +134,16 @@ export class ServiceOrderService {
   ): Observable<ServiceOrderItemCancellationResult> {
     return this.base.post<ServiceOrderItemCancellationResult>(
       `${config.serviceOrders.serviceOrders}/${serviceOrderId}/items/${itemId}/cancellations`,
+      payload,
+    );
+  }
+
+  requestItemsCancellation(
+    serviceOrderId: number,
+    payload: RequestServiceOrderItemsCancellationRequest,
+  ): Observable<ServiceOrderItemsCancellationResult> {
+    return this.base.post<ServiceOrderItemsCancellationResult>(
+      `${config.serviceOrders.serviceOrders}/${serviceOrderId}/item-cancellations`,
       payload,
     );
   }

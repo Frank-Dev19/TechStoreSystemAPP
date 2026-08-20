@@ -31,27 +31,45 @@
       } @else {
         <div class="delivery-notice">
           <i class="fas fa-info-circle"></i>
-          <p>Selecciona únicamente el equipo que el cliente está recogiendo ahora.</p>
+          <p>Selecciona los equipos que el cliente está recogiendo ahora.</p>
         </div>
 
         <fieldset class="delivery-items">
-          <legend>Equipo a entregar</legend>
-          @for (item of eligibleItems; track item.id) {
-            <button
-              type="button"
+          <legend class="delivery-items__header">
+            <label class="delivery-select-all">
+              <input
+                type="checkbox"
+                [checked]="allEligibleSelected"
+                [indeterminate]="someEligibleSelected"
+                [disabled]="isSaving || !eligibleItems.length"
+                (change)="toggleAllEligible()"
+              />
+              <span>Equipos pendientes</span>
+            </label>
+            <small>{{ selectedCount }} seleccionado{{ selectedCount === 1 ? '' : 's' }}</small>
+          </legend>
+          @for (item of pendingItems; track item.id) {
+            <label
               class="delivery-item"
-              [class.delivery-item--selected]="selectedItemId === item.id"
-              [attr.aria-pressed]="selectedItemId === item.id"
-              (click)="selectItem(item)"
+              [class.delivery-item--selected]="isItemSelected(item)"
+              [class.delivery-item--blocked]="!!getItemBlockedReason(item)"
             >
-              <span class="delivery-item__marker" aria-hidden="true"><i class="fas fa-check"></i></span>
+              <input
+                class="delivery-item__checkbox"
+                type="checkbox"
+                [checked]="isItemSelected(item)"
+                [disabled]="isSaving || !!getItemBlockedReason(item)"
+                (change)="toggleItem(item)"
+              />
               <span class="delivery-item__copy">
                 <strong>{{ getItemLabel(item) }}</strong>
                 <small>{{ item.code }}</small>
                 <span>{{ item.initialIssue || 'Sin observación inicial' }}</span>
               </span>
-              <span class="delivery-item__state">Listo para entrega</span>
-            </button>
+              <span class="delivery-item__state" [class.delivery-item__state--blocked]="!!getItemBlockedReason(item)">
+                {{ getItemStateLabel(item) }}
+              </span>
+            </label>
           }
         </fieldset>
       }
@@ -68,7 +86,7 @@
       <button
         type="button"
         class="delivery-button delivery-button--primary"
-        [disabled]="!!blockedReason || !selectedItem || isSaving"
+        [disabled]="!!blockedReason || !selectedCount || isSaving"
         (click)="submit()"
       >
         @if (isSaving) {
@@ -76,7 +94,7 @@
           Registrando...
         } @else {
           <i class="fas fa-box-open"></i>
-          Confirmar entrega
+          Confirmar entrega de {{ selectedCount }} equipo{{ selectedCount === 1 ? '' : 's' }}
         }
       </button>
     </footer>

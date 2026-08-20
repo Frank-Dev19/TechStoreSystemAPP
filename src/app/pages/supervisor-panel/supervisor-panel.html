@@ -262,26 +262,6 @@
             <p class="detail-reason-value">{{ selectedServiceOrder.initialIssue || 'Sin motivo registrado' }}</p>
           </section>
 
-          @if (selectedServiceOrder.sla; as operativeSla) {
-            <section class="detail-operational-grid" aria-label="SLA operativo">
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Etapa SLA</span>
-                <strong>{{ getServiceOrderSlaStageLabel(operativeSla.stage) }}</strong>
-              </article>
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Transcurrido</span>
-                <strong>{{ formatMinutes(operativeSla.elapsedMinutes) }}</strong>
-              </article>
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Restante</span>
-                <strong>{{ formatMinutes(operativeSla.remainingMinutes) }}</strong>
-              </article>
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Brecha</span>
-                <strong>{{ operativeSla.breached ? 'Sí' : 'No' }}</strong>
-              </article>
-            </section>
-          } @else {
             <section class="detail-operational-grid" aria-label="Resumen operativo">
               <article class="detail-chip-card">
                 <span class="detail-card-label">Estado operativo</span>
@@ -300,8 +280,6 @@
                 <strong>{{ selectedServiceOrder.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
               </article>
             </section>
-          }
-
           <div class="detail-section-divider"></div>
 
           <section class="detail-section-block">
@@ -373,33 +351,32 @@
             </section>
           }
 
-          @if (selectedServiceOrder.sla; as sla) {
-            <section class="detail-sla-panel" [class.is-breached]="sla.breached" aria-label="SLA actual">
-              <div class="detail-sla-hero">
-                <div>
-                  <p class="detail-card-label">Etapa SLA actual</p>
-                  <h3>{{ getServiceOrderSlaStageLabel(sla.stage) }}</h3>
+          @for (item of selectedServiceOrder.items ?? []; track item.id) {
+            @if (item.sla; as sla) {
+              <section class="detail-sla-panel" [class.is-breached]="sla.breached" aria-label="SLA del equipo">
+                <div class="detail-sla-hero">
+                  <div>
+                    <p class="detail-card-label">{{ item.code }} · SLA del equipo</p>
+                    <h3>{{ getServiceOrderSlaStageLabel(sla.stage) }}</h3>
+                  </div>
+                  <span class="detail-sla-hero__icon"><i class="fas fa-laptop"></i></span>
                 </div>
-                <span class="detail-sla-hero__icon">
-                  <i class="fas fa-shield-alt"></i>
-                </span>
-              </div>
-
-              <div class="detail-sla-summary-grid">
-                <article class="detail-chip-card">
-                  <span class="detail-card-label">Transcurrido</span>
-                  <strong>{{ formatMinutes(sla.elapsedMinutes) }}</strong>
-                </article>
-                <article class="detail-chip-card">
-                  <span class="detail-card-label">Restante</span>
-                  <strong>{{ formatMinutes(sla.remainingMinutes) }}</strong>
-                </article>
-                <article class="detail-chip-card">
-                  <span class="detail-card-label">Brecha</span>
-                  <strong>{{ sla.breached ? 'Sí' : 'No' }}</strong>
-                </article>
-              </div>
-            </section>
+                <div class="detail-sla-summary-grid">
+                  <article class="detail-chip-card">
+                    <span class="detail-card-label">Transcurrido</span>
+                    <strong>{{ formatMinutes(sla.elapsedMinutes) }}</strong>
+                  </article>
+                  <article class="detail-chip-card">
+                    <span class="detail-card-label">Restante</span>
+                    <strong>{{ formatMinutes(sla.remainingMinutes) }}</strong>
+                  </article>
+                  <article class="detail-chip-card">
+                    <span class="detail-card-label">Brecha</span>
+                    <strong>{{ sla.breached ? 'Sí' : 'No' }}</strong>
+                  </article>
+                </div>
+              </section>
+            }
           }
 
           @if (selectedServiceOrder.timeMetrics; as timeMetrics) {

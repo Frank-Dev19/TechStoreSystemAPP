@@ -36,7 +36,6 @@ export interface ServiceOrder {
   technicalStatus: ServiceOrderTechnicalStatus;
   commercialStatus: ServiceOrderCommercialStatus;
   economicStatus: ServiceOrderEconomicStatus;
-  priority: ServiceOrderPriority;
   requestOrigin: RequestOrigin;
   clientId: number | null;
   clientContactId?: number | null;
@@ -86,7 +85,6 @@ export interface ServiceOrder {
   montoComprometidoVigente: number;
   montoReconciliado: number;
   totalServiceOrderAgreedAmount?: number;
-  sla?: ServiceOrderSla | null;
   timeMetrics?: ServiceOrderTimeMetrics | null;
   items?: ServiceOrderItem[];
   itemsCount?: number;
@@ -119,6 +117,7 @@ export interface ServiceOrderItem {
   initialIssue: string;
   notes: string | null;
   priority: ServiceOrderPriority;
+  sla?: ServiceOrderSla | null;
   operativeStatus: ServiceOrderOperativeStatus;
   technicalStatus: ServiceOrderTechnicalStatus;
   commercialStatus: ServiceOrderCommercialStatus;
@@ -157,6 +156,25 @@ export interface ServiceOrderItemCancellationRequest {
 export interface ServiceOrderItemCancellationResult {
   request: ServiceOrderItemCancellationRequest;
   order: ServiceOrder;
+}
+
+export interface ServiceOrderItemsCancellationResult {
+  requests: ServiceOrderItemCancellationRequest[];
+  order: ServiceOrder;
+  agreement: unknown | null;
+  chargedItemsCount: number;
+  chargeTotal: number;
+}
+
+export type ServiceOrderCancellationResult =
+  | ServiceOrderItemCancellationResult
+  | ServiceOrderItemsCancellationResult;
+
+export interface RequestServiceOrderItemsCancellationRequest {
+  itemIds: number[];
+  channel: ServiceOrderCancellationChannel;
+  reason: string;
+  customerChargeAcknowledged?: boolean;
 }
 
 export enum ServiceOrderOperativeStatus {

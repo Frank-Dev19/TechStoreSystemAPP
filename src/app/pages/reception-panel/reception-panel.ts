@@ -17,7 +17,7 @@ import {
   RequestOrigin,
   ServiceOrder,
   ServiceOrderItem,
-  ServiceOrderItemCancellationResult,
+  ServiceOrderCancellationResult,
   ServiceOrderCommercialStatus,
   ServiceOrderEconomicStatus,
   ServiceOrderOperativeStatus,
@@ -242,13 +242,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   currentDiagnosis: ServiceOrderDiagnosis | null = null
   isLoadingDiagnosis = false
   readonly serviceTypeEnum = ServiceType
+  readonly serviceOrderOperativeStatusEnum = ServiceOrderOperativeStatus
   readonly requestOriginEnum = RequestOrigin
   readonly serviceOrderAgreementStatusEnum = ServiceOrderAgreementStatus
   readonly clientKindEnum = ClientKind
   expectedDocumentDigits: number | null = null
   private itemServiceOrderAgreementTotals: Record<number, number> = {}
   filterState: "all" | ServiceOrderOperativeStatus = "all"
-  filterPriority: "all" | ServiceOrderPriority = "all"
   filterStartDate = ""
   filterEndDate = ""
   searchTerm = ""
@@ -303,6 +303,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   lineDiscountTarget: ServiceOrderLineDiscountTarget | null = null
   itemCancellationTarget: ServiceOrderItemCancellationTarget | null = null
   itemDeliveryTarget: ServiceOrderItemDeliveryTarget | null = null
+  equipmentDetailOrder: ServiceOrder | null = null
+  selectedEquipmentCancellationIds: number[] = []
+  isLoadingEquipmentDetail = false
   quoteDetailError = ""
   showWarrantyActionModal = false
   isLoadingWarrantyLines = false
@@ -455,7 +458,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       contactPhone: ["", e164PhoneValidator()],
       contactPhoneCountry: [DEFAULT_PHONE_COUNTRY],
       contactPhoneNationalNumber: [""],
-      priority: [ServiceOrderPriority.MEDIUM, Validators.required],
       notes: [""],
       equipmentType: [EquipmentType.LAPTOP, Validators.required],
       equipmentTypeOther: [""],
@@ -897,7 +899,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const endDate = this.parseDateFilter(this.filterEndDate, true)
     this.filteredServiceOrders = this.serviceOrders.filter((serviceOrder) => {
       const matchState = this.filterState === "all" || serviceOrder.operativeStatus === this.filterState
-      const matchPriority = this.filterPriority === "all" || serviceOrder.priority === this.filterPriority
       const matchDate = this.matchesDateRange(serviceOrder.createdAt, startDate, endDate)
       const matchSearch =
         term === "" ||
@@ -905,7 +906,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         this.getServiceOrderContactName(serviceOrder).toLowerCase().includes(term) ||
         this.getServiceOrderContactEmail(serviceOrder).toLowerCase().includes(term) ||
         this.getServiceOrderContactPhone(serviceOrder).toLowerCase().includes(term)
-      return matchState && matchPriority && matchDate && matchSearch
+      return matchState && matchDate && matchSearch
     })
     this.updatePagination()
     this.pruneSelectedMockBoletaOrders()
@@ -1066,7 +1067,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   canDeliverItem(serviceOrder: ServiceOrder): boolean {
     return (serviceOrder.items ?? []).some(
-      (item) => item.operativeStatus === ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+      (item) => !item.deliveredAt && [
+        ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+        ServiceOrderOperativeStatus.CANCELADA,
+      ].includes(item.operativeStatus),
     )
   }
 
@@ -1103,7 +1107,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   deliverItem(serviceOrder: ServiceOrder, event?: Event): void {
     event?.stopPropagation()
     const firstReadyItem = (serviceOrder.items ?? []).find(
-      (item) => item.operativeStatus === ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+      (item) => !item.deliveredAt && [
+        ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA,
+        ServiceOrderOperativeStatus.CANCELADA,
+      ].includes(item.operativeStatus),
     )
     if (!firstReadyItem) {
       this.showMessage("warning", "fas fa-info-circle", "Esta orden no tiene equipos listos para entregar.")
@@ -1120,7 +1127,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       "fas fa-check-circle",
       order.operativeStatus === ServiceOrderOperativeStatus.ENTREGADA
         ? "Todos los equipos activos fueron entregados."
-        : "Entrega del equipo registrada. La orden continúa con entrega parcial.",
+        : "Entrega registrada. La orden todavía tiene equipos pendientes de devolución.",
     )
   }
 
@@ -1265,6 +1272,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const selectedLines = this.warrantyCoverageLines.filter((line) => this.selectedWarrantyLineIds.has(line.id))
     const warrantyNotes = selectedLines.map((line) => `- ${line.label}`).join("\n")
     const sourceOrder = this.warrantySourceServiceOrder
+    const sourceItem = sourceOrder.items?.[0]
+    if (!sourceItem) {
+      this.warrantyActionError = "La orden origen no tiene un equipo disponible para registrar la garantía."
+      return
+    }
 
     const payload: ServiceOrderSaveRequest = {
       requestOrigin: RequestOrigin.CLIENT,
@@ -1273,14 +1285,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       serviceType: ServiceType.WARRANTY_SERVICE,
       notes: `Garantía derivada de ${sourceOrder.code}\nLíneas:\n${warrantyNotes}`,
       items: [{
-        priority: sourceOrder.priority,
-        equipmentType: sourceOrder.equipmentType,
-        equipmentTypeOther: sourceOrder.equipmentTypeOther ?? null,
-        brand: sourceOrder.brand,
-        model: sourceOrder.model,
-        serialNumber: sourceOrder.serialNumber,
+        priority: sourceItem.priority,
+        equipmentType: sourceItem.equipmentType,
+        equipmentTypeOther: sourceItem.equipmentTypeOther ?? null,
+        brand: sourceItem.brand,
+        model: sourceItem.model,
+        serialNumber: sourceItem.serialNumber,
         initialIssue: `Garantía de ${sourceOrder.code}`,
-        accessories: sourceOrder.accessories,
+        accessories: sourceItem.accessories,
       }],
     }
 
@@ -2317,8 +2329,104 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     ).length
   }
 
-  get highPriorityServiceOrdersCount(): number {
-    return this.serviceOrders.filter((serviceOrder) => serviceOrder.priority === ServiceOrderPriority.HIGH).length
+  get registeredEquipmentCount(): number {
+    return this.serviceOrders.reduce((total, serviceOrder) => total + (serviceOrder.items?.length ?? 0), 0)
+  }
+
+  getCommercialStatusLabel(status: ServiceOrderCommercialStatus): string {
+    const labels: Record<ServiceOrderCommercialStatus, string> = {
+      [ServiceOrderCommercialStatus.NO_REQUIERE]: "No requiere",
+      [ServiceOrderCommercialStatus.PENDIENTE_PROPUESTA]: "Pendiente de propuesta",
+      [ServiceOrderCommercialStatus.PROPUESTA_EMITIDA]: "Propuesta emitida",
+      [ServiceOrderCommercialStatus.PENDIENTE_RESPUESTA_CLIENTE]: "Pendiente de respuesta",
+      [ServiceOrderCommercialStatus.AUTORIZADA]: "Autorizada",
+      [ServiceOrderCommercialStatus.RECHAZADA]: "Rechazada",
+      [ServiceOrderCommercialStatus.EXPIRADA]: "Expirada",
+      [ServiceOrderCommercialStatus.REEMPLAZADA]: "Reemplazada",
+    }
+    return labels[status] ?? status
+  }
+
+  getItemSlaLabel(item: ServiceOrderItem): string {
+    if (!item.sla?.targetMinutes) return "Sin plazo configurado"
+    if (item.sla.breached) return `Plazo excedido por ${Math.max(item.sla.elapsedMinutes - item.sla.targetMinutes, 0)} min`
+    return `${item.sla.remainingMinutes ?? 0} min restantes`
+  }
+
+  openEquipmentDetails(order: ServiceOrder, event?: Event): void {
+    event?.stopPropagation()
+    this.selectedEquipmentCancellationIds = []
+    this.equipmentDetailOrder = order
+    this.isLoadingEquipmentDetail = true
+    this.serviceOrderService.findOne(Number(order.id)).subscribe({
+      next: (detail) => {
+        this.equipmentDetailOrder = detail
+        this.isLoadingEquipmentDetail = false
+      },
+      error: () => {
+        this.isLoadingEquipmentDetail = false
+        this.showMessage("warning", "fas fa-info-circle", "Mostramos la información disponible. No pudimos actualizar el detalle de los equipos.")
+      },
+    })
+  }
+
+  closeEquipmentDetails(): void {
+    this.equipmentDetailOrder = null
+    this.selectedEquipmentCancellationIds = []
+    this.isLoadingEquipmentDetail = false
+  }
+
+  get cancellableEquipmentDetailItems(): ServiceOrderItem[] {
+    return (this.equipmentDetailOrder?.items ?? []).filter((item) => this.canRequestItemCancellation(item))
+  }
+
+  isEquipmentSelectedForCancellation(item: ServiceOrderItem): boolean {
+    return this.selectedEquipmentCancellationIds.includes(Number(item.id))
+  }
+
+  toggleEquipmentCancellationSelection(item: ServiceOrderItem): void {
+    if (!this.canRequestItemCancellation(item)) return
+    const itemId = Number(item.id)
+    this.selectedEquipmentCancellationIds = this.isEquipmentSelectedForCancellation(item)
+      ? this.selectedEquipmentCancellationIds.filter((id) => id !== itemId)
+      : [...this.selectedEquipmentCancellationIds, itemId]
+  }
+
+  selectAllCancellableEquipment(): void {
+    this.selectedEquipmentCancellationIds = this.cancellableEquipmentDetailItems.map((item) => Number(item.id))
+  }
+
+  deselectAllCancellableEquipment(): void {
+    this.selectedEquipmentCancellationIds = []
+  }
+
+  get allCancellableEquipmentSelected(): boolean {
+    const items = this.cancellableEquipmentDetailItems
+    return items.length > 0 && items.every((item) => this.isEquipmentSelectedForCancellation(item))
+  }
+
+  get someCancellableEquipmentSelected(): boolean {
+    return this.selectedEquipmentCancellationIds.length > 0 && !this.allCancellableEquipmentSelected
+  }
+
+  openSelectedEquipmentCancellation(event?: Event): void {
+    event?.stopPropagation()
+    const order = this.equipmentDetailOrder
+    if (!order || !this.selectedEquipmentCancellationIds.length) return
+    const items = (order.items ?? []).filter((item) => this.canRequestItemCancellation(item))
+    this.itemCancellationTarget = {
+      mode: "REQUEST",
+      serviceOrderId: Number(order.id),
+      orderCode: order.code,
+      items,
+      selectedItemIds: [...this.selectedEquipmentCancellationIds],
+      selectionLocked: true,
+    }
+  }
+
+  openEquipmentItemDelivery(order: ServiceOrder, item: ServiceOrderItem, event?: Event): void {
+    event?.stopPropagation()
+    this.itemDeliveryTarget = { order, selectedItemId: item.id }
   }
 
   get diagnosticPendingServiceOrderAgreementsCount(): number {
@@ -2720,40 +2828,28 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     ].includes(item.operativeStatus) && !this.getPendingItemCancellation(item)
   }
 
-  canRequestAnyItemCancellation(order: ServiceOrder): boolean {
-    return (order.items ?? []).some((item) => this.canRequestItemCancellation(item))
-  }
-
-  openItemCancellationModal(order: ServiceOrder, event?: Event, item?: ServiceOrderItem): void {
-    event?.stopPropagation()
-    const items = (order.items ?? []).filter((candidate) => this.canRequestItemCancellation(candidate))
-    if (!items.length) {
-      this.showMessage("warning", "fas fa-info-circle", "Esta orden no tiene equipos disponibles para cancelar.")
-      return
-    }
-    this.itemCancellationTarget = {
-      mode: "REQUEST",
-      serviceOrderId: Number(order.id),
-      orderCode: order.code,
-      items,
-      selectedItemId: item?.id ?? items[0].id,
-    }
-  }
-
-  handleItemCancellationSaved(result: ServiceOrderItemCancellationResult): void {
+  handleItemCancellationSaved(result: ServiceOrderCancellationResult): void {
     this.itemCancellationTarget = null
     this.selectedServiceOrder = result.order
+    if (this.equipmentDetailOrder?.id === result.order.id) {
+      this.equipmentDetailOrder = result.order
+      this.selectedEquipmentCancellationIds = []
+    }
     this.loadServiceOrders()
     if (this.showServiceOrderAgreementsModal && this.serviceOrderAgreementsServiceOrder?.id === result.order.id) {
       this.serviceOrderAgreementsServiceOrder = result.order
     }
-    const pending = ["PENDING", "AWAITING_CLIENT_ACCEPTANCE"].includes(result.request.status)
+    const isBatch = "requests" in result
+    const pending = !isBatch && ["PENDING", "AWAITING_CLIENT_ACCEPTANCE"].includes(result.request.status)
+    const cancelledCount = isBatch ? result.requests.length : 1
     this.showMessage(
       "success",
       "fas fa-check-circle",
       pending
         ? "La cancelación quedó pendiente de revisión por supervisión."
-        : "El equipo quedó cancelado correctamente.",
+        : isBatch && result.chargedItemsCount > 0
+          ? `${cancelledCount} equipo(s) cancelados. Se registró S/ ${result.chargeTotal.toFixed(2)} pendiente de pago.`
+          : `${cancelledCount} equipo(s) cancelados correctamente.`,
     )
   }
 
@@ -4018,7 +4114,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       contactPhone: "",
       contactPhoneCountry: DEFAULT_PHONE_COUNTRY,
       contactPhoneNationalNumber: "",
-      priority: serviceOrder.priority,
       notes: serviceOrder.notes,
       equipmentType: serviceOrder.equipmentType ?? EquipmentType.LAPTOP,
       equipmentTypeOther: serviceOrder.equipmentTypeOther ?? "",
@@ -4138,7 +4233,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       contactName: String(formValue.contactName ?? "").trim(),
       contactPhone: normalizeOptionalPhone(formValue.contactPhone),
       contactEmail: String(formValue.contactEmail ?? "").trim() || null,
-      priority: formValue.priority,
       notes: formValue.notes ?? null,
       equipmentType: formValue.equipmentType,
       equipmentTypeOther:

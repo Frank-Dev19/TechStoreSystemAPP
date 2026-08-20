@@ -92,7 +92,27 @@ $error: #ef4444;
 }
 
 .options-row {
-    min-height: 8px;
+    display: flex;
+    justify-content: flex-end;
+    margin: -2px 0 16px;
+
+    a {
+        color: $primary;
+        font-size: 14px;
+        line-height: 1.4;
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        &:focus-visible {
+            outline: 2px solid $primary;
+            outline-offset: 3px;
+            border-radius: 2px;
+        }
+    }
 }
 
 .login-button {

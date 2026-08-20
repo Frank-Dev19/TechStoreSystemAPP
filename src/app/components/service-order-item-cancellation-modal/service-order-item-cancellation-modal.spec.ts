@@ -16,6 +16,7 @@ describe('ServiceOrderItemCancellationModalComponent', () => {
   let component: ServiceOrderItemCancellationModalComponent;
   const serviceOrderService = jasmine.createSpyObj<ServiceOrderService>('ServiceOrderService', [
     'requestItemCancellation',
+    'requestItemsCancellation',
     'resolveItemCancellation',
   ]);
 
@@ -29,6 +30,7 @@ describe('ServiceOrderItemCancellationModalComponent', () => {
     fixture = TestBed.createComponent(ServiceOrderItemCancellationModalComponent);
     component = fixture.componentInstance;
     serviceOrderService.requestItemCancellation.calls.reset();
+    serviceOrderService.requestItemsCancellation.calls.reset();
     serviceOrderService.resolveItemCancellation.calls.reset();
   });
 
@@ -41,15 +43,76 @@ describe('ServiceOrderItemCancellationModalComponent', () => {
       items: [createItem()],
     };
     component.ngOnChanges();
-    serviceOrderService.requestItemCancellation.and.returnValue(of({ request: { id: 91 }, order: {} } as any));
-    component.form.patchValue({ channel: ServiceOrderCancellationChannel.WHATSAPP, reason: 'El cliente desistió.' });
+    serviceOrderService.requestItemsCancellation.and.returnValue(of({ requests: [{ id: 91 }], order: {} } as any));
+    component.form.patchValue({
+      channel: ServiceOrderCancellationChannel.WHATSAPP,
+      reason: 'El cliente desistió.',
+      customerChargeAcknowledged: true,
+    });
 
     component.submit();
 
-    expect(serviceOrderService.requestItemCancellation).toHaveBeenCalledOnceWith(70, 702, {
+    expect(serviceOrderService.requestItemsCancellation).toHaveBeenCalledOnceWith(70, {
+      itemIds: [702],
       channel: ServiceOrderCancellationChannel.WHATSAPP,
       reason: 'El cliente desistió.',
+      customerChargeAcknowledged: true,
     });
+  });
+
+  it('muestra el overlay por encima de los modales de los paneles', () => {
+    component.target = {
+      mode: 'REQUEST',
+      serviceOrderId: 70,
+      orderCode: 'OS-03-08-2026-001',
+      items: [createItem()],
+    };
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    const overlay = fixture.nativeElement.querySelector('.cancellation-overlay') as HTMLElement;
+    expect(Number(getComputedStyle(overlay).zIndex)).toBeGreaterThan(9500);
+  });
+
+  it('muestra solo el resumen cuando la selección viene del modal de equipos', () => {
+    component.target = {
+      mode: 'REQUEST',
+      serviceOrderId: 70,
+      orderCode: 'OS-03-08-2026-001',
+      items: [createItem()],
+      selectedItemIds: [702],
+      selectionLocked: true,
+    };
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.cancellation-confirmation-summary')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.cancellation-picker')).toBeFalsy();
+    expect(component.selectedItems.map((item) => item.id)).toEqual([702]);
+  });
+
+  it('selecciona varios equipos y calcula S/ 20 por cada diagnóstico iniciado', () => {
+    const assigned = { ...createItem(), id: 701, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA };
+    const diagnosed = { ...createItem(), id: 702, technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO };
+    component.target = {
+      mode: 'REQUEST',
+      serviceOrderId: 70,
+      orderCode: 'OS-03-08-2026-001',
+      items: [assigned, diagnosed],
+    };
+    component.ngOnChanges();
+
+    component.selectAll();
+
+    expect(component.selectedItems).toHaveSize(2);
+    expect(component.chargedItems).toEqual([diagnosed]);
+    expect(component.chargeTotal).toBe(20);
+    expect(component.canSubmit).toBeFalse();
+    component.form.patchValue({
+      reason: 'El cliente solicita cancelar.',
+      customerChargeAcknowledged: true,
+    });
+    expect(component.canSubmit).toBeTrue();
   });
 
   it('resuelve una solicitud tardía sin permitir afectar otro equipo', () => {

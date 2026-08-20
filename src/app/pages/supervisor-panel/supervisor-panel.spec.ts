@@ -165,13 +165,17 @@ describe('SupervisorPanel', () => {
           model: 'Nitro V',
           initialIssue: 'Sobrecalentamiento',
           timeMetrics: createTimeMetricsWithPending(),
-          sla: {
-            stage: 'diagnosis',
-            targetMinutes: 180,
-            elapsedMinutes: 120,
-            remainingMinutes: 0,
-            breached: true,
-          },
+          items: [{
+            id: 501,
+            code: 'SO-51-01',
+            sla: {
+              stage: 'diagnosis',
+              targetMinutes: 180,
+              elapsedMinutes: 120,
+              remainingMinutes: 0,
+              breached: true,
+            },
+          } as any],
         }),
       ),
     );
@@ -203,7 +207,7 @@ describe('SupervisorPanel', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Motivo de ingreso');
     expect(compiled.textContent).toContain('Equipo y comunicación');
-    expect(compiled.textContent).toContain('Etapa SLA actual');
+    expect(compiled.textContent).toContain('SO-51-01 · SLA del equipo');
     expect(compiled.textContent).toContain('Tiempo a diagnóstico');
     expect(compiled.textContent).toContain('WhatsApp');
     expect(compiled.textContent).toContain('Pendiente');

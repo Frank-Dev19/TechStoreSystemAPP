@@ -2,8 +2,8 @@
   <div
     class="item-progress"
     [class.item-progress--compact]="compact"
-    [class.item-progress--partial]="delivered > 0 && delivered < active"
-    [class.item-progress--complete]="active > 0 && delivered === active"
+    [class.item-progress--partial]="delivered > 0 && delivered < total"
+    [class.item-progress--complete]="total > 0 && delivered === total"
     role="group"
     [attr.aria-label]="label"
   >

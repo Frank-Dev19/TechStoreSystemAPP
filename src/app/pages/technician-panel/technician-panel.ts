@@ -8,7 +8,7 @@ import {
   ServiceOrderDerivedMetric,
   ServiceOrder,
   ServiceOrderItem,
-  ServiceOrderItemCancellationResult,
+  ServiceOrderCancellationResult,
   ServiceOrderCommercialStatus,
   ServiceOrderOperativeStatus,
   ServiceOrderSlaStage,
@@ -421,7 +421,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     this.activeDetailTab = "equipment"
     this.loadServiceOrderDiagnosisHistory(Number(order.id))
     this.loadServiceOrderAgreementSummary(order)
-    this.startLiveTimer(order.sla?.elapsedMinutes ?? 0)
+    this.stopLiveTimer()
   }
 
   clearSelectedServiceOrder(): void {
@@ -1736,21 +1736,25 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       serviceOrderId: Number(order.id),
       orderCode: order.code,
       items,
-      selectedItemId: item?.id ?? items[0].id,
+      selectedItemId: item?.id ?? null,
     }
   }
 
-  handleItemCancellationSaved(result: ServiceOrderItemCancellationResult): void {
+  handleItemCancellationSaved(result: ServiceOrderCancellationResult): void {
     this.itemCancellationTarget = null
     this.selectedServiceOrder = result.order
     this.loadTechnicianOrders()
-    const pending = ["PENDING", "AWAITING_CLIENT_ACCEPTANCE"].includes(result.request.status)
+    const isBatch = "requests" in result
+    const pending = !isBatch && ["PENDING", "AWAITING_CLIENT_ACCEPTANCE"].includes(result.request.status)
+    const cancelledCount = isBatch ? result.requests.length : 1
     this.showMessage(
       "success",
       "fas fa-check-circle",
       pending
         ? "La cancelación quedó pendiente de revisión por supervisión."
-        : "El equipo quedó cancelado correctamente.",
+        : isBatch && result.chargedItemsCount > 0
+          ? `${cancelledCount} equipo(s) cancelados. Se registró S/ ${result.chargeTotal.toFixed(2)} pendiente de pago.`
+          : `${cancelledCount} equipo(s) cancelados correctamente.`,
     )
   }
 

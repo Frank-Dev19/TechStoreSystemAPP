@@ -31,12 +31,12 @@
     </div>
     <div class="stat-card">
       <div class="stat-icon info">
-        <i class="fas fa-bolt"></i>
+        <i class="fas fa-laptop"></i>
       </div>
       <div class="stat-content">
-        <span class="stat-label">Alta prioridad</span>
-        <h3 class="stat-value">{{ highPriorityServiceOrdersCount }}</h3>
-        <p class="stat-meta">Requieren atención inmediata</p>
+        <span class="stat-label">Equipos registrados</span>
+        <h3 class="stat-value">{{ registeredEquipmentCount }}</h3>
+        <p class="stat-meta">Dentro de las órdenes visibles</p>
       </div>
     </div>
     <div class="stat-card">
@@ -80,20 +80,6 @@
             <option value="ENTREGADA">Entregado</option>
             <option value="CANCELADA">Cancelado</option>
             <option value="CERRADA_SIN_SOLUCION">Sin solución</option>
-          </select>
-        </div>
-        <div class="filter-control">
-          <label for="filter-priority">Prioridad</label>
-          <select
-            id="filter-priority"
-            class="select-control"
-            [(ngModel)]="filterPriority"
-            (change)="onFilterChange()"
-          >
-            <option value="all">Todas</option>
-            <option value="HIGH">Alta</option>
-            <option value="MEDIUM">Media</option>
-            <option value="LOW">Baja</option>
           </select>
         </div>
         <div class="filter-control">
@@ -167,9 +153,8 @@
                 <th class="select-column"></th>
                 <th>Código</th>
                 <th>Cliente</th>
-                <th>Prioridad</th>
                 <th>Estado</th>
-                <th>Equipo</th>
+                <th>Técnico</th>
                 <!-- Pago column ocultada -->
                 <th class="actions-column">Acciones</th>
               </tr>
@@ -215,40 +200,26 @@
                       </div>
                     </td>
                     <td>
-                      <span [class]="'badge ' + getPriorityBadgeClass(serviceOrder.priority)">
-                        {{ getPriorityLabel(serviceOrder.priority) }}
-                      </span>
-                    </td>
-                    <td>
                       <span class="status-chip" [ngClass]="serviceOrder.operativeStatus.toLowerCase()">
                         {{ getOperativeStatusLabel(serviceOrder.operativeStatus) }}
                       </span>
                     </td>
                     <td>
-                      <div class="equipment-summary">
-                        <strong>{{
-                          getEquipmentTypeLabel(
-                            serviceOrder.equipmentType,
-                            serviceOrder.equipmentTypeOther
-                          )
-                        }}</strong>
-                        <small
-                          >{{ serviceOrder.brand || 'Sin marca' }} ·
-                          {{ serviceOrder.model || 'Sin modelo' }}</small
-                        >
-                        <small
-                          >Técnico:
-                          {{ serviceOrder.assignedToTechnicianName || 'Sin asignar' }}</small
-                        >
-                        <app-service-order-item-progress
-                          [order]="serviceOrder"
-                          [compact]="true"
-                        ></app-service-order-item-progress>
-                      </div>
+                      <span class="technician-name">{{ serviceOrder.assignedToTechnicianName || 'Sin asignar' }}</span>
                     </td>
                     <!-- Pago column ocultada -->
                     <td class="actions-column actions">
                       <div class="action-buttons">
+                        <button
+                          class="btn-icon btn-equipment-detail"
+                          type="button"
+                          (click)="openEquipmentDetails(serviceOrder, $event)"
+                          title="Ver equipos"
+                          aria-label="Ver equipos de la orden"
+                        >
+                          <i class="fas fa-laptop"></i>
+                          <span>Equipos</span>
+                        </button>
                         <button
                           class="btn-icon"
                           type="button"
@@ -365,16 +336,6 @@
                                 >
                                   <i class="fas fa-truck"></i>
                                   <span>Entregar equipo</span>
-                                </button>
-                              }
-                              @if (canRequestAnyItemCancellation(serviceOrder)) {
-                                <button
-                                  type="button"
-                                  class="action-menu-item action-menu-item--danger"
-                                  (click)="openItemCancellationModal(serviceOrder, $event); closeActionMenu()"
-                                >
-                                  <i class="fas fa-ban"></i>
-                                  <span>Cancelar equipo</span>
                                 </button>
                               }
                               <button
@@ -613,6 +574,168 @@
           }
         </div>
       </div>
+    </div>
+  }
+
+  @if (equipmentDetailOrder) {
+    <div class="modal-overlay" (click)="closeEquipmentDetails()">
+      <section
+        class="equipment-detail-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="equipment-detail-title"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="equipment-detail-header">
+          <div>
+            <p class="modal-eyebrow">Orden {{ equipmentDetailOrder.code }}</p>
+            <h2 id="equipment-detail-title">Equipos recibidos</h2>
+            <p>
+              {{ getServiceOrderContactName(equipmentDetailOrder) || 'Cliente sin identificar' }}
+              · {{ equipmentDetailOrder.items?.length ?? 0 }}
+              {{ (equipmentDetailOrder.items?.length ?? 0) === 1 ? 'equipo' : 'equipos' }}
+            </p>
+          </div>
+          <button class="btn-close" type="button" (click)="closeEquipmentDetails()" aria-label="Cerrar detalle">
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+
+        @if (cancellableEquipmentDetailItems.length) {
+          <div class="equipment-selection-bar">
+            <label class="equipment-select-all">
+              <input
+                type="checkbox"
+                [checked]="allCancellableEquipmentSelected"
+                [indeterminate]="someCancellableEquipmentSelected"
+                (change)="allCancellableEquipmentSelected ? deselectAllCancellableEquipment() : selectAllCancellableEquipment()"
+              />
+              <span>
+                <strong>Seleccionar equipos para cancelar</strong>
+                <small>{{ selectedEquipmentCancellationIds.length }} de {{ cancellableEquipmentDetailItems.length }} seleccionados</small>
+              </span>
+            </label>
+            <div class="equipment-selection-actions">
+              <button type="button" class="equipment-selection-link" (click)="selectAllCancellableEquipment()">
+                Seleccionar todos
+              </button>
+              <button type="button" class="equipment-selection-link" (click)="deselectAllCancellableEquipment()">
+                Deseleccionar todos
+              </button>
+              <button
+                type="button"
+                class="btn equipment-cancel-selected"
+                [disabled]="!selectedEquipmentCancellationIds.length"
+                (click)="openSelectedEquipmentCancellation($event)"
+              >
+                <i class="fas fa-ban"></i>
+                Cancelar selección
+              </button>
+            </div>
+          </div>
+        }
+
+        <div class="equipment-detail-body">
+          @if (isLoadingEquipmentDetail) {
+            <div class="equipment-detail-loading" role="status">
+              <i class="fas fa-circle-notch fa-spin"></i>
+              <span>Actualizando equipos...</span>
+            </div>
+          }
+
+          @if (!equipmentDetailOrder.items?.length) {
+            <div class="equipment-detail-empty">
+              <i class="fas fa-laptop-medical"></i>
+              <h3>Aún no hay equipos registrados</h3>
+              <p>Esta orden no contiene equipos disponibles para consultar.</p>
+            </div>
+          } @else {
+            <div class="equipment-detail-list">
+              @for (item of equipmentDetailOrder.items; track item.id) {
+                <article
+                  class="equipment-detail-item"
+                  [class.is-cancellation-selected]="isEquipmentSelectedForCancellation(item)"
+                >
+                  <div class="equipment-item-heading">
+                    <div class="equipment-item-identity">
+                      @if (canRequestItemCancellation(item)) {
+                        <label class="equipment-item-selector" [attr.aria-label]="'Seleccionar ' + item.code">
+                          <input
+                            type="checkbox"
+                            [checked]="isEquipmentSelectedForCancellation(item)"
+                            (change)="toggleEquipmentCancellationSelection(item)"
+                          />
+                          <span><i class="fas fa-check"></i></span>
+                        </label>
+                      }
+                      <span class="equipment-position">{{ item.position }}</span>
+                      <div>
+                        <p>{{ item.code }}</p>
+                        <h3>{{ getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther) }}</h3>
+                        <span>{{ item.brand || 'Sin marca' }} · {{ item.model || 'Sin modelo' }}</span>
+                      </div>
+                    </div>
+                    <span [class]="'badge ' + getPriorityBadgeClass(item.priority)">
+                      Prioridad {{ getPriorityLabel(item.priority) | lowercase }}
+                    </span>
+                  </div>
+
+                  <dl class="equipment-facts">
+                    <div>
+                      <dt>Número de serie</dt>
+                      <dd>{{ item.serialNumber || 'No registrado' }}</dd>
+                    </div>
+                    <div>
+                      <dt>Accesorios</dt>
+                      <dd>{{ item.accessories || 'Sin accesorios registrados' }}</dd>
+                    </div>
+                    <div class="equipment-fact-wide">
+                      <dt>Falla reportada</dt>
+                      <dd>{{ item.initialIssue }}</dd>
+                    </div>
+                    <div class="equipment-fact-wide">
+                      <dt>Notas del equipo</dt>
+                      <dd>{{ item.notes || 'Sin notas adicionales' }}</dd>
+                    </div>
+                  </dl>
+
+                  <div class="equipment-status-row">
+                    <div>
+                      <span>Estado operativo</span>
+                      <strong>{{ getOperativeStatusLabel(item.operativeStatus) }}</strong>
+                    </div>
+                    <div>
+                      <span>Etapa técnica</span>
+                      <strong>{{ getServiceOrderTechnicalStatusLabel(item.technicalStatus) }}</strong>
+                    </div>
+                    <div>
+                      <span>Estado comercial</span>
+                      <strong>{{ getCommercialStatusLabel(item.commercialStatus) }}</strong>
+                    </div>
+                    <div [class.sla-breached]="item.sla?.breached">
+                      <span>Plazo de atención</span>
+                      <strong>{{ getItemSlaLabel(item) }}</strong>
+                    </div>
+                  </div>
+
+                  <footer class="equipment-item-actions">
+                    @if (item.operativeStatus === serviceOrderOperativeStatusEnum.LISTA_PARA_ENTREGA) {
+                      <button
+                        class="btn btn-primary"
+                        type="button"
+                        (click)="openEquipmentItemDelivery(equipmentDetailOrder, item, $event)"
+                      >
+                        <i class="fas fa-box-open"></i>
+                        Entregar equipo
+                      </button>
+                    }
+                  </footer>
+                </article>
+              }
+            </div>
+          }
+        </div>
+      </section>
     </div>
   }
 
@@ -2353,14 +2476,6 @@
                 [required]="false"
                 appearance="form-control"
               />
-            </div>
-            <div class="form-group">
-              <label for="edit-priority">Prioridad *</label>
-              <select id="edit-priority" class="form-control" formControlName="priority">
-                <option value="LOW">Baja</option>
-                <option value="MEDIUM">Media</option>
-                <option value="HIGH">Alta</option>
-              </select>
             </div>
             <div class="form-group full-width">
               <label class="section-label">Equipo y servicio</label>

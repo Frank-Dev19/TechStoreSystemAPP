@@ -1029,7 +1029,6 @@ function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder
     technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
     commercialStatus: ServiceOrderCommercialStatus.NO_REQUIERE,
     economicStatus: ServiceOrderEconomicStatus.PENDIENTE,
-    priority: ServiceOrderPriority.MEDIUM,
     requestOrigin: RequestOrigin.CLIENT,
     clientId: 1,
     createdBy: 1,

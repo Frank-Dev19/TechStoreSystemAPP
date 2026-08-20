@@ -18,7 +18,7 @@ import {
   ServiceOrder,
   ServiceOrderDerivedMetric,
   ServiceOrderItem,
-  ServiceOrderItemCancellationResult,
+  ServiceOrderCancellationResult,
   ServiceOrderOperativeStatus,
   ServiceOrderSlaStage,
   ServiceType,
@@ -623,7 +623,7 @@ export class SupervisorPanel implements OnInit {
       serviceOrderId: Number(order.id),
       orderCode: order.code,
       items,
-      selectedItemId: item?.id ?? items[0].id,
+      selectedItemId: item?.id ?? null,
     }
   }
 
@@ -643,11 +643,15 @@ export class SupervisorPanel implements OnInit {
     }
   }
 
-  handleItemCancellationSaved(result: ServiceOrderItemCancellationResult): void {
+  handleItemCancellationSaved(result: ServiceOrderCancellationResult): void {
     this.itemCancellationTarget = null
     this.selectedServiceOrder = result.order
     this.loadServiceOrders()
-    const message = result.request.status === "REJECTED"
+    const message = "requests" in result
+      ? result.chargedItemsCount > 0
+        ? `${result.requests.length} equipo(s) cancelados. Se registró S/ ${result.chargeTotal.toFixed(2)} pendiente de pago.`
+        : `${result.requests.length} equipo(s) cancelados correctamente.`
+      : result.request.status === "REJECTED"
       ? "La solicitud fue rechazada y el equipo recuperó su estado anterior."
       : result.request.status === "APPROVED"
         ? "La cancelación del equipo quedó aprobada."
@@ -681,7 +685,7 @@ export class SupervisorPanel implements OnInit {
   }
 
   hasActiveSlaBreach(order?: ServiceOrder | null): boolean {
-    return Boolean(order?.sla?.breached)
+    return Boolean(order?.items?.some((item) => item.sla?.breached))
   }
 
   private showMessage(type: string, icon: string, message: string): void {
