@@ -13,6 +13,7 @@ import { Auditoria } from '../../pages/auditoria/auditoria';
 import { Ventas } from '../../pages/ventas/ventas';
 import { Pricing } from '../../pages/pricing/pricing';
 import { BusinessProfilePage } from '../../pages/business-profile/business-profile';
+import { MailSettingsPage } from '../../pages/mail-settings/mail-settings';
 import { ReceptionPanel } from '../../pages/reception-panel/reception-panel';
 import { ServiceOrderInboxPage } from '../../pages/service-order-inbox/service-order-inbox';
 import { TechnicianPanel } from '../../pages/technician-panel/technician-panel';
@@ -36,6 +37,7 @@ export const AdminLayoutRoutes: Routes = [
     { path: 'ventas', component: Ventas, canActivate: [PermissionGuard], data: { requiredPermissions: ['navigation.sales'] } },
     { path: 'pricing', component: Pricing, canActivate: [PermissionGuard], data: { requiredPermissions: ['navigation.admin'] } },
     { path: 'configuracion-empresa', component: BusinessProfilePage, canActivate: [PermissionGuard], data: { requiredPermissions: ['navigation.admin'] } },
+    { path: 'configuracion-correo', component: MailSettingsPage, canActivate: [PermissionGuard], data: { requiredPermissions: ['navigation.mail-settings'] } },
     {
         path: 'reception-panel',
         component: ReceptionPanel,

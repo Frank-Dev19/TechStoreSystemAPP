@@ -21,6 +21,7 @@ import { Auditoria } from "../../pages/auditoria/auditoria";
 import { Ventas } from "../../pages/ventas/ventas";
 import { Pricing } from "../../pages/pricing/pricing";
 import { BusinessProfilePage } from "../../pages/business-profile/business-profile";
+import { MailSettingsPage } from "../../pages/mail-settings/mail-settings";
 import { TechnicianPanel } from "../../pages/technician-panel/technician-panel";
 import { ReceptionPanel } from "../../pages/reception-panel/reception-panel";
 import { ServiceOrderInboxPage } from "../../pages/service-order-inbox/service-order-inbox";
@@ -59,6 +60,7 @@ import { ServiceOrderItemProgressComponent } from "../../components/service-orde
         Ventas,
         Pricing,
         BusinessProfilePage,
+        MailSettingsPage,
         TechnicianPanel,
         ReceptionPanel,
         ServiceOrderInboxPage,

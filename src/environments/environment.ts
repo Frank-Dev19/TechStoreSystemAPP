@@ -59,6 +59,10 @@ export const config = {
     base: '/business-profile',
   },
 
+  mailSettings: {
+    base: '/mail-settings',
+  },
+
   electronicBilling: {
     base: '/electronic-billing',
   },

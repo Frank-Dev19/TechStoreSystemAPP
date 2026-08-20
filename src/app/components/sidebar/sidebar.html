@@ -18,7 +18,7 @@
             <!-- Enhanced navigation container with better visual hierarchy -->
             <div class="nav-container">
                 <ul class="nav main-nav">
-                    <li class="nav-item" *ngIf="canAny('navigation.admin', 'navigation.document-types')">
+                    <li class="nav-item" *ngIf="canAny('navigation.admin', 'navigation.document-types', 'navigation.mail-settings')">
                         <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('modulo1a')">
                             <div class="nav-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -51,6 +51,11 @@
                             <li *ngIf="can('navigation.admin')"><a class="nav-link submenu-link"
                                     routerLink="/configuracion-empresa">
                                     <i class="submenu-dot"></i>Empresa Emisora
+                                </a>
+                            </li>
+                            <li *ngIf="can('navigation.mail-settings')"><a class="nav-link submenu-link"
+                                    routerLink="/configuracion-correo">
+                                    <i class="submenu-dot"></i>Correo Electrónico
                                 </a>
                             </li>
                         </ul>

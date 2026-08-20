@@ -1,0 +1,178 @@
+<div class="mail-settings-page">
+  <header class="page-header">
+    <div>
+      <h1>Configuración de Correo</h1>
+      <p>Administra los remitentes que utiliza el sistema para comunicarse con clientes y usuarios.</p>
+    </div>
+    <span class="status-pill" [class.incomplete]="!activeProfile?.isConfigured">
+      <i class="fas" [ngClass]="activeProfile?.isConfigured ? 'fa-check-circle' : 'fa-exclamation-circle'"></i>
+      {{ activeProfile?.isConfigured ? 'Configurado' : 'Configuración pendiente' }}
+    </span>
+  </header>
+
+  <div class="profile-tabs" role="tablist" aria-label="Tipos de correo">
+    <button type="button" *ngFor="let purpose of purposes"
+      [class.active]="activePurpose === purpose"
+      (click)="selectPurpose(purpose)">
+      <i class="fas" [ngClass]="purpose === 'ELECTRONIC_BILLING' ? 'fa-file-invoice' : 'fa-key'"></i>
+      <span>{{ purpose === 'ELECTRONIC_BILLING' ? 'Comprobantes' : 'Contraseñas' }}</span>
+    </button>
+  </div>
+
+  <div class="loading-state" *ngIf="isLoading">
+    <i class="fas fa-spinner fa-spin"></i>
+    <span>Cargando configuración...</span>
+  </div>
+
+  <main *ngIf="!isLoading">
+    <section class="profile-summary">
+      <div class="summary-icon">
+        <i class="fas" [ngClass]="activePurpose === 'ELECTRONIC_BILLING' ? 'fa-envelope-open-text' : 'fa-shield-alt'"></i>
+      </div>
+      <div>
+        <h2>{{ purposeTitle }}</h2>
+        <p>{{ purposeDescription }}</p>
+      </div>
+      <label class="switch-field">
+        <input type="checkbox" [(ngModel)]="form.isActive">
+        <span class="switch"></span>
+        <strong>{{ form.isActive ? 'Activo' : 'Inactivo' }}</strong>
+      </label>
+    </section>
+
+    <section class="config-section">
+      <div class="section-title">
+        <div>
+          <h2>Conexión SMTP</h2>
+          <span>Datos proporcionados por el proveedor de correo o cPanel.</span>
+        </div>
+        <i class="fas fa-server"></i>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group wide">
+          <label for="smtp-host">Servidor SMTP *</label>
+          <input id="smtp-host" type="text" class="form-control" [(ngModel)]="form.host"
+            placeholder="mail.macrochips.com">
+        </div>
+        <div class="form-group">
+          <label for="smtp-port">Puerto *</label>
+          <input id="smtp-port" type="number" min="1" max="65535" class="form-control" [(ngModel)]="form.port">
+        </div>
+        <div class="form-group">
+          <label for="smtp-encryption">Seguridad *</label>
+          <select id="smtp-encryption" class="form-control" [(ngModel)]="form.encryption">
+            <option *ngFor="let encryption of encryptions" [ngValue]="encryption.value">{{ encryption.label }}</option>
+          </select>
+        </div>
+        <div class="form-group wide">
+          <label for="smtp-user">Usuario SMTP *</label>
+          <input id="smtp-user" type="email" class="form-control" [(ngModel)]="form.username"
+            placeholder="ventas@macrochips.com">
+        </div>
+        <div class="form-group wide">
+          <label for="smtp-password">Contraseña SMTP *</label>
+          <div class="password-input">
+            <input id="smtp-password" [type]="showPassword ? 'text' : 'password'" class="form-control"
+              [(ngModel)]="form.password" [placeholder]="passwordHint" autocomplete="new-password">
+            <button type="button" (click)="showPassword = !showPassword"
+              [title]="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'">
+              <i class="fas" [ngClass]="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+            </button>
+          </div>
+          <small>{{ passwordHint }}</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="config-section">
+      <div class="section-title">
+        <div>
+          <h2>Identidad del remitente</h2>
+          <span>Información que verá el destinatario al recibir el correo.</span>
+        </div>
+        <i class="fas fa-address-card"></i>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="from-name">Nombre visible *</label>
+          <input id="from-name" type="text" class="form-control" [(ngModel)]="form.fromName" placeholder="Macrochips">
+        </div>
+        <div class="form-group">
+          <label for="from-email">Correo remitente *</label>
+          <input id="from-email" type="email" class="form-control" [(ngModel)]="form.fromEmail"
+            placeholder="ventas@macrochips.com">
+        </div>
+        <div class="form-group">
+          <label for="reply-to">Responder a</label>
+          <input id="reply-to" type="email" class="form-control" [(ngModel)]="form.replyTo"
+            placeholder="Opcional">
+        </div>
+      </div>
+    </section>
+
+    <section class="config-section">
+      <div class="section-title">
+        <div>
+          <h2>Contenido del mensaje</h2>
+          <span>Textos editables sin modificar el código del sistema.</span>
+        </div>
+        <i class="fas fa-pen"></i>
+      </div>
+
+      <div class="form-grid message-grid">
+        <div class="form-group wide">
+          <label for="mail-subject">Asunto</label>
+          <input id="mail-subject" type="text" maxlength="180" class="form-control"
+            [(ngModel)]="form.subjectTemplate">
+          <small *ngIf="activePurpose === 'ELECTRONIC_BILLING'">Puede usar <code>{{ '{documento}' }}</code> para insertar el número del comprobante.</small>
+        </div>
+        <div class="form-group">
+          <label for="mail-intro">Mensaje principal</label>
+          <textarea id="mail-intro" rows="4" maxlength="2000" class="form-control"
+            [(ngModel)]="form.introText"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="mail-footer">Mensaje final</label>
+          <textarea id="mail-footer" rows="4" maxlength="2000" class="form-control"
+            [(ngModel)]="form.footerText"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="test-section">
+      <div>
+        <h2><i class="fas fa-vial"></i> Verificar configuración</h2>
+        <p>Guarda los cambios y comprueba la conexión. Si indicas un destinatario, también se enviará un correo de prueba.</p>
+        <div class="last-test" *ngIf="activeProfile?.lastTestedAt">
+          <i class="fas" [ngClass]="activeProfile?.lastTestSuccessful ? 'fa-check-circle success' : 'fa-times-circle error'"></i>
+          Última prueba: {{ activeProfile?.lastTestedAt | date:'dd/MM/yyyy HH:mm' }}
+          <span>{{ activeProfile?.lastTestMessage }}</span>
+        </div>
+      </div>
+      <div class="test-controls">
+        <input type="email" class="form-control" [(ngModel)]="testRecipient" placeholder="Correo de prueba (opcional)">
+        <button type="button" class="btn-secondary" (click)="test()" [disabled]="isSaving || isTesting">
+          <i class="fas" [ngClass]="isTesting ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
+          {{ isTesting ? 'Probando...' : 'Probar conexión' }}
+        </button>
+      </div>
+    </section>
+
+    <div class="form-actions">
+      <button type="button" class="btn-light" (click)="load()" [disabled]="isSaving || isTesting">
+        <i class="fas fa-undo"></i> Descartar cambios
+      </button>
+      <button type="button" class="btn-primary" (click)="save()" [disabled]="isSaving || isTesting">
+        <i class="fas" [ngClass]="isSaving ? 'fa-spinner fa-spin' : 'fa-save'"></i>
+        {{ isSaving ? 'Guardando...' : 'Guardar configuración' }}
+      </button>
+    </div>
+  </main>
+
+  <div class="toast-message" *ngIf="toast.show" [ngClass]="toast.type">
+    <i class="fas" [ngClass]="toast.type === 'success' ? 'fa-check-circle' : toast.type === 'warning' ? 'fa-exclamation-triangle' : toast.type === 'info' ? 'fa-info-circle' : 'fa-times-circle'"></i>
+    <span>{{ toast.message }}</span>
+  </div>
+</div>
