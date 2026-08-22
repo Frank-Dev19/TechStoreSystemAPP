@@ -33,11 +33,11 @@ $bg-light: #f5f7fa;
     .title-section {
       flex: 1 1 100%;
       width: 100%;
-      background: linear-gradient(135deg, $primary 0%, $secondary 100%);
+      background: var(--brand-page-header-gradient);
       border-radius: 16px;
       padding: 1.75rem;
       color: white;
-      box-shadow: 0 20px 45px rgba($primary, 0.25);
+      box-shadow: var(--brand-page-header-shadow);
 
       .page-title {
         font-size: 2rem;

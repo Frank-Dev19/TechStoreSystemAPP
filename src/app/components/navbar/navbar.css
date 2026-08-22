@@ -5,7 +5,7 @@
     left: 0;
     right: 0;
     z-index: 1200;
-    background: linear-gradient(90deg, #0f3d22, #16a34a);
+    background: var(--brand-navbar-gradient);
     box-shadow: 0 2px 14px rgba(0, 0, 0, .08);
     width: 100%;
     transition: left 0.3s ease;

@@ -40,11 +40,12 @@ body {
 
 /* HEADER */
 .auditoria-header {
-    background: linear-gradient(135deg, var(--primary), var(--primary-600));
+    background: var(--brand-page-header-gradient);
     //color: #fff;
     padding: 28px;
     border-radius: var(--radius);
     margin-bottom: 22px;
+    box-shadow: var(--brand-page-header-shadow);
     box-shadow: 0 6px 18px rgba(0, 0, 0, .12);
 
     .header-content {

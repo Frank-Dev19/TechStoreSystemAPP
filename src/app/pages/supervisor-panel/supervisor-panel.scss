@@ -17,12 +17,12 @@ $bg-light: #f5f7fa;
   padding: 2rem;
 
   .panel-header {
-    background: linear-gradient(135deg, $primary 0%, $secondary 100%);
+    background: var(--brand-page-header-gradient);
     color: white;
     padding: 2rem;
     border-radius: 12px;
     margin-bottom: 2rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--brand-page-header-shadow);
 
     .title-section {
       .page-title {

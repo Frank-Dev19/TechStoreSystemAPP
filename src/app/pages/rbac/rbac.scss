@@ -13,10 +13,11 @@
     margin-bottom: 2rem;
 
     .header-content {
-        background: linear-gradient(135deg, #2c5282 0%, #3b6ba8 100%);
+        background: var(--brand-page-header-gradient);
         padding: 2rem;
         border-radius: 12px;
         color: white;
+        box-shadow: var(--brand-page-header-shadow);
 
         @media (max-width: 768px) {
             padding: 1.5rem;

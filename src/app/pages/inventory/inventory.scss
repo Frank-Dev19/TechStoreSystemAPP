@@ -119,12 +119,12 @@
 }
 
 .inventory-header {
-    background: linear-gradient(135deg, var(--primary), var(--primary-600));
+    background: var(--brand-page-header-gradient);
     color: white;
     padding: 28px;
     border-radius: 12px;
     margin-bottom: 18px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--brand-page-header-shadow);
 
     .header-content {
         display: flex;

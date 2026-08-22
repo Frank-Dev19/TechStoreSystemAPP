@@ -29,6 +29,18 @@ body {
 }
 
 :root {
+    /* Macrochips brand palette */
+    --brand-green-900: #0f3d22;
+    --brand-green-700: #15803d;
+    --brand-green-600: #16a34a;
+    --brand-green-500: #22c55e;
+    --brand-sidebar: var(--brand-green-900);
+    --brand-navbar-gradient: linear-gradient(90deg, var(--brand-green-900), var(--brand-green-600));
+    --brand-login-gradient: linear-gradient(135deg, var(--brand-green-900) 0%, var(--brand-green-700) 60%, var(--brand-green-500) 100%);
+    --brand-page-header-gradient: linear-gradient(135deg, var(--brand-green-900), var(--brand-green-700));
+    --brand-page-header-shadow: 0 20px 45px rgba(15, 61, 34, 0.22);
+
+    /* Functional UI palette */
     --primary: #2c5282;
     --primary-600: #3b6ba8;
     --bg: #f8f9fa;
