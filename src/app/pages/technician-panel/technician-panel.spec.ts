@@ -58,6 +58,8 @@ describe('TechnicianPanel', () => {
   const agreementServiceStub = {
     create: jasmine.createSpy('create').and.returnValue(of({ id: 999 })),
     createRevision: jasmine.createSpy('createRevision').and.returnValue(of({ id: 1000 })),
+    previewCommercialVersionPdf: jasmine.createSpy('previewCommercialVersionPdf').and.returnValue(of(new Blob())),
+    issueCommercialVersion: jasmine.createSpy('issueCommercialVersion').and.returnValue(of({ version: {}, deliveryStatus: 'SENT' })),
     recordClientDecision: jasmine.createSpy('recordClientDecision').and.returnValue(of({ allAccepted: false })),
     update: jasmine.createSpy('update').and.returnValue(of({ id: 999 })),
     confirm: jasmine.createSpy('confirm').and.returnValue(of({ id: 999 })),
@@ -133,6 +135,17 @@ describe('TechnicianPanel', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('mantiene visible el panel de detalle con una orientación antes de seleccionar una orden', () => {
+    component.clearSelectedServiceOrder();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const emptyDetail = compiled.querySelector('.detail-view-card--empty');
+
+    expect(emptyDetail).not.toBeNull();
+    expect(emptyDetail?.textContent).toContain('Selecciona una orden para gestionarla');
   });
 
   it('inicia el diagnóstico mediante la transición del único equipo', () => {
@@ -261,7 +274,7 @@ describe('TechnicianPanel', () => {
     expect(component.canFinishRepair(order)).toBeTrue();
   });
 
-  it('exige seleccionar un equipo cuando la orden tiene varios pendientes de diagnóstico', () => {
+  it('abre el diagnóstico directamente para el equipo seleccionado en la orden', () => {
     const order = createServiceOrder({
       id: 32,
       serviceType: ServiceType.DIAGNOSIS,
@@ -274,8 +287,58 @@ describe('TechnicianPanel', () => {
 
     component.openDiagnosisModal(order);
 
-    expect(component.selectedDiagnosisItemId).toBeNull();
-    expect(component.canSubmitDiagnosis).toBeFalse();
+    expect(component.selectedServiceOrderItemId).toBe(321);
+    expect(component.selectedDiagnosisItemId).toBe(321);
+    expect(component.diagnosisEligibleItems.map((item) => item.id)).toEqual([321]);
+  });
+
+  it('selecciona primero el equipo accionable y conserva la selección al refrescar la orden', () => {
+    const cancelled = createServiceOrderItem(createServiceOrder({ id: 33 }), {
+      id: 331,
+      position: 1,
+      operativeStatus: ServiceOrderOperativeStatus.CANCELADA,
+    });
+    const active = createServiceOrderItem(createServiceOrder({ id: 33 }), {
+      id: 332,
+      position: 2,
+      operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO,
+    });
+    const order = createServiceOrder({ id: 33 });
+    order.items = [cancelled, active];
+
+    component.selectServiceOrder(order);
+    expect(component.selectedServiceOrderItemId).toBe(332);
+
+    component.selectServiceOrderItem(cancelled);
+    const refreshedOrder = { ...order, items: [{ ...cancelled }, { ...active }] };
+    component.selectServiceOrder(refreshedOrder);
+
+    expect(component.selectedServiceOrderItemId).toBe(331);
+    expect(diagnosisServiceStub.findAll).toHaveBeenCalledWith({
+      serviceOrderId: 33,
+      serviceOrderItemId: 331,
+      limit: 20,
+    });
+  });
+
+  it('mantiene visible un equipo cancelado pero oculta sus transiciones técnicas', () => {
+    const order = createServiceOrder({
+      id: 34,
+      serviceType: ServiceType.DIAGNOSIS,
+      technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+    });
+    const item = createServiceOrderItem(order, {
+      id: 341,
+      operativeStatus: ServiceOrderOperativeStatus.CANCELADA,
+      technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA,
+    });
+    order.items = [item];
+
+    component.selectServiceOrder(order);
+
+    expect(component.selectedOrderItems).toEqual([item]);
+    expect(component.canStartDiagnosis(order)).toBeFalse();
+    expect(component.canManageAgreement(order)).toBeFalse();
   });
 
   it('envía el diagnóstico con serviceOrderItemId y no con serviceOrderId', () => {
@@ -435,7 +498,7 @@ describe('TechnicianPanel', () => {
     expect(component.agreementForm.get('notes')?.value).toBe('');
 
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('Acuerdo anterior heredado');
+    expect(compiled.textContent).toContain('Cotización anterior heredada');
     expect(compiled.textContent).toContain('Nuevos agregados');
     expect(compiled.textContent).toContain('Notas del acuerdo anterior');
   });
@@ -695,18 +758,17 @@ describe('TechnicianPanel', () => {
     });
     agreementServiceStub.findAll.and.returnValue(of({ data: [agreement] }));
 
+    component.selectServiceOrder(order);
+    component.selectServiceOrderItem(secondItem);
     component.openAgreementModal(order);
     fixture.detectChanges();
 
     expect(component.selectedAgreementItemId).toBe(702);
     expect(component.isAgreementItemLocked(firstItem)).toBeTrue();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('Aceptado');
-    expect(compiled.textContent).toContain('Bloqueado');
-    expect(compiled.textContent).toContain('OS-03-08-2026-0001-02');
-
-    component.selectAgreementItem(701);
-    expect(component.selectedAgreementItemId).toBe(702);
+    const agreementModal = compiled.querySelector('.agreement-modal') as HTMLElement;
+    expect(agreementModal.textContent).toContain('OS-03-08-2026-0001-02');
+    expect(agreementModal.textContent).not.toContain('OS-03-08-2026-0001-01');
 
     component.agreementForm.patchValue({ notes: 'Cliente solicita otra alternativa' });
     component.agreementNewItems = [
@@ -803,7 +865,7 @@ describe('TechnicianPanel', () => {
     expect(component.showClientDecisionModal).toBeFalse();
   });
 
-  it('envía descuentos por línea y muestra importe base, descuento y neto', () => {
+  it('envía descuentos solo para servicios y conserva el precio íntegro del producto', () => {
     const order = createServiceOrder({ id: 72, technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
     const item = createServiceOrderItem(order, {
       id: 721,
@@ -841,9 +903,9 @@ describe('TechnicianPanel', () => {
     }];
 
     expect(component.calculateAgreementItemGross(component.agreementNewItems[0])).toBe(100);
-    expect(component.calculateAgreementItemDiscount(component.agreementNewItems[0])).toBe(10);
-    expect(component.calculateAgreementItemSubtotal(component.agreementNewItems[0])).toBe(90);
-    expect(component.calculateAgreementTotal()).toBe(185);
+    expect(component.calculateAgreementItemDiscount(component.agreementNewItems[0])).toBe(0);
+    expect(component.calculateAgreementItemSubtotal(component.agreementNewItems[0])).toBe(100);
+    expect(component.calculateAgreementTotal()).toBe(195);
 
     component.submitAgreement(false);
 
@@ -858,13 +920,33 @@ describe('TechnicianPanel', () => {
             productId: 9,
             quantity: 2,
             unitPrice: 50,
-            discountPct: 10,
-            discountOverrideReason: 'Promoción autorizada por supervisión.',
             requiresPurchase: false,
           },
         ],
       }],
     });
+  });
+
+  it('carga el precio recomendado y valida el minimo sin mostrar el origen del costo', () => {
+    pricingQueryStub.calculatePrice.and.returnValue(of({
+      recommendedPrice: 67.85,
+      minAllowedPrice: 61.07,
+      salePriceWithIgv: 67.85,
+      costSource: 'MOVEMENT_HISTORY',
+    }));
+    component.selectedServiceOrder = createServiceOrder({ technicalStatus: ServiceOrderTechnicalStatus.DIAGNOSTICADA });
+    component.addAgreementProduct();
+    const product = component.getAgreementProductItems()[0];
+
+    component.onAgreementProductSelected(product, 9);
+
+    expect(product.unitPrice).toBe(67.85);
+    expect(product.recommendedPrice).toBe(67.85);
+    expect(product.minAllowedPrice).toBe(61.07);
+    component.onAgreementProductPriceChange(product, 61);
+    expect(component.isAgreementProductPriceValid(product)).toBeFalse();
+    component.onAgreementProductPriceChange(product, 61.07);
+    expect(component.isAgreementProductPriceValid(product)).toBeTrue();
   });
 
   it('conserva y muestra el mensaje backend cuando el descuento requiere autorización de supervisión', () => {
@@ -958,7 +1040,7 @@ describe('TechnicianPanel', () => {
     expect(showMessageSpy).toHaveBeenCalledWith(
       'success',
       'fas fa-check-circle',
-      'Nueva versión de acuerdo confirmada. La versión anterior quedó reemplazada.',
+      'Nueva versión de cotización confirmada. La versión anterior quedó reemplazada.',
     );
   });
 
@@ -1018,6 +1100,50 @@ describe('TechnicianPanel', () => {
 
     expect(component.getOrderStatusPillLabel(order)).toBe('Entrega parcial');
     expect(component.getOrderStageLabel(order)).toBe('1 de 3 equipos entregados');
+  });
+
+  it('prioriza la cancelación operativa sobre el estado técnico sin solución', () => {
+    const order = createServiceOrder({
+      operativeStatus: ServiceOrderOperativeStatus.CANCELADA,
+      technicalStatus: ServiceOrderTechnicalStatus.SIN_SOLUCION,
+      itemProgress: {
+        total: 2,
+        active: 0,
+        resolved: 0,
+        readyForPickup: 0,
+        delivered: 2,
+        cancelled: 2,
+        cancellationPending: 0,
+        isPartial: false,
+      },
+    });
+
+    expect(component.getOrderBadgeClass(order)).toBe('badge badge-danger');
+    expect(component.getOrderStatusPillLabel(order)).toBe('Cancelada');
+    expect(component.getOrderStageIcon(order)).toBe('fas fa-ban');
+    expect(component.getOrderStageLabel(order)).toBe('Equipos devueltos al cliente');
+  });
+
+  it('distingue la devolución pendiente o parcial de una orden cancelada', () => {
+    const order = createServiceOrder({
+      operativeStatus: ServiceOrderOperativeStatus.CANCELADA,
+      technicalStatus: ServiceOrderTechnicalStatus.SIN_SOLUCION,
+      itemProgress: {
+        total: 2,
+        active: 0,
+        resolved: 0,
+        readyForPickup: 0,
+        delivered: 0,
+        cancelled: 2,
+        cancellationPending: 0,
+        isPartial: false,
+      },
+    });
+
+    expect(component.getOrderStageLabel(order)).toBe('Pendiente de devolución');
+
+    order.itemProgress = { ...order.itemProgress!, delivered: 1, isPartial: true };
+    expect(component.getOrderStageLabel(order)).toBe('Devolución parcial al cliente');
   });
 });
 

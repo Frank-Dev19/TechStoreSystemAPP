@@ -59,6 +59,8 @@ interface AgreementProductComposer {
   productNameSnapshot: string
   quantity: number
   unitPrice: number
+  recommendedPrice?: number
+  minAllowedPrice?: number
   discountPct?: number
   discountOverrideReason?: string
   requiresPurchase: boolean
@@ -170,6 +172,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   repairedOrders: ServiceOrder[] = []
   allOrders: ServiceOrder[] = []
   selectedServiceOrder: ServiceOrder | null = null
+  selectedServiceOrderItemId: number | null = null
   selectedDiagnosisItemId: number | null = null
   selectedAgreementItemId: number | null = null
   itemCancellationTarget: ServiceOrderItemCancellationTarget | null = null
@@ -357,16 +360,19 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     this.repairedOrders = orders.filter((order) => order.technicalStatus === ServiceOrderTechnicalStatus.RESUELTA)
 
     if (this.selectedServiceOrder) {
+      const previousItemId = this.selectedServiceOrderItemId
       const updated = orders.find((entry) => Number(entry.id) === Number(this.selectedServiceOrder?.id))
       this.selectedServiceOrder = updated ?? null
       if (this.selectedServiceOrder) {
         if (!this.isOrderVisibleInCurrentTab(this.selectedServiceOrder)) {
           this.clearSelectedServiceOrder()
         } else {
-          this.loadServiceOrderDiagnosisHistory(Number(this.selectedServiceOrder.id))
+          this.syncSelectedServiceOrderItem(previousItemId)
+          this.loadSelectedItemDiagnosisHistory()
           this.loadServiceOrderAgreementSummary(this.selectedServiceOrder)
         }
       } else {
+        this.selectedServiceOrderItemId = null
         this.diagnosticHistory = []
         this.agreementSummary = null
         this.agreementHistory = []
@@ -417,15 +423,29 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   selectServiceOrder(order: ServiceOrder): void {
+    const preservedItemId = Number(this.selectedServiceOrder?.id) === Number(order.id)
+      ? this.selectedServiceOrderItemId
+      : null
     this.selectedServiceOrder = order
+    this.syncSelectedServiceOrderItem(preservedItemId)
     this.activeDetailTab = "equipment"
-    this.loadServiceOrderDiagnosisHistory(Number(order.id))
+    this.loadSelectedItemDiagnosisHistory()
     this.loadServiceOrderAgreementSummary(order)
+    this.stopLiveTimer()
+  }
+
+  selectServiceOrderItem(item: ServiceOrderItem): void {
+    if (!this.selectedServiceOrder?.items?.some((entry) => Number(entry.id) === Number(item.id))) return
+    this.selectedServiceOrderItemId = Number(item.id)
+    this.activeDetailTab = "equipment"
+    this.loadSelectedItemDiagnosisHistory()
+    this.loadServiceOrderAgreementSummary(this.selectedServiceOrder)
     this.stopLiveTimer()
   }
 
   clearSelectedServiceOrder(): void {
     this.selectedServiceOrder = null
+    this.selectedServiceOrderItemId = null
     this.activeDetailTab = "equipment"
     this.diagnosticHistory = []
     this.agreementSummary = null
@@ -448,7 +468,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       case "diagnosis":
         return "En diagnóstico"
       case "pending_approval":
-        return "Pendientes de acuerdo"
+        return "Pendientes de cotización"
       case "repair":
         return "En servicio"
       case "repaired":
@@ -502,7 +522,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       case "diagnosis":
         return "No hay órdenes en diagnóstico"
       case "pending_approval":
-        return "No hay órdenes pendientes de coordinación o acuerdo"
+        return "No hay órdenes pendientes de coordinación o cotización"
       case "repair":
         return "No hay órdenes en servicio"
       case "repaired":
@@ -514,6 +534,9 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   getOrderBadgeClass(order: ServiceOrder): string {
+    if (order.operativeStatus === ServiceOrderOperativeStatus.CANCELADA) {
+      return "badge badge-danger"
+    }
     if (order.operativeStatus === ServiceOrderOperativeStatus.ENTREGA_PARCIAL) {
       return "badge badge-waiting"
     }
@@ -540,6 +563,9 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   getOrderStatusPillLabel(order: ServiceOrder): string {
+    if (order.operativeStatus === ServiceOrderOperativeStatus.CANCELADA) {
+      return "Cancelada"
+    }
     if (order.operativeStatus === ServiceOrderOperativeStatus.ENTREGA_PARCIAL) {
       return "Entrega parcial"
     }
@@ -563,6 +589,9 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   getOrderStageIcon(order: ServiceOrder): string {
+    if (order.operativeStatus === ServiceOrderOperativeStatus.CANCELADA) {
+      return "fas fa-ban"
+    }
     switch (order.technicalStatus) {
       case ServiceOrderTechnicalStatus.DIAGNOSTICADA:
       case ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL:
@@ -579,6 +608,17 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   getOrderStageLabel(order: ServiceOrder): string {
+    if (order.operativeStatus === ServiceOrderOperativeStatus.CANCELADA) {
+      const delivered = order.itemProgress?.delivered ?? 0
+      const total = order.itemProgress?.total ?? order.items?.length ?? 0
+      if (total > 0 && delivered >= total) {
+        return "Equipos devueltos al cliente"
+      }
+      if (delivered > 0) {
+        return "Devolución parcial al cliente"
+      }
+      return "Pendiente de devolución"
+    }
     if (order.operativeStatus === ServiceOrderOperativeStatus.ENTREGA_PARCIAL) {
       const delivered = order.itemProgress?.delivered ?? 0
       const active = order.itemProgress?.active ?? order.items?.length ?? 0
@@ -591,7 +631,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       return "Esperando coordinación"
     }
     if (order.technicalStatus === ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL) {
-      return "Esperando acuerdo"
+      return "Esperando cotización"
     }
     if (order.technicalStatus === ServiceOrderTechnicalStatus.ASIGNADA && order.serviceType === ServiceType.STANDARD_SERVICE) {
       return "Esperando inicio de servicio"
@@ -651,6 +691,62 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     )
   }
 
+  get selectedServiceOrderItem(): ServiceOrderItem | null {
+    const selectedId = Number(this.selectedServiceOrderItemId ?? 0)
+    if (!selectedId) return null
+    return (this.selectedServiceOrder?.items ?? []).find((item) => Number(item.id) === selectedId) ?? null
+  }
+
+  canSendPickupReminder(item?: ServiceOrderItem | null): boolean {
+    return Boolean(item && !item.deliveredAt && (item.readyForPickupAt || item.cancelledAt))
+  }
+
+  sendSelectedEquipmentPickupReminder(event?: Event): void {
+    event?.stopPropagation()
+    const order = this.selectedServiceOrder
+    const item = this.selectedServiceOrderItem
+    if (!order || !item || !this.canSendPickupReminder(item)) return
+
+    this.serviceOrderService.sendPickupReminder(Number(order.id), [Number(item.id)]).subscribe({
+      next: () => this.showMessage("success", "fas fa-paper-plane", "Recordatorio de recojo enviado al cliente."),
+      error: (error) => this.showMessage(
+        "danger",
+        "fas fa-exclamation-circle",
+        error?.error?.message || "No pudimos enviar el recordatorio de recojo.",
+      ),
+    })
+  }
+
+  get selectedOrderItems(): ServiceOrderItem[] {
+    return [...(this.selectedServiceOrder?.items ?? [])].sort(
+      (left, right) => Number(left.position) - Number(right.position),
+    )
+  }
+
+  private syncSelectedServiceOrderItem(preferredItemId: number | null): void {
+    const items = [...(this.selectedServiceOrder?.items ?? [])].sort(
+      (left, right) => Number(left.position) - Number(right.position),
+    )
+    if (!items.length) {
+      this.selectedServiceOrderItemId = null
+      return
+    }
+    const preserved = items.find((item) => Number(item.id) === Number(preferredItemId ?? 0))
+    const fallback = items.find((item) => this.isItemOperativelyActionable(item)) ?? items[0]
+    this.selectedServiceOrderItemId = Number((preserved ?? fallback).id)
+  }
+
+  isServiceOrderItemSelected(item: ServiceOrderItem): boolean {
+    return Number(this.selectedServiceOrderItemId) === Number(item.id)
+  }
+
+  isItemOperativelyActionable(item: ServiceOrderItem | null | undefined): boolean {
+    return !!item && [
+      ServiceOrderOperativeStatus.ABIERTA,
+      ServiceOrderOperativeStatus.EN_PROCESO,
+    ].includes(item.operativeStatus)
+  }
+
   startStandardService(order: ServiceOrder): void {
     if (!this.isStandardService(order)) return
     this.startRepair(order)
@@ -701,14 +797,20 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         .findAll({ page: 1, limit: 5, serviceOrderId: Number(order.id) })
         .pipe(catchError(() => of({ data: [] }))),
       diagnoses: this.diagnosticService
-        .findAll({ serviceOrderId: Number(order.id), limit: 20 })
+        .findAll({
+          serviceOrderId: Number(order.id),
+          ...(this.selectedServiceOrderItemId
+            ? { serviceOrderItemId: Number(this.selectedServiceOrderItemId) }
+            : {}),
+          limit: 20,
+        })
         .pipe(catchError(() => of({ data: [] }))),
     })
       .pipe(finalize(() => (this.isLoadingServiceOrderAgreement = false)))
       .subscribe({
         next: ({ agreements, diagnoses }) => {
           this.diagnosticHistory = diagnoses.data ?? []
-          const list = agreements.data ?? []
+          const list = this.filterAgreementsForSelectedItem(agreements.data ?? [])
           this.agreementHistory = list
 
           if (this.usesItemCommercialComposer(order)) {
@@ -851,7 +953,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           const message = decision === "CHANGES_REQUESTED"
             ? "Se registró que el cliente solicita cambios para este equipo."
             : result.allAccepted
-              ? "Se registró la aceptación y el acuerdo consolidado quedó confirmado."
+              ? "Se registró la aceptación y la cotización consolidada quedó confirmada."
               : "Se registró la aceptación de este equipo. Los demás equipos siguen pendientes."
           this.closeClientDecisionModal()
           this.closeAgreementModal()
@@ -903,6 +1005,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     item.productId = this.toNumericId(value)
     if (!item.productId) {
       item.unitPrice = 0
+      item.recommendedPrice = undefined
+      item.minAllowedPrice = undefined
       return
     }
     this.fetchAgreementProductPrice(item)
@@ -923,7 +1027,9 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       .pipe(finalize(() => (this.productPriceLoading[item.id] = false)))
       .subscribe({
         next: (res) => {
-          item.unitPrice = res?.salePrice ?? 0
+          item.recommendedPrice = Number(res?.recommendedPrice ?? res?.salePriceWithIgv ?? 0)
+          item.minAllowedPrice = Number(res?.minAllowedPrice ?? 0)
+          item.unitPrice = item.recommendedPrice
         },
         error: () => {
           this.showMessage("warning", "fas fa-info-circle", "No pudimos obtener el precio del producto.")
@@ -938,7 +1044,18 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     return Number(item.unitPrice ?? TECHNICAL_SERVICE_OPTION.price)
   }
 
+  onAgreementProductPriceChange(item: AgreementProductComposer, value: unknown): void {
+    item.unitPrice = Number(value) || 0
+  }
+
+  isAgreementProductPriceValid(item: AgreementProductComposer): boolean {
+    return Boolean(item.productId)
+      && Number(item.unitPrice) > 0
+      && Number(item.unitPrice) >= Number(item.minAllowedPrice ?? 0)
+  }
+
   calculateAgreementItemDiscount(item: AgreementComposerItem): number {
+    if (item.type === "product") return 0
     const gross = this.calculateAgreementItemGross(item)
     const percentage = Math.min(100, Math.max(0, Number(item.discountPct ?? 0)))
     return Number((gross * percentage / 100).toFixed(2))
@@ -964,20 +1081,29 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     const order = this.selectedServiceOrder
     if (!order?.id) return
     if (!this.isAgreementEditable()) {
-      this.showMessage("warning", "fas fa-info-circle", "El acuerdo ya está confirmado y no puede modificarse.")
+      this.showMessage("warning", "fas fa-info-circle", "La cotización ya está confirmada y no puede modificarse.")
       return
     }
     if (!this.hasAgreementComposerItems()) {
-      this.showMessage("warning", "fas fa-exclamation-circle", "Agrega al menos un producto o servicio al acuerdo.")
+      this.showMessage("warning", "fas fa-exclamation-circle", "Agrega al menos un producto o servicio a la cotización.")
       return
     }
     if (!this.isTechnicalServiceAmountValid()) {
       this.showMessage("warning", "fas fa-exclamation-circle", "El servicio técnico debe ser de al menos S/20.")
       return
     }
+    const invalidProduct = this.getAgreementProductItems().find((item) => !this.isAgreementProductPriceValid(item))
+    if (invalidProduct) {
+      this.showMessage(
+        "warning",
+        "fas fa-exclamation-circle",
+        `El precio del producto debe ser de al menos S/ ${Number(invalidProduct.minAllowedPrice ?? 0).toFixed(2)}.`,
+      )
+      return
+    }
 
     if (this.usesItemCommercialComposer(order)) {
-      this.submitItemCommercialRevision(order)
+      this.submitItemCommercialRevision(order, confirmImmediately)
       return
     }
 
@@ -1032,7 +1158,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         next: (agreement) => {
           if (!confirmImmediately) {
             this.agreementSummary = agreement
-            this.showMessage("success", "fas fa-check-circle", "Borrador de acuerdo guardado.")
+            this.showMessage("success", "fas fa-check-circle", "Borrador de cotización guardado.")
             this.closeAgreementModal()
             this.loadTechnicianOrders()
             return
@@ -1040,13 +1166,13 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
           this.confirmAgreement(agreement.id)
         },
-        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos guardar el acuerdo."),
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos guardar la cotización."),
       })
   }
 
   confirmAgreement(agreementId: number): void {
     if (!this.isAgreementEditable()) {
-      this.showMessage("warning", "fas fa-info-circle", "El acuerdo ya está confirmado.")
+      this.showMessage("warning", "fas fa-info-circle", "La cotización ya está confirmada.")
       return
     }
     this.isSavingAgreement = true
@@ -1059,13 +1185,13 @@ export class TechnicianPanel implements OnInit, OnDestroy {
             "success",
             "fas fa-check-circle",
             this.isDerivedAgreementComposer()
-              ? "Nueva versión de acuerdo confirmada. La versión anterior quedó reemplazada."
-              : "Acuerdo confirmado. Ya puedes continuar con el servicio.",
+              ? "Nueva versión de cotización confirmada. La versión anterior quedó reemplazada."
+              : "Cotización confirmada. Ya puedes continuar con el servicio.",
           )
           this.closeAgreementModal()
           this.loadTechnicianOrders()
         },
-        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos confirmar el acuerdo."),
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos confirmar la cotización."),
       })
   }
 
@@ -1082,7 +1208,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           this.closeAgreementModal()
           this.loadTechnicianOrders()
         },
-        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos cerrar la orden sin acuerdo."),
+        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos cerrar la orden sin cotización."),
       })
   }
 
@@ -1139,7 +1265,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
               : resolution === "WAIVED"
                 ? "Diagnóstico registrado. La orden quedó lista para entrega sin cobro."
                 : wasInService
-                  ? "Nuevo diagnóstico registrado. La orden volvió a coordinación para generar un nuevo acuerdo."
+                  ? "Nuevo diagnóstico registrado. La orden volvió a coordinación para generar una nueva cotización."
                   : "Diagnostico registrado correctamente.",
           )
           this.closeDiagnosisModal()
@@ -1147,6 +1273,10 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         },
         error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar el diagnóstico."),
       })
+  }
+
+  isProductPriceLoading(itemId: number): boolean {
+    return Boolean(this.productPriceLoading[itemId])
   }
 
   getAgreementDiscountTotal(): number {
@@ -1157,12 +1287,13 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   get diagnosisEligibleItems(): ServiceOrderItem[] {
-    const items = this.selectedServiceOrder?.items ?? []
-    return items.filter((item) =>
+    const item = this.selectedServiceOrderItem
+    return item && this.isItemOperativelyActionable(item) &&
       [ServiceOrderTechnicalStatus.EN_DIAGNOSTICO, ServiceOrderTechnicalStatus.EN_EJECUCION].includes(
         item.technicalStatus,
-      ),
-    )
+      )
+      ? [item]
+      : []
   }
 
   get selectedDiagnosisItem(): ServiceOrderItem | null {
@@ -1315,7 +1446,14 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     order: ServiceOrder,
     statuses: ServiceOrderTechnicalStatus[],
   ): ServiceOrderItem[] {
-    return (order.items ?? []).filter((item) => statuses.includes(item.technicalStatus))
+    const items = order.items ?? []
+    const selectedItem = Number(this.selectedServiceOrder?.id) === Number(order.id)
+      ? this.selectedServiceOrderItem
+      : null
+    const candidates = selectedItem ? [selectedItem] : items
+    return candidates.filter((item) =>
+      this.isItemOperativelyActionable(item) && statuses.includes(item.technicalStatus),
+    )
   }
 
   private hasItemInTechnicalStatus(
@@ -1324,16 +1462,32 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   ): boolean {
     const items = order.items ?? []
     return items.length > 0
-      ? items.some((item) => statuses.includes(item.technicalStatus))
+      ? this.getItemsInTechnicalStatuses(order, statuses).length > 0
       : statuses.includes(order.technicalStatus)
   }
 
   acceptWarrantyReview(order: ServiceOrder): void {
-    this.transitionWorkflow(order, ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION, "Garantia aceptada correctamente.")
+    this.requestItemTransition(
+      order,
+      ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION,
+      [ServiceOrderTechnicalStatus.EN_DIAGNOSTICO],
+      "Seleccionar equipo para aceptar garantía",
+      "Elige el equipo cuya garantía deseas aceptar.",
+      "Aceptar garantía",
+      "Garantía aceptada correctamente.",
+    )
   }
 
   rejectWarrantyReview(order: ServiceOrder): void {
-    this.transitionWorkflow(order, ServiceOrderTechnicalStatus.SIN_SOLUCION, "Garantia rechazada correctamente.")
+    this.requestItemTransition(
+      order,
+      ServiceOrderTechnicalStatus.SIN_SOLUCION,
+      [ServiceOrderTechnicalStatus.EN_DIAGNOSTICO],
+      "Seleccionar equipo para rechazar garantía",
+      "Elige el equipo cuya garantía deseas rechazar.",
+      "Rechazar garantía",
+      "Garantía rechazada correctamente.",
+    )
   }
 
   private transitionWorkflow(order: ServiceOrder, status: ServiceOrderTechnicalStatus, successMessage: string): void {
@@ -1362,13 +1516,18 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     return "Sin asignar"
   }
 
-  private loadServiceOrderDiagnosisHistory(serviceOrderId: number): void {
-    const normalizedId = Number(serviceOrderId)
+  private loadSelectedItemDiagnosisHistory(): void {
+    const normalizedId = Number(this.selectedServiceOrder?.id ?? 0)
+    const serviceOrderItemId = Number(this.selectedServiceOrderItemId ?? 0)
     if (!normalizedId) {
       this.diagnosticHistory = []
       return
     }
-    this.diagnosticService.findAll({ serviceOrderId: normalizedId, limit: 20 }).subscribe({
+    this.diagnosticService.findAll({
+      serviceOrderId: normalizedId,
+      ...(serviceOrderItemId ? { serviceOrderItemId } : {}),
+      limit: 20,
+    }).subscribe({
       next: ({ data }) => (this.diagnosticHistory = data ?? []),
       error: () => this.showMessage("warning", "fas fa-info-circle", "No pudimos cargar el historial de diagnósticos."),
     })
@@ -1395,7 +1554,12 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   canManageAgreement(order: ServiceOrder | null): boolean {
     if (!order || this.isWarrantyService(order)) return false
-    return EDITABLE_AGREEMENT_STATUSES.includes(order.technicalStatus)
+    const item = Number(this.selectedServiceOrder?.id) === Number(order.id)
+      ? this.selectedServiceOrderItem
+      : null
+    return item
+      ? this.isItemOperativelyActionable(item) && EDITABLE_AGREEMENT_STATUSES.includes(item.technicalStatus)
+      : EDITABLE_AGREEMENT_STATUSES.includes(order.technicalStatus)
   }
 
   isAgreementEditable(): boolean {
@@ -1417,7 +1581,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     }
 
     if (this.isDerivedAgreementComposer()) {
-      return 'Estás preparando una nueva versión derivada. Al confirmar, este acuerdo reemplaza al acuerdo activo anterior.'
+      return 'Estás preparando una nueva versión derivada. Al confirmar, esta cotización reemplaza a la cotización activa anterior.'
     }
 
     if (!this.agreementSummary) {
@@ -1426,13 +1590,13 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
     switch (this.agreementSummary.status) {
       case ServiceOrderAgreementStatus.DRAFT:
-        return 'Este acuerdo está en borrador. Puedes editarlo o confirmarlo.'
+        return 'Esta cotización está en borrador. Puedes editarla o confirmarla.'
       case ServiceOrderAgreementStatus.CONFIRMED:
-        return 'Este acuerdo ya está confirmado. Solo puedes revisarlo.'
+        return 'Esta cotización ya está confirmada. Solo puedes revisarla.'
       case ServiceOrderAgreementStatus.SUPERSEDED:
-        return 'Este acuerdo fue reemplazado por una versión más reciente. Solo puedes revisarlo.'
+        return 'Esta cotización fue reemplazada por una versión más reciente. Solo puedes revisarla.'
       case ServiceOrderAgreementStatus.VOIDED:
-        return 'Este acuerdo fue anulado. Solo puedes revisarlo.'
+        return 'Esta cotización fue anulada. Solo puedes revisarla.'
       default:
         return null
     }
@@ -1456,11 +1620,13 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   canAcceptWarrantyReview(order: ServiceOrder | null): boolean {
-    return !!order && this.isWarrantyService(order) && order.technicalStatus === ServiceOrderTechnicalStatus.EN_DIAGNOSTICO
+    return !!order && this.isWarrantyService(order) &&
+      this.hasItemInTechnicalStatus(order, [ServiceOrderTechnicalStatus.EN_DIAGNOSTICO])
   }
 
   canRejectWarrantyReview(order: ServiceOrder | null): boolean {
-    return !!order && this.isWarrantyService(order) && order.technicalStatus === ServiceOrderTechnicalStatus.EN_DIAGNOSTICO
+    return !!order && this.isWarrantyService(order) &&
+      this.hasItemInTechnicalStatus(order, [ServiceOrderTechnicalStatus.EN_DIAGNOSTICO])
   }
 
   canStartStandardService(order: ServiceOrder): boolean {
@@ -1545,6 +1711,77 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     return this.equipmentTypeLabels[type] ?? String(type)
   }
 
+  getOrderEquipmentSummaryTitle(order: ServiceOrder): string {
+    const items = order.items ?? []
+    if (items.length > 1) return `${items.length} equipos`
+    const item = items[0]
+    return item
+      ? this.getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther)
+      : this.getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther)
+  }
+
+  getOrderEquipmentSummaryDetail(order: ServiceOrder): string {
+    const items = order.items ?? []
+    if (items.length <= 1) return items[0]?.initialIssue || order.initialIssue || "Sin detalle"
+
+    const active = items.filter((item) => this.isItemOperativelyActionable(item)).length
+    const cancelled = items.filter((item) => item.operativeStatus === ServiceOrderOperativeStatus.CANCELADA).length
+    const delivered = items.filter((item) => !!item.deliveredAt || item.operativeStatus === ServiceOrderOperativeStatus.ENTREGADA).length
+    const parts = [
+      active > 0 ? `${active} activos` : "",
+      cancelled > 0 ? `${cancelled} cancelados` : "",
+      delivered > 0 ? `${delivered} con salida registrada` : "",
+    ].filter(Boolean)
+    return parts.join(" · ") || "Sin equipos activos"
+  }
+
+  getServiceOrderItemDisplayName(item: ServiceOrderItem): string {
+    const brandModel = [item.brand, item.model].map((value) => String(value ?? "").trim()).filter(Boolean).join(" ")
+    return brandModel || this.getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther)
+  }
+
+  getServiceOrderItemOperativeLabel(item: ServiceOrderItem): string {
+    if (item.deliveredAt) {
+      return item.operativeStatus === ServiceOrderOperativeStatus.CANCELADA
+        ? "Cancelado · Devuelto"
+        : "Entregado"
+    }
+    switch (item.operativeStatus) {
+      case ServiceOrderOperativeStatus.ABIERTA:
+        return "Abierto"
+      case ServiceOrderOperativeStatus.EN_PROCESO:
+        return "En proceso"
+      case ServiceOrderOperativeStatus.CANCELACION_SOLICITADA:
+        return "Cancelación solicitada"
+      case ServiceOrderOperativeStatus.LISTA_PARA_ENTREGA:
+        return "Listo para entrega"
+      case ServiceOrderOperativeStatus.ENTREGA_PARCIAL:
+        return "Entrega parcial"
+      case ServiceOrderOperativeStatus.ENTREGADA:
+        return "Entregado"
+      case ServiceOrderOperativeStatus.CANCELADA:
+        return "Cancelado · Pendiente de devolución"
+      case ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION:
+        return "Sin solución"
+      default:
+        return item.operativeStatus
+    }
+  }
+
+  getServiceOrderItemTechnicalLabel(item: ServiceOrderItem): string {
+    return this.getWorkflowLabel({
+      ...(this.selectedServiceOrder ?? {}),
+      technicalStatus: item.technicalStatus,
+    } as ServiceOrder)
+  }
+
+  getServiceOrderItemStatusClass(item: ServiceOrderItem): string {
+    if (item.operativeStatus === ServiceOrderOperativeStatus.CANCELADA) return "is-cancelled"
+    if (item.operativeStatus === ServiceOrderOperativeStatus.ENTREGADA) return "is-delivered"
+    if (!this.isItemOperativelyActionable(item)) return "is-terminal"
+    return "is-active"
+  }
+
   getDiagnosisStatusLabel(status?: ServiceOrderDiagnosisStatus | null): string {
     if (!status) return "Sin estado"
     switch (status) {
@@ -1621,12 +1858,19 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   getAgreementEquipmentName(order: ServiceOrder | null): string {
     if (!order) return "Equipo sin referencia"
+    const selectedItem = Number(this.selectedServiceOrder?.id) === Number(order.id)
+      ? this.selectedServiceOrderItem
+      : null
+    if (selectedItem) return this.getServiceOrderItemDisplayName(selectedItem)
     const parts = [order.brand, order.model].map((value) => String(value ?? "").trim()).filter(Boolean)
     return parts.length ? parts.join(" ") : this.getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther)
   }
 
   getAgreementEquipmentDescription(order: ServiceOrder | null): string {
-    const issue = String(order?.initialIssue ?? "").trim()
+    const selectedItem = order && Number(this.selectedServiceOrder?.id) === Number(order.id)
+      ? this.selectedServiceOrderItem
+      : null
+    const issue = String(selectedItem?.initialIssue ?? order?.initialIssue ?? "").trim()
     return issue || "Sin detalle adicional del servicio."
   }
 
@@ -1638,6 +1882,9 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   private shouldLoadServiceOrderAgreement(order: ServiceOrder | null): boolean {
     if (!order) return false
     if (order.serviceType === ServiceType.WARRANTY_SERVICE) return false
+    const technicalStatus = Number(this.selectedServiceOrder?.id) === Number(order.id)
+      ? this.selectedServiceOrderItem?.technicalStatus ?? order.technicalStatus
+      : order.technicalStatus
     return [
       ServiceOrderTechnicalStatus.DIAGNOSTICADA,
       ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL,
@@ -1645,7 +1892,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       ServiceOrderTechnicalStatus.EN_EJECUCION,
       ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO,
       ServiceOrderTechnicalStatus.RESUELTA,
-    ].includes(order.technicalStatus)
+    ].includes(technicalStatus)
   }
 
   canShowServiceOrderAgreementSection(order: ServiceOrder | null): boolean {
@@ -1666,7 +1913,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       .pipe(finalize(() => (this.isLoadingServiceOrderAgreement = false)))
       .subscribe({
         next: ({ data }) => {
-          const list = data ?? []
+          const list = this.filterAgreementsForSelectedItem(data ?? [])
           this.agreementHistory = list
           const draft = list.find((agreement) => agreement.status === ServiceOrderAgreementStatus.DRAFT) ?? null
           const confirmed = resolveLatestActiveAgreement(list)
@@ -1721,7 +1968,12 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   canRequestAnyItemCancellation(order: ServiceOrder): boolean {
-    return (order.items ?? []).some((item) => this.canRequestItemCancellation(item))
+    const selectedItem = Number(this.selectedServiceOrder?.id) === Number(order.id)
+      ? this.selectedServiceOrderItem
+      : null
+    return selectedItem
+      ? this.canRequestItemCancellation(selectedItem)
+      : (order.items ?? []).some((item) => this.canRequestItemCancellation(item))
   }
 
   openItemCancellationModal(order: ServiceOrder, event?: Event, item?: ServiceOrderItem): void {
@@ -1763,13 +2015,10 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   getAgreementEligibleItems(): ServiceOrderItem[] {
-    const terminalStatuses = new Set<ServiceOrderOperativeStatus>([
-      ServiceOrderOperativeStatus.CANCELADA,
-      ServiceOrderOperativeStatus.ENTREGADA,
-      ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION,
-    ])
+    const selectedItemId = Number(this.selectedServiceOrderItemId ?? 0)
     return (this.selectedServiceOrder?.items ?? [])
-      .filter((item) => !terminalStatuses.has(item.operativeStatus))
+      .filter((item) => this.isItemOperativelyActionable(item))
+      .filter((item) => !selectedItemId || Number(item.id) === selectedItemId)
       .sort((left, right) => Number(left.position) - Number(right.position))
   }
 
@@ -1946,7 +2195,38 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     this.ensureTechnicalServiceItem()
   }
 
-  private submitItemCommercialRevision(order: ServiceOrder): void {
+  previewCommercialVersionPdf(): void {
+    const version = this.getSelectedAgreementVersionLink()?.commercialVersion
+    const versionId = this.toNumericId(version?.id)
+    if (!versionId || version?.status !== "DRAFT") {
+      this.showMessage("warning", "fas fa-info-circle", "Guarda el borrador antes de previsualizar el PDF.")
+      return
+    }
+
+    this.agreementService.previewCommercialVersionPdf(versionId).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.target = "_blank"
+        anchor.rel = "noopener"
+        anchor.click()
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      },
+      error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos generar la vista previa del PDF."),
+    })
+  }
+
+  retryCommercialVersionDelivery(): void {
+    const versionId = this.toNumericId(this.getSelectedAgreementVersionLink()?.commercialVersion?.id)
+    if (!versionId) {
+      this.showMessage("warning", "fas fa-info-circle", "No encontramos una cotización emitida para reintentar.")
+      return
+    }
+    this.issueCommercialVersion(versionId)
+  }
+
+  private submitItemCommercialRevision(order: ServiceOrder, sendToCustomer = false): void {
     const selectedItem = this.getSelectedAgreementItem()
     if (!selectedItem) {
       this.showMessage("warning", "fas fa-exclamation-circle", "Selecciona el equipo que deseas cotizar.")
@@ -1987,15 +2267,11 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     for (const product of this.getAgreementProductItems()) {
       const productId = this.toNumericId(product.productId)
       if (!productId) continue
-      const discountPct = Number(product.discountPct ?? 0)
-      const discountOverrideReason = String(product.discountOverrideReason ?? "").trim()
       lines.push({
         type: "PRODUCT",
         productId,
         quantity: Math.max(1, Number(product.quantity) || 1),
         unitPrice: Number(Number(product.unitPrice).toFixed(2)),
-        ...(discountPct > 0 ? { discountPct } : {}),
-        ...(discountOverrideReason ? { discountOverrideReason } : {}),
         requiresPurchase: Boolean(product.requiresPurchase),
         ...(product.notes ? { notes: product.notes } : {}),
       })
@@ -2017,14 +2293,29 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     this.agreementService.createRevision(payload)
       .pipe(finalize(() => (this.isSavingAgreement = false)))
       .subscribe({
-        next: () => {
+        next: (agreement) => {
+          const link = (agreement.items ?? []).find(
+            (entry) => Number(entry.serviceOrderItemId) === Number(selectedItem.id),
+          )
+          const version = link?.commercialVersion
+          const versionId = this.toNumericId(version?.id ?? link?.commercialVersionId)
+
+          if (sendToCustomer) {
+            if (!versionId) {
+              this.showMessage("danger", "fas fa-times-circle", "La cotización se guardó, pero no pudimos identificar la versión para enviarla.")
+              return
+            }
+            this.issueCommercialVersion(versionId)
+            return
+          }
+
+          this.agreementSummary = agreement
+          this.hydrateItemCommercialVersion(version ?? null)
           this.showMessage(
             "success",
             "fas fa-check-circle",
-            "Revisión comercial guardada. Falta registrar la decisión del cliente para cada equipo.",
+            "Borrador guardado. Aún no se envió al cliente.",
           )
-          this.closeAgreementModal()
-          this.loadTechnicianOrders()
         },
         error: (error) => {
           const backendMessage = error?.error?.message
@@ -2034,6 +2325,42 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           this.showMessage("danger", "fas fa-times-circle", message)
         },
       })
+  }
+
+  private issueCommercialVersion(versionId: number): void {
+    this.isSavingAgreement = true
+    this.agreementService.issueCommercialVersion(versionId)
+      .pipe(finalize(() => (this.isSavingAgreement = false)))
+      .subscribe({
+        next: (result) => {
+          const delivered = result.deliveryStatus === "SENT"
+          this.showMessage(
+            delivered ? "success" : "warning",
+            delivered ? "fas fa-paper-plane" : "fas fa-exclamation-circle",
+            delivered
+              ? "Cotización enviada al cliente con el diagnóstico y el PDF adjunto."
+              : "La cotización quedó emitida, pero WhatsApp no pudo enviarla. Puedes reintentar el envío.",
+          )
+          this.closeAgreementModal()
+          this.loadTechnicianOrders()
+        },
+        error: (error) => {
+          const backendMessage = error?.error?.message
+          this.showMessage(
+            "danger",
+            "fas fa-times-circle",
+            Array.isArray(backendMessage) ? backendMessage.join(" ") : backendMessage || "No pudimos enviar la cotización al cliente.",
+          )
+        },
+      })
+  }
+
+  private filterAgreementsForSelectedItem(agreements: ServiceOrderAgreement[]): ServiceOrderAgreement[] {
+    const itemId = Number(this.selectedServiceOrderItemId ?? 0)
+    if (!itemId) return agreements
+    return agreements.filter((agreement) =>
+      (agreement.items ?? []).some((link) => Number(link.serviceOrderItemId) === itemId),
+    )
   }
 
   private resolveLatestAgreement(agreements: ServiceOrderAgreement[]): ServiceOrderAgreement | null {

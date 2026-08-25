@@ -88,7 +88,7 @@ describe('ServiceOrderLineDiscountModalComponent', () => {
     agreementService.createRevision.calls.reset();
   });
 
-  it('crea una nueva versión del equipo con los descuentos editados y conserva las demás líneas', () => {
+  it('crea una nueva versión con descuento de servicio y conserva íntegro el precio del producto', () => {
     const result = { id: 1000 } as ServiceOrderAgreement;
     agreementService.createRevision.and.returnValue(of(result));
     const emitted = jasmine.createSpy('revisionCreated');
@@ -97,6 +97,7 @@ describe('ServiceOrderLineDiscountModalComponent', () => {
     component.setPercentage(0, 7);
     component.setPercentage(1, 10);
     component.setOverrideReason(1, 'Autorizado por supervisión.');
+    expect(component.getPercentage(1)).toBe(0);
     component.submit();
 
     expect(agreementService.createRevision).toHaveBeenCalledOnceWith({
@@ -113,8 +114,6 @@ describe('ServiceOrderLineDiscountModalComponent', () => {
               productId: 41,
               quantity: 2,
               unitPrice: 80,
-              discountPct: 10,
-              discountOverrideReason: 'Autorizado por supervisión.',
               requiresPurchase: true,
               notes: 'Requiere compra',
             },

@@ -69,7 +69,7 @@ $bg-light: #f5f7fa;
 
     .split-pane-layout {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.05fr);
     gap: 1.5rem;
     align-items: stretch;
     transition: all 0.3s ease;
@@ -79,9 +79,7 @@ $bg-light: #f5f7fa;
     }
 
     @media (max-width: 1280px) {
-      &.has-selection {
-        grid-template-columns: 1fr;
-      }
+      grid-template-columns: 1fr;
     }
   }
 
@@ -933,6 +931,57 @@ $bg-light: #f5f7fa;
     }
   }
 
+  .detail-view-card--empty {
+    min-height: 430px;
+    display: grid;
+    place-items: center;
+    position: sticky;
+    top: 2rem;
+  }
+
+  .detail-empty-state {
+    width: min(460px, 100%);
+    padding: 3rem 2rem;
+    display: grid;
+    justify-items: center;
+    gap: 1rem;
+    text-align: center;
+    color: #5d6b82;
+
+    &__icon {
+      width: 58px;
+      height: 58px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background: #edf4ff;
+      color: #1f4298;
+      font-size: 1.35rem;
+    }
+
+    &__eyebrow {
+      margin: 0 0 0.35rem;
+      color: #5d7393;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 0;
+      color: #172b4d;
+      font-size: 1.3rem;
+      line-height: 1.25;
+    }
+
+    p:last-child {
+      max-width: 52ch;
+      margin: 0.65rem auto 0;
+      line-height: 1.55;
+    }
+  }
+
   .detail-close-btn {
     width: 40px;
     height: 40px;
@@ -943,6 +992,110 @@ $bg-light: #f5f7fa;
     border: none;
     background: transparent;
     color: #6b7c93;
+  }
+
+  .equipment-switcher {
+    padding: 1rem 1.5rem 0;
+    background: #fff;
+
+    &__heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.65rem;
+      color: #253858;
+
+      span {
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      small {
+        color: #6b7c93;
+        font-size: 0.76rem;
+      }
+    }
+
+    &__track {
+      display: flex;
+      gap: 0.7rem;
+      padding: 0.1rem 0 0.8rem;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(31, 66, 152, 0.45) transparent;
+    }
+  }
+
+  .equipment-switcher-card {
+    min-width: 220px;
+    max-width: 280px;
+    padding: 0.8rem 0.9rem;
+    display: grid;
+    gap: 0.35rem;
+    text-align: left;
+    border: 1px solid #d7e3f4;
+    border-radius: 14px;
+    background: #f9fbff;
+    color: #172b4d;
+    cursor: pointer;
+    transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+
+    &:hover {
+      border-color: #8ca9d8;
+      background: #f2f7ff;
+    }
+
+    &:focus-visible {
+      outline: 3px solid rgba(31, 66, 152, 0.22);
+      outline-offset: 2px;
+    }
+
+    &.selected {
+      border-color: #1f4298;
+      background: #edf4ff;
+      box-shadow: inset 0 0 0 1px #1f4298;
+    }
+
+    &__code {
+      color: #5d7393;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }
+
+    strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.9rem;
+    }
+
+    &__states {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      color: #344563;
+      font-size: 0.72rem;
+
+      small {
+        color: #6b7c93;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    &.status-cancelled,
+    &.status-delivered,
+    &.status-closed {
+      background: #f7f8fa;
+      color: #5e6c84;
+    }
   }
 
   .detail-tabs-nav {
@@ -1742,6 +1895,23 @@ $bg-light: #f5f7fa;
   min-width: 118px;
 }
 
+.agreement-product-price-guidance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  color: #667085;
+  font-size: 0.75rem;
+}
+
+.agreement-field-error {
+  display: block;
+  margin-top: 5px;
+  color: #c2413b;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
 .agreement-line-ledger {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2128,14 +2298,12 @@ $bg-light: #f5f7fa;
         background: #fff;
         color: #172033;
         text-align: left;
-        cursor: pointer;
-        transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+        cursor: default;
+        transition: border-color 150ms ease, box-shadow 150ms ease;
 
-        &:hover:not(:disabled),
         &.is-active {
           border-color: #2f4fa8;
           box-shadow: 0 7px 16px rgba(47, 79, 168, 0.1);
-          transform: translateY(-1px);
         }
 
         &.is-locked {
@@ -2451,14 +2619,13 @@ $bg-light: #f5f7fa;
       gap: 24px;
       padding: 18px 20px;
       border: 1px solid #d8e2ef;
-      border-left: 4px solid #2f4fa8;
       border-radius: 14px;
       background: #f8fafc;
 
       &__copy {
         min-width: 0;
 
-        label {
+        strong {
           display: block;
           margin: 3px 0 4px;
           color: #172033;
@@ -2897,9 +3064,9 @@ $bg-light: #f5f7fa;
 
     .agreement-product-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 120px 1fr;
-      gap: 12px;
-      align-items: end;
+      grid-template-columns: minmax(220px, 1.35fr) 120px minmax(220px, 1fr);
+      gap: 16px;
+      align-items: start;
     }
 
     .agreement-product-field {
@@ -2931,6 +3098,38 @@ $bg-light: #f5f7fa;
 
       &.agreement-product-field-qty input {
         text-align: center;
+      }
+
+      &.agreement-product-field-price {
+        min-width: 0;
+
+        .agreement-currency-input {
+          min-height: 40px;
+
+          input {
+            min-height: 40px;
+            padding: 0 14px 0 38px;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            appearance: textfield;
+
+            &::-webkit-inner-spin-button,
+            &::-webkit-outer-spin-button {
+              margin: 0;
+              appearance: none;
+            }
+          }
+        }
+
+        .agreement-product-price-guidance {
+          min-height: 18px;
+          margin-top: 7px;
+        }
+
+        .agreement-field-error {
+          margin-top: 4px;
+        }
       }
     }
 

@@ -38,6 +38,11 @@ export interface TechnicianRevenueRankingResponse {
   technicians: TechnicianRevenueRanking[];
 }
 
+export interface CommercialVersionIssueResult {
+  version: import('../../models/service-orders/service-agreement').ServiceOrderItemCommercialVersion;
+  deliveryStatus: 'SENT' | 'FAILED' | string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ServiceOrderAgreementService {
   constructor(private base: BaseService) {}
@@ -64,6 +69,19 @@ export class ServiceOrderAgreementService {
     return this.base.post<ServiceOrderAgreement>(
       `${config.serviceOrders.serviceOrderAgreements}/revisions`,
       payload,
+    );
+  }
+
+  previewCommercialVersionPdf(id: number): Observable<Blob> {
+    return this.base.getBlob(
+      `${config.serviceOrders.serviceOrderAgreements}/commercial-versions/${id}/pdf-preview`,
+    );
+  }
+
+  issueCommercialVersion(id: number): Observable<CommercialVersionIssueResult> {
+    return this.base.post<CommercialVersionIssueResult>(
+      `${config.serviceOrders.serviceOrderAgreements}/commercial-versions/${id}/issue`,
+      {},
     );
   }
 

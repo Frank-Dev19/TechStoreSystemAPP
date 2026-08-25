@@ -2,9 +2,36 @@
   <div class="panel-header">
     <div class="title-section">
       <h1 class="page-title">Panel del Supervisor</h1>
-      <p class="page-subtitle">Monitorea acuerdos, diagnósticos y equipos de todas las órdenes de servicio.</p>
+      <p class="page-subtitle">Monitorea cotizaciones, diagnósticos y equipos de todas las órdenes de servicio.</p>
     </div>
   </div>
+
+  @if (failedNotifications.length) {
+    <section class="panel-surface notification-failures" aria-label="Notificaciones pendientes de revisión">
+      <header class="ranking-header">
+        <div>
+          <h2>Notificaciones que requieren revisión</h2>
+          <p>Agotaron sus reintentos automáticos. Revisa el error antes de reenviarlas.</p>
+        </div>
+        <span class="ranking-pill"><i class="fas fa-exclamation-triangle"></i> {{ failedNotifications.length }}</span>
+      </header>
+      <div class="ranking-list">
+        @for (notification of failedNotifications; track notification.id) {
+          <article class="ranking-row">
+            <div class="ranking-main">
+              <div>
+                <h3>{{ notification.messageType }}</h3>
+                <p>{{ notification.recipient || 'Sin destinatario' }} · {{ notification.lastError || 'Error no detallado' }}</p>
+              </div>
+            </div>
+            <button class="btn btn-secondary" type="button" (click)="retryNotification(notification)">
+              <i class="fas fa-redo"></i> Reintentar
+            </button>
+          </article>
+        }
+      </div>
+    </section>
+  }
 
   <div class="stats-grid panel-surface panel-surface--stats">
     <div class="stat-card">
@@ -34,7 +61,7 @@
       <div class="stat-content">
         <span class="stat-label">Total</span>
         <h3 class="stat-value">{{ allServiceOrderAgreements.length }}</h3>
-        <p class="stat-meta">Todos los acuerdos registrados</p>
+        <p class="stat-meta">Todas las cotizaciones registradas</p>
       </div>
     </div>
   </div>
@@ -333,6 +360,12 @@
                       }
                     </div>
                     <div class="detail-cancellation-item__actions">
+                      @if (canSendPickupReminder(item)) {
+                        <button type="button" class="detail-cancellation-button detail-cancellation-button--review" (click)="sendEquipmentPickupReminder(selectedServiceOrder, item)">
+                          <i class="fas fa-paper-plane"></i>
+                          Recordar recojo
+                        </button>
+                      }
                       @if (getPendingItemCancellation(item)) {
                         <button type="button" class="detail-cancellation-button detail-cancellation-button--review" (click)="openCancellationResolution(selectedServiceOrder, item)">
                           <i class="fas fa-user-shield"></i>
@@ -422,7 +455,7 @@
             <section class="detail-commercial-card" aria-label="Decisiones comerciales por equipo">
               <header class="detail-commercial-card__header">
                 <div>
-                  <p class="detail-card-label">Acuerdo #{{ selectedServiceOrderAgreement?.sequenceNumber }}</p>
+                  <p class="detail-card-label">Cotización #{{ selectedServiceOrderAgreement?.sequenceNumber }}</p>
                   <h3>Decisiones del cliente</h3>
                 </div>
                 <span>{{ formatMoney(selectedServiceOrderAgreement?.totalAmount) }}</span>

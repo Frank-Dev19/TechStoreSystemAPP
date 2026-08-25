@@ -2,103 +2,147 @@
   <div class="header-section">
     <div class="title-section">
       <h1 class="page-title">Panel del Técnico</h1>
-      <p class="page-subtitle">Gestiona tus órdenes asignadas y avanza en cada etapa del servicio.</p>
+      <p class="page-subtitle">
+        Gestiona tus órdenes asignadas y avanza en cada etapa del servicio.
+      </p>
     </div>
   </div>
 
-    <section class="technician-status-card">
-      <div class="tabs-navigation technician-status-nav">
-        <button type="button" class="tab-button" [class.active]="activeTab === 'todo'" (click)="setActiveTab('todo')">
-          <i [class]="getTabIcon('todo')"></i>
-          <span>{{ getTabLabel('todo') }}</span>
-          <strong>{{ getTabCount('todo') }}</strong>
-        </button>
-        <button type="button" class="tab-button" [class.active]="activeTab === 'diagnosis'" (click)="setActiveTab('diagnosis')">
-          <i [class]="getTabIcon('diagnosis')"></i>
-          <span>{{ getTabLabel('diagnosis') }}</span>
-          <strong>{{ getTabCount('diagnosis') }}</strong>
-        </button>
-        <button type="button" class="tab-button" [class.active]="activeTab === 'pending_approval'" (click)="setActiveTab('pending_approval')">
-          <i [class]="getTabIcon('pending_approval')"></i>
-          <span>{{ getTabLabel('pending_approval') }}</span>
-          <strong>{{ getTabCount('pending_approval') }}</strong>
-        </button>
-        <button type="button" class="tab-button" [class.active]="activeTab === 'repair'" (click)="setActiveTab('repair')">
-          <i [class]="getTabIcon('repair')"></i>
-          <span>{{ getTabLabel('repair') }}</span>
-          <strong>{{ getTabCount('repair') }}</strong>
-        </button>
-        <button type="button" class="tab-button" [class.active]="activeTab === 'repaired'" (click)="setActiveTab('repaired')">
-          <i [class]="getTabIcon('repaired')"></i>
-          <span>{{ getTabLabel('repaired') }}</span>
-          <strong>{{ getTabCount('repaired') }}</strong>
-        </button>
-        <button type="button" class="tab-button" [class.active]="activeTab === 'all'" (click)="setActiveTab('all')">
-          <i [class]="getTabIcon('all')"></i>
-          <span>{{ getTabLabel('all') }}</span>
-          <strong>{{ getTabCount('all') }}</strong>
-        </button>
-      </div>
-    </section>
+  <section class="technician-status-card">
+    <div class="tabs-navigation technician-status-nav">
+      <button
+        type="button"
+        class="tab-button"
+        [class.active]="activeTab === 'todo'"
+        (click)="setActiveTab('todo')"
+      >
+        <i [class]="getTabIcon('todo')"></i>
+        <span>{{ getTabLabel('todo') }}</span>
+        <strong>{{ getTabCount('todo') }}</strong>
+      </button>
+      <button
+        type="button"
+        class="tab-button"
+        [class.active]="activeTab === 'diagnosis'"
+        (click)="setActiveTab('diagnosis')"
+      >
+        <i [class]="getTabIcon('diagnosis')"></i>
+        <span>{{ getTabLabel('diagnosis') }}</span>
+        <strong>{{ getTabCount('diagnosis') }}</strong>
+      </button>
+      <button
+        type="button"
+        class="tab-button"
+        [class.active]="activeTab === 'pending_approval'"
+        (click)="setActiveTab('pending_approval')"
+      >
+        <i [class]="getTabIcon('pending_approval')"></i>
+        <span>{{ getTabLabel('pending_approval') }}</span>
+        <strong>{{ getTabCount('pending_approval') }}</strong>
+      </button>
+      <button
+        type="button"
+        class="tab-button"
+        [class.active]="activeTab === 'repair'"
+        (click)="setActiveTab('repair')"
+      >
+        <i [class]="getTabIcon('repair')"></i>
+        <span>{{ getTabLabel('repair') }}</span>
+        <strong>{{ getTabCount('repair') }}</strong>
+      </button>
+      <button
+        type="button"
+        class="tab-button"
+        [class.active]="activeTab === 'repaired'"
+        (click)="setActiveTab('repaired')"
+      >
+        <i [class]="getTabIcon('repaired')"></i>
+        <span>{{ getTabLabel('repaired') }}</span>
+        <strong>{{ getTabCount('repaired') }}</strong>
+      </button>
+      <button
+        type="button"
+        class="tab-button"
+        [class.active]="activeTab === 'all'"
+        (click)="setActiveTab('all')"
+      >
+        <i [class]="getTabIcon('all')"></i>
+        <span>{{ getTabLabel('all') }}</span>
+        <strong>{{ getTabCount('all') }}</strong>
+      </button>
+    </div>
+  </section>
 
-    <div class="split-pane-layout" [class.has-selection]="selectedServiceOrder">
-      <section class="panel-card technician-workspace-card">
-        <div class="panel-card-header technician-workspace-card__header">
-          <div>
-            <h2>Órdenes asignadas</h2>
-            <p>Selecciona una orden para revisar su detalle, historial y acciones disponibles.</p>
-          </div>
+  <div class="split-pane-layout" [class.has-selection]="selectedServiceOrder">
+    <section class="panel-card technician-workspace-card">
+      <div class="panel-card-header technician-workspace-card__header">
+        <div>
+          <h2>Órdenes asignadas</h2>
+          <p>Selecciona una orden para revisar su detalle, historial y acciones disponibles.</p>
         </div>
+      </div>
 
-        <div class="order-list-table">
+      <div class="order-list-table">
         <div class="order-list-header">
           <div class="col-code">Código</div>
           <div class="col-equip">Equipo / Problema</div>
           <div class="col-status">Estado / etapa</div>
         </div>
-      @if (visibleOrders.length === 0) {
-        <div class="empty-state empty-state-card">
-          <i class="fas fa-inbox"></i>
-          <p>{{ getEmptyStateLabel() }}</p>
-        </div>
-      } @else {
-        @for (order of paginatedVisibleOrders; track order.id) {
-          <div class="order-list-row" [class.selected]="isOrderSelected(order)" (click)="selectServiceOrder(order)">
-            <div class="col-code">
-              <strong>{{ order.code || 'SIN-CÓDIGO' }}</strong>
-            </div>
-            <div class="col-equip">
-              <span class="equip-name">{{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</span>
-              <span class="equip-issue">{{ order.initialIssue || 'Sin detalle' }}</span>
-            </div>
-            <div class="col-status">
-              <span [class]="getOrderBadgeClass(order)">{{ getOrderStatusPillLabel(order) }}</span>
-              <span class="status-stage-detail">
-                <i [class]="getOrderStageIcon(order)"></i>
-                {{ getOrderStageLabel(order) }}
-              </span>
-              <app-service-order-item-progress
-                [order]="order"
-                [compact]="true"
-              ></app-service-order-item-progress>
-            </div>
+        @if (visibleOrders.length === 0) {
+          <div class="empty-state empty-state-card">
+            <i class="fas fa-inbox"></i>
+            <p>{{ getEmptyStateLabel() }}</p>
           </div>
+        } @else {
+          @for (order of paginatedVisibleOrders; track order.id) {
+            <div
+              class="order-list-row"
+              [class.selected]="isOrderSelected(order)"
+              (click)="selectServiceOrder(order)"
+            >
+              <div class="col-code">
+                <strong>{{ order.code || 'SIN-CÓDIGO' }}</strong>
+              </div>
+              <div class="col-equip">
+                <span class="equip-name">{{ getOrderEquipmentSummaryTitle(order) }}</span>
+                <span class="equip-issue">{{ getOrderEquipmentSummaryDetail(order) }}</span>
+              </div>
+              <div class="col-status">
+                <span [class]="getOrderBadgeClass(order)">{{
+                  getOrderStatusPillLabel(order)
+                }}</span>
+                <span class="status-stage-detail">
+                  <i [class]="getOrderStageIcon(order)"></i>
+                  {{ getOrderStageLabel(order) }}
+                </span>
+                <app-service-order-item-progress
+                  [order]="order"
+                  [compact]="true"
+                ></app-service-order-item-progress>
+              </div>
+            </div>
+          }
         }
-      }
-    </div>
-
-    @if (visibleOrders.length > itemsPerPage) {
-      <div class="pagination pagination-inline">
-        <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
-          <i class="fas fa-chevron-left"></i> Anterior
-        </button>
-        <span class="pagination-info">Página {{ currentPage }} de {{ totalPages }} ({{ visibleOrders.length }} total)</span>
-        <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
-          Siguiente <i class="fas fa-chevron-right"></i>
-        </button>
       </div>
-    }
-      </section>
+
+      @if (visibleOrders.length > itemsPerPage) {
+        <div class="pagination pagination-inline">
+          <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
+            <i class="fas fa-chevron-left"></i> Anterior
+          </button>
+          <span class="pagination-info"
+            >Página {{ currentPage }} de {{ totalPages }} ({{ visibleOrders.length }} total)</span
+          >
+          <button
+            class="btn-secondary"
+            (click)="nextPage()"
+            [disabled]="currentPage === totalPages"
+          >
+            Siguiente <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      }
+    </section>
 
     @if (selectedServiceOrder) {
       <section class="detail-view-card panel-card">
@@ -116,144 +160,244 @@
             </div>
           </div>
 
-          <button class="btn-close detail-close-btn" (click)="clearSelectedServiceOrder()" aria-label="Cerrar detalle">
+          <button
+            class="btn-close detail-close-btn"
+            (click)="clearSelectedServiceOrder()"
+            aria-label="Cerrar detalle"
+          >
             <i class="fas fa-times"></i>
           </button>
         </header>
+        @if (selectedOrderItems.length > 0) {
+          <section class="equipment-switcher" aria-label="Equipos de la orden">
+            <div class="equipment-switcher__heading">
+              <span>Equipos de la orden</span>
+              <small>{{ selectedOrderItems.length }} en total</small>
+            </div>
+            <div class="equipment-switcher__track">
+              @for (item of selectedOrderItems; track item.id) {
+                <button
+                  type="button"
+                  class="equipment-switcher-card"
+                  [class.selected]="isServiceOrderItemSelected(item)"
+                  [ngClass]="getServiceOrderItemStatusClass(item)"
+                  [attr.aria-pressed]="isServiceOrderItemSelected(item)"
+                  (click)="selectServiceOrderItem(item)"
+                >
+                  <span class="equipment-switcher-card__code">{{ item.code }}</span>
+                  <strong>{{ getServiceOrderItemDisplayName(item) }}</strong>
+                  <span class="equipment-switcher-card__states">
+                    <span>{{ getServiceOrderItemOperativeLabel(item) }}</span>
+                    <small>{{ getServiceOrderItemTechnicalLabel(item) }}</small>
+                  </span>
+                </button>
+              }
+            </div>
+          </section>
+        }
         <div class="detail-actions-bar">
           <div class="detail-actions-flex">
-                <button
-                  class="btn btn-whatsapp action-whatsapp-btn"
-                  *ngIf="canOpenClientInbox(selectedServiceOrder)"
-                  title="WhatsApp"
-                  aria-label="WhatsApp"
-                  (click)="openWhatsAppInbox(selectedServiceOrder, $event)"
-                >
-                  <i class="fab fa-whatsapp"></i>
-                  <span class="action-btn__label">WhatsApp</span>
-                </button>
+            <button
+              class="btn btn-whatsapp action-whatsapp-btn"
+              *ngIf="canOpenClientInbox(selectedServiceOrder)"
+              title="WhatsApp"
+              aria-label="WhatsApp"
+              (click)="openWhatsAppInbox(selectedServiceOrder, $event)"
+            >
+              <i class="fab fa-whatsapp"></i>
+              <span class="action-btn__label">WhatsApp</span>
+            </button>
 
-                <button
-                  class="btn btn-primary primary-action-btn"
-                  *ngIf="canShowAgreementShortcut(selectedServiceOrder)"
-                  title="Acuerdo"
-                  aria-label="Acuerdo"
-                  (click)="openAgreementModal(selectedServiceOrder, $event)"
-                >
-                  <i class="fas fa-handshake"></i>
-                  <span class="action-btn__label">Acuerdo</span>
-                  <i class="fas fa-chevron-right action-btn__tail"></i>
-                </button>
+            <button
+              class="btn btn-primary primary-action-btn"
+              *ngIf="canSendPickupReminder(selectedServiceOrderItem)"
+              title="Recordar recojo"
+              aria-label="Recordar recojo del equipo seleccionado"
+              (click)="sendSelectedEquipmentPickupReminder($event)"
+            >
+              <i class="fas fa-paper-plane"></i>
+              <span class="action-btn__label">Recordar recojo</span>
+            </button>
 
-                <button
-                  class="btn btn-primary primary-action-btn"
-                  *ngIf="canStartDiagnosis(selectedServiceOrder)"
-                  [title]="isWarrantyService(selectedServiceOrder) ? 'Iniciar revisión' : 'Iniciar diagnóstico'"
-                  [attr.aria-label]="isWarrantyService(selectedServiceOrder) ? 'Iniciar revisión' : 'Iniciar diagnóstico'"
-                  (click)="selectServiceOrder(selectedServiceOrder); startDiagnosis(selectedServiceOrder); $event.stopPropagation()"
-                >
-                  <i class="fas fa-play"></i>
-                  <span class="action-btn__label">{{ isWarrantyService(selectedServiceOrder) ? 'Iniciar revisión' : 'Iniciar diagnóstico' }}</span>
-                </button>
+            <button
+              class="btn btn-primary primary-action-btn"
+              *ngIf="canShowAgreementShortcut(selectedServiceOrder)"
+              title="Cotización"
+              aria-label="Cotización"
+              (click)="openAgreementModal(selectedServiceOrder, $event)"
+            >
+              <i class="fas fa-handshake"></i>
+              <span class="action-btn__label">Cotización</span>
+              <i class="fas fa-chevron-right action-btn__tail"></i>
+            </button>
 
-                <button
-                  class="btn btn-primary primary-action-btn"
-                  *ngIf="canStartStandardService(selectedServiceOrder)"
-                  title="Iniciar servicio"
-                  aria-label="Iniciar servicio"
-                  (click)="selectServiceOrder(selectedServiceOrder); startStandardService(selectedServiceOrder); $event.stopPropagation()"
-                >
-                  <i class="fas fa-play"></i>
-                  <span class="action-btn__label">Iniciar servicio</span>
-                </button>
+            <button
+              class="btn btn-primary primary-action-btn"
+              *ngIf="canStartDiagnosis(selectedServiceOrder)"
+              [title]="
+                isWarrantyService(selectedServiceOrder) ? 'Iniciar revisión' : 'Iniciar diagnóstico'
+              "
+              [attr.aria-label]="
+                isWarrantyService(selectedServiceOrder) ? 'Iniciar revisión' : 'Iniciar diagnóstico'
+              "
+              (click)="
+                selectServiceOrder(selectedServiceOrder);
+                startDiagnosis(selectedServiceOrder);
+                $event.stopPropagation()
+              "
+            >
+              <i class="fas fa-play"></i>
+              <span class="action-btn__label">{{
+                isWarrantyService(selectedServiceOrder) ? 'Iniciar revisión' : 'Iniciar diagnóstico'
+              }}</span>
+            </button>
 
-                <button
-                  class="btn btn-success primary-action-btn"
-                  *ngIf="canStartRepairDirectly(selectedServiceOrder)"
-                  title="Iniciar servicio"
-                  aria-label="Iniciar servicio"
-                  (click)="selectServiceOrder(selectedServiceOrder); startRepair(selectedServiceOrder); $event.stopPropagation()"
-                >
-                  <i class="fas fa-tools"></i>
-                  <span class="action-btn__label">Iniciar servicio</span>
-                </button>
+            <button
+              class="btn btn-primary primary-action-btn"
+              *ngIf="canStartStandardService(selectedServiceOrder)"
+              title="Iniciar servicio"
+              aria-label="Iniciar servicio"
+              (click)="
+                selectServiceOrder(selectedServiceOrder);
+                startStandardService(selectedServiceOrder);
+                $event.stopPropagation()
+              "
+            >
+              <i class="fas fa-play"></i>
+              <span class="action-btn__label">Iniciar servicio</span>
+            </button>
 
-                <button
-                  class="btn btn-outline-danger primary-action-btn"
-                  *ngIf="canOpenRediagnosis(selectedServiceOrder)"
-                  title="Nuevo diagnóstico"
-                  aria-label="Nuevo diagnóstico"
-                  (click)="selectServiceOrder(selectedServiceOrder); openDiagnosisModal(selectedServiceOrder, $event); $event.stopPropagation()"
-                >
-                  <i class="fas fa-stethoscope"></i>
-                  <span class="action-btn__label">Nuevo diagnóstico</span>
-                </button>
+            <button
+              class="btn btn-success primary-action-btn"
+              *ngIf="canStartRepairDirectly(selectedServiceOrder)"
+              title="Iniciar servicio"
+              aria-label="Iniciar servicio"
+              (click)="
+                selectServiceOrder(selectedServiceOrder);
+                startRepair(selectedServiceOrder);
+                $event.stopPropagation()
+              "
+            >
+              <i class="fas fa-tools"></i>
+              <span class="action-btn__label">Iniciar servicio</span>
+            </button>
 
-                <button
-                  class="btn btn-warning primary-action-btn"
-                  *ngIf="canFinishRepair(selectedServiceOrder)"
-                  title="Finalizar servicio"
-                  aria-label="Finalizar servicio"
-                  (click)="selectServiceOrder(selectedServiceOrder); markRepaired(selectedServiceOrder); $event.stopPropagation()"
-                >
-                  <i class="fas fa-flag-checkered"></i>
-                  <span class="action-btn__label">Finalizar servicio</span>
-                </button>
+            <button
+              class="btn btn-outline-danger primary-action-btn"
+              *ngIf="canOpenRediagnosis(selectedServiceOrder)"
+              title="Nuevo diagnóstico"
+              aria-label="Nuevo diagnóstico"
+              (click)="
+                selectServiceOrder(selectedServiceOrder);
+                openDiagnosisModal(selectedServiceOrder, $event);
+                $event.stopPropagation()
+              "
+            >
+              <i class="fas fa-stethoscope"></i>
+              <span class="action-btn__label">Nuevo diagnóstico</span>
+            </button>
 
-                <button
-                  class="btn btn-primary primary-action-btn"
-                  *ngIf="activeTab === 'diagnosis' && canRegisterDiagnosis(selectedServiceOrder)"
-                  title="Registrar diagnóstico"
-                  aria-label="Registrar diagnóstico"
-                  (click)="selectServiceOrder(selectedServiceOrder); openDiagnosisModal(); $event.stopPropagation()"
-                >
-                  <i class="fas fa-plus"></i>
-                  <span class="action-btn__label">Registrar diagnóstico</span>
-                </button>
+            <button
+              class="btn btn-warning primary-action-btn"
+              *ngIf="canFinishRepair(selectedServiceOrder)"
+              title="Finalizar servicio"
+              aria-label="Finalizar servicio"
+              (click)="
+                selectServiceOrder(selectedServiceOrder);
+                markRepaired(selectedServiceOrder);
+                $event.stopPropagation()
+              "
+            >
+              <i class="fas fa-flag-checkered"></i>
+              <span class="action-btn__label">Finalizar servicio</span>
+            </button>
 
-                <button
-                  class="btn btn-success primary-action-btn"
-                  *ngIf="canAcceptWarrantyReview(selectedServiceOrder)"
-                  title="Aceptar garantía"
-                  aria-label="Aceptar garantía"
-                  (click)="selectServiceOrder(selectedServiceOrder); acceptWarrantyReview(selectedServiceOrder); $event.stopPropagation()"
-                >
-                  <i class="fas fa-check-circle"></i>
-                  <span class="action-btn__label">Aceptar garantía</span>
-                </button>
+            <button
+              class="btn btn-primary primary-action-btn"
+              *ngIf="activeTab === 'diagnosis' && canRegisterDiagnosis(selectedServiceOrder)"
+              title="Registrar diagnóstico"
+              aria-label="Registrar diagnóstico"
+              (click)="
+                selectServiceOrder(selectedServiceOrder);
+                openDiagnosisModal();
+                $event.stopPropagation()
+              "
+            >
+              <i class="fas fa-plus"></i>
+              <span class="action-btn__label">Registrar diagnóstico</span>
+            </button>
 
-                <button
-                  class="btn btn-outline-danger primary-action-btn"
-                  *ngIf="canRejectWarrantyReview(selectedServiceOrder)"
-                  title="Rechazar garantía"
-                  aria-label="Rechazar garantía"
-                  (click)="selectServiceOrder(selectedServiceOrder); rejectWarrantyReview(selectedServiceOrder); $event.stopPropagation()"
-                >
-                  <i class="fas fa-ban"></i>
-                  <span class="action-btn__label">Rechazar garantía</span>
-                </button>
-              </div>
+            <button
+              class="btn btn-success primary-action-btn"
+              *ngIf="canAcceptWarrantyReview(selectedServiceOrder)"
+              title="Aceptar garantía"
+              aria-label="Aceptar garantía"
+              (click)="
+                selectServiceOrder(selectedServiceOrder);
+                acceptWarrantyReview(selectedServiceOrder);
+                $event.stopPropagation()
+              "
+            >
+              <i class="fas fa-check-circle"></i>
+              <span class="action-btn__label">Aceptar garantía</span>
+            </button>
+
+            <button
+              class="btn btn-outline-danger primary-action-btn"
+              *ngIf="canRejectWarrantyReview(selectedServiceOrder)"
+              title="Rechazar garantía"
+              aria-label="Rechazar garantía"
+              (click)="
+                selectServiceOrder(selectedServiceOrder);
+                rejectWarrantyReview(selectedServiceOrder);
+                $event.stopPropagation()
+              "
+            >
+              <i class="fas fa-ban"></i>
+              <span class="action-btn__label">Rechazar garantía</span>
+            </button>
+          </div>
         </div>
 
         <nav class="detail-tabs-nav">
-          <button type="button" class="detail-tab-btn" [class.active]="activeDetailTab === 'equipment'" (click)="setActiveDetailTab('equipment')">
+          <button
+            type="button"
+            class="detail-tab-btn"
+            [class.active]="activeDetailTab === 'equipment'"
+            (click)="setActiveDetailTab('equipment')"
+          >
             <i class="fas fa-info-circle"></i>
             Información del equipo
           </button>
-          <button type="button" class="detail-tab-btn" [class.active]="activeDetailTab === 'sla'" (click)="setActiveDetailTab('sla')">
+          <button
+            type="button"
+            class="detail-tab-btn"
+            [class.active]="activeDetailTab === 'sla'"
+            (click)="setActiveDetailTab('sla')"
+          >
             <i class="fas fa-stopwatch"></i>
             SLA y métricas
           </button>
           @if (shouldShowHistoryTab(selectedServiceOrder)) {
-            <button type="button" class="detail-tab-btn" [class.active]="activeDetailTab === 'history'" (click)="setActiveDetailTab('history')">
+            <button
+              type="button"
+              class="detail-tab-btn"
+              [class.active]="activeDetailTab === 'history'"
+              (click)="setActiveDetailTab('history')"
+            >
               <i class="fas fa-history"></i>
               Historial de diagnósticos
             </button>
           }
           @if (canShowServiceOrderAgreementSection(selectedServiceOrder)) {
-            <button type="button" class="detail-tab-btn" [class.active]="activeDetailTab === 'agreements'" (click)="setActiveDetailTab('agreements')">
+            <button
+              type="button"
+              class="detail-tab-btn"
+              [class.active]="activeDetailTab === 'agreements'"
+              (click)="setActiveDetailTab('agreements')"
+            >
               <i class="fas fa-clock-rotate-left"></i>
-              Historial de acuerdos
+              Historial de cotizaciones
             </button>
           }
         </nav>
@@ -265,7 +409,13 @@
                 <div class="equipment-info-card__icon"><i class="fas fa-laptop"></i></div>
                 <div>
                   <p>Tipo</p>
-                  <strong>{{ getEquipmentTypeLabel(selectedServiceOrder.equipmentType, selectedServiceOrder.equipmentTypeOther) }}</strong>
+                  <strong>{{
+                    getEquipmentTypeLabel(
+                      selectedServiceOrderItem?.equipmentType ?? selectedServiceOrder.equipmentType,
+                      selectedServiceOrderItem?.equipmentTypeOther ??
+                        selectedServiceOrder.equipmentTypeOther
+                    )
+                  }}</strong>
                 </div>
               </article>
 
@@ -273,7 +423,12 @@
                 <div class="equipment-info-card__icon"><i class="fas fa-copyright"></i></div>
                 <div>
                   <p>Marca</p>
-                  <strong>{{ getEquipmentDetailValue(selectedServiceOrder.brand, 'Sin marca registrada') }}</strong>
+                  <strong>{{
+                    getEquipmentDetailValue(
+                      selectedServiceOrderItem?.brand ?? selectedServiceOrder.brand,
+                      'Sin marca registrada'
+                    )
+                  }}</strong>
                 </div>
               </article>
 
@@ -281,7 +436,12 @@
                 <div class="equipment-info-card__icon"><i class="fas fa-layer-group"></i></div>
                 <div>
                   <p>Modelo</p>
-                  <strong>{{ getEquipmentDetailValue(selectedServiceOrder.model, 'Sin modelo registrado') }}</strong>
+                  <strong>{{
+                    getEquipmentDetailValue(
+                      selectedServiceOrderItem?.model ?? selectedServiceOrder.model,
+                      'Sin modelo registrado'
+                    )
+                  }}</strong>
                 </div>
               </article>
 
@@ -289,7 +449,12 @@
                 <div class="equipment-info-card__icon"><i class="fas fa-fingerprint"></i></div>
                 <div>
                   <p>N.° de serie</p>
-                  <strong>{{ getEquipmentDetailValue(selectedServiceOrder.serialNumber, 'Sin número de serie') }}</strong>
+                  <strong>{{
+                    getEquipmentDetailValue(
+                      selectedServiceOrderItem?.serialNumber ?? selectedServiceOrder.serialNumber,
+                      'Sin número de serie'
+                    )
+                  }}</strong>
                 </div>
               </article>
 
@@ -297,15 +462,26 @@
                 <div class="equipment-info-card__icon"><i class="fas fa-plug"></i></div>
                 <div>
                   <p>Accesorios</p>
-                  <strong>{{ getEquipmentDetailValue(selectedServiceOrder.accessories, 'Sin accesorios reportados') }}</strong>
+                  <strong>{{
+                    getEquipmentDetailValue(
+                      selectedServiceOrderItem?.accessories ?? selectedServiceOrder.accessories,
+                      'Sin accesorios reportados'
+                    )
+                  }}</strong>
                 </div>
               </article>
 
               <article class="equipment-info-card">
-                <div class="equipment-info-card__icon"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="equipment-info-card__icon">
+                  <i class="fas fa-exclamation-triangle"></i>
+                </div>
                 <div>
                   <p>Problema reportado</p>
-                  <strong>{{ selectedServiceOrder.initialIssue || 'Sin detalle del problema' }}</strong>
+                  <strong>{{
+                    selectedServiceOrderItem?.initialIssue ||
+                      selectedServiceOrder.initialIssue ||
+                      'Sin detalle del problema'
+                  }}</strong>
                 </div>
               </article>
 
@@ -328,37 +504,37 @@
           }
 
           @if (activeDetailTab === 'sla') {
-            @if (selectedServiceOrder.items?.length) {
+            @if (selectedServiceOrderItem?.sla; as sla) {
               <section class="detail-panel-section">
-                @for (item of selectedServiceOrder.items ?? []; track item.id) {
-                  @if (item.sla; as sla) {
-                    <div class="service-order-metrics-panel">
-                      <div class="service-order-sla-summary" [class.is-breached]="sla.breached">
-                        <div class="service-order-sla-main">
-                          <span class="service-order-metrics-label">{{ item.code }} · SLA del equipo</span>
-                          <strong>{{ getServiceOrderSlaStageLabel(sla.stage) }}</strong>
-                        </div>
-                        <div class="service-order-sla-stats">
-                          <div class="metric-tile">
-                            <span>Transcurrido</span>
-                            <strong>{{ formatMinutes(sla.elapsedMinutes) }}</strong>
-                          </div>
-                          <div class="metric-tile">
-                            <span>Restante</span>
-                            <strong>{{ formatMinutes(sla.remainingMinutes) }}</strong>
-                          </div>
-                          <div class="metric-tile">
-                            <span>Brecha</span>
-                            <strong>{{ sla.breached ? 'Sí' : 'No' }}</strong>
-                          </div>
-                        </div>
+                <div class="service-order-metrics-panel">
+                  <div class="service-order-sla-summary" [class.is-breached]="sla.breached">
+                    <div class="service-order-sla-main">
+                      <span class="service-order-metrics-label"
+                        >{{ selectedServiceOrderItem?.code }} · SLA del equipo</span
+                      >
+                      <strong>{{ getServiceOrderSlaStageLabel(sla.stage) }}</strong>
+                    </div>
+                    <div class="service-order-sla-stats">
+                      <div class="metric-tile">
+                        <span>Transcurrido</span>
+                        <strong>{{ formatMinutes(sla.elapsedMinutes) }}</strong>
+                      </div>
+                      <div class="metric-tile">
+                        <span>Restante</span>
+                        <strong>{{ formatMinutes(sla.remainingMinutes) }}</strong>
+                      </div>
+                      <div class="metric-tile">
+                        <span>Brecha</span>
+                        <strong>{{ sla.breached ? 'Sí' : 'No' }}</strong>
                       </div>
                     </div>
-                  }
-                }
+                  </div>
+                </div>
               </section>
             } @else {
-              <div class="empty-text detail-empty-text">No hay equipos con métricas SLA disponibles.</div>
+              <div class="empty-text detail-empty-text">
+                Este equipo aún no tiene métricas SLA disponibles.
+              </div>
             }
           }
 
@@ -366,7 +542,9 @@
             <section class="detail-panel-section">
               @if (isDiagnosisService(selectedServiceOrder)) {
                 @if (diagnosticHistory.length === 0) {
-                  <div class="empty-text detail-empty-text">Sin diagnósticos registrados</div>
+                  <div class="empty-text detail-empty-text">
+                    Este equipo aún no tiene diagnósticos registrados.
+                  </div>
                 } @else {
                   <ol class="diagnosis-timeline">
                     @for (dx of diagnosticHistory; track dx.id) {
@@ -376,17 +554,25 @@
                           <div class="history-header">
                             <span class="history-number">DX #{{ dx.sequenceNumber }}</span>
                             @if (dx.serviceOrderItem) {
-                              <span class="timeline-secondary-badge">{{ dx.serviceOrderItem.code }}</span>
+                              <span class="timeline-secondary-badge">{{
+                                dx.serviceOrderItem.code
+                              }}</span>
                             }
                             @if (dx.status === 'CURRENT') {
                               <span class="timeline-current-badge">Actual</span>
                             } @else {
-                              <span class="timeline-secondary-badge">{{ getDiagnosisStatusLabel(dx.status) }}</span>
+                              <span class="timeline-secondary-badge">{{
+                                getDiagnosisStatusLabel(dx.status)
+                              }}</span>
                             }
                           </div>
-                          <p class="history-summary"><strong>{{ dx.summary }}</strong></p>
+                          <p class="history-summary">
+                            <strong>{{ dx.summary }}</strong>
+                          </p>
                           <p class="history-details">{{ dx.details }}</p>
-                          <small class="history-meta">{{ dx.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
+                          <small class="history-meta">{{
+                            dx.createdAt | date: 'dd/MM/yyyy HH:mm'
+                          }}</small>
                         </article>
                       </li>
                     }
@@ -395,80 +581,139 @@
               } @else {
                 <div class="history-card history-card-elevated panel-card">
                   <p class="history-summary"><strong>Evaluación técnica requerida</strong></p>
-                  <p class="history-details">Confirma si el daño corresponde a garantía o si debe rechazarse por uso indebido u otra causal.</p>
+                  <p class="history-details">
+                    Confirma si el daño corresponde a garantía o si debe rechazarse por uso indebido
+                    u otra causal.
+                  </p>
                 </div>
-              }
-
-              @if (selectedServiceOrder.technicalStatus === 'EN_DIAGNOSTICO' && isDiagnosisService(selectedServiceOrder) && diagnosticHistory.length === 0) {
-                <p class="empty-text detail-empty-text">Registra un diagnóstico antes de completarlo.</p>
               }
             </section>
           }
 
-          @if (activeDetailTab === 'agreements' && canShowServiceOrderAgreementSection(selectedServiceOrder)) {
+          @if (
+            activeDetailTab === 'agreements' &&
+            canShowServiceOrderAgreementSection(selectedServiceOrder)
+          ) {
             @if (isLoadingServiceOrderAgreement) {
               <section class="detail-panel-section">
-                <p class="empty-text detail-empty-text"><i class="fas fa-spinner fa-spin"></i> Cargando acuerdo...</p>
+                <p class="empty-text detail-empty-text">
+                  <i class="fas fa-spinner fa-spin"></i> Cargando cotización...
+                </p>
               </section>
             } @else if (agreementHistory.length > 0) {
               <section class="detail-panel-section agreement-history-panel">
-                <h3><i class="fas fa-clock-rotate-left"></i> Historial de acuerdos</h3>
+                <h3><i class="fas fa-clock-rotate-left"></i> Historial de cotizaciones</h3>
                 <div class="quote-items">
                   @for (agreement of agreementHistory; track agreement.id) {
-                    <div class="history-card agreement-history-card panel-card" (click)="openAgreementHistoryModal(agreement, $event)">
+                    <div
+                      class="history-card agreement-history-card panel-card"
+                      (click)="openAgreementHistoryModal(agreement, $event)"
+                    >
                       <div class="history-header">
-                        <span class="history-number">Acuerdo #{{ agreement.sequenceNumber }}</span>
-                        <span [class]="'badge badge-' + (agreement.status === 'CONFIRMED' ? 'success' : agreement.status === 'DRAFT' ? 'info' : agreement.status === 'SUPERSEDED' ? 'secondary' : 'danger')">
+                        <span class="history-number">Cotización #{{ agreement.sequenceNumber }}</span>
+                        <span
+                          [class]="
+                            'badge badge-' +
+                            (agreement.status === 'CONFIRMED'
+                              ? 'success'
+                              : agreement.status === 'DRAFT'
+                                ? 'info'
+                                : agreement.status === 'SUPERSEDED'
+                                  ? 'secondary'
+                                  : 'danger')
+                          "
+                        >
                           {{ getAgreementStatusLabel(agreement.status) }}
                         </span>
                       </div>
-                      <p class="history-summary"><strong>{{ agreement.totalAmount | number: '1.2-2' }} {{ agreement.currency || 'PEN' }}</strong></p>
+                      <p class="history-summary">
+                        <strong
+                          >{{ agreement.totalAmount | number: '1.2-2' }}
+                          {{ agreement.currency || 'PEN' }}</strong
+                        >
+                      </p>
                       @if (agreement.notes) {
                         <p class="history-details">{{ agreement.notes }}</p>
                       }
                       <p class="history-details mt-3">
-                        {{ agreement.productItems?.length || 0 }} productos · {{ agreement.serviceItems?.length || 0 }} servicios
+                        {{ agreement.productItems?.length || 0 }} productos ·
+                        {{ agreement.serviceItems?.length || 0 }} servicios
                       </p>
                       <p class="history-meta-action">Haz clic para ver el detalle</p>
-                      <small class="history-meta">{{ agreement.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
+                      <small class="history-meta">{{
+                        agreement.createdAt | date: 'dd/MM/yyyy HH:mm'
+                      }}</small>
                     </div>
                   }
                 </div>
               </section>
             } @else {
               <section class="detail-panel-section">
-                <div class="empty-text detail-empty-text">Sin acuerdos registrados</div>
-                <p class="empty-text detail-empty-text">
-                  {{ canManageAgreement(selectedServiceOrder) ? 'Registra un acuerdo antes de completarlo.' : 'Esta orden aún no cuenta con acuerdos asociados.' }}
-                </p>
+                <div class="empty-text detail-empty-text">
+                  Este equipo aún no tiene cotizaciones registradas.
+                </div>
               </section>
             }
           }
         </div>
       </section>
+    } @else {
+      <section
+        class="detail-view-card detail-view-card--empty panel-card"
+        aria-labelledby="empty-detail-title"
+      >
+        <div class="detail-empty-state">
+          <div class="detail-empty-state__icon" aria-hidden="true">
+            <i class="fas fa-clipboard-list"></i>
+          </div>
+          <div>
+            <p class="detail-empty-state__eyebrow">Detalle de orden</p>
+            <h2 id="empty-detail-title">Selecciona una orden para gestionarla</h2>
+            <p>
+              Desde aquí podrás revisar sus equipos, consultar historiales y ejecutar las acciones
+              disponibles.
+            </p>
+          </div>
+        </div>
+      </section>
     }
-    </div>
+  </div>
 
   @if (showAgreementModal && selectedServiceOrder) {
     <div class="modal-overlay" (click)="closeAgreementModal()">
-      <div class="modal-content agreement-modal" role="dialog" aria-modal="true" aria-labelledby="agreement-modal-title" (click)="$event.stopPropagation()">
+      <div
+        class="modal-content agreement-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agreement-modal-title"
+        (click)="$event.stopPropagation()"
+      >
         <div class="modal-header">
           <div class="agreement-modal-heading">
             <div class="agreement-modal-icon">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M9 12l2 2 4-4"></path>
-                <path d="M20.618 5.984A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016Z"></path>
+                <path
+                  d="M20.618 5.984A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016Z"
+                ></path>
               </svg>
             </div>
             <div class="agreement-modal-title-block">
-              <h2 id="agreement-modal-title">Gestionar acuerdo</h2>
+              <h2 id="agreement-modal-title">Gestionar cotización</h2>
               <div class="agreement-modal-code">
                 <span class="agreement-code-dot"></span>
                 <span>{{ selectedServiceOrder.code || 'Sin código' }}</span>
               </div>
             </div>
           </div>
-          <button class="btn-close" type="button" aria-label="Cerrar" (click)="closeAgreementModal()">×</button>
+          <button
+            class="btn-close"
+            type="button"
+            aria-label="Cerrar"
+            (click)="closeAgreementModal()"
+          >
+            ×
+          </button>
         </div>
 
         <form [formGroup]="agreementForm" class="modal-body">
@@ -479,36 +724,15 @@
           }
 
           @if (usesItemCommercialComposer()) {
-            <section class="agreement-section agreement-item-selector">
-              <div class="agreement-item-selector__copy">
-                <span class="agreement-item-selector__eyebrow">Alcance de la revisión</span>
-                <label for="agreement-service-order-item">Equipo que deseas cotizar</label>
-                <p>La revisión se aplicará únicamente a este equipo. Los demás conservarán su versión comercial vigente.</p>
-              </div>
-              <select
-                id="agreement-service-order-item"
-                [ngModel]="selectedAgreementItemId"
-                (ngModelChange)="selectAgreementItem($event)"
-                [ngModelOptions]="{ standalone: true }"
-                [disabled]="isSavingAgreement || isViewingAgreementHistory"
-              >
-                @for (item of getAgreementEligibleItems(); track item.id) {
-                  <option [ngValue]="item.id" [disabled]="isAgreementItemLocked(item)">
-                    {{ getAgreementItemLabel(item) }} — {{ getAgreementItemVersionLabel(item) }}
-                  </option>
-                }
-              </select>
-              <div class="agreement-item-overview" aria-label="Resumen comercial de los equipos">
-                @for (item of getAgreementEligibleItems(); track item.id) {
-                  <button
-                    type="button"
-                    class="agreement-item-overview__card"
-                    [class.is-active]="selectedAgreementItemId === item.id"
-                    [class.is-locked]="isAgreementItemLocked(item)"
-                    [disabled]="isSavingAgreement || isViewingAgreementHistory || isAgreementItemLocked(item)"
-                    (click)="selectAgreementItem(item.id)"
-                  >
-                    <span class="agreement-item-overview__code">{{ item.code }}</span>
+            @if (getSelectedAgreementItem(); as item) {
+              <section class="agreement-section agreement-item-selector" aria-label="Equipo de la cotización">
+                <div class="agreement-item-selector__copy">
+                  <span class="agreement-item-selector__eyebrow">Equipo de esta cotización</span>
+                  <strong>{{ getServiceOrderItemDisplayName(item) }}</strong>
+                  <p>{{ item.code }} · {{ item.initialIssue || 'Sin detalle del problema' }}</p>
+                </div>
+                <div class="agreement-item-overview" aria-label="Estado comercial del equipo">
+                  <article class="agreement-item-overview__card is-active">
                     <span class="agreement-item-overview__state">
                       {{ getAgreementItemVersionLabel(item) }}
                       @if (isAgreementItemLocked(item)) {
@@ -524,10 +748,10 @@
                     @if (getAgreementItemDecisionAuditLabel(item); as decisionAuditLabel) {
                       <span class="agreement-item-overview__audit">{{ decisionAuditLabel }}</span>
                     }
-                  </button>
-                }
-              </div>
-            </section>
+                  </article>
+                </div>
+              </section>
+            }
           }
 
           @if (!usesItemCommercialComposer() && isDerivedAgreementComposer()) {
@@ -536,10 +760,15 @@
               <div class="agreement-derived-hero__body">
                 <div>
                   <h3>Nueva versión derivada</h3>
-                  <p>Estás editando una continuidad del acuerdo vigente. Lo heredado queda protegido y solo puedes sumar nuevos agregados o ajustar el monto del servicio técnico.</p>
+                  <p>
+                    Estás editando una continuidad de la cotización vigente. Lo heredado queda protegido
+                    y solo puedes sumar nuevos agregados o ajustar el monto del servicio técnico.
+                  </p>
                 </div>
                 @if (agreementBaseVersion) {
-                  <div class="agreement-derived-hero__chip">Base #{{ agreementBaseVersion.sequenceNumber }}</div>
+                  <div class="agreement-derived-hero__chip">
+                    Base #{{ agreementBaseVersion.sequenceNumber }}
+                  </div>
                 }
               </div>
             </section>
@@ -549,28 +778,40 @@
             <section class="agreement-section agreement-legacy-section">
               <div class="agreement-section-header agreement-section-header--stacked">
                 <div class="agreement-section-title">
-                  <span>Acuerdo anterior heredado</span>
+                  <span>Cotización anterior heredada</span>
                   <p>Este bloque preserva el contexto comercial activo antes del rediagnóstico.</p>
                 </div>
               </div>
 
               @if (getTechnicalServiceItem(); as technicalServiceItem) {
-                <article class="agreement-item-card agreement-item-card--inherited agreement-item-card--technical">
+                <article
+                  class="agreement-item-card agreement-item-card--inherited agreement-item-card--technical"
+                >
                   <div class="agreement-item-header agreement-item-header--inherited">
                     <div>
-                      <span class="agreement-item-label">{{ getAgreementItemProvenanceLabel(technicalServiceItem) }}</span>
-                      <strong class="agreement-item-title">{{ getAgreementItemDisplayName(technicalServiceItem) }}</strong>
+                      <span class="agreement-item-label">{{
+                        getAgreementItemProvenanceLabel(technicalServiceItem)
+                      }}</span>
+                      <strong class="agreement-item-title">{{
+                        getAgreementItemDisplayName(technicalServiceItem)
+                      }}</strong>
                     </div>
                     <span class="agreement-lock-chip">Monto editable</span>
                   </div>
                   <div class="agreement-inherited-technical-grid">
                     <div class="agreement-readonly-copy">
                       <label>Continuidad del servicio</label>
-                      <p>La línea permanece heredada para no romper historial. Solo se puede ajustar el monto coordinado en esta nueva versión.</p>
+                      <p>
+                        La línea permanece heredada para no romper historial. Solo se puede ajustar
+                        el monto coordinado en esta nueva versión.
+                      </p>
                     </div>
                     <div class="agreement-service-pricing agreement-service-pricing--derived">
                       <label>Servicio técnico (PEN)</label>
-                      <div class="agreement-currency-input" [class.field-invalid]="!isTechnicalServiceAmountValid()">
+                      <div
+                        class="agreement-currency-input"
+                        [class.field-invalid]="!isTechnicalServiceAmountValid()"
+                      >
                         <span>S/</span>
                         <input
                           [class.input-error]="!isTechnicalServiceAmountValid()"
@@ -583,7 +824,11 @@
                           [ngModelOptions]="{ standalone: true }"
                         />
                       </div>
-                      <div class="agreement-minimum-copy" [class.invalid]="!isTechnicalServiceAmountValid()" aria-live="polite">
+                      <div
+                        class="agreement-minimum-copy"
+                        [class.invalid]="!isTechnicalServiceAmountValid()"
+                        aria-live="polite"
+                      >
                         @if (!isTechnicalServiceAmountValid()) {
                           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                             <circle cx="12" cy="12" r="9"></circle>
@@ -602,7 +847,10 @@
                 <div class="agreement-empty-state agreement-empty-state--compact">
                   <div>
                     <strong>Sin líneas heredadas bloqueadas</strong>
-                    <p>Solo quedó visible la línea heredada de servicio técnico para editar el monto de esta nueva versión.</p>
+                    <p>
+                      Solo quedó visible la línea heredada de servicio técnico para editar el monto
+                      de esta nueva versión.
+                    </p>
                   </div>
                 </div>
               } @else {
@@ -611,19 +859,27 @@
                     <article class="agreement-item-card agreement-item-card--inherited">
                       <div class="agreement-item-header agreement-item-header--inherited">
                         <div>
-                          <span class="agreement-item-label">{{ getAgreementItemProvenanceLabel(item) }}</span>
-                          <strong class="agreement-item-title">{{ getAgreementItemDisplayName(item) }}</strong>
+                          <span class="agreement-item-label">{{
+                            getAgreementItemProvenanceLabel(item)
+                          }}</span>
+                          <strong class="agreement-item-title">{{
+                            getAgreementItemDisplayName(item)
+                          }}</strong>
                         </div>
                         <span class="agreement-lock-chip">Bloqueado</span>
                       </div>
                       <div class="agreement-readonly-grid">
                         <div>
                           <label>{{ item.type === 'product' ? 'Cantidad' : 'Concepto' }}</label>
-                          <strong>{{ item.type === 'product' ? item.quantity : 'Servicio heredado' }}</strong>
+                          <strong>{{
+                            item.type === 'product' ? item.quantity : 'Servicio heredado'
+                          }}</strong>
                         </div>
                         <div>
                           <label>Monto</label>
-                          <strong>S/ {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }}</strong>
+                          <strong
+                            >S/ {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }}</strong
+                          >
                         </div>
                       </div>
                       @if (item.notes) {
@@ -635,7 +891,9 @@
                 @if (agreementInheritedNotes) {
                   <article class="agreement-item-card agreement-item-card--notes-ledger">
                     <span class="agreement-item-label">Notas heredadas</span>
-                    <p class="agreement-readonly-note agreement-readonly-note--ledger">{{ agreementInheritedNotes }}</p>
+                    <p class="agreement-readonly-note agreement-readonly-note--ledger">
+                      {{ agreementInheritedNotes }}
+                    </p>
                   </article>
                 }
               }
@@ -659,7 +917,10 @@
                 </div>
                 <div class="agreement-service-pricing">
                   <label>Servicio técnico (PEN)</label>
-                  <div class="agreement-currency-input" [class.field-invalid]="!isTechnicalServiceAmountValid()">
+                  <div
+                    class="agreement-currency-input"
+                    [class.field-invalid]="!isTechnicalServiceAmountValid()"
+                  >
                     <span>S/</span>
                     <input
                       [class.input-error]="!isTechnicalServiceAmountValid()"
@@ -672,7 +933,11 @@
                       [ngModelOptions]="{ standalone: true }"
                     />
                   </div>
-                  <div class="agreement-minimum-copy" [class.invalid]="!isTechnicalServiceAmountValid()" aria-live="polite">
+                  <div
+                    class="agreement-minimum-copy"
+                    [class.invalid]="!isTechnicalServiceAmountValid()"
+                    aria-live="polite"
+                  >
                     @if (!isTechnicalServiceAmountValid()) {
                       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                         <circle cx="12" cy="12" r="9"></circle>
@@ -693,15 +958,41 @@
                           step="0.01"
                           [disabled]="!isAgreementEditable()"
                           [ngModel]="technicalServiceItem.discountPct || 0"
-                          (ngModelChange)="updateAgreementItemDiscount(technicalServiceItem, $event)"
+                          (ngModelChange)="
+                            updateAgreementItemDiscount(technicalServiceItem, $event)
+                          "
                           [ngModelOptions]="{ standalone: true }"
                         />
                         <span>%</span>
                       </div>
                       <div class="agreement-discount-editor__totals">
-                        <span>Base <strong>S/ {{ calculateAgreementItemGross(technicalServiceItem) | number: '1.2-2' }}</strong></span>
-                        <span>Descuento <strong>- S/ {{ calculateAgreementItemDiscount(technicalServiceItem) | number: '1.2-2' }}</strong></span>
-                        <span>Neto <strong>S/ {{ calculateAgreementItemSubtotal(technicalServiceItem) | number: '1.2-2' }}</strong></span>
+                        <span
+                          >Base
+                          <strong
+                            >S/
+                            {{
+                              calculateAgreementItemGross(technicalServiceItem) | number: '1.2-2'
+                            }}</strong
+                          ></span
+                        >
+                        <span
+                          >Descuento
+                          <strong
+                            >- S/
+                            {{
+                              calculateAgreementItemDiscount(technicalServiceItem) | number: '1.2-2'
+                            }}</strong
+                          ></span
+                        >
+                        <span
+                          >Neto
+                          <strong
+                            >S/
+                            {{
+                              calculateAgreementItemSubtotal(technicalServiceItem) | number: '1.2-2'
+                            }}</strong
+                          ></span
+                        >
                       </div>
                       @if ((technicalServiceItem.discountPct || 0) > 0) {
                         <input
@@ -724,10 +1015,29 @@
           <section class="agreement-section agreement-products-section">
             <div class="agreement-section-header">
               <div class="agreement-section-title">
-                <span>{{ usesItemCommercialComposer() ? 'Productos de esta versión' : (isDerivedAgreementComposer() ? 'Nuevos agregados' : 'Productos adicionales') }}</span>
-                <p>{{ usesItemCommercialComposer() ? 'Puedes ajustar los repuestos de este equipo sin modificar las versiones de los demás.' : (isDerivedAgreementComposer() ? 'Solo lo que agregues aquí formará parte del cambio de la nueva versión.' : 'Agrega repuestos o accesorios si el servicio los requiere.') }}</p>
+                <span>{{
+                  usesItemCommercialComposer()
+                    ? 'Productos de esta versión'
+                    : isDerivedAgreementComposer()
+                      ? 'Nuevos agregados'
+                      : 'Productos adicionales'
+                }}</span>
+                <p>
+                  {{
+                    usesItemCommercialComposer()
+                      ? 'Puedes ajustar los repuestos de este equipo sin modificar las versiones de los demás.'
+                      : isDerivedAgreementComposer()
+                        ? 'Solo lo que agregues aquí formará parte del cambio de la nueva versión.'
+                        : 'Agrega repuestos o accesorios si el servicio los requiere.'
+                  }}
+                </p>
               </div>
-              <button type="button" class="agreement-add-product-btn" [disabled]="!isAgreementEditable()" (click)="addAgreementProduct()">
+              <button
+                type="button"
+                class="agreement-add-product-btn"
+                [disabled]="!isAgreementEditable()"
+                (click)="addAgreementProduct()"
+              >
                 <span>+</span>
                 Agregar producto
               </button>
@@ -736,123 +1046,154 @@
             @if (getAgreementProductItems().length === 0) {
               <div class="agreement-empty-state">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"></path>
+                  <path
+                    d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"
+                  ></path>
                   <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
                 </svg>
                 <div>
                   <strong>Sin repuestos adicionales</strong>
-                  <p>Puedes agregar productos si el servicio requiere componentes o accesorios extra.</p>
+                  <p>
+                    Puedes agregar productos si el servicio requiere componentes o accesorios extra.
+                  </p>
                 </div>
               </div>
             } @else {
               <div class="quote-items">
-              @for (item of getAgreementProductItems(); let i = $index; track item.id) {
-                <div class="agreement-item-card">
-                  <div class="agreement-item-header">
-                    <span class="agreement-item-label">Producto #{{ i + 1 }}</span>
-                    <button type="button" class="btn-icon" aria-label="Eliminar producto adicional {{ i + 1 }}" [disabled]="!isAgreementEditable() || !canRemoveAgreementItemById(item.id)" (click)="removeAgreementItem(i)">
-                      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                        <path d="M3 6h18"></path>
-                        <path d="M8 6V4h8v2"></path>
-                        <path d="M19 6l-1 14H6L5 6"></path>
-                        <path d="M10 11v6"></path>
-                        <path d="M14 11v6"></path>
-                      </svg>
-                    </button>
-                  </div>
-                  <div class="agreement-product-grid">
-                    <div class="agreement-product-field agreement-product-field-name">
-                      <label>Producto</label>
-                      <ng-select
-                        [items]="products"
-                        bindValue="id"
-                        [searchFn]="productSearchFn"
-                        [clearable]="true"
-                        [readonly]="!isAgreementEditable()"
-                        placeholder="Selecciona un producto"
-                        [(ngModel)]="item.productId"
-                        (ngModelChange)="onAgreementProductSelected(item, $event)"
-                        [ngModelOptions]="{ standalone: true }"
+                @for (item of getAgreementProductItems(); let i = $index; track item.id) {
+                  <div class="agreement-item-card">
+                    <div class="agreement-item-header">
+                      <span class="agreement-item-label">Producto #{{ i + 1 }}</span>
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        aria-label="Eliminar producto adicional {{ i + 1 }}"
+                        [disabled]="!isAgreementEditable() || !canRemoveAgreementItemById(item.id)"
+                        (click)="removeAgreementItem(i)"
                       >
-                        <ng-template ng-label-tmp let-product="item">
-                          {{ product?.sku }} · {{ product?.name }}
-                        </ng-template>
-                        <ng-template ng-option-tmp let-product="item">
-                          {{ product?.sku }} · {{ product?.name }}
-                        </ng-template>
-                      </ng-select>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M3 6h18"></path>
+                          <path d="M8 6V4h8v2"></path>
+                          <path d="M19 6l-1 14H6L5 6"></path>
+                          <path d="M10 11v6"></path>
+                          <path d="M14 11v6"></path>
+                        </svg>
+                      </button>
                     </div>
-                    <div class="agreement-product-field agreement-product-field-qty">
-                      <label>Cantidad</label>
-                      <input type="number" min="1" [disabled]="!isAgreementEditable()" [(ngModel)]="item.quantity" (ngModelChange)="onAgreementProductQuantityChange(item, $event)" [ngModelOptions]="{ standalone: true }" />
-                    </div>
-                    <div class="agreement-product-field agreement-product-field-price">
-                      <label>Precio unitario</label>
-                      <div class="agreement-currency-input agreement-currency-input-readonly">
-                        <span>S/</span>
-                        <input type="text" [value]="item.unitPrice | number: '1.2-2'" readonly tabindex="-1" />
+                    <div class="agreement-product-grid">
+                      <div class="agreement-product-field agreement-product-field-name">
+                        <label>Producto</label>
+                        <ng-select
+                          [items]="products"
+                          bindValue="id"
+                          [searchFn]="productSearchFn"
+                          [clearable]="true"
+                          [readonly]="!isAgreementEditable()"
+                          placeholder="Selecciona un producto"
+                          [(ngModel)]="item.productId"
+                          (ngModelChange)="onAgreementProductSelected(item, $event)"
+                          [ngModelOptions]="{ standalone: true }"
+                        >
+                          <ng-template ng-label-tmp let-product="item">
+                            {{ product?.sku }} · {{ product?.name }}
+                          </ng-template>
+                          <ng-template ng-option-tmp let-product="item">
+                            {{ product?.sku }} · {{ product?.name }}
+                          </ng-template>
+                        </ng-select>
+                      </div>
+                      <div class="agreement-product-field agreement-product-field-qty">
+                        <label>Cantidad</label>
+                        <input
+                          type="number"
+                          min="1"
+                          [disabled]="!isAgreementEditable()"
+                          [(ngModel)]="item.quantity"
+                          (ngModelChange)="onAgreementProductQuantityChange(item, $event)"
+                          [ngModelOptions]="{ standalone: true }"
+                        />
+                      </div>
+                      <div class="agreement-product-field agreement-product-field-price">
+                        <label>Precio final</label>
+                        <div class="agreement-currency-input" [class.field-invalid]="item.productId && !isAgreementProductPriceValid(item)">
+                          <span>S/</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            [min]="item.minAllowedPrice || 0"
+                            [disabled]="!isAgreementEditable() || isProductPriceLoading(item.id)"
+                            [(ngModel)]="item.unitPrice"
+                            (ngModelChange)="onAgreementProductPriceChange(item, $event)"
+                            [ngModelOptions]="{ standalone: true }"
+                          />
+                        </div>
+                        @if (item.productId && item.recommendedPrice) {
+                          <div class="agreement-product-price-guidance">
+                            <span>Recomendado: <strong>S/ {{ item.recommendedPrice | number: '1.2-2' }}</strong></span>
+                            <span>Mínimo: <strong>S/ {{ item.minAllowedPrice | number: '1.2-2' }}</strong></span>
+                          </div>
+                        }
+                        @if (item.productId && !isAgreementProductPriceValid(item)) {
+                          <small class="agreement-field-error">Ingresa un precio igual o mayor al mínimo permitido.</small>
+                        }
                       </div>
                     </div>
                     @if (usesItemCommercialComposer()) {
-                      <div class="agreement-product-field agreement-product-field-discount">
-                        <label>Descuento</label>
-                        <div class="agreement-discount-editor__input">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            [disabled]="!isAgreementEditable()"
-                            [ngModel]="item.discountPct || 0"
-                            (ngModelChange)="updateAgreementItemDiscount(item, $event)"
-                            [ngModelOptions]="{ standalone: true }"
-                          />
-                          <span>%</span>
-                        </div>
+                      <div class="agreement-line-ledger">
+                        <span
+                          >Importe
+                          <strong
+                            >S/ {{ calculateAgreementItemGross(item) | number: '1.2-2' }}</strong
+                          ></span
+                        >
+                      </div>
+                    } @else {
+                      <div class="agreement-subtotal-row">
+                        <span class="agreement-subtotal-label">Subtotal</span>
+                        <span class="agreement-subtotal-value"
+                          >S/ {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }}</span
+                        >
                       </div>
                     }
                   </div>
-                  @if (usesItemCommercialComposer()) {
-                    @if ((item.discountPct || 0) > 0) {
-                      <input
-                        class="agreement-discount-editor__reason agreement-discount-editor__reason--product"
-                        type="text"
-                        maxlength="500"
-                        [disabled]="!isAgreementEditable()"
-                        [(ngModel)]="item.discountOverrideReason"
-                        [ngModelOptions]="{ standalone: true }"
-                        placeholder="Motivo si requiere autorización de supervisión"
-                      />
-                    }
-                    <div class="agreement-line-ledger">
-                      <span>Base <strong>S/ {{ calculateAgreementItemGross(item) | number: '1.2-2' }}</strong></span>
-                      <span>Descuento <strong>- S/ {{ calculateAgreementItemDiscount(item) | number: '1.2-2' }}</strong></span>
-                      <span class="agreement-line-ledger__net">Neto <strong>S/ {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }}</strong></span>
-                    </div>
-                  } @else {
-                    <div class="agreement-subtotal-row">
-                      <span class="agreement-subtotal-label">Subtotal</span>
-                      <span class="agreement-subtotal-value">S/ {{ calculateAgreementItemSubtotal(item) | number: '1.2-2' }}</span>
-                    </div>
-                  }
-                </div>
-              }
+                }
               </div>
             }
           </section>
 
           <section class="agreement-section agreement-notes-section">
             <div class="agreement-section-title">
-              <span>{{ usesItemCommercialComposer() ? 'Notas de esta versión del equipo' : (isDerivedAgreementComposer() ? 'Notas de esta nueva versión' : 'Notas del acuerdo') }}</span>
+              <span>{{
+                usesItemCommercialComposer()
+                  ? 'Notas de esta versión del equipo'
+                  : isDerivedAgreementComposer()
+                    ? 'Notas de esta nueva versión'
+                    : 'Notas de la cotización'
+              }}</span>
             </div>
             <div class="form-group">
-              <textarea formControlName="notes" rows="3" [readonly]="!isAgreementEditable()" [placeholder]="usesItemCommercialComposer() ? 'Resume lo coordinado para este equipo.' : (isDerivedAgreementComposer() ? 'Escribe aquí solo lo nuevo o renegociado en esta versión. Las notas heredadas no se copian automáticamente.' : 'Resumen de lo coordinado con el cliente, garantías, tiempos de entrega...')"></textarea>
+              <textarea
+                formControlName="notes"
+                rows="3"
+                [readonly]="!isAgreementEditable()"
+                [placeholder]="
+                  usesItemCommercialComposer()
+                    ? 'Resume lo coordinado para este equipo.'
+                    : isDerivedAgreementComposer()
+                      ? 'Escribe aquí solo lo nuevo o renegociado en esta versión. Las notas heredadas no se copian automáticamente.'
+                      : 'Resumen de lo coordinado con el cliente, garantías, tiempos de entrega...'
+                "
+              ></textarea>
             </div>
           </section>
 
           <section class="agreement-total-bar">
             <div class="agreement-total-main">
-              <span>{{ usesItemCommercialComposer() ? 'Total de la versión del equipo' : 'Total del acuerdo' }}</span>
+              <span>{{
+                usesItemCommercialComposer()
+                  ? 'Total de la versión del equipo'
+                  : 'Total de la cotización'
+              }}</span>
               <strong>
                 <small>S/</small>
                 {{ calculateAgreementTotal() | number: '1.2-2' }}
@@ -861,30 +1202,55 @@
             <div class="agreement-total-meta">
               <span>Servicio: S/ {{ getAgreementTechnicalServiceAmount() | number: '1.2-2' }}</span>
               @if (getAgreementProductItems().length > 0) {
-                <span>Productos ({{ getAgreementProductItems().length }}): S/ {{ getAgreementProductsTotal() | number: '1.2-2' }}</span>
+                <span
+                  >Productos ({{ getAgreementProductItems().length }}): S/
+                  {{ getAgreementProductsTotal() | number: '1.2-2' }}</span
+                >
               }
               @if (usesItemCommercialComposer() && getAgreementDiscountTotal() > 0) {
-                <span>Descuento total: - S/ {{ getAgreementDiscountTotal() | number: '1.2-2' }}</span>
+                <span
+                  >Descuento total: - S/ {{ getAgreementDiscountTotal() | number: '1.2-2' }}</span
+                >
               }
               @if (isDerivedAgreementComposer() && agreementBaseVersion) {
-                <span>Al confirmar, la versión #{{ agreementBaseVersion.sequenceNumber }} queda reemplazada.</span>
+                <span
+                  >Al confirmar, la versión #{{ agreementBaseVersion.sequenceNumber }} queda
+                  reemplazada.</span
+                >
               }
             </div>
           </section>
-
         </form>
 
         <div class="modal-footer agreement-footer">
-          <button type="button" class="btn agreement-cancel-btn" (click)="closeAgreementModal()">Cancelar</button>
+          <button type="button" class="btn agreement-cancel-btn" (click)="closeAgreementModal()">
+            Cancelar
+          </button>
           <div class="agreement-footer-actions">
-            @if (!usesItemCommercialComposer() && selectedServiceOrder && isDiagnosisService(selectedServiceOrder) && canManageAgreement(selectedServiceOrder) && isAgreementEditable()) {
-              <button type="button" class="btn agreement-outline-danger-btn" [disabled]="isSavingAgreement" (click)="markNoAgreement(selectedServiceOrder)">
-                Cerrar sin acuerdo
+            @if (
+              !usesItemCommercialComposer() &&
+              selectedServiceOrder &&
+              isDiagnosisService(selectedServiceOrder) &&
+              canManageAgreement(selectedServiceOrder) &&
+              isAgreementEditable()
+            ) {
+              <button
+                type="button"
+                class="btn agreement-outline-danger-btn"
+                [disabled]="isSavingAgreement"
+                (click)="markNoAgreement(selectedServiceOrder)"
+              >
+                Cerrar sin cotización
               </button>
             }
             @if (usesItemCommercialComposer()) {
               @if (canRecordClientDecision()) {
-                <button type="button" class="btn agreement-outline-primary-btn" [disabled]="isSavingAgreement || isSavingClientDecision" (click)="openClientDecisionModal()">
+                <button
+                  type="button"
+                  class="btn agreement-outline-primary-btn"
+                  [disabled]="isSavingAgreement || isSavingClientDecision"
+                  (click)="openClientDecisionModal()"
+                >
                   Registrar decisión del cliente
                 </button>
 
@@ -893,21 +1259,79 @@
                   *ngIf="canRequestAnyItemCancellation(selectedServiceOrder)"
                   title="Cancelar equipo"
                   aria-label="Cancelar equipo"
-                  (click)="openItemCancellationModal(selectedServiceOrder, $event)"
+                  (click)="
+                    openItemCancellationModal(
+                      selectedServiceOrder,
+                      $event,
+                      selectedServiceOrderItem ?? undefined
+                    )
+                  "
                 >
                   <i class="fas fa-ban"></i>
                   <span class="action-btn__label">Cancelar equipo</span>
                 </button>
               }
-              <button type="button" class="btn btn-primary agreement-confirm-btn" [disabled]="!isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement" (click)="submitAgreement(false)">
-                Guardar revisión comercial
-              </button>
-            } @else {
-              <button type="button" class="btn agreement-outline-primary-btn" [disabled]="!isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement" (click)="submitAgreement(false)">
+              <button
+                type="button"
+                class="btn agreement-outline-primary-btn"
+                [disabled]="
+                  !isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement
+                "
+                (click)="submitAgreement(false)"
+              >
                 Guardar borrador
               </button>
-              <button type="button" class="btn btn-primary agreement-confirm-btn" [disabled]="!isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement" (click)="submitAgreement(true)">
-                {{ isDerivedAgreementComposer() ? 'Confirmar nueva versión' : 'Confirmar acuerdo' }}
+              <button
+                type="button"
+                class="btn agreement-outline-primary-btn"
+                [disabled]="
+                  getSelectedAgreementVersionLink()?.commercialVersion?.status !== 'DRAFT' ||
+                  isSavingAgreement
+                "
+                (click)="previewCommercialVersionPdf()"
+              >
+                Vista previa PDF
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary agreement-confirm-btn"
+                [disabled]="
+                  isSavingAgreement ||
+                  (getSelectedAgreementVersionLink()?.commercialVersion?.status !== 'ISSUED' &&
+                    (!isAgreementEditable() || !hasAgreementComposerItems()))
+                "
+                (click)="
+                  getSelectedAgreementVersionLink()?.commercialVersion?.status === 'ISSUED'
+                    ? retryCommercialVersionDelivery()
+                    : submitAgreement(true)
+                "
+              >
+                {{
+                  getSelectedAgreementVersionLink()?.commercialVersion?.status === 'ISSUED'
+                    ? 'Reintentar envío'
+                    : 'Enviar al cliente'
+                }}
+              </button>
+            } @else {
+              <button
+                type="button"
+                class="btn agreement-outline-primary-btn"
+                [disabled]="
+                  !isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement
+                "
+                (click)="submitAgreement(false)"
+              >
+                Guardar borrador
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary agreement-confirm-btn"
+                [disabled]="
+                  !isAgreementEditable() || !hasAgreementComposerItems() || isSavingAgreement
+                "
+                (click)="submitAgreement(true)"
+              >
+                {{ isDerivedAgreementComposer() ? 'Confirmar nueva versión' : 'Confirmar cotización' }}
               </button>
             }
           </div>
@@ -917,19 +1341,35 @@
   }
   @if (showClientDecisionModal && getSelectedAgreementItem(); as decisionItem) {
     <div class="modal-overlay client-decision-overlay" (click)="closeClientDecisionModal()">
-      <div class="modal-content client-decision-modal" role="dialog" aria-modal="true" aria-labelledby="client-decision-title" (click)="$event.stopPropagation()">
+      <div
+        class="modal-content client-decision-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="client-decision-title"
+        (click)="$event.stopPropagation()"
+      >
         <div class="modal-header">
           <div>
             <span class="client-decision-eyebrow">Respuesta comunicada por el cliente</span>
             <h2 id="client-decision-title">Registrar decisión comercial</h2>
             <p>{{ getAgreementItemLabel(decisionItem) }}</p>
           </div>
-          <button class="btn-close" type="button" aria-label="Cerrar" (click)="closeClientDecisionModal()">×</button>
+          <button
+            class="btn-close"
+            type="button"
+            aria-label="Cerrar"
+            (click)="closeClientDecisionModal()"
+          >
+            ×
+          </button>
         </div>
 
         <form [formGroup]="clientDecisionForm" class="modal-body client-decision-body">
           <div class="info-banner client-decision-warning" aria-live="polite">
-            <span>Esta acción registra una respuesta que el cliente ya comunicó. No envía mensajes ni plantillas por WhatsApp.</span>
+            <span
+              >Esta acción registra una respuesta que el cliente ya comunicó. No envía mensajes ni
+              plantillas por WhatsApp.</span
+            >
           </div>
 
           <div class="form-group">
@@ -953,13 +1393,30 @@
 
           <div class="form-group">
             <label for="client-decision-observation">Observación <span>(opcional)</span></label>
-            <textarea id="client-decision-observation" formControlName="observation" rows="4" placeholder="Ejemplo: confirmó por WhatsApp luego de revisar el PDF."></textarea>
+            <textarea
+              id="client-decision-observation"
+              formControlName="observation"
+              rows="4"
+              placeholder="Ejemplo: confirmó por WhatsApp luego de revisar el PDF."
+            ></textarea>
           </div>
         </form>
 
         <div class="modal-footer client-decision-footer">
-          <button type="button" class="btn agreement-cancel-btn" [disabled]="isSavingClientDecision" (click)="closeClientDecisionModal()">Cancelar</button>
-          <button type="button" class="btn btn-primary agreement-confirm-btn" [disabled]="clientDecisionForm.invalid || isSavingClientDecision" (click)="submitClientDecision()">
+          <button
+            type="button"
+            class="btn agreement-cancel-btn"
+            [disabled]="isSavingClientDecision"
+            (click)="closeClientDecisionModal()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary agreement-confirm-btn"
+            [disabled]="clientDecisionForm.invalid || isSavingClientDecision"
+            (click)="submitClientDecision()"
+          >
             {{ isSavingClientDecision ? 'Registrando...' : 'Registrar decisión' }}
           </button>
         </div>
@@ -971,7 +1428,12 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h2>{{ transition.title }}</h2>
-          <button class="btn-close" type="button" [disabled]="isSavingItemTransition" (click)="closeItemTransitionModal()">
+          <button
+            class="btn-close"
+            type="button"
+            [disabled]="isSavingItemTransition"
+            (click)="closeItemTransitionModal()"
+          >
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -996,7 +1458,12 @@
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" [disabled]="isSavingItemTransition" (click)="closeItemTransitionModal()">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            [disabled]="isSavingItemTransition"
+            (click)="closeItemTransitionModal()"
+          >
             Cancelar
           </button>
           <button
@@ -1050,7 +1517,9 @@
           }
           @if (isAdditionalDiagnosisFlow()) {
             <div class="info-banner mb-3">
-              Registra aquí el hallazgo adicional. No sobrescribas el diagnóstico anterior; este nuevo diagnóstico quedará en el historial y reabrirá la coordinación para un nuevo acuerdo.
+              Registra aquí el hallazgo adicional. No sobrescribas el diagnóstico anterior; este
+              nuevo diagnóstico quedará en el historial y reabrirá la coordinación para un nuevo
+              acuerdo.
             </div>
           }
           <div class="form-group">
@@ -1061,12 +1530,12 @@
               class="form-control"
               formControlName="summary"
               placeholder="Ej: Falla en disco duro"
-              [class.is-invalid]="diagnosisForm.get('summary')?.invalid && diagnosisForm.get('summary')?.touched"
-            >
+              [class.is-invalid]="
+                diagnosisForm.get('summary')?.invalid && diagnosisForm.get('summary')?.touched
+              "
+            />
             @if (diagnosisForm.get('summary')?.invalid && diagnosisForm.get('summary')?.touched) {
-              <div class="invalid-feedback">
-                El resumen es requerido (5-100 caracteres)
-              </div>
+              <div class="invalid-feedback">El resumen es requerido (5-100 caracteres)</div>
             }
           </div>
 
@@ -1078,18 +1547,20 @@
               formControlName="details"
               rows="5"
               placeholder="Describe los hallazgos detallados..."
-              [class.is-invalid]="diagnosisForm.get('details')?.invalid && diagnosisForm.get('details')?.touched"
+              [class.is-invalid]="
+                diagnosisForm.get('details')?.invalid && diagnosisForm.get('details')?.touched
+              "
             ></textarea>
             @if (diagnosisForm.get('details')?.invalid && diagnosisForm.get('details')?.touched) {
-              <div class="invalid-feedback">
-                Los detalles son requeridos (5-1000 caracteres)
-              </div>
+              <div class="invalid-feedback">Los detalles son requeridos (5-1000 caracteres)</div>
             }
           </div>
         </form>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="closeDiagnosisModal()">Cancelar</button>
+          <button type="button" class="btn btn-secondary" (click)="closeDiagnosisModal()">
+            Cancelar
+          </button>
           @if (selectedServiceOrder && isDiagnosisService(selectedServiceOrder)) {
             <button
               type="button"
@@ -1100,7 +1571,12 @@
               <i class="fas fa-times-circle"></i> Sin arreglo
             </button>
           }
-          <button type="button" class="btn btn-primary" (click)="submitDiagnosis()" [disabled]="diagnosisForm.invalid || !canSubmitDiagnosis || isSavingDiagnosis">
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="submitDiagnosis()"
+            [disabled]="diagnosisForm.invalid || !canSubmitDiagnosis || isSavingDiagnosis"
+          >
             <i class="fas fa-save"></i> Guardar diagnóstico
           </button>
         </div>
@@ -1126,5 +1602,3 @@
     </div>
   </div>
 </div>
-
-

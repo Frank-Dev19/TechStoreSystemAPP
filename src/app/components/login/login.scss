@@ -7,6 +7,11 @@ $error: #ef4444;
 
 .login-container {
     min-height: 100vh;
+    min-height: 100dvh;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
     padding: clamp(16px, 2vw, 32px);
     display: grid;
     place-items: center;
@@ -14,7 +19,9 @@ $error: #ef4444;
 }
 
 .login-card {
-    width: min(96vw, 480px);
+    width: 100%;
+    max-width: 480px;
+    box-sizing: border-box;
     background: #fff;
     border-radius: 14px;
     padding: clamp(20px, 3vw, 32px);
@@ -151,6 +158,34 @@ $error: #ef4444;
     border-radius: 8px;
     color: $error;
     font-size: 14px;
+}
+
+@media (max-width: 480px) {
+    .login-container {
+        padding: 12px;
+    }
+
+    .login-card {
+        max-width: 100%;
+        padding: 24px 20px;
+    }
+
+    .login-header {
+        margin-bottom: 20px;
+
+        .login-logo {
+            width: 88px;
+            margin-bottom: 12px;
+        }
+
+        .subtitle {
+            line-height: 1.45;
+        }
+    }
+
+    .options-row a {
+        font-size: 13px;
+    }
 }
 
 @media (min-width: 481px) and (max-width: 1024px) {

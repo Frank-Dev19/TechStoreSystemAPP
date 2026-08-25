@@ -15,8 +15,8 @@ import { DocumentTypesApiService } from '../../services/document-types-api.servi
 import { PricingQueryApiService } from '../../services/pricing/pricing-query-api.service';
 import { CurrentUserService } from '../../services/current-user.service';
 import { ServiceOrderEconomicStatus } from '../../models/service-orders/service-order';
-import { of, throwError } from 'rxjs';
-import { SaleReceiptPdfService } from '../../services/sales/sale-receipt-pdf.service';
+import { of } from 'rxjs';
+import { ElectronicBillingApiService } from '../../services/electronic-billing/electronic-billing-api.service';
 
 describe('Ventas', () => {
   let component: Ventas;
@@ -27,13 +27,13 @@ describe('Ventas', () => {
     createFromServiceAgreements: jasmine.createSpy('createFromServiceAgreements').and.returnValue(of({ id: 12 })),
     getEligibleServiceOrders: jasmine.createSpy('getEligibleServiceOrders').and.returnValue(of({ data: [], total: 0, page: 1, limit: 10, totalPages: 0 })),
   };
-  const saleReceiptPdfServiceStub = {
-    downloadBySaleId: jasmine.createSpy('downloadBySaleId').and.returnValue(of('F001-123.pdf')),
+  const electronicBillingApiStub = {
+    downloadPdf: jasmine.createSpy('downloadPdf').and.returnValue(of(new Blob(['pdf']))),
   };
 
   beforeEach(async () => {
     spyOn(Ventas.prototype, 'ngOnInit').and.stub();
-    saleReceiptPdfServiceStub.downloadBySaleId.and.returnValue(of('F001-123.pdf'));
+    electronicBillingApiStub.downloadPdf.and.returnValue(of(new Blob(['pdf'])));
     salesApiStub.create.calls.reset();
     salesApiStub.createFromServiceOrder.calls.reset();
     salesApiStub.createFromServiceAgreements.calls.reset();
@@ -55,7 +55,7 @@ describe('Ventas', () => {
         { provide: DocumentTypesApiService, useValue: {} },
         { provide: PricingQueryApiService, useValue: {} },
         { provide: CurrentUserService, useValue: { value: { id: 1, name: 'Test User' } } },
-        { provide: SaleReceiptPdfService, useValue: saleReceiptPdfServiceStub },
+        { provide: ElectronicBillingApiService, useValue: electronicBillingApiStub },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     })
@@ -70,27 +70,30 @@ describe('Ventas', () => {
     expect(component).toBeTruthy();
   });
 
-  it('delegates full receipt generation to the shared service and keeps toast feedback in the page', () => {
+  it('descarga exclusivamente el PDF del comprobante electrónico aceptado', () => {
     const showToastSpy = spyOn(component, 'showToast');
+    spyOn<any>(component, 'downloadBlob');
+    component.electronicDocumentsBySaleId[77] = {
+      id: 1,
+      saleId: 77,
+      companyId: 1,
+      provider: 'APISPERU',
+      documentType: 'FACTURA',
+      sunatDocumentTypeCode: '01',
+      series: 'F001',
+      number: '123',
+      status: 'ACCEPTED',
+      createdAt: '2026-08-20T10:00:00.000Z',
+      updatedAt: '2026-08-20T10:00:00.000Z',
+    };
 
-    component.onDownloadSalePdf({ id: 77 } as never);
+    component.onDownloadSalePdf({ id: 77, companyId: 1, documentType: 'FACTURA', series: 'F001', number: '123' } as never);
 
-    expect(saleReceiptPdfServiceStub.downloadBySaleId).toHaveBeenCalledWith(77, 'full');
-    expect(showToastSpy).toHaveBeenCalledWith('success', 'PDF descargado: F001-123.pdf');
+    expect(electronicBillingApiStub.downloadPdf).toHaveBeenCalledWith(77);
+    expect(showToastSpy).toHaveBeenCalledWith('success', 'PDF electronico descargado');
   });
 
-  it('shows page error feedback when the shared PDF service fails', () => {
-    saleReceiptPdfServiceStub.downloadBySaleId.and.returnValue(
-      throwError(() => new Error('renderer failed')),
-    );
-    const showToastSpy = spyOn(component, 'showToast');
-
-    component.onDownloadSalePdf({ id: 88 } as never);
-
-    expect(showToastSpy).toHaveBeenCalledWith('error', 'Error al generar PDF');
-  });
-
-  it('usa createFromServiceAgreements para ventas agrupadas originadas en órdenes pendientes', () => {
+  it('usa createFromServiceAgreements con una sola orden de servicio', () => {
     const showToastSpy = spyOn(component, 'showToast');
     spyOn(component as any, 'loadSales');
     spyOn(component as any, 'loadOpenRegister');
@@ -134,13 +137,29 @@ describe('Ventas', () => {
     component.onConfirmSale();
 
     expect(salesApiStub.createFromServiceAgreements).toHaveBeenCalledWith(
-      jasmine.objectContaining({ serviceOrderIds: [9, 10], taxpayerCustomerId: 66, companyId: 1, documentType: 'BOLETA' }),
+      jasmine.objectContaining({ serviceOrderIds: [9], taxpayerCustomerId: 66, companyId: 1, documentType: 'BOLETA' }),
     );
     expect(salesApiStub.create).not.toHaveBeenCalled();
-    expect(showToastSpy).toHaveBeenCalledWith('success', 'Venta agrupada registrada exitosamente');
+    expect(showToastSpy).toHaveBeenCalledWith('success', 'Venta de la orden registrada exitosamente');
   });
 
-  it('agrupa líneas de servicio al seleccionar varias órdenes del mismo cliente', () => {
+  it('muestra el detalle del backend cuando la venta falla por falta de stock', () => {
+    const message = (component as any).resolveGroupedSaleErrorMessage({
+      error: { message: 'Stock insuficiente para G502. Disponible: 0, solicitado: 1' },
+    });
+
+    expect(message).toBe('Stock insuficiente para G502. Disponible: 0, solicitado: 1');
+  });
+
+  it('mantiene el mensaje generico para errores ajenos al stock', () => {
+    const message = (component as any).resolveGroupedSaleErrorMessage({
+      error: { message: 'Duplicate entry 12 for key sale_number' },
+    });
+
+    expect(message).toBe('Error registrando venta agrupada');
+  });
+
+  it('conserva únicamente la primera orden cuando recibe una selección múltiple heredada', () => {
     component.saleFormData = { lines: [], total: 0, subtotal: 0, igv: 0, taxRate: 0.18 };
     component.eligibleServiceOrders = [
       {
@@ -170,14 +189,13 @@ describe('Ventas', () => {
 
     component.onServiceOrdersSelectionChange(event);
 
-    expect(component.selectedServiceOrderIds).toEqual([9, 10]);
+    expect(component.selectedServiceOrderIds).toEqual([9]);
     expect(component.saleFormData.lines).toEqual([
       jasmine.objectContaining({ productName: 'Servicio técnico - Orden SO-001', lineTotal: 120 }),
-      jasmine.objectContaining({ productName: 'Servicio técnico - Orden SO-002', lineTotal: 80 }),
     ]);
-    expect(component.saleFormData.total).toBe(200);
-    expect(component.saleFormData.subtotal).toBeCloseTo(169.49, 2);
-    expect(component.saleFormData.igv).toBeCloseTo(30.51, 2);
+    expect(component.saleFormData.total).toBe(120);
+    expect(component.saleFormData.subtotal).toBeCloseTo(101.69, 2);
+    expect(component.saleFormData.igv).toBeCloseTo(18.31, 2);
     expect(component.saleFormData.taxRate).toBe(0.18);
   });
 
@@ -226,7 +244,7 @@ describe('Ventas', () => {
     expect(component.saleFormData.igv).toBeCloseTo(12.2, 2);
   });
 
-  it('el checkbox maestro marca y desmarca solo las órdenes adicionales del mismo cliente', () => {
+  it('ignora la selección masiva heredada y conserva la orden ancla', () => {
     component.saleFormData = { lines: [], total: 0, subtotal: 0, igv: 0, taxRate: 0.18 };
     component.eligibleServiceOrders = [
       {
@@ -262,8 +280,8 @@ describe('Ventas', () => {
     component.selectAnchoredServiceOrder(component.eligibleServiceOrders[1] as any);
 
     component.onToggleAllGroupedServiceOrders({ target: { checked: true } } as any);
-    expect(component.selectedServiceOrderIds).toEqual([10, 9, 11]);
-    expect(component.areAllSelectableGroupedOrdersSelected()).toBeTrue();
+    expect(component.selectedServiceOrderIds).toEqual([10]);
+    expect(component.areAllSelectableGroupedOrdersSelected()).toBeFalse();
 
     component.onToggleAllGroupedServiceOrders({ target: { checked: false } } as any);
     expect(component.selectedServiceOrderIds).toEqual([10]);
@@ -300,7 +318,7 @@ describe('Ventas', () => {
     component.onConfirmSale();
 
     expect(salesApiStub.createFromServiceAgreements).not.toHaveBeenCalled();
-    expect(showToastSpy).toHaveBeenCalledWith('error', 'La factura requiere un contribuyente empresa');
+    expect(showToastSpy).toHaveBeenCalledWith('error', 'Una factura requiere un contribuyente con RUC');
   });
 
   it('distingue órdenes cubiertas por esta venta agrupada de otras pendientes del mismo cliente', () => {

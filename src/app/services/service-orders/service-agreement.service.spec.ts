@@ -1,4 +1,4 @@
-import { throwError } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { BaseService } from '../base.service';
 import { ServiceOrderAgreementService } from './service-agreement.service';
 
@@ -7,7 +7,7 @@ describe('ServiceOrderAgreementService', () => {
   let baseServiceSpy: jasmine.SpyObj<BaseService>;
 
   beforeEach(() => {
-    baseServiceSpy = jasmine.createSpyObj<BaseService>('BaseService', ['get', 'post', 'patch', 'delete']);
+    baseServiceSpy = jasmine.createSpyObj<BaseService>('BaseService', ['get', 'getBlob', 'post', 'patch', 'delete']);
     service = new ServiceOrderAgreementService(baseServiceSpy);
   });
 
@@ -45,5 +45,26 @@ describe('ServiceOrderAgreementService', () => {
     service.recordClientDecision(payload);
 
     expect(baseServiceSpy.post).toHaveBeenCalledWith('/service-order-agreements/client-decisions', payload);
+  });
+
+  it('solicita la vista previa PDF de una versión comercial', () => {
+    baseServiceSpy.getBlob.and.returnValue(of(new Blob()));
+
+    service.previewCommercialVersionPdf(802);
+
+    expect(baseServiceSpy.getBlob).toHaveBeenCalledWith(
+      '/service-order-agreements/commercial-versions/802/pdf-preview',
+    );
+  });
+
+  it('emite y envía una versión comercial mediante el endpoint dedicado', () => {
+    baseServiceSpy.post.and.returnValue(of({ version: {} as never, deliveryStatus: 'SENT' }));
+
+    service.issueCommercialVersion(802);
+
+    expect(baseServiceSpy.post).toHaveBeenCalledWith(
+      '/service-order-agreements/commercial-versions/802/issue',
+      {},
+    );
   });
 });

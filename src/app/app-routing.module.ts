@@ -5,6 +5,7 @@ import { AuthGuard } from './helpers/authguard';
 import { AdminLayout } from './layouts/admin-layout/admin-layout';
 import { ForgotPassword } from './pages/forgot-password/forgot-password';
 import { ResetPassword } from './pages/reset-password/reset-password';
+import { OrderSurvey } from './pages/order-survey/order-survey';
 const routes: Routes = [
 
   // Ruta inicial de autenticación
@@ -15,6 +16,7 @@ const routes: Routes = [
 
   { path: 'forgot-password', component: ForgotPassword },
   { path: 'reset-password', component: ResetPassword },
+  { path: 'encuesta/:token', component: OrderSurvey },
 
 
   // Áreas protegidas

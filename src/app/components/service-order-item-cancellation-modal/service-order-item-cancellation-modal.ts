@@ -138,7 +138,7 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
 
   getItemDetail(item: ServiceOrderItem): string {
     const serial = item.serialNumber ? `Serie ${item.serialNumber}` : 'Sin serie registrada';
-    return `${serial} · ${this.hasDiagnosisStarted(item) ? 'Genera cargo de S/ 20.00' : 'Sin cargo'}`;
+    return `${serial} · ${this.hasDiagnosisStarted(item) ? 'Diagnóstico iniciado · S/ 20.00' : 'Sin importe pendiente'}`;
   }
 
   getItemTitle(item: ServiceOrderItem): string {

@@ -83,7 +83,7 @@ export class ServiceOrderItemDeliveryModalComponent implements OnChanges {
       return 'El equipo tiene una cancelación pendiente.';
     }
     if (order.commercialStatus !== ServiceOrderCommercialStatus.AUTORIZADA) {
-      return 'El acuerdo comercial vigente todavía no está confirmado.';
+      return 'La cotización vigente todavía no está confirmada.';
     }
     if (!hasCoverage) {
       return 'La orden necesita cobertura económica total o una exoneración antes de entregar equipos.';

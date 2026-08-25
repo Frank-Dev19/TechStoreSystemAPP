@@ -42,6 +42,24 @@ export class BaseService {
         return this.request<T>('GET', url, null, options);
     }
 
+    getBlob(url: string, options?: Omit<HttpOptions, 'responseType'>): Observable<Blob> {
+        const { withLoader = true, body: _body, ...httpOpts } = options ?? {};
+        const fullUrl = `${config.endpointServices}${url}`;
+        const headers = this.buildHeaders(httpOpts.headers).delete('Content-Type');
+        if (withLoader) this.trigger.fireShowLoader();
+
+        return this.http.get(fullUrl, {
+            ...httpOpts,
+            headers,
+            responseType: 'blob',
+        }).pipe(
+            finalize(() => {
+                if (withLoader) this.trigger.fireHideLoader();
+            }),
+            catchError(err => throwError(() => err)),
+        );
+    }
+
     post<T>(url: string, body?: any, options?: HttpOptions): Observable<T> {
         return this.request<T>('POST', url, body, options);
     }

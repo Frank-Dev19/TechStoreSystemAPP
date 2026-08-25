@@ -5,12 +5,13 @@
     [class.item-progress--partial]="delivered > 0 && delivered < total"
     [class.item-progress--complete]="total > 0 && delivered === total"
     role="group"
-    [attr.aria-label]="label"
+    [attr.aria-label]="heading + ': ' + label"
   >
     <div class="item-progress__copy">
-      <span>{{ label }}</span>
-      @if (!compact && cancelled > 0) {
-        <small>{{ cancelled }} cancelado{{ cancelled === 1 ? '' : 's' }}</small>
+      <span class="item-progress__heading">{{ heading }}</span>
+      <strong>{{ label }}</strong>
+      @if (!compact) {
+        <small>{{ detail }}</small>
       }
     </div>
     <div class="item-progress__track" aria-hidden="true">

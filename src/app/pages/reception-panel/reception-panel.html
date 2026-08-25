@@ -3,7 +3,7 @@
     <div class="title-section">
       <h1 class="page-title">Panel de Recepción</h1>
       <p class="page-subtitle">
-        Coordina órdenes de servicio, pagos y acuerdos desde una sola pantalla
+        Coordina órdenes de servicio, pagos y cotizaciones desde una sola pantalla
       </p>
     </div>
   </div>
@@ -46,7 +46,7 @@
       <div class="stat-content">
         <span class="stat-label">Equipos por coordinar</span>
         <h3 class="stat-value">{{ diagnosticPendingServiceOrderAgreementsCount }}</h3>
-        <p class="stat-meta">Diagnosticados sin acuerdo</p>
+        <p class="stat-meta">Diagnosticados sin cotización</p>
       </div>
     </div>
   </div>
@@ -154,6 +154,7 @@
                 <th>Código</th>
                 <th>Cliente</th>
                 <th>Estado</th>
+                <th>Salida de equipos</th>
                 <th>Técnico</th>
                 <!-- Pago column ocultada -->
                 <th class="actions-column">Acciones</th>
@@ -204,6 +205,12 @@
                         {{ getOperativeStatusLabel(serviceOrder.operativeStatus) }}
                       </span>
                     </td>
+                    <td class="equipment-exit-column">
+                      <app-service-order-item-progress
+                        [order]="serviceOrder"
+                        [compact]="true"
+                      ></app-service-order-item-progress>
+                    </td>
                     <td>
                       <span class="technician-name">{{ serviceOrder.assignedToTechnicianName || 'Sin asignar' }}</span>
                     </td>
@@ -234,7 +241,7 @@
                             class="btn-icon"
                             type="button"
                             (click)="downloadLinkedSaleDocument(serviceOrder, $event)"
-                            title="Descargar documento ligado"
+                            title="Emitir o descargar comprobante electrónico"
                           >
                             <i class="fas fa-download"></i>
                           </button>
@@ -244,7 +251,7 @@
                             type="button"
                             class="btn-icon"
                             (click)="viewServiceOrderAgreements(serviceOrder, $event)"
-                            title="Ver acuerdos"
+                            title="Ver cotizaciones"
                           >
                             <i class="fas fa-list"></i>
                           </button>
@@ -315,7 +322,7 @@
                                   (click)="viewServiceOrderAgreements(serviceOrder, $event); closeActionMenu()"
                                 >
                                   <i class="fas fa-list"></i>
-                                  <span>Ver acuerdos</span>
+                                  <span>Ver cotizaciones</span>
                                 </button>
                               }
                               @if (canOpenWarrantyAction(serviceOrder)) {
@@ -616,12 +623,6 @@
               </span>
             </label>
             <div class="equipment-selection-actions">
-              <button type="button" class="equipment-selection-link" (click)="selectAllCancellableEquipment()">
-                Seleccionar todos
-              </button>
-              <button type="button" class="equipment-selection-link" (click)="deselectAllCancellableEquipment()">
-                Deseleccionar todos
-              </button>
               <button
                 type="button"
                 class="btn equipment-cancel-selected"
@@ -712,6 +713,10 @@
                       <span>Estado comercial</span>
                       <strong>{{ getCommercialStatusLabel(item.commercialStatus) }}</strong>
                     </div>
+                    <div>
+                      <span>Salida física</span>
+                      <strong>{{ getEquipmentPhysicalExitLabel(item) }}</strong>
+                    </div>
                     <div [class.sla-breached]="item.sla?.breached">
                       <span>Plazo de atención</span>
                       <strong>{{ getItemSlaLabel(item) }}</strong>
@@ -719,6 +724,16 @@
                   </div>
 
                   <footer class="equipment-item-actions">
+                    @if (canSendPickupReminder(item)) {
+                      <button
+                        class="btn btn-secondary"
+                        type="button"
+                        (click)="sendEquipmentPickupReminder(equipmentDetailOrder, item, $event)"
+                      >
+                        <i class="fas fa-paper-plane"></i>
+                        Recordar recojo
+                      </button>
+                    }
                     @if (item.operativeStatus === serviceOrderOperativeStatusEnum.LISTA_PARA_ENTREGA) {
                       <button
                         class="btn btn-primary"
@@ -1145,7 +1160,13 @@
                   <div class="service-order-item-card-header">
                     <div class="item-title">
                       <i class="fas fa-laptop"></i>
-                      Equipo
+                      @if (editingCreateServiceOrderCandidateIndex !== null) {
+                        Editar equipo
+                      } @else if (createServiceOrderCandidates.length > 0) {
+                        Equipo adicional
+                      } @else {
+                        Equipo
+                      }
                     </div>
                   </div>
                   <div class="form-grid">
@@ -1272,6 +1293,18 @@
                       placeholder="Observaciones internas o detalle adicional de este equipo"
                     ></textarea>
                   </div>
+                  @if (canAddAnotherCreateServiceOrderCandidate()) {
+                    <div class="equipment-form-actions">
+                      <button
+                        class="btn btn-outline"
+                        type="button"
+                        (click)="beginAnotherCreateServiceOrderCandidate()"
+                      >
+                        <i class="fas fa-plus"></i>
+                        Agregar equipo
+                      </button>
+                    </div>
+                  }
                 </div>
               </div>
             </div>
@@ -1280,10 +1313,10 @@
           @if (isCreateServiceOrderStepActive(4) && requiresCreateServiceOrderInitialAgreementStep()) {
             <div class="form-section initial-agreement-section">
               <div class="section-header">
-                <h4>Acuerdo inicial</h4>
+                <h4>Cotización inicial</h4>
                 <p>
                   La línea fija de servicio técnico ya está incluida. Agrega productos del pool
-                  si hace falta y este acuerdo se registrará automáticamente al crear la orden.
+                  si hace falta y esta cotización se registrará automáticamente al crear la orden.
                 </p>
               </div>
 
@@ -1430,14 +1463,18 @@
                               />
                             </div>
                             <div class="agreement-product-field">
-                              <label>Precio</label>
-                              <div class="price-display">
+                              <label>Precio final</label>
+                              <div class="agreement-currency-input">
                                 @if (isCreateOrderProductPriceLoading(itemIndex, quoteItem.id)) {
                                   <span class="muted"><i class="fas fa-spinner fa-spin"></i> Calculando</span>
                                 } @else {
-                                  <strong>{{ quoteItem.unitPrice || 0 | number: '1.2-2' }} PEN</strong>
+                                  <span>S/</span>
+                                  <input type="number" step="0.01" [min]="quoteItem.minAllowedPrice || 0" [(ngModel)]="quoteItem.unitPrice" [ngModelOptions]="{ standalone: true }" />
                                 }
                               </div>
+                              @if (quoteItem.productId && quoteItem.recommendedPrice) {
+                                <small>Recomendado: S/ {{ quoteItem.recommendedPrice | number: '1.2-2' }} · Mínimo: S/ {{ quoteItem.minAllowedPrice | number: '1.2-2' }}</small>
+                              }
                             </div>
                           </div>
 
@@ -1601,7 +1638,7 @@
                       @if (requiresCreateServiceOrderInitialAgreementStep()) {
                         <div class="review-quote-lines">
                           <div class="review-quote-lines-header">
-                            <strong>Líneas del acuerdo</strong>
+                            <strong>Líneas de la cotización</strong>
                           </div>
                           @for (
                             quoteItem of summaryItem.quoteItems;
@@ -1667,12 +1704,6 @@
               Anterior
             </button>
           }
-          @if (canAddAnotherCreateServiceOrderCandidate()) {
-            <button class="btn btn-outline" type="button" (click)="beginAnotherCreateServiceOrderCandidate()">
-              <i class="fas fa-plus"></i>
-              Agregar equipo
-            </button>
-          }
           @if (!isLastCreateServiceOrderStep()) {
             <button class="btn btn-primary" type="button" (click)="nextCreateServiceOrderStep()">
               Siguiente
@@ -1699,14 +1730,14 @@
       <div class="quote-modal" (click)="$event.stopPropagation()">
         <div class="quote-topbar">
           <div>
-            <p class="modal-eyebrow">Acuerdo</p>
+            <p class="modal-eyebrow">Cotización</p>
             <h2>
               {{
                 isEditingDraftServiceOrderAgreement
                   ? 'Editar borrador'
                   : isResubmittingServiceOrderAgreement
-                    ? 'Actualizar acuerdo'
-                    : 'Nuevo acuerdo'
+                    ? 'Actualizar cotización'
+                    : 'Nueva cotización'
               }}
             </h2>
             <div class="quote-chip-row">
@@ -1730,7 +1761,7 @@
             }
             @if (isWarrantyServiceOrderAgreementContext()) {
               <p class="muted">
-                Garantía: acuerdo no facturable (productos y servicio técnico en S/ 0.00).
+                Garantía: cotización no facturable (productos y servicio técnico en S/ 0.00).
               </p>
             }
           </div>
@@ -1763,7 +1794,7 @@
                 <p>
                   {{
                     selectedServiceOrder?.initialIssue ||
-                      'Registra el problema inicial para contextualizar el acuerdo.'
+                      'Registra el problema inicial para contextualizar la cotización.'
                   }}
                 </p>
                 @if (selectedServiceOrder?.serviceType === serviceTypeEnum.DIAGNOSIS) {
@@ -1869,7 +1900,7 @@
             @if (getQuoteProductItems().length === 0) {
               <div class="agreement-empty-state">
                 <strong>Sin productos adicionales</strong>
-                <p>Puedes cerrar el acuerdo con la línea técnica o sumar repuestos si el servicio lo requiere.</p>
+                <p>Puedes cerrar la cotización con la línea técnica o sumar repuestos si el servicio lo requiere.</p>
               </div>
             } @else {
               <div class="quote-items">
@@ -1920,13 +1951,14 @@
                         />
                       </div>
                       <div class="agreement-product-field">
-                        <label>Precio</label>
-                        <div class="price-display">
-                          <strong>
-                            {{ item.unitPrice || 0 | number: '1.2-2' }}
-                            {{ createServiceOrderAgreementForm.get('currency')?.value }}
-                          </strong>
+                        <label>Precio final</label>
+                        <div class="agreement-currency-input">
+                          <span>S/</span>
+                          <input type="number" step="0.01" [min]="item.minAllowedPrice || 0" [(ngModel)]="item.unitPrice" [ngModelOptions]="{ standalone: true }" />
                         </div>
+                        @if (item.productId && item.recommendedPrice) {
+                          <small>Recomendado: S/ {{ item.recommendedPrice | number: '1.2-2' }} · Mínimo: S/ {{ item.minAllowedPrice | number: '1.2-2' }}</small>
+                        }
                       </div>
                     </div>
 
@@ -1981,7 +2013,7 @@
 
           <section class="agreement-total-bar">
             <div class="agreement-total-main">
-              <span>Total del acuerdo</span>
+              <span>Total de la cotización</span>
               <strong>
                 <small>S/</small>
                 {{ calculateServiceOrderAgreementTotal() | number: '1.2-2' }}
@@ -2021,8 +2053,8 @@
                 isEditingDraftServiceOrderAgreement
                   ? 'Guardar borrador'
                   : isResubmittingServiceOrderAgreement
-                    ? 'Actualizar acuerdo'
-                    : 'Crear acuerdo'
+                    ? 'Actualizar cotización'
+                    : 'Crear cotización'
               }}
             </button>
           </div>
@@ -2036,7 +2068,7 @@
       <div class="serviceOrderAgreements-modal" (click)="$event.stopPropagation()">
         <div class="serviceOrderAgreements-modal-header">
           <div>
-            <p class="modal-eyebrow">Acuerdos</p>
+            <p class="modal-eyebrow">Cotizaciones</p>
             <h2>{{ serviceOrderAgreementsServiceOrder.code }} · {{ getServiceOrderLabel(serviceOrderAgreementsServiceOrder) }}</h2>
             <p class="muted">
               Estado del flujo:
@@ -2067,7 +2099,7 @@
 
             @if (isLoadingServiceOrderAgreements) {
               <div class="empty-state-small">
-                <p><i class="fas fa-spinner fa-spin"></i> Cargando acuerdos...</p>
+                <p><i class="fas fa-spinner fa-spin"></i> Cargando cotizaciones...</p>
               </div>
             } @else if (serviceOrderAgreementsError) {
               <div class="empty-state-small">
@@ -2075,7 +2107,7 @@
               </div>
             } @else if (!serviceOrderItemQuotes.length) {
               <div class="empty-state-small">
-                <p>Esta orden aún no tiene acuerdos registrados.</p>
+                <p>Esta orden aún no tiene cotizaciones registradas.</p>
               </div>
             } @else {
               <div class="quote-cards-grid">
@@ -2087,7 +2119,7 @@
                   >
                     <div class="quote-card-top">
                       <div>
-                        <p class="quote-label">Acuerdo</p>
+                        <p class="quote-label">Cotización</p>
                         <h4>#{{ quote.sequenceNumber }}</h4>
                         <p class="quote-subline">
                           <i class="fas fa-calendar-alt"></i>
@@ -2135,14 +2167,14 @@
               </div>
             } @else if (!selectedServiceOrderAgreementDetail) {
               <div class="empty-state-small">
-                <p>Selecciona un acuerdo para ver el detalle.</p>
+                <p>Selecciona una cotización para ver el detalle.</p>
               </div>
             } @else {
               <div class="quote-detail-card">
                 <div class="detail-header">
                   <div>
                     <p class="quote-label">Detalle</p>
-                    <h3>Acuerdo #{{ selectedServiceOrderAgreementDetail.sequenceNumber }}</h3>
+                    <h3>Cotización #{{ selectedServiceOrderAgreementDetail.sequenceNumber }}</h3>
                     <p class="quote-subline">
                       <i class="fas fa-calendar-alt"></i>
                       {{ selectedServiceOrderAgreementDetail.createdAt | date: 'dd/MM/yyyy HH:mm' }}
@@ -2314,7 +2346,7 @@
                       <div class="detail-row">
                         <div>
                           <p class="detail-title">{{ getServiceLabel(service.serviceId) }}</p>
-                          <span class="muted">Línea fija del acuerdo</span>
+                          <span class="muted">Línea fija de la cotización</span>
                         </div>
                         <div class="detail-amount">
                           <span class="muted">Importe:</span>
@@ -2333,7 +2365,7 @@
                     !selectedServiceOrderAgreementDetail.serviceItems?.length
                   "
                 >
-                  <p>Este acuerdo no tiene líneas registradas.</p>
+                  <p>Esta cotización no tiene líneas registradas.</p>
                 </div>
               </div>
             }

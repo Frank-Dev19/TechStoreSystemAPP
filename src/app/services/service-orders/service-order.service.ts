@@ -46,6 +46,15 @@ export interface TechnicianAssignmentSuggestion {
   technicians: TechnicianAssignmentSuggestionRow[];
 }
 
+export interface FailedServiceOrderNotification {
+  id: number;
+  messageType: string;
+  recipient: string | null;
+  lastError: string | null;
+  attemptCount: number;
+  updatedAt: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ServiceOrderService {
   constructor(private base: BaseService) {}
@@ -90,6 +99,26 @@ export class ServiceOrderService {
     return this.base.patch<ServiceOrder>(
       `${config.serviceOrders.serviceOrders}/${serviceOrderId}/item-deliveries`,
       { itemIds },
+    );
+  }
+
+  sendPickupReminder(serviceOrderId: number, itemIds: number[]): Observable<{ ok: true; itemIds: number[] }> {
+    return this.base.post<{ ok: true; itemIds: number[] }>(
+      `${config.serviceOrders.serviceOrders}/${serviceOrderId}/pickup-reminders`,
+      { itemIds },
+    );
+  }
+
+  getFinalNotificationFailures(): Observable<FailedServiceOrderNotification[]> {
+    return this.base.get<FailedServiceOrderNotification[]>(
+      `${config.serviceOrders.serviceOrders}/notifications/final-failures`,
+    );
+  }
+
+  retryFinalNotification(notificationId: number): Observable<FailedServiceOrderNotification> {
+    return this.base.post<FailedServiceOrderNotification>(
+      `${config.serviceOrders.serviceOrders}/notifications/${notificationId}/retry`,
+      {},
     );
   }
 

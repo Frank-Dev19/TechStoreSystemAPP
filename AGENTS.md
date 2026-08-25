@@ -44,10 +44,17 @@
 - `src/app/pages/` holds most feature screens used by `AdminLayoutRoutes`.
 - `src/app/services/` contains API-facing and document/PDF logic.
 - `src/app/models/` contains request/response/domain types.
+- Service-order workflow logic is concentrated in a few large page components: `src/app/pages/reception-panel/reception-panel.ts`, `src/app/pages/technician-panel/technician-panel.ts`, and `src/app/pages/supervisor-panel/supervisor-panel.ts`. Inspect those first, then the `src/app/services/service-orders/` services.
+
+## Service-order domain gotchas
+
+- `agreement` is the canonical term, but many variables/tests still use legacy `quote` naming. Read behavior before renaming anything.
+- `src/app/services/service-orders/service-agreement.service.ts` still exposes compatibility wrappers like `sendToClient`, `approveByClient`, and `rejectByClient` while the UI finishes migrating from quotes to agreements.
+- Manual payment marking was intentionally removed: `ServiceOrderService.markPaid()` throws, and economic status/delivery gating now depend on linked billing documents instead of a manual paid flag.
 
 ## SDD and cross-repo docs
 
 - This repo has its own authoritative frontend specs in `openspec/`.
 - Parent-folder docs in `../docs/*.md` are coordination notes only for cross-repo changes; do not treat them as the source of truth for frontend behavior.
 - For APP + API changes, coordination notes live in `../docs`, but the actual change artifacts must live in this repo's `openspec/` and the API repo's `openspec/` separately.
-- There is an active frontend change folder in `openspec/changes/rediagnosis-agreement-versioning/`; check active deltas before implementing related service-order or technician workflow work.
+- `openspec/changes/` currently contains only `archive/`; check canonical specs under `openspec/specs/` before assuming an active change exists. Rediagnosis/agreement versioning is archived under `openspec/changes/archive/2026-05-14-rediagnosis-agreement-versioning/` and merged into `openspec/specs/`.

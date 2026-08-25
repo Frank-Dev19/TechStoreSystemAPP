@@ -316,7 +316,7 @@
           Diagnóstico
         </button>
         <button type="button" [class.order-tabs__button--active]="orderDetailTab === 'agreement'" (click)="setOrderDetailTab('agreement')">
-          Acuerdo comercial
+          Cotización
         </button>
       </nav>
 
@@ -365,12 +365,12 @@
         <section *ngIf="orderDetailTab === 'agreement'" class="order-detail-section">
           <div class="detail-empty" *ngIf="!selectedOrderAgreements.length">
             <i class="fas fa-file-signature" aria-hidden="true"></i>
-            <strong>Aún no hay un acuerdo comercial</strong>
+            <strong>Aún no hay una cotización</strong>
             <span>Los términos y montos aparecerán cuando se registre una propuesta.</span>
           </div>
           <article class="history-entry" *ngFor="let agreement of selectedOrderAgreements">
             <header>
-              <strong>Acuerdo {{ agreement.sequenceNumber }}</strong>
+              <strong>Cotización {{ agreement.sequenceNumber }}</strong>
               <span>{{ formatStatus(agreement.status) }}</span>
             </header>
             <div class="agreement-total">
@@ -380,7 +380,7 @@
 
             <div class="agreement-meta">
               <div>
-                <span>Fecha del acuerdo</span>
+                <span>Fecha de la cotización</span>
                 <strong>{{ agreement.agreedAt ? (agreement.agreedAt | date: 'dd/MM/yyyy, HH:mm') : 'Pendiente' }}</strong>
               </div>
               <div>
@@ -421,7 +421,7 @@
               class="agreement-lines agreement-lines--empty"
               *ngIf="!agreement.serviceItems?.length && !agreement.productItems?.length"
             >
-              Este acuerdo no tiene servicios ni productos detallados.
+              Esta cotización no tiene servicios ni productos detallados.
             </div>
 
             <div class="agreement-notes">

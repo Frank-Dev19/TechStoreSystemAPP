@@ -25,7 +25,7 @@ import { ProductsService } from '../../services/inventory/products.service';
 import { PricingQueryApiService } from '../../services/pricing/pricing-query-api.service';
 import { UsersApiService } from '../../services/rbac/users-api.service';
 import { SalesApiService } from '../../services/sales/sales-api.service';
-import { SaleReceiptPdfService } from '../../services/sales/sale-receipt-pdf.service';
+import { ElectronicBillingApiService } from '../../services/electronic-billing/electronic-billing-api.service';
 import { ServiceOrderAgreementService } from '../../services/service-orders/service-agreement.service';
 import { ServiceOrderBillingLinkService } from '../../services/service-orders/service-order-billing-link.service';
 import { ServiceOrderDiagnosisService } from '../../services/service-orders/service-order-diagnosis.service';
@@ -108,8 +108,10 @@ describe('ReceptionPanel', () => {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [] })),
   };
 
-  const saleReceiptPdfServiceStub = {
-    downloadBySaleId: jasmine.createSpy('downloadBySaleId').and.returnValue(of('B001-001.pdf')),
+  const electronicBillingApiStub = {
+    getDocumentBySale: jasmine.createSpy('getDocumentBySale'),
+    sendInvoice: jasmine.createSpy('sendInvoice'),
+    downloadPdf: jasmine.createSpy('downloadPdf'),
   };
 
   const routerStub = {
@@ -131,7 +133,9 @@ describe('ReceptionPanel', () => {
 
   beforeEach(async () => {
     localStorage.removeItem('techstore:reception:create-service-order-draft:v2:1:99');
-    saleReceiptPdfServiceStub.downloadBySaleId.and.returnValue(of('B001-001.pdf'));
+    electronicBillingApiStub.getDocumentBySale.and.returnValue(of(createElectronicDocument()));
+    electronicBillingApiStub.sendInvoice.and.returnValue(of({ document: createElectronicDocument() }));
+    electronicBillingApiStub.downloadPdf.and.returnValue(of(new Blob(['pdf'])));
 
     await TestBed.configureTestingModule({
       declarations: [ReceptionPanel],
@@ -148,7 +152,7 @@ describe('ReceptionPanel', () => {
         { provide: ServiceOrderDocumentsService, useValue: serviceOrderDocumentsStub },
         { provide: ServiceOrderBillingLinkService, useValue: billingLinksStub },
         { provide: SalesApiService, useValue: salesApiStub },
-        { provide: SaleReceiptPdfService, useValue: saleReceiptPdfServiceStub },
+        { provide: ElectronicBillingApiService, useValue: electronicBillingApiStub },
         { provide: ServiceOrderInboxService, useValue: inboxServiceStub },
         { provide: CurrentUserService, useValue: currentUserServiceStub },
         { provide: Router, useValue: routerStub },
@@ -710,6 +714,23 @@ describe('ReceptionPanel', () => {
     expect(component.createServiceOrderCandidates[0].accessories).toBeNull()
   })
 
+  it('reinicia el formulario del equipo sin mostrar errores al agregar otro', () => {
+    component.createServiceOrderStep = 3
+    component.createServiceOrderForm.patchValue({
+      equipmentType: EquipmentType.LAPTOP,
+      initialIssue: 'No enciende',
+    })
+    component.createServiceOrderForm.get('initialIssue')?.markAsTouched()
+    component.createServiceOrderForm.get('initialIssue')?.markAsDirty()
+
+    component.beginAnotherCreateServiceOrderCandidate()
+
+    const initialIssueControl = component.createServiceOrderForm.get('initialIssue')
+    expect(initialIssueControl?.value).toBe('')
+    expect(initialIssueControl?.untouched).toBeTrue()
+    expect(initialIssueControl?.pristine).toBeTrue()
+  })
+
   it('guarda y expone la nota por equipo en el resumen de la orden', () => {
     component.createServiceOrderForm.patchValue({
       workflowServiceType: ServiceType.DIAGNOSIS,
@@ -804,8 +825,7 @@ describe('ReceptionPanel', () => {
     expect(component.createServiceOrderStep).toBe(4)
   })
 
-  it('bloquea avanzar desde Equipos si hay draft pendiente aunque ya exista un equipo guardado', () => {
-    const showMessageSpy = spyOn<any>(component, 'showMessage')
+  it('guarda automáticamente un equipo válido pendiente al avanzar', () => {
     component.createServiceOrderStep = 3
     component.createServiceOrderCandidates = [
       {
@@ -821,21 +841,23 @@ describe('ReceptionPanel', () => {
       } as any,
     ]
     component.createServiceOrderForm.patchValue({
+      equipmentType: EquipmentType.DESKTOP_PC,
       brand: 'Dell',
+      initialIssue: 'No muestra imagen',
     })
 
     component.nextCreateServiceOrderStep()
 
-    expect(component.createServiceOrderStep).toBe(3)
-    expect(showMessageSpy).toHaveBeenCalledWith(
-      'warning',
-      'fas fa-exclamation-circle',
-      'Tienes un equipo en edición o sin guardar. Guárdalo o limpia el formulario antes de continuar.',
-    )
+    expect(component.createServiceOrderStep).toBe(4)
+    expect(component.createServiceOrderCandidates.length).toBe(2)
+    expect(component.createServiceOrderCandidates[1]).toEqual(jasmine.objectContaining({
+      equipmentType: EquipmentType.DESKTOP_PC,
+      brand: 'Dell',
+      initialIssue: 'No muestra imagen',
+    }))
   })
 
-  it('bloquea avanzar desde Equipos si está editando un equipo existente', () => {
-    const showMessageSpy = spyOn<any>(component, 'showMessage')
+  it('guarda automáticamente la edición válida de un equipo al avanzar', () => {
     component.createServiceOrderStep = 3
     component.createServiceOrderCandidates = [
       {
@@ -846,20 +868,19 @@ describe('ReceptionPanel', () => {
         serialNumber: null,
         accessories: null,
         initialIssue: 'No enciende',
+        priority: ServiceOrderPriority.LOW,
         serviceType: ServiceType.DIAGNOSIS,
         quoteItems: [],
       } as any,
     ]
     component.editCreateServiceOrderCandidate(0)
+    component.createServiceOrderForm.patchValue({ initialIssue: 'No enciende después de una caída' })
 
     component.nextCreateServiceOrderStep()
 
-    expect(component.createServiceOrderStep).toBe(3)
-    expect(showMessageSpy).toHaveBeenCalledWith(
-      'warning',
-      'fas fa-exclamation-circle',
-      'Tienes un equipo en edición o sin guardar. Guárdalo o limpia el formulario antes de continuar.',
-    )
+    expect(component.createServiceOrderStep).toBe(4)
+    expect(component.createServiceOrderCandidates.length).toBe(1)
+    expect(component.createServiceOrderCandidates[0].initialIssue).toBe('No enciende después de una caída')
   })
 
   it('bloquea avanzar desde Equipos si el draft quedó en OTHER sin completar', () => {
@@ -889,7 +910,7 @@ describe('ReceptionPanel', () => {
     expect(showMessageSpy).toHaveBeenCalledWith(
       'warning',
       'fas fa-exclamation-circle',
-      'Tienes un equipo en edición o sin guardar. Guárdalo o limpia el formulario antes de continuar.',
+      'Completa los campos obligatorios del equipo antes de continuar.',
     )
   })
 
@@ -1290,36 +1311,35 @@ describe('ReceptionPanel', () => {
     expect(companyTradeNameInput).toBeTruthy();
   }));
 
-  it('genera la tabla del PDF del documento ligado con columna NÂ° en vez de Tipo', () => {
+  it('descarga el PDF electrónico aceptado del documento ligado', () => {
     const order = createServiceOrder({ id: 12 });
     component.saleLinksByOrderId[12] = [createBillingLink(12)];
     const showMessageSpy = spyOn<any>(component, 'showMessage');
+    spyOn<any>(component, 'downloadBlob');
 
     component.downloadLinkedSaleDocument(order);
 
-    expect(saleReceiptPdfServiceStub.downloadBySaleId).toHaveBeenCalledWith(99, 'linked-summary');
+    expect(electronicBillingApiStub.getDocumentBySale).toHaveBeenCalledWith(99);
+    expect(electronicBillingApiStub.downloadPdf).toHaveBeenCalledWith(99);
     expect(showMessageSpy).toHaveBeenCalledWith(
       'success',
       'fas fa-check-circle',
-      'Documento descargado: B001-001.pdf',
+      'Comprobante electrónico descargado: B001-00000001.pdf',
     );
   });
 
-  it('keeps error feedback in the page when linked PDF generation fails', () => {
+  it('emite el comprobante ligado cuando todavía no existe y luego descarga el PDF aceptado', () => {
     const order = createServiceOrder({ id: 13 });
     component.saleLinksByOrderId[13] = [createBillingLink(13)];
-    saleReceiptPdfServiceStub.downloadBySaleId.and.returnValue(
-      throwError(() => new Error('renderer failed')),
+    electronicBillingApiStub.getDocumentBySale.and.returnValue(
+      throwError(() => ({ status: 404 })),
     );
-    const showMessageSpy = spyOn<any>(component, 'showMessage');
+    spyOn<any>(component, 'downloadBlob');
 
     component.downloadLinkedSaleDocument(order);
 
-    expect(showMessageSpy).toHaveBeenCalledWith(
-      'danger',
-      'fas fa-times-circle',
-      'No pudimos descargar el documento ligado.',
-    );
+    expect(electronicBillingApiStub.sendInvoice).toHaveBeenCalledWith(99);
+    expect(electronicBillingApiStub.downloadPdf).toHaveBeenCalledWith(99);
   });
 
   it('arma payloads de acuerdos con technicalServiceAmount y sin services[]', () => {
@@ -1597,6 +1617,22 @@ function createBillingLink(serviceOrderId: number): ServiceOrderBillingLink {
       createdAt: '2026-04-02T10:00:00.000Z',
       updatedAt: '2026-04-02T10:00:00.000Z',
     } as any,
+  };
+}
+
+function createElectronicDocument() {
+  return {
+    id: 7,
+    saleId: 99,
+    companyId: 1,
+    provider: 'APISPERU',
+    documentType: 'BOLETA',
+    sunatDocumentTypeCode: '03',
+    series: 'B001',
+    number: '00000001',
+    status: 'ACCEPTED' as const,
+    createdAt: '2026-08-20T10:00:00.000Z',
+    updatedAt: '2026-08-20T10:00:00.000Z',
   };
 }
 

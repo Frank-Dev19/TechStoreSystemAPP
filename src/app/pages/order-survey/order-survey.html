@@ -1,0 +1,92 @@
+<main class="survey-page">
+  <div class="survey-orb survey-orb--one"></div>
+  <div class="survey-orb survey-orb--two"></div>
+
+  <section class="survey-shell" aria-live="polite">
+    <header class="brand-bar">
+      <img src="assets/img/Logo_macrochips.png" alt="Macrochips" class="brand-logo" />
+      <div>
+        <span class="brand-name">Macrochips</span>
+        <span class="brand-caption">Servicio técnico</span>
+      </div>
+    </header>
+
+    <div *ngIf="state === 'loading'" class="state-panel">
+      <span class="loader" aria-hidden="true"></span>
+      <h1>Preparando tu encuesta</h1>
+      <p>Esto tomará solo un momento.</p>
+    </div>
+
+    <div *ngIf="state === 'answered'" class="state-panel state-panel--success">
+      <div class="state-icon">✓</div>
+      <p class="eyebrow">Respuesta registrada</p>
+      <h1>Gracias por ayudarnos a mejorar</h1>
+      <p>Tu opinión fue guardada correctamente. Esta encuesta ya no admite nuevas respuestas.</p>
+    </div>
+
+    <div *ngIf="state === 'expired'" class="state-panel">
+      <div class="state-icon state-icon--muted">⌛</div>
+      <p class="eyebrow">Encuesta finalizada</p>
+      <h1>El plazo para responder venció</h1>
+      <p>Gracias por tu interés. Si deseas comentarnos algo, puedes escribirnos directamente por WhatsApp.</p>
+    </div>
+
+    <div *ngIf="state === 'invalid'" class="state-panel">
+      <div class="state-icon state-icon--muted">!</div>
+      <p class="eyebrow">Enlace no disponible</p>
+      <h1>No pudimos abrir esta encuesta</h1>
+      <p>Verifica que el enlace esté completo o comunícate con Macrochips.</p>
+    </div>
+
+    <ng-container *ngIf="state === 'available' || state === 'submitting'">
+      <div class="survey-intro">
+        <p class="eyebrow">Tu experiencia importa</p>
+        <h1>Hola, {{ survey?.clientName }}</h1>
+        <p>Queremos conocer cómo fue tu experiencia con nuestro servicio. Te tomará menos de un minuto.</p>
+        <div class="order-chip">
+          <span>Orden {{ survey?.orderCode }}</span>
+          <strong>{{ survey?.equipmentSummary }}</strong>
+        </div>
+      </div>
+
+      <form [formGroup]="form" (ngSubmit)="submit()" class="survey-form">
+        <section class="rating-block" *ngFor="let question of [
+          { control: 'overallRating', title: '¿Cómo calificarías tu experiencia general?' },
+          { control: 'attentionRating', title: '¿Cómo fue la atención que recibiste?' },
+          { control: 'serviceQualityRating', title: '¿Cómo calificas la calidad del servicio?' }
+        ]; let questionIndex = index">
+          <span class="question-number">0{{ questionIndex + 1 }}</span>
+          <h2>{{ question.title }}</h2>
+          <div class="rating-options" role="radiogroup" [attr.aria-label]="question.title">
+            <button
+              *ngFor="let rating of ratings"
+              type="button"
+              class="rating-option"
+              [class.is-selected]="form.get(question.control)?.value === rating"
+              [attr.aria-pressed]="form.get(question.control)?.value === rating"
+              (click)="selectRating(question.control, rating)">
+              <span>{{ rating }}</span>
+              <small>{{ ratingLabels[rating - 1] }}</small>
+            </button>
+          </div>
+          <p class="field-error" *ngIf="form.get(question.control)?.touched && form.get(question.control)?.invalid">
+            Selecciona una calificación.
+          </p>
+        </section>
+
+        <section class="comment-block">
+          <label for="survey-comment">¿Hay algo más que quieras contarnos? <span>Opcional</span></label>
+          <textarea id="survey-comment" formControlName="comment" maxlength="1000" rows="4"
+            placeholder="Cuéntanos qué hicimos bien o qué podríamos mejorar."></textarea>
+          <small>{{ form.get('comment')?.value?.length || 0 }}/1000</small>
+        </section>
+
+        <button class="submit-button" type="submit" [disabled]="state === 'submitting'">
+          <span>{{ state === 'submitting' ? 'Enviando respuesta…' : 'Enviar mi opinión' }}</span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <p class="privacy-note">Tu respuesta se registrará una sola vez y será usada únicamente para mejorar nuestra atención.</p>
+      </form>
+    </ng-container>
+  </section>
+</main>

@@ -38,6 +38,7 @@
               </div>
             </div>
 
+            @if (line.type === 'SERVICE') {
             <div class="discount-control">
               <label [for]="'discount-percentage-' + line.id">Descuento porcentual</label>
               <div class="discount-control__entry">
@@ -64,13 +65,19 @@
                 }
               </div>
             </div>
+            } @else {
+              <div class="discount-notice">
+                <i class="fas fa-box"></i>
+                <span>Los productos conservan su precio y no admiten descuentos en la cotización.</span>
+              </div>
+            }
 
             <div class="discount-line__totals">
               <span>Descuento <strong>- S/ {{ getDiscountAmount(line, index) | number: '1.2-2' }}</strong></span>
               <span>Neto <strong>S/ {{ getNetAmount(line, index) | number: '1.2-2' }}</strong></span>
             </div>
 
-            @if (getPercentage(index) > 0) {
+            @if (line.type === 'SERVICE' && getPercentage(index) > 0) {
               <label class="discount-reason">
                 <span>Motivo de autorización <small>(obligatorio solo si supera el límite)</small></span>
                 <textarea

@@ -23,7 +23,7 @@ import {
   ServiceOrderSlaStage,
   ServiceType,
 } from "../../models/service-orders/service-order"
-import { ServiceOrderService } from "../../services/service-orders/service-order.service"
+import { FailedServiceOrderNotification, ServiceOrderService } from "../../services/service-orders/service-order.service"
 import { ServiceOrderDiagnosisService } from "../../services/service-orders/service-order-diagnosis.service"
 import { ServiceOrderDiagnosis } from "../../models/service-orders/service-order-diagnosis"
 import { Product } from "../../models/catalog/product"
@@ -64,6 +64,7 @@ export class SupervisorPanel implements OnInit {
 
   products: Product[] = []
   technicianRankings: TechnicianRevenueRanking[] = []
+  failedNotifications: FailedServiceOrderNotification[] = []
 
   isLoadingServiceOrderAgreements = false
   isLoadingDiagnosis = false
@@ -128,6 +129,24 @@ export class SupervisorPanel implements OnInit {
     this.loadServiceOrders()
     this.loadProducts()
     this.loadTechnicianRankings()
+    this.loadFailedNotifications()
+  }
+
+  loadFailedNotifications(): void {
+    this.serviceOrderService.getFinalNotificationFailures().subscribe({
+      next: (notifications) => this.failedNotifications = notifications,
+      error: () => this.failedNotifications = [],
+    })
+  }
+
+  retryNotification(notification: FailedServiceOrderNotification): void {
+    this.serviceOrderService.retryFinalNotification(notification.id).subscribe({
+      next: () => {
+        this.failedNotifications = this.failedNotifications.filter((item) => item.id !== notification.id)
+        this.showMessage('success', 'fas fa-redo', 'Notificación reenviada o reprogramada correctamente.')
+      },
+      error: () => this.showMessage('error', 'fas fa-exclamation-circle', 'No pudimos reintentar la notificación.'),
+    })
   }
 
   setActiveSection(section: "ranking" | "orders"): void {
@@ -184,7 +203,7 @@ export class SupervisorPanel implements OnInit {
       .pipe(finalize(() => (this.isLoadingServiceOrderAgreements = false)))
       .subscribe({
         next: ({ data }) => this.hydrateLists(data ?? []),
-        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar los acuerdos."),
+        error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar las cotizaciones."),
       })
   }
 
@@ -457,7 +476,7 @@ export class SupervisorPanel implements OnInit {
     const message = result.decision.decision === "CHANGES_REQUESTED"
       ? "Se registró que el cliente solicita cambios para este equipo."
       : result.allAccepted
-        ? "Se registró la aceptación y el acuerdo consolidado quedó confirmado."
+        ? "Se registró la aceptación y la cotización consolidada quedó confirmada."
         : "Se registró la aceptación de este equipo. Los demás equipos siguen pendientes."
     this.clientDecisionTarget = null
     const orderId = this.selectedServiceOrder?.id
@@ -625,6 +644,22 @@ export class SupervisorPanel implements OnInit {
       items,
       selectedItemId: item?.id ?? null,
     }
+  }
+
+  canSendPickupReminder(item: ServiceOrderItem): boolean {
+    return !item.deliveredAt && Boolean(item.readyForPickupAt || item.cancelledAt)
+  }
+
+  sendEquipmentPickupReminder(order: ServiceOrder, item: ServiceOrderItem): void {
+    if (!this.canSendPickupReminder(item)) return
+    this.serviceOrderService.sendPickupReminder(Number(order.id), [Number(item.id)]).subscribe({
+      next: () => this.showMessage("success", "fas fa-paper-plane", "Recordatorio de recojo enviado al cliente."),
+      error: (error) => this.showMessage(
+        "danger",
+        "fas fa-exclamation-circle",
+        error?.error?.message || "No pudimos enviar el recordatorio de recojo.",
+      ),
+    })
   }
 
   openCancellationResolution(order: ServiceOrder, item: ServiceOrderItem): void {

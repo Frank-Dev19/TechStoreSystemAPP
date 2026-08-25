@@ -38,6 +38,8 @@ describe('SupervisorPanel', () => {
   const serviceOrderServiceStub = {
     findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
     findOne: jasmine.createSpy('findOne').and.returnValue(of({} as any)),
+    getFinalNotificationFailures: jasmine.createSpy('getFinalNotificationFailures').and.returnValue(of([])),
+    retryFinalNotification: jasmine.createSpy('retryFinalNotification').and.returnValue(of({} as any)),
   };
 
   const diagnosisServiceStub = {

@@ -87,13 +87,13 @@
             <i [class]="chargedItems.length ? 'fas fa-receipt' : 'fas fa-check-circle'"></i>
             <div>
               <strong>
-                {{ chargedItems.length ? 'La cancelación generará un cargo' : 'Cancelación inmediata sin cargo' }}
+                {{ chargedItems.length ? 'Se cobrará el servicio de diagnóstico' : 'Cancelación sin importe pendiente' }}
               </strong>
               <span>
                 @if (chargedItems.length) {
-                  {{ chargedItems.length }} equipo(s) ya iniciaron diagnóstico. Total pendiente: S/ {{ chargeTotal.toFixed(2) }}.
+                  El diagnóstico de {{ chargedItems.length }} equipo(s) ya inició. Importe pendiente: S/ {{ chargeTotal.toFixed(2) }}.
                 } @else {
-                  Ninguno de los equipos seleccionados inició el diagnóstico.
+                  El diagnóstico de los equipos seleccionados todavía no inició.
                 }
               </span>
             </div>
@@ -113,8 +113,8 @@
           <label class="cancellation-acknowledgement">
             <input type="checkbox" formControlName="customerChargeAcknowledged" />
             <span>
-              <strong>Confirmo que el cliente fue informado</strong>
-              <small>Se cobrarán S/ 20.00 por cada equipo cuyo diagnóstico ya inició.</small>
+              <strong>Confirmo que informé el importe al cliente</strong>
+              <small>Corresponden S/ 20.00 por el diagnóstico iniciado de cada equipo indicado.</small>
             </span>
           </label>
         }

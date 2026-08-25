@@ -92,6 +92,9 @@ export interface PriceCalculation {
     salePriceWithIgv: number;
     minPriceWithIgv: number;
     stockQty: number;
+    recommendedPrice: number;
+    minAllowedPrice: number;
+    costSource: 'CURRENT_STOCK' | 'MOVEMENT_HISTORY';
 }
 
 export interface DiscountValidation {

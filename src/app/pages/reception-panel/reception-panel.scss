@@ -15,6 +15,11 @@ $bg-light: #f5f7fa;
 .reception-panel-container {
   background: $bg-light;
   min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: clip;
   padding: 2rem;
   display: flex;
   flex-direction: column;
@@ -274,11 +279,28 @@ $bg-light: #f5f7fa;
     grid-template-columns: 1fr;
     gap: 1.5rem;
     align-items: start;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .serviceOrders-card {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
     overflow-y: visible;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .serviceOrders-table {
+    min-width: 72rem;
   }
 
   .data-table {
@@ -1489,7 +1511,16 @@ $bg-light: #f5f7fa;
             color: #0f172a;
           }
         }
+
+        .equipment-form-actions {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 0.5rem;
+          padding-top: 1rem;
+          border-top: 1px solid $border;
+        }
       }
+
     }
 
     .quote-items-section {
@@ -4114,6 +4145,10 @@ $bg-light: #f5f7fa;
       font-size: 0.7rem;
     }
   }
+}
+
+.serviceOrders-table .equipment-exit-column {
+  min-width: 11rem;
 }
 
 .commercial-version-list {

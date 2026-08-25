@@ -19,7 +19,6 @@ import { DocumentType } from '../../models/sales/enums';
 import { ClientKind, ClientSaveRequest } from '../../models/clients-request';
 import { ClientResponse } from '../../models/clients-response';
 import { ServiceOrder } from '../../models/service-orders/service-order';
-import { SaleReceiptPdfService } from '../../services/sales/sale-receipt-pdf.service';
 import { ElectronicBillingApiService } from '../../services/electronic-billing/electronic-billing-api.service';
 import { ElectronicDocument, ElectronicDocumentStatus } from '../../models/electronic-billing/electronic-document.model';
 // ============================================
@@ -325,7 +324,6 @@ export class Ventas implements OnInit {
     private documentTypesApi: DocumentTypesApiService,
     private pricingQueryApi: PricingQueryApiService,
     private currentUser: CurrentUserService,
-    private saleReceiptPdfService: SaleReceiptPdfService,
     private electronicBillingApi: ElectronicBillingApiService,
   ) { }
 
@@ -1273,35 +1271,16 @@ export class Ventas implements OnInit {
       return
     }
 
-    const selectedOrders = this.eligibleServiceOrders.filter((order) => normalizedIds.includes(Number(order.id)))
-    if (!selectedOrders.length) {
+    const selectedOrder = this.eligibleServiceOrders.find((order) => Number(order.id) === Number(normalizedIds[0]))
+    if (!selectedOrder) {
       this.clearGroupedServiceOrderSelection()
       return
     }
 
-    const preferredAnchorId = Number(this.selectedServiceOrderId ?? normalizedIds[0] ?? 0)
-    const anchorCandidate = selectedOrders.find((order) => Number(order.id) === preferredAnchorId) ?? selectedOrders[0]
-    const anchorClientId = Number(anchorCandidate?.clientId ?? 0)
-    const sameClientOrders = this.sortServiceOrdersByCode(
-      selectedOrders.filter((order) => Number(order.clientId ?? 0) === anchorClientId),
-    )
-
-    if (sameClientOrders.length !== selectedOrders.length) {
-      this.showToast('warning', 'Solo puedes agrupar órdenes del mismo cliente')
-    }
-
-    const anchoredOrder = sameClientOrders.find((order) => Number(order.id) === Number(anchorCandidate.id)) ?? sameClientOrders[0] ?? null
-    const groupedOrders = anchoredOrder
-      ? [
-          anchoredOrder,
-          ...sameClientOrders.filter((order) => Number(order.id) !== Number(anchoredOrder.id)),
-        ]
-      : []
-
-    this.selectedServiceOrder = anchoredOrder
-    this.selectedServiceOrderId = anchoredOrder ? Number(anchoredOrder.id) : null
-    this.selectedServiceOrders = groupedOrders
-    this.selectedServiceOrderIds = groupedOrders.map((order) => Number(order.id))
+    this.selectedServiceOrder = selectedOrder
+    this.selectedServiceOrderId = Number(selectedOrder.id)
+    this.selectedServiceOrders = [selectedOrder]
+    this.selectedServiceOrderIds = [Number(selectedOrder.id)]
     this.hydrateGroupedServiceOrderLines()
   }
 
@@ -1543,8 +1522,9 @@ export class Ventas implements OnInit {
     // CASH: reference, bankName, cardType = null
 
     if (this.saleCreationMode === 'SERVICE_ORDER') {
-      if (!this.selectedServiceOrderIds.length) {
-        this.showToast('error', 'Selecciona al menos una orden pendiente para facturar')
+      const serviceOrderId = Number(this.selectedServiceOrderId ?? this.selectedServiceOrderIds[0] ?? 0)
+      if (!serviceOrderId) {
+        this.showToast('error', 'Selecciona una orden pendiente para facturar')
         return
       }
 
@@ -1553,22 +1533,22 @@ export class Ventas implements OnInit {
       }
 
       this.salesApi.createFromServiceAgreements({
-        serviceOrderIds: this.selectedServiceOrderIds,
+        serviceOrderIds: [serviceOrderId],
         companyId: this.COMPANY_ID,
         taxpayerCustomerId: Number(this.foundCustomer!.id),
         documentType: this.saleFormData.documentType,
         issueDate: this.getToday(),
-        observations: `Venta agrupada desde órdenes ${this.selectedServiceOrders.map((order) => order.code).join(', ')}`,
+        observations: `Venta desde orden ${this.selectedServiceOrder.code}`,
         payments: [paymentData],
       }).subscribe({
         next: () => {
-          this.showToast('success', 'Venta agrupada registrada exitosamente')
+          this.showToast('success', 'Venta de la orden registrada exitosamente')
           this.onCancelSaleForm()
           this.loadSales()
           this.loadOpenRegister()
           this.loadEligibleServiceOrders()
         },
-        error: () => this.showToast('error', 'Error registrando venta agrupada'),
+        error: (error) => this.showToast('error', this.resolveGroupedSaleErrorMessage(error)),
       })
       return
     }
@@ -1607,6 +1587,26 @@ export class Ventas implements OnInit {
       },
       error: () => this.showToast('error', 'Error registrando venta')
     })
+  }
+
+  private resolveGroupedSaleErrorMessage(error: any): string {
+    const rawMessage = error?.error?.message
+    const message = Array.isArray(rawMessage)
+      ? rawMessage.join(' ')
+      : typeof rawMessage === 'string'
+        ? rawMessage
+        : ''
+    const normalized = message.toLocaleLowerCase('es-PE')
+    const isStockError = [
+      'stock insuficiente',
+      'stock total insuficiente',
+      'no hay stock disponible',
+      'stock insuficiente de seriales',
+    ].some((pattern) => normalized.includes(pattern))
+
+    return isStockError
+      ? message
+      : 'Error registrando venta agrupada'
   }
 
   // ============================================

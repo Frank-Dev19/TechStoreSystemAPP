@@ -58,7 +58,8 @@ import { ServiceOrderDocumentsService } from "../../services/service-orders/serv
 import { ServiceOrderBillingLinkService } from "../../services/service-orders/service-order-billing-link.service"
 import { ServiceOrderBillingLink } from "../../models/service-orders/service-order-billing-link"
 import { Sale } from "../../models/sales/sale.model"
-import { SaleReceiptPdfService } from "../../services/sales/sale-receipt-pdf.service"
+import { ElectronicBillingApiService } from "../../services/electronic-billing/electronic-billing-api.service"
+import { ElectronicDocument } from "../../models/electronic-billing/electronic-document.model"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
 import { CurrentUserService } from "../../services/current-user.service"
 import {
@@ -77,6 +78,8 @@ interface ServiceOrderAgreementProductComposer {
   productId: number | null
   quantity: number
   unitPrice: number
+  recommendedPrice?: number
+  minAllowedPrice?: number
   requiresPurchase: boolean
   notes: string
 }
@@ -357,7 +360,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     private readonly pricingQuery: PricingQueryApiService,
     private readonly serviceOrderDocuments: ServiceOrderDocumentsService,
     private readonly serviceOrderBillingLinks: ServiceOrderBillingLinkService,
-    private readonly saleReceiptPdfService: SaleReceiptPdfService,
+    private readonly electronicBillingApi: ElectronicBillingApiService,
     private readonly serviceOrderInboxService: ServiceOrderInboxService,
     private readonly currentUserService: CurrentUserService,
     private readonly router: Router,
@@ -620,14 +623,51 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
 
-    this.saleReceiptPdfService.downloadBySaleId(Number(activeLink.sale.id), 'linked-summary').subscribe({
-      next: (fileName) => {
-        this.showMessage("success", "fas fa-check-circle", `Documento descargado: ${fileName}`)
+    const saleId = Number(activeLink.sale.id)
+    this.electronicBillingApi.getDocumentBySale(saleId).pipe(
+      catchError((error) => {
+        const status = Number(error?.status ?? error?.error?.statusCode ?? 0)
+        return status === 404
+          ? this.electronicBillingApi.sendInvoice(saleId).pipe(map((response) => response.document))
+          : throwError(() => error)
+      }),
+      switchMap((document) => {
+        if (document.status !== "ACCEPTED") {
+          return throwError(() => new Error(this.getElectronicDocumentUnavailableMessage(document)))
+        }
+        return this.electronicBillingApi.downloadPdf(saleId).pipe(
+          map((blob) => ({ blob, document })),
+        )
+      }),
+    ).subscribe({
+      next: ({ blob, document }) => {
+        const fileName = `${document.series}-${document.number}.pdf`
+        this.downloadBlob(blob, fileName)
+        this.showMessage("success", "fas fa-check-circle", `Comprobante electrónico descargado: ${fileName}`)
       },
-      error: () => {
-        this.showMessage("danger", "fas fa-times-circle", "No pudimos descargar el documento ligado.")
+      error: (error) => {
+        const message = error instanceof Error && error.message
+          ? error.message
+          : "No pudimos emitir o descargar el comprobante electrónico."
+        this.showMessage("danger", "fas fa-times-circle", message)
       },
     })
+  }
+
+  private getElectronicDocumentUnavailableMessage(document: ElectronicDocument): string {
+    if (document.status === "REJECTED" || document.status === "ERROR") {
+      return document.errorMessage || document.sunatDescription || "El comprobante electrónico fue rechazado."
+    }
+    return "La emisión electrónica está en proceso. El PDF estará disponible cuando el comprobante sea aceptado."
+  }
+
+  private downloadBlob(blob: Blob, fileName: string): void {
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = fileName
+    link.click()
+    window.URL.revokeObjectURL(url)
   }
 
   toggleActionMenu(serviceOrderId: number, event?: Event): void {
@@ -1100,7 +1140,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.showMessage(
       "warning",
       "fas fa-info-circle",
-      "El rechazo comercial debe resolverse desde el flujo de acuerdos, no desde una transición técnica directa.",
+      "El rechazo comercial debe resolverse desde el flujo de cotizaciones, no desde una transición técnica directa.",
     )
   }
 
@@ -1161,7 +1201,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
             (quote) => quote.status === ServiceOrderAgreementStatus.CONFIRMED || Boolean(quote.agreedAt),
           )
           if (!quotes.length) {
-            this.warrantyActionError = "El equipo no tiene acuerdos confirmados para evaluar garantía."
+            this.warrantyActionError = "El equipo no tiene cotizaciones confirmadas para evaluar garantía."
             return
           }
 
@@ -1885,8 +1925,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       .pipe(finalize(() => (this.productPriceLoading[item.id] = false)))
       .subscribe({
         next: (res) => {
-          const unitPrice = res?.salePrice ?? 0
-          item.unitPrice = unitPrice
+          item.recommendedPrice = Number(res?.recommendedPrice ?? res?.salePriceWithIgv ?? 0)
+          item.minAllowedPrice = Number(res?.minAllowedPrice ?? 0)
+          item.unitPrice = item.recommendedPrice
         },
         error: () => {
           this.showMessage("warning", "fas fa-dollar-sign", "No pudimos obtener el precio del producto.")
@@ -1945,7 +1986,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     if (this.createServiceOrderAgreementForm.invalid || this.quoteItems.length === 0 || !this.selectedServiceOrderId) {
-      this.showMessage("warning", "fas fa-exclamation-circle", "Selecciona la orden y completa los datos del acuerdo.")
+      this.showMessage("warning", "fas fa-exclamation-circle", "Selecciona la orden y completa los datos de la cotización.")
       return
     }
 
@@ -2036,7 +2077,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           }
         },
         error: () => {
-          this.quoteDetailError = "No pudimos refrescar el detalle del acuerdo."
+          this.quoteDetailError = "No pudimos refrescar el detalle de la cotización."
         },
       })
   }
@@ -2123,7 +2164,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     const message = result.decision.decision === "CHANGES_REQUESTED"
       ? "Se registró que el cliente solicita cambios para este equipo."
       : result.allAccepted
-        ? "Se registró la aceptación y el acuerdo consolidado quedó confirmado."
+        ? "Se registró la aceptación y la cotización consolidada quedó confirmada."
         : "Se registró la aceptación de este equipo. Los demás equipos siguen pendientes."
     this.clientDecisionTarget = null
     this.lineDiscountTarget = null
@@ -2619,7 +2660,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
     this.addCurrentEquipmentToCreateOrder()
-    this.resetCreateServiceOrderItemDraft()
     this.createServiceOrderStep = 3
   }
 
@@ -2633,32 +2673,34 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   private resetCreateServiceOrderItemDraft(): void {
     this.editingCreateServiceOrderCandidateIndex = null
     this.createServiceOrderForm.patchValue(this.getEmptyEquipmentDraftSnapshot())
+    this.getCreateServiceOrderItemControlNames().forEach((controlName) => {
+      const control = this.createServiceOrderForm.get(controlName)
+      control?.markAsPristine()
+      control?.markAsUntouched()
+    })
     this.createOrderAgreementItemsByItemIndex[0] = this.buildDefaultAgreementItemsForServiceType(
       this.getSelectedWorkflowServiceType(),
     )
   }
 
+  private getCreateServiceOrderItemControlNames(): string[] {
+    return [
+      "priority",
+      "equipmentType",
+      "equipmentTypeOther",
+      "brand",
+      "model",
+      "serialNumber",
+      "initialIssue",
+      "accessories",
+      "notes",
+    ]
+  }
+
   private areCurrentCreateOrderItemControlsValid(): boolean {
-    this.markControlsAsTouched([
-      "priority",
-      "equipmentType",
-      "equipmentTypeOther",
-      "brand",
-      "model",
-      "serialNumber",
-      "initialIssue",
-      "accessories",
-    ])
-    return this.areControlsValid([
-      "priority",
-      "equipmentType",
-      "equipmentTypeOther",
-      "brand",
-      "model",
-      "serialNumber",
-      "initialIssue",
-      "accessories",
-    ])
+    const controlNames = this.getCreateServiceOrderItemControlNames()
+    this.markControlsAsTouched(controlNames)
+    return this.areControlsValid(controlNames)
   }
 
   addCurrentEquipmentToCreateOrder(): void {
@@ -2826,6 +2868,34 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       ServiceOrderOperativeStatus.ENTREGADA,
       ServiceOrderOperativeStatus.CERRADA_SIN_SOLUCION,
     ].includes(item.operativeStatus) && !this.getPendingItemCancellation(item)
+  }
+
+  getEquipmentPhysicalExitLabel(item: ServiceOrderItem): string {
+    if (!item.deliveredAt) {
+      return item.operativeStatus === ServiceOrderOperativeStatus.CANCELADA
+        ? "Pendiente de devolución"
+        : "Pendiente de entrega"
+    }
+    return item.operativeStatus === ServiceOrderOperativeStatus.CANCELADA
+      ? "Devuelto"
+      : "Entregado"
+  }
+
+  canSendPickupReminder(item: ServiceOrderItem): boolean {
+    return !item.deliveredAt && Boolean(item.readyForPickupAt || item.cancelledAt)
+  }
+
+  sendEquipmentPickupReminder(order: ServiceOrder, item: ServiceOrderItem, event?: Event): void {
+    event?.stopPropagation()
+    if (!this.canSendPickupReminder(item)) return
+    this.serviceOrderService.sendPickupReminder(Number(order.id), [Number(item.id)]).subscribe({
+      next: () => this.showMessage('success', 'fas fa-paper-plane', 'Recordatorio de recojo enviado al cliente.'),
+      error: (error) => this.showMessage(
+        'error',
+        'fas fa-exclamation-circle',
+        error?.error?.message || 'No pudimos enviar el recordatorio de recojo.',
+      ),
+    })
   }
 
   handleItemCancellationSaved(result: ServiceOrderCancellationResult): void {
@@ -3173,8 +3243,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       .pipe(finalize(() => (this.getCreateOrderItemPriceLoadingMap(index)[item.id] = false)))
       .subscribe({
         next: (res) => {
-          const unitPrice = res?.salePrice ?? 0
-          item.unitPrice = unitPrice
+          item.recommendedPrice = Number(res?.recommendedPrice ?? res?.salePriceWithIgv ?? 0)
+          item.minAllowedPrice = Number(res?.minAllowedPrice ?? 0)
+          item.unitPrice = item.recommendedPrice
         },
         error: () => {
           this.showMessage("warning", "fas fa-dollar-sign", "No pudimos obtener el precio del producto.")
@@ -3407,17 +3478,21 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   private canAdvanceFromEquipmentStep(): boolean {
-    if (!this.hasSavedEquipmentCandidates()) {
-      this.showMessage("warning", "fas fa-exclamation-circle", "Debes guardar al menos un equipo antes de continuar.")
-      return false
+    if (this.hasPendingEquipmentDraft()) {
+      if (!this.areCurrentCreateOrderItemControlsValid()) {
+        this.showMessage(
+          "warning",
+          "fas fa-exclamation-circle",
+          "Completa los campos obligatorios del equipo antes de continuar.",
+        )
+        return false
+      }
+
+      this.addCurrentEquipmentToCreateOrder()
     }
 
-    if (this.hasPendingEquipmentDraft()) {
-      this.showMessage(
-        "warning",
-        "fas fa-exclamation-circle",
-        "Tienes un equipo en edición o sin guardar. Guárdalo o limpia el formulario antes de continuar.",
-      )
+    if (!this.hasSavedEquipmentCandidates()) {
+      this.showMessage("warning", "fas fa-exclamation-circle", "Debes guardar al menos un equipo antes de continuar.")
       return false
     }
 
@@ -3877,7 +3952,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   sendServiceOrderAgreementToClient(quote: ServiceOrderAgreement): void {
     if (!quote?.id) return
     if (!this.canRespondToServiceOrderAgreement(quote)) {
-      this.showMessage("warning", "fas fa-info-circle", "Este acuerdo ya fue cerrado.")
+      this.showMessage("warning", "fas fa-info-circle", "Esta cotización ya fue cerrada.")
       this.refreshServiceOrderAgreementsForCurrentItem()
       this.refreshServiceOrderAgreementDetail(quote.id)
       return
@@ -3888,7 +3963,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       .pipe(finalize(() => (this.isLoadingServiceOrderAgreementDetail = false)))
       .subscribe({
         next: (updatedServiceOrderAgreement) => {
-          this.showMessage("success", "fas fa-check-circle", "Acuerdo confirmado correctamente.")
+          this.showMessage("success", "fas fa-check-circle", "Cotización confirmada correctamente.")
           const index = this.serviceOrderItemQuotes.findIndex((q) => q.id === quote.id)
           if (index >= 0) {
             this.serviceOrderItemQuotes[index] = updatedServiceOrderAgreement
@@ -3899,7 +3974,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           this.loadServiceOrders()
         },
         error: (error) => {
-          this.showMessage("danger", "fas fa-times-circle", "No pudimos confirmar el acuerdo.")
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos confirmar la cotización.")
           const applied = this.applyServiceOrderAgreementStatusFromError(quote.id, error)
           if (!applied) {
             this.refreshServiceOrderAgreementsForCurrentItem()
@@ -3912,14 +3987,14 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   rejectServiceOrderAgreementByClient(quote: ServiceOrderAgreement): void {
     if (!quote?.id) return
     if (!this.canRespondToServiceOrderAgreement(quote)) {
-      this.showMessage("warning", "fas fa-info-circle", "Este acuerdo ya fue cerrado.")
+      this.showMessage("warning", "fas fa-info-circle", "Esta cotización ya fue cerrada.")
       this.refreshServiceOrderAgreementsForCurrentItem()
       this.refreshServiceOrderAgreementDetail(quote.id)
       return
     }
     this.isLoadingServiceOrderAgreementDetail = true
     this.agreementService
-      .voidAgreement(quote.id, "Sin acuerdo con el cliente.")
+      .voidAgreement(quote.id, "Sin aceptación de la cotización por parte del cliente.")
       .pipe(
         switchMap(() => this.agreementService.createDiagnosisFeeAgreement(Number(quote.serviceOrderId))),
       )
@@ -3929,7 +4004,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           this.showMessage(
             "success",
             "fas fa-check-circle",
-            "Orden marcada como pendiente de recojo y se generó el acuerdo automático de diagnóstico.",
+            "Orden marcada como pendiente de recojo y se generó la cotización automática por diagnóstico.",
           )
           const index = this.serviceOrderItemQuotes.findIndex((q) => q.id === quote.id)
           if (index >= 0) {
@@ -3948,7 +4023,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           this.refreshServiceOrderAgreementsForCurrentItem()
         },
         error: (error) => {
-          this.showMessage("danger", "fas fa-times-circle", "No pudimos cerrar el acuerdo sin continuidad.")
+          this.showMessage("danger", "fas fa-times-circle", "No pudimos cerrar la cotización sin continuidad.")
           const applied = this.applyServiceOrderAgreementStatusFromError(quote.id, error)
           if (!applied) {
             this.refreshServiceOrderAgreementsForCurrentItem()
@@ -4053,7 +4128,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   submitResubmitServiceOrderAgreement(): void {
     if (!this.selectedServiceOrderAgreementDetail?.id || this.createServiceOrderAgreementForm.invalid || this.quoteItems.length === 0) {
-      this.showMessage("warning", "fas fa-exclamation-circle", "Completa los datos del acuerdo.")
+      this.showMessage("warning", "fas fa-exclamation-circle", "Completa los datos de la cotización.")
       return
     }
 
@@ -4130,7 +4205,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   submitUpdateDraftServiceOrderAgreement(): void {
     if (!this.selectedServiceOrderAgreementDetail?.id || this.createServiceOrderAgreementForm.invalid || this.quoteItems.length === 0) {
-      this.showMessage("warning", "fas fa-exclamation-circle", "Completa los datos del acuerdo.")
+      this.showMessage("warning", "fas fa-exclamation-circle", "Completa los datos de la cotización.")
       return
     }
 

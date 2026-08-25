@@ -512,7 +512,7 @@
                         <select class="form-control" [ngModel]="saleCreationMode"
                             (ngModelChange)="onSaleCreationModeChange($event)">
                             <option value="MANUAL_PRODUCT">Venta manual de productos</option>
-                            <option value="SERVICE_ORDER">Venta desde orden/acuerdo</option>
+                            <option value="SERVICE_ORDER">Venta desde orden/cotización</option>
                         </select>
                     </div>
 
@@ -588,63 +588,6 @@
                                 <strong>S/ {{ getGroupedOrdersPendingTotal() | number:'1.2-2' }}</strong>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="anchored-order-table" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrder">
-                        <div class="anchored-order-table__header">
-                            <div>
-                                <h4>Órdenes elegibles del mismo cliente</h4>
-                                <p>
-                                    La orden ancla queda incluida automáticamente. Marca solo las adicionales que quieres cobrar ahora.
-                                </p>
-                            </div>
-                            <span class="anchored-order-table__anchor-pill">{{ selectedServiceOrder.code }}</span>
-                        </div>
-
-                        <div class="anchored-order-table__scroll" *ngIf="getSelectableGroupedServiceOrders().length; else onlyAnchorEligibleState">
-                            <table class="data-table anchored-order-table__grid">
-                                <thead>
-                                    <tr>
-                                        <th class="anchored-order-table__checkbox-col">
-                                            <input
-                                                type="checkbox"
-                                                [checked]="areAllSelectableGroupedOrdersSelected()"
-                                                [indeterminate]="hasPartiallySelectedGroupedOrders()"
-                                                (change)="onToggleAllGroupedServiceOrders($event)">
-                                        </th>
-                                        <th>Código</th>
-                                        <th>Fecha</th>
-                                        <th>Monto pendiente</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr *ngFor="let order of getSelectableGroupedServiceOrders()"
-                                        [class.is-selected]="isServiceOrderChecked(order.id)">
-                                        <td class="anchored-order-table__checkbox-col">
-                                            <input
-                                                type="checkbox"
-                                                [checked]="isServiceOrderChecked(order.id)"
-                                                (change)="onGroupedServiceOrderToggle(order, $event)">
-                                        </td>
-                                        <td>
-                                            <div class="anchored-order-table__code">
-                                                <strong>{{ order.code }}</strong>
-                                                <span>{{ order.clientSnapshotName || order.client?.name || 'Cliente' }}</span>
-                                            </div>
-                                        </td>
-                                        <td>{{ order.receivedAt | date:'dd/MM/yy HH:mm' }}</td>
-                                        <td><strong>S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}</strong></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <ng-template #onlyAnchorEligibleState>
-                            <div class="anchored-order-table__empty">
-                                <i class="fas fa-check-circle"></i>
-                                <span>La orden ancla es la única elegible de este cliente en este momento.</span>
-                            </div>
-                        </ng-template>
                     </div>
 
                     <div class="grouped-orders-clarity" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrders.length">

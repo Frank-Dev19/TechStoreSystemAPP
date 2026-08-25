@@ -10,15 +10,27 @@
 }
 
 .item-progress__copy {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 0.75rem;
   font-size: 0.76rem;
   font-weight: 650;
 }
 
+.item-progress__copy strong {
+  color: inherit;
+  font-size: inherit;
+  text-align: right;
+}
+
+.item-progress__heading {
+  color: #596575;
+  font-weight: 600;
+}
+
 .item-progress__copy small {
+  grid-column: 1 / -1;
   color: #7b8490;
   font-size: 0.68rem;
   font-weight: 500;
@@ -62,4 +74,8 @@
 
 .item-progress--compact .item-progress__copy {
   font-size: 0.7rem;
+}
+
+.item-progress--compact .item-progress__heading {
+  font-size: 0.68rem;
 }

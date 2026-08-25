@@ -50,7 +50,7 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
   ngOnChanges(): void {
     const forms = (this.target?.lines ?? []).map((line) =>
       new FormGroup({
-        percentage: new FormControl(this.getCurrentPercentage(line), {
+        percentage: new FormControl(line.type === 'PRODUCT' ? 0 : this.getCurrentPercentage(line), {
           nonNullable: true,
           validators: [Validators.required, Validators.min(0), Validators.max(100)],
         }),
@@ -69,6 +69,10 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
   }
 
   setPercentage(index: number, value: number | string): void {
+    if (this.target?.lines?.[index]?.type === 'PRODUCT') {
+      this.lineForms.at(index)?.controls.percentage.setValue(0);
+      return;
+    }
     const percentage = Math.min(100, Math.max(0, Number(value) || 0));
     this.lineForms.at(index)?.controls.percentage.setValue(percentage);
     this.errorMessage = '';
@@ -79,6 +83,7 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
   }
 
   getCurrentPercentage(line: ServiceOrderItemCommercialLine): number {
+    if (line.type === 'PRODUCT') return 0;
     return Number(line.discounts?.[0]?.percentage ?? 0);
   }
 
@@ -87,6 +92,7 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
   }
 
   getDiscountAmount(line: ServiceOrderItemCommercialLine, index: number): number {
+    if (line.type === 'PRODUCT') return 0;
     return Number((Number(line.grossAmount) * (this.getPercentage(index) / 100)).toFixed(2));
   }
 
@@ -126,7 +132,7 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
     try {
       lines = this.target.lines.map((line, index) => this.toRevisionLine(line, index));
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : 'No pudimos preparar las líneas del acuerdo.';
+      this.errorMessage = error instanceof Error ? error.message : 'No pudimos preparar las líneas de la cotización.';
       return;
     }
 
@@ -161,8 +167,10 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
       throw new Error('Las líneas de ajuste no admiten descuentos desde este formulario.');
     }
 
-    const discountPct = this.getPercentage(index);
-    const overrideReason = this.lineForms.at(index)?.controls.overrideReason.value.trim() ?? '';
+    const discountPct = line.type === 'PRODUCT' ? 0 : this.getPercentage(index);
+    const overrideReason = line.type === 'PRODUCT'
+      ? ''
+      : this.lineForms.at(index)?.controls.overrideReason.value.trim() ?? '';
     return {
       type: line.type,
       ...(line.type === 'PRODUCT' && line.productId ? { productId: Number(line.productId) } : {}),
