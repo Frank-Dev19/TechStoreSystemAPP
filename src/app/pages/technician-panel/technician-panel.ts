@@ -2314,7 +2314,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           this.showMessage(
             "success",
             "fas fa-check-circle",
-            "Borrador guardado. Aún no se envió al cliente.",
+            "Borrador guardado.",
           )
         },
         error: (error) => {
@@ -2333,13 +2333,16 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       .pipe(finalize(() => (this.isSavingAgreement = false)))
       .subscribe({
         next: (result) => {
-          const delivered = result.deliveryStatus === "SENT"
+          const delivered = ["DELIVERED", "READ"].includes(result.deliveryStatus)
+          const acceptedByWhatsapp = result.deliveryStatus === "SENT"
           this.showMessage(
-            delivered ? "success" : "warning",
-            delivered ? "fas fa-paper-plane" : "fas fa-exclamation-circle",
+            delivered || acceptedByWhatsapp ? "success" : "warning",
+            delivered || acceptedByWhatsapp ? "fas fa-paper-plane" : "fas fa-exclamation-circle",
             delivered
-              ? "Cotización enviada al cliente con el diagnóstico y el PDF adjunto."
-              : "La cotización quedó emitida, pero WhatsApp no pudo enviarla. Puedes reintentar el envío.",
+              ? "Cotización entregada al cliente con el diagnóstico y el PDF adjunto."
+              : acceptedByWhatsapp
+                ? "Cotización enviada a WhatsApp. La entrega al cliente está pendiente de confirmación."
+                : "La cotización quedó emitida, pero WhatsApp no aceptó el envío. Puedes reintentar.",
           )
           this.closeAgreementModal()
           this.loadTechnicianOrders()
