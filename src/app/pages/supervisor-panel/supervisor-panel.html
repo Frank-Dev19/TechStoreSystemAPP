@@ -2,35 +2,131 @@
   <div class="panel-header">
     <div class="title-section">
       <h1 class="page-title">Panel del Supervisor</h1>
-      <p class="page-subtitle">Monitorea cotizaciones, diagnósticos y equipos de todas las órdenes de servicio.</p>
+      <p class="page-subtitle">
+        Monitorea cotizaciones, diagnósticos y equipos de todas las órdenes de servicio.
+      </p>
     </div>
+    @if (failedNotifications.length) {
+      <button
+        class="notification-trigger"
+        type="button"
+        aria-haspopup="dialog"
+        [attr.aria-label]="'Revisar ' + failedNotifications.length + ' notificaciones pendientes'"
+        (click)="openFailedNotifications()"
+      >
+        <span class="notification-trigger-icon" aria-hidden="true">
+          <i class="fas fa-bell"></i>
+        </span>
+        <span>Notificaciones</span>
+        <strong>{{ failedNotifications.length }}</strong>
+      </button>
+    }
   </div>
 
-  @if (failedNotifications.length) {
-    <section class="panel-surface notification-failures" aria-label="Notificaciones pendientes de revisión">
-      <header class="ranking-header">
-        <div>
-          <h2>Notificaciones que requieren revisión</h2>
-          <p>Agotaron sus reintentos automáticos. Revisa el error antes de reenviarlas.</p>
-        </div>
-        <span class="ranking-pill"><i class="fas fa-exclamation-triangle"></i> {{ failedNotifications.length }}</span>
-      </header>
-      <div class="ranking-list">
-        @for (notification of failedNotifications; track notification.id) {
-          <article class="ranking-row">
-            <div class="ranking-main">
-              <div>
-                <h3>{{ notification.messageType }}</h3>
-                <p>{{ notification.recipient || 'Sin destinatario' }} · {{ notification.lastError || 'Error no detallado' }}</p>
-              </div>
+  @if (showFailedNotifications && failedNotifications.length) {
+    <div class="modal-overlay notification-modal-overlay" (click)="closeFailedNotifications()">
+      <section
+        class="modal-content notification-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="notification-modal-title"
+        aria-describedby="notification-modal-description"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="notification-modal-header">
+          <div class="notification-modal-heading">
+            <span class="notification-modal-icon" aria-hidden="true">
+              <i class="fas fa-bell"></i>
+            </span>
+            <div>
+              <span class="notification-modal-eyebrow">Centro de notificaciones</span>
+              <h2 id="notification-modal-title">Notificaciones pendientes</h2>
+              <p id="notification-modal-description">
+                Revisa los envíos que agotaron sus intentos automáticos.
+              </p>
             </div>
-            <button class="btn btn-secondary" type="button" (click)="retryNotification(notification)">
-              <i class="fas fa-redo"></i> Reintentar
-            </button>
-          </article>
-        }
-      </div>
-    </section>
+          </div>
+          <button
+            class="notification-modal-close"
+            type="button"
+            aria-label="Cerrar notificaciones"
+            autofocus
+            (click)="closeFailedNotifications()"
+          >
+            <i class="fas fa-times" aria-hidden="true"></i>
+          </button>
+        </header>
+
+        <div class="notification-modal-body">
+          <div class="notification-list" role="list">
+            @for (notification of failedNotifications; track notification.id) {
+              <article class="notification-card" role="listitem">
+                <div class="notification-card-main">
+                  <header class="notification-card-header">
+                    <div>
+                      <span class="notification-card-kicker"
+                        >Notificación #{{ notification.id }}</span
+                      >
+                      <h3>{{ getNotificationTypeLabel(notification.messageType) }}</h3>
+                    </div>
+                    <span class="notification-status">
+                      <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+                      Requiere revisión
+                    </span>
+                  </header>
+
+                  <p class="notification-error-summary">
+                    {{ getNotificationErrorSummary(notification.lastError) }}
+                  </p>
+
+                  <dl class="notification-meta">
+                    <div>
+                      <dt>Destinatario</dt>
+                      <dd>{{ notification.recipient || 'Sin destinatario' }}</dd>
+                    </div>
+                    <div>
+                      <dt>Intentos</dt>
+                      <dd>{{ notification.attemptCount }}</dd>
+                    </div>
+                    <div>
+                      <dt>Último intento</dt>
+                      <dd>{{ notification.updatedAt | date: 'dd/MM/yyyy, HH:mm' }}</dd>
+                    </div>
+                  </dl>
+
+                  <details class="notification-error-details">
+                    <summary>Ver detalle técnico</summary>
+                    <p>{{ notification.lastError || 'Error no detallado' }}</p>
+                  </details>
+                </div>
+
+                <div class="notification-card-actions">
+                  <button
+                    class="notification-retry-button"
+                    type="button"
+                    [disabled]="isRetryingNotification(notification.id)"
+                    (click)="retryNotification(notification)"
+                  >
+                    <i
+                      class="fas"
+                      [class.fa-redo]="!isRetryingNotification(notification.id)"
+                      [class.fa-spinner]="isRetryingNotification(notification.id)"
+                      [class.fa-spin]="isRetryingNotification(notification.id)"
+                      aria-hidden="true"
+                    ></i>
+                    {{
+                      isRetryingNotification(notification.id)
+                        ? 'Reintentando...'
+                        : 'Reintentar envío'
+                    }}
+                  </button>
+                </div>
+              </article>
+            }
+          </div>
+        </div>
+      </section>
+    </div>
   }
 
   <div class="stats-grid panel-surface panel-surface--stats">
@@ -67,475 +163,604 @@
   </div>
 
   <div class="tabs-navigation supervisor-tabs">
-    <button class="tab-button" [class.active]="activeSection === 'orders'" (click)="setActiveSection('orders')">
+    <button
+      class="tab-button"
+      [class.active]="activeSection === 'orders'"
+      (click)="setActiveSection('orders')"
+    >
       <i class="fas fa-clipboard-list"></i>
       Órdenes
     </button>
-    <button class="tab-button" [class.active]="activeSection === 'ranking'" (click)="setActiveSection('ranking')">
+    <button
+      class="tab-button"
+      [class.active]="activeSection === 'ranking'"
+      (click)="setActiveSection('ranking')"
+    >
       <i class="fas fa-trophy"></i>
       Ranking
     </button>
-    <button class="tab-button" type="button" (click)="openInboxWorkspace(selectedServiceOrder ?? null)">
+    <button
+      class="tab-button"
+      type="button"
+      (click)="openInboxWorkspace(selectedServiceOrder ?? null)"
+    >
       <i class="fas fa-comments"></i>
       Chats
     </button>
   </div>
 
   @if (activeSection === 'ranking') {
-  <section class="ranking-panel panel-surface panel-surface--ranking">
-    <header class="ranking-header">
-      <div>
-        <h2>Ranking económico de técnicos</h2>
-        <p>Basado en el aporte monetario de órdenes de tipo diagnóstico y estándar, separado por productos y servicios.</p>
-      </div>
-      <span class="ranking-pill"><i class="fas fa-trophy"></i> Ranking actual</span>
-    </header>
-
-    @if (isLoadingTechnicianRankings) {
-      <div class="empty-state">
-        <i class="fas fa-spinner fa-spin"></i>
-        <p>Cargando ranking...</p>
-      </div>
-    } @else if (!technicianRankings.length) {
-      <div class="empty-state">
-        <i class="fas fa-chart-line"></i>
-        <p>Aún no hay información suficiente para construir el ranking.</p>
-      </div>
-    } @else {
-      <div class="ranking-podium">
-        @if (secondTechnician) {
-          <article class="podium-card silver">
-            <span class="podium-rank">2</span>
-            <h3>{{ secondTechnician.technicianName }}</h3>
-            <strong>{{ formatMoney(secondTechnician.totalRevenue) }}</strong>
-            <small>{{ secondTechnician.itemsCount }} ordenes con impacto economico</small>
-          </article>
-        }
-        @if (topTechnician) {
-          <article class="podium-card gold featured">
-            <span class="podium-rank">1</span>
-            <h3>{{ topTechnician.technicianName }}</h3>
-            <strong>{{ formatMoney(topTechnician.totalRevenue) }}</strong>
-            <small>{{ topTechnician.itemsCount }} ordenes con impacto economico</small>
-          </article>
-        }
-        @if (thirdTechnician) {
-          <article class="podium-card bronze">
-            <span class="podium-rank">3</span>
-            <h3>{{ thirdTechnician.technicianName }}</h3>
-            <strong>{{ formatMoney(thirdTechnician.totalRevenue) }}</strong>
-            <small>{{ thirdTechnician.itemsCount }} ordenes con impacto economico</small>
-          </article>
-        }
-      </div>
-
-      <div class="ranking-list">
-        @for (technician of paginatedTechnicianRankings; track technician.technicianId) {
-          <article class="ranking-row">
-            <div class="ranking-main">
-              <div class="ranking-rank">#{{ technician.rank }}</div>
-              <div>
-                <h3>{{ technician.technicianName }}</h3>
-                <p>{{ technician.itemsCount }} órdenes . {{ technician.diagnosisItemsCount }} diagnóstico . {{ technician.standardItemsCount }} estándar</p>
-              </div>
-            </div>
-            <div class="ranking-metrics">
-              <div class="metric-chip">
-                <span>Total</span>
-                <strong>{{ formatMoney(technician.totalRevenue) }}</strong>
-              </div>
-              <div class="metric-chip">
-                <span>Productos</span>
-                <strong>{{ formatMoney(technician.productRevenue) }}</strong>
-              </div>
-              <div class="metric-chip">
-                <span>Servicios</span>
-                <strong>{{ formatMoney(technician.serviceRevenue) }}</strong>
-              </div>
-              <div class="metric-chip">
-                <span>Diagnóstico</span>
-                <strong>{{ formatMoney(technician.diagnosisRevenue) }}</strong>
-              </div>
-              <div class="metric-chip">
-                <span>Estandar</span>
-                <strong>{{ formatMoney(technician.standardRevenue) }}</strong>
-              </div>
-            </div>
-            <div class="ranking-share">
-              <div class="share-bar">
-                <span class="share-fill" [style.width.%]="getRevenueShare(technician)"></span>
-              </div>
-              <small>{{ getRevenueShare(technician) | number: '1.0-1' }}% del total</small>
-            </div>
-          </article>
-        }
-      </div>
-      @if (technicianRankings.length > itemsPerPage) {
-        <div class="pagination">
-          <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
-            <i class="fas fa-chevron-left"></i> Anterior
-          </button>
-          <span class="pagination-info">Pagina {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span>
-          <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
-            Siguiente <i class="fas fa-chevron-right"></i>
-          </button>
+    <section class="ranking-panel panel-surface panel-surface--ranking">
+      <header class="ranking-header">
+        <div>
+          <h2>Ranking económico de técnicos</h2>
+          <p>
+            Basado en el aporte monetario de órdenes de tipo diagnóstico y estándar, separado por
+            productos y servicios.
+          </p>
         </div>
-      }
-    }
-  </section>
-  }
+        <span class="ranking-pill"><i class="fas fa-trophy"></i> Ranking actual</span>
+      </header>
 
-
-  @if (activeSection === 'orders') {
-  <div class="panel-container panel-surface panel-surface--orders">
-    <div class="tabs-navigation order-filters surface-toolbar">
-      <input
-        class="thread-input"
-        type="text"
-        placeholder="Buscar por código, técnico, marca o problema..."
-        [(ngModel)]="orderSearchTerm"
-      />
-      <select class="tab-btn" [(ngModel)]="orderOperativeStatusFilter">
-        <option value="ALL">Todos los estados</option>
-        @for (status of getOrderOperativeStatusOptions(); track status) {
-          <option [value]="status">{{ getInboxThreadOperativeStatusLabel(status) }}</option>
-        }
-      </select>
-    </div>
-
-    <div class="orders-workspace" [class.has-selection]="selectedServiceOrder">
-      <div class="orders-list-column">
-        <div class="serviceOrderAgreements-grid">
-          @if (!serviceOrders.length) {
-            <div class="empty-state">
-              <i class="fas fa-spinner fa-spin"></i>
-              <p>Cargando órdenes...</p>
-            </div>
-          } @else if (filteredServiceOrders.length === 0) {
-            <div class="empty-state">
-              <i class="fas fa-inbox"></i>
-              <p>No hay órdenes para esta vista.</p>
-            </div>
-          } @else {
-            @for (order of paginatedServiceOrders; track order.id) {
-              <div class="quote-card" (click)="selectServiceOrder(order)" [class.selected]="selectedServiceOrder?.id === order.id">
-                <div class="card-header">
-                  <div class="quote-info">
-                    <h3>{{ order.code }} . {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</h3>
-                    <span class="quote-badge status-current">
-                      {{ getInboxThreadOperativeStatusLabel(order.operativeStatus) }}
-                    </span>
-                  </div>
-                </div>
-                <div class="card-body">
-                  <p class="quote-date">
-                    <i class="fas fa-calendar-alt"></i>
-                    {{ order.receivedAt | date: 'dd/MM/yyyy HH:mm' }}
-                  </p>
-                  <p class="quote-date">
-                    <i class="fas fa-tag"></i>
-                    {{ getServiceTypeLabel(order.serviceType) }}
-                  </p>
-                  <p class="quote-date">
-                    <i class="fas fa-user-cog"></i>
-                    {{ order.assignedToTechnicianName || 'Sin asignar' }}
-                  </p>
-                  @if (order.initialIssue) {
-                    <p class="quote-notes">
-                      <i class="fas fa-sticky-note"></i>
-                      {{ order.initialIssue }}
-                    </p>
-                  }
-                  <app-service-order-item-progress
-                    [order]="order"
-                    [compact]="true"
-                  ></app-service-order-item-progress>
-                </div>
-              </div>
-            }
+      @if (isLoadingTechnicianRankings) {
+        <div class="empty-state">
+          <i class="fas fa-spinner fa-spin"></i>
+          <p>Cargando ranking...</p>
+        </div>
+      } @else if (!technicianRankings.length) {
+        <div class="empty-state">
+          <i class="fas fa-chart-line"></i>
+          <p>Aún no hay información suficiente para construir el ranking.</p>
+        </div>
+      } @else {
+        <div class="ranking-podium">
+          @if (secondTechnician) {
+            <article class="podium-card silver">
+              <span class="podium-rank">2</span>
+              <h3>{{ secondTechnician.technicianName }}</h3>
+              <strong>{{ formatMoney(secondTechnician.totalRevenue) }}</strong>
+              <small>{{ secondTechnician.itemsCount }} ordenes con impacto economico</small>
+            </article>
+          }
+          @if (topTechnician) {
+            <article class="podium-card gold featured">
+              <span class="podium-rank">1</span>
+              <h3>{{ topTechnician.technicianName }}</h3>
+              <strong>{{ formatMoney(topTechnician.totalRevenue) }}</strong>
+              <small>{{ topTechnician.itemsCount }} ordenes con impacto economico</small>
+            </article>
+          }
+          @if (thirdTechnician) {
+            <article class="podium-card bronze">
+              <span class="podium-rank">3</span>
+              <h3>{{ thirdTechnician.technicianName }}</h3>
+              <strong>{{ formatMoney(thirdTechnician.totalRevenue) }}</strong>
+              <small>{{ thirdTechnician.itemsCount }} ordenes con impacto economico</small>
+            </article>
           }
         </div>
-        @if (filteredServiceOrders.length > itemsPerPage) {
+
+        <div class="ranking-list">
+          @for (technician of paginatedTechnicianRankings; track technician.technicianId) {
+            <article class="ranking-row">
+              <div class="ranking-main">
+                <div class="ranking-rank">#{{ technician.rank }}</div>
+                <div>
+                  <h3>{{ technician.technicianName }}</h3>
+                  <p>
+                    {{ technician.itemsCount }} órdenes .
+                    {{ technician.diagnosisItemsCount }} diagnóstico .
+                    {{ technician.standardItemsCount }} estándar
+                  </p>
+                </div>
+              </div>
+              <div class="ranking-metrics">
+                <div class="metric-chip">
+                  <span>Total</span>
+                  <strong>{{ formatMoney(technician.totalRevenue) }}</strong>
+                </div>
+                <div class="metric-chip">
+                  <span>Productos</span>
+                  <strong>{{ formatMoney(technician.productRevenue) }}</strong>
+                </div>
+                <div class="metric-chip">
+                  <span>Servicios</span>
+                  <strong>{{ formatMoney(technician.serviceRevenue) }}</strong>
+                </div>
+                <div class="metric-chip">
+                  <span>Diagnóstico</span>
+                  <strong>{{ formatMoney(technician.diagnosisRevenue) }}</strong>
+                </div>
+                <div class="metric-chip">
+                  <span>Estandar</span>
+                  <strong>{{ formatMoney(technician.standardRevenue) }}</strong>
+                </div>
+              </div>
+              <div class="ranking-share">
+                <div class="share-bar">
+                  <span class="share-fill" [style.width.%]="getRevenueShare(technician)"></span>
+                </div>
+                <small>{{ getRevenueShare(technician) | number: '1.0-1' }}% del total</small>
+              </div>
+            </article>
+          }
+        </div>
+        @if (technicianRankings.length > itemsPerPage) {
           <div class="pagination">
             <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
               <i class="fas fa-chevron-left"></i> Anterior
             </button>
-            <span class="pagination-info">Pagina {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span>
-            <button class="btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
+            <span class="pagination-info"
+              >Pagina {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span
+            >
+            <button
+              class="btn-secondary"
+              (click)="nextPage()"
+              [disabled]="currentPage === totalPages"
+            >
               Siguiente <i class="fas fa-chevron-right"></i>
             </button>
           </div>
         }
+      }
+    </section>
+  }
+
+  @if (activeSection === 'orders') {
+    <div class="panel-container panel-surface panel-surface--orders">
+      <div class="tabs-navigation order-filters surface-toolbar">
+        <input
+          class="thread-input"
+          type="text"
+          placeholder="Buscar por código, técnico, marca o problema..."
+          [(ngModel)]="orderSearchTerm"
+        />
+        <select class="tab-btn" [(ngModel)]="orderOperativeStatusFilter">
+          <option value="ALL">Todos los estados</option>
+          @for (status of getOrderOperativeStatusOptions(); track status) {
+            <option [value]="status">{{ getInboxThreadOperativeStatusLabel(status) }}</option>
+          }
+        </select>
       </div>
 
-      @if (selectedServiceOrder) {
-      <aside class="detail-view">
-        <header class="detail-drawer-header">
-          <div>
-            <p class="detail-drawer-kicker">Detalle de orden</p>
-            <h2>{{ selectedServiceOrder.code || 'Sin código' }}</h2>
-            <app-service-order-item-progress
-              [order]="selectedServiceOrder"
-            ></app-service-order-item-progress>
+      <div class="orders-workspace" [class.has-selection]="selectedServiceOrder">
+        <div class="orders-list-column">
+          <div class="serviceOrderAgreements-grid">
+            @if (!serviceOrders.length) {
+              <div class="empty-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Cargando órdenes...</p>
+              </div>
+            } @else if (filteredServiceOrders.length === 0) {
+              <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <p>No hay órdenes para esta vista.</p>
+              </div>
+            } @else {
+              @for (order of paginatedServiceOrders; track order.id) {
+                <div
+                  class="quote-card"
+                  (click)="selectServiceOrder(order)"
+                  [class.selected]="selectedServiceOrder?.id === order.id"
+                >
+                  <div class="card-header">
+                    <div class="quote-info">
+                      <h3>
+                        {{ order.code }} .
+                        {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}
+                      </h3>
+                      <span class="quote-badge status-current">
+                        {{ getInboxThreadOperativeStatusLabel(order.operativeStatus) }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <p class="quote-date">
+                      <i class="fas fa-calendar-alt"></i>
+                      {{ order.receivedAt | date: 'dd/MM/yyyy HH:mm' }}
+                    </p>
+                    <p class="quote-date">
+                      <i class="fas fa-tag"></i>
+                      {{ getServiceTypeLabel(order.serviceType) }}
+                    </p>
+                    <p class="quote-date">
+                      <i class="fas fa-user-cog"></i>
+                      {{ order.assignedToTechnicianName || 'Sin asignar' }}
+                    </p>
+                    @if (order.initialIssue) {
+                      <p class="quote-notes">
+                        <i class="fas fa-sticky-note"></i>
+                        {{ order.initialIssue }}
+                      </p>
+                    }
+                    <app-service-order-item-progress
+                      [order]="order"
+                      [compact]="true"
+                    ></app-service-order-item-progress>
+                  </div>
+                </div>
+              }
+            }
           </div>
-          <button class="btn-close" type="button" aria-label="Cerrar detalle de orden" (click)="clearSelectedServiceOrder()">
-            <i class="fas fa-times"></i>
-          </button>
-        </header>
-
-        <div class="detail-content detail-drawer-scroll">
-          <section class="detail-reason-card">
-            <p class="detail-card-label">Motivo de ingreso</p>
-            <p class="detail-reason-value">{{ selectedServiceOrder.initialIssue || 'Sin motivo registrado' }}</p>
-          </section>
-
-            <section class="detail-operational-grid" aria-label="Resumen operativo">
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Estado operativo</span>
-                <strong>{{ getInboxThreadOperativeStatusLabel(selectedServiceOrder.operativeStatus) }}</strong>
-              </article>
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Técnico</span>
-                <strong>{{ selectedServiceOrder.assignedToTechnicianName || 'Sin asignar' }}</strong>
-              </article>
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Servicio</span>
-                <strong>{{ getServiceTypeLabel(selectedServiceOrder.serviceType) }}</strong>
-              </article>
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Ingreso</span>
-                <strong>{{ selectedServiceOrder.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
-              </article>
-            </section>
-          <div class="detail-section-divider"></div>
-
-          <section class="detail-section-block">
-            <div class="detail-section-heading detail-section-heading--split">
-              <h3><i class="fas fa-desktop"></i> Equipo y comunicación</h3>
-              <button type="button" class="detail-whatsapp-btn" (click)="openInboxShortcut(selectedServiceOrder)">
-                <i class="fab fa-whatsapp"></i>
-                WhatsApp
+          @if (filteredServiceOrders.length > itemsPerPage) {
+            <div class="pagination">
+              <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
+                <i class="fas fa-chevron-left"></i> Anterior
+              </button>
+              <span class="pagination-info"
+                >Pagina {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span
+              >
+              <button
+                class="btn-secondary"
+                (click)="nextPage()"
+                [disabled]="currentPage === totalPages"
+              >
+                Siguiente <i class="fas fa-chevron-right"></i>
               </button>
             </div>
-
-            <div class="detail-equipment-grid">
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Tipo</span>
-                <strong>{{ getEquipmentTypeLabel(selectedServiceOrder.equipmentType, selectedServiceOrder.equipmentTypeOther) }}</strong>
-              </article>
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Marca</span>
-                <strong>{{ selectedServiceOrder.brand || 'Sin marca' }}</strong>
-              </article>
-              <article class="detail-chip-card">
-                <span class="detail-card-label">Modelo</span>
-                <strong>{{ selectedServiceOrder.model || 'Sin modelo' }}</strong>
-              </article>
-            </div>
-          </section>
-
-          @if (selectedServiceOrder.items?.length) {
-            <section class="detail-cancellation-card" aria-label="Cancelaciones por equipo">
-              <header class="detail-cancellation-card__header">
-                <div>
-                  <p class="detail-card-label">Gestión por equipo</p>
-                  <h3>Cancelaciones</h3>
-                </div>
-                <span>{{ selectedServiceOrder.items?.length }} equipo(s)</span>
-              </header>
-
-              <div class="detail-cancellation-card__list">
-                @for (item of selectedServiceOrder.items ?? []; track item.id) {
-                  <article class="detail-cancellation-item">
-                    <div>
-                      <strong>{{ getItemLabel(item) }}</strong>
-                      @if (getPendingItemCancellation(item); as pendingRequest) {
-                        <span class="detail-cancellation-state detail-cancellation-state--pending">
-                          Cancelación pendiente · {{ pendingRequest.requestedAt | date: 'dd/MM/yyyy HH:mm' }}
-                        </span>
-                      } @else if (item.operativeStatus === 'CANCELADA') {
-                        <span class="detail-cancellation-state detail-cancellation-state--cancelled">Equipo cancelado</span>
-                      } @else {
-                        <span class="detail-cancellation-state">{{ getInboxThreadOperativeStatusLabel(item.operativeStatus) }}</span>
-                      }
-                    </div>
-                    <div class="detail-cancellation-item__actions">
-                      @if (canSendPickupReminder(item)) {
-                        <button type="button" class="detail-cancellation-button detail-cancellation-button--review" (click)="sendEquipmentPickupReminder(selectedServiceOrder, item)">
-                          <i class="fas fa-paper-plane"></i>
-                          Recordar recojo
-                        </button>
-                      }
-                      @if (getPendingItemCancellation(item)) {
-                        <button type="button" class="detail-cancellation-button detail-cancellation-button--review" (click)="openCancellationResolution(selectedServiceOrder, item)">
-                          <i class="fas fa-user-shield"></i>
-                          Resolver
-                        </button>
-                      } @else if (canRequestItemCancellation(item)) {
-                        <button type="button" class="detail-cancellation-button" (click)="openItemCancellationModal(selectedServiceOrder, item)">
-                          <i class="fas fa-ban"></i>
-                          Cancelar
-                        </button>
-                      }
-                    </div>
-                  </article>
-                }
-              </div>
-            </section>
           }
+        </div>
 
-          @for (item of selectedServiceOrder.items ?? []; track item.id) {
-            @if (item.sla; as sla) {
-              <section class="detail-sla-panel" [class.is-breached]="sla.breached" aria-label="SLA del equipo">
-                <div class="detail-sla-hero">
-                  <div>
-                    <p class="detail-card-label">{{ item.code }} · SLA del equipo</p>
-                    <h3>{{ getServiceOrderSlaStageLabel(sla.stage) }}</h3>
-                  </div>
-                  <span class="detail-sla-hero__icon"><i class="fas fa-laptop"></i></span>
+        @if (selectedServiceOrder) {
+          <aside class="detail-view">
+            <header class="detail-drawer-header">
+              <div>
+                <p class="detail-drawer-kicker">Detalle de orden</p>
+                <h2>{{ selectedServiceOrder.code || 'Sin código' }}</h2>
+                <app-service-order-item-progress
+                  [order]="selectedServiceOrder"
+                ></app-service-order-item-progress>
+              </div>
+              <button
+                class="btn-close"
+                type="button"
+                aria-label="Cerrar detalle de orden"
+                (click)="clearSelectedServiceOrder()"
+              >
+                <i class="fas fa-times"></i>
+              </button>
+            </header>
+
+            <div class="detail-content detail-drawer-scroll">
+              <section class="detail-reason-card">
+                <p class="detail-card-label">Motivo de ingreso</p>
+                <p class="detail-reason-value">
+                  {{ selectedServiceOrder.initialIssue || 'Sin motivo registrado' }}
+                </p>
+              </section>
+
+              <section class="detail-operational-grid" aria-label="Resumen operativo">
+                <article class="detail-chip-card">
+                  <span class="detail-card-label">Estado operativo</span>
+                  <strong>{{
+                    getInboxThreadOperativeStatusLabel(selectedServiceOrder.operativeStatus)
+                  }}</strong>
+                </article>
+                <article class="detail-chip-card">
+                  <span class="detail-card-label">Técnico</span>
+                  <strong>{{
+                    selectedServiceOrder.assignedToTechnicianName || 'Sin asignar'
+                  }}</strong>
+                </article>
+                <article class="detail-chip-card">
+                  <span class="detail-card-label">Servicio</span>
+                  <strong>{{ getServiceTypeLabel(selectedServiceOrder.serviceType) }}</strong>
+                </article>
+                <article class="detail-chip-card">
+                  <span class="detail-card-label">Ingreso</span>
+                  <strong>{{ selectedServiceOrder.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
+                </article>
+              </section>
+              <div class="detail-section-divider"></div>
+
+              <section class="detail-section-block">
+                <div class="detail-section-heading detail-section-heading--split">
+                  <h3><i class="fas fa-desktop"></i> Equipo y comunicación</h3>
+                  <button
+                    type="button"
+                    class="detail-whatsapp-btn"
+                    (click)="openInboxShortcut(selectedServiceOrder)"
+                  >
+                    <i class="fab fa-whatsapp"></i>
+                    WhatsApp
+                  </button>
                 </div>
-                <div class="detail-sla-summary-grid">
+
+                <div class="detail-equipment-grid">
                   <article class="detail-chip-card">
-                    <span class="detail-card-label">Transcurrido</span>
-                    <strong>{{ formatMinutes(sla.elapsedMinutes) }}</strong>
+                    <span class="detail-card-label">Tipo</span>
+                    <strong>{{
+                      getEquipmentTypeLabel(
+                        selectedServiceOrder.equipmentType,
+                        selectedServiceOrder.equipmentTypeOther
+                      )
+                    }}</strong>
                   </article>
                   <article class="detail-chip-card">
-                    <span class="detail-card-label">Restante</span>
-                    <strong>{{ formatMinutes(sla.remainingMinutes) }}</strong>
+                    <span class="detail-card-label">Marca</span>
+                    <strong>{{ selectedServiceOrder.brand || 'Sin marca' }}</strong>
                   </article>
                   <article class="detail-chip-card">
-                    <span class="detail-card-label">Brecha</span>
-                    <strong>{{ sla.breached ? 'Sí' : 'No' }}</strong>
+                    <span class="detail-card-label">Modelo</span>
+                    <strong>{{ selectedServiceOrder.model || 'Sin modelo' }}</strong>
                   </article>
                 </div>
               </section>
-            }
-          }
 
-          @if (selectedServiceOrder.timeMetrics; as timeMetrics) {
-            <section class="detail-metrics-grid" aria-label="Tiempos SLA">
-              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToDiagnosis.isComputable">
-                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo a diagnóstico</p>
-                <strong>{{ getMetricDisplayValue(timeMetrics.timeToDiagnosis) }}</strong>
-              </article>
-              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToServiceStart.isComputable">
-                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo a inicio de servicio</p>
-                <strong>{{ getMetricDisplayValue(timeMetrics.timeToServiceStart) }}</strong>
-              </article>
-              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToService.isComputable">
-                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo de servicio</p>
-                <strong>{{ getMetricDisplayValue(timeMetrics.timeToService) }}</strong>
-              </article>
-              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToResolution.isComputable">
-                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo a resolución</p>
-                <strong>{{ getMetricDisplayValue(timeMetrics.timeToResolution) }}</strong>
-              </article>
-              <article class="detail-metric-card" [class.is-pending]="!timeMetrics.timeToDelivery.isComputable">
-                <p class="detail-card-label detail-card-label--with-icon"><i class="far fa-clock"></i>Tiempo a entrega</p>
-                <strong>{{ getMetricDisplayValue(timeMetrics.timeToDelivery) }}</strong>
-              </article>
-            </section>
-          }
-
-          <section class="detail-diagnosis-card" aria-label="Diagnóstico del técnico">
-            <p class="detail-diagnosis-title">Diagnóstico del técnico:</p>
-            @if (isLoadingDiagnosis) {
-              <p class="detail-diagnosis-loading"><i class="fas fa-spinner fa-spin"></i> Cargando diagnóstico...</p>
-            } @else if (currentDiagnosis) {
-              <p class="detail-diagnosis-summary">{{ currentDiagnosis.summary }}</p>
-              @if (currentDiagnosis.details) {
-                <p class="detail-diagnosis-body">{{ currentDiagnosis.details }}</p>
-              }
-            } @else {
-              <p class="detail-diagnosis-body">Sin diagnóstico registrado.</p>
-            }
-          </section>
-
-          @if (selectedServiceOrderAgreement?.items?.length) {
-            <section class="detail-commercial-card" aria-label="Decisiones comerciales por equipo">
-              <header class="detail-commercial-card__header">
-                <div>
-                  <p class="detail-card-label">Cotización #{{ selectedServiceOrderAgreement?.sequenceNumber }}</p>
-                  <h3>Decisiones del cliente</h3>
-                </div>
-                <span>{{ formatMoney(selectedServiceOrderAgreement?.totalAmount) }}</span>
-              </header>
-
-              <div class="detail-commercial-card__list">
-                @for (link of selectedServiceOrderAgreement?.items ?? []; track link.id) {
-                  <article class="detail-commercial-item">
+              @if (selectedServiceOrder.items?.length) {
+                <section class="detail-cancellation-card" aria-label="Cancelaciones por equipo">
+                  <header class="detail-cancellation-card__header">
                     <div>
-                      <strong>{{ getCommercialItemLabel(link) }}</strong>
-                      <span>
-                        Versión #{{ link.commercialVersion?.versionNumber }} ·
-                        {{ formatMoney(link.commercialVersion?.totalAmount) }}
-                      </span>
-                      @if (getCommercialDecisionAuditLabel(link); as auditLabel) {
-                        <small>{{ auditLabel }}</small>
-                      }
+                      <p class="detail-card-label">Gestión por equipo</p>
+                      <h3>Cancelaciones</h3>
                     </div>
-                    <div class="detail-commercial-item__action">
-                      <span>{{ getCommercialVersionStatusLabel(link) }}</span>
-                      @if (canEditCommercialDiscounts(link)) {
-                        <button type="button" (click)="openLineDiscountModal(link)">
-                          <i class="fas fa-tag"></i>
-                          Editar descuentos
-                        </button>
-                      }
-                      @if (canRecordClientDecision(link)) {
-                        <button type="button" (click)="openClientDecisionModal(link)">Registrar decisión</button>
-                      }
+                    <span>{{ selectedServiceOrder.items?.length }} equipo(s)</span>
+                  </header>
+
+                  <div class="detail-cancellation-card__list">
+                    @for (item of selectedServiceOrder.items ?? []; track item.id) {
+                      <article class="detail-cancellation-item">
+                        <div>
+                          <strong>{{ getItemLabel(item) }}</strong>
+                          @if (getPendingItemCancellation(item); as pendingRequest) {
+                            <span
+                              class="detail-cancellation-state detail-cancellation-state--pending"
+                            >
+                              Cancelación pendiente ·
+                              {{ pendingRequest.requestedAt | date: 'dd/MM/yyyy HH:mm' }}
+                            </span>
+                          } @else if (item.operativeStatus === 'CANCELADA') {
+                            <span
+                              class="detail-cancellation-state detail-cancellation-state--cancelled"
+                              >Equipo cancelado</span
+                            >
+                          } @else {
+                            <span class="detail-cancellation-state">{{
+                              getInboxThreadOperativeStatusLabel(item.operativeStatus)
+                            }}</span>
+                          }
+                        </div>
+                        <div class="detail-cancellation-item__actions">
+                          @if (canSendPickupReminder(item)) {
+                            <button
+                              type="button"
+                              class="detail-cancellation-button detail-cancellation-button--review"
+                              (click)="sendEquipmentPickupReminder(selectedServiceOrder, item)"
+                            >
+                              <i class="fas fa-paper-plane"></i>
+                              Recordar recojo
+                            </button>
+                          }
+                          @if (getPendingItemCancellation(item)) {
+                            <button
+                              type="button"
+                              class="detail-cancellation-button detail-cancellation-button--review"
+                              (click)="openCancellationResolution(selectedServiceOrder, item)"
+                            >
+                              <i class="fas fa-user-shield"></i>
+                              Resolver
+                            </button>
+                          } @else if (canRequestItemCancellation(item)) {
+                            <button
+                              type="button"
+                              class="detail-cancellation-button"
+                              (click)="openItemCancellationModal(selectedServiceOrder, item)"
+                            >
+                              <i class="fas fa-ban"></i>
+                              Cancelar
+                            </button>
+                          }
+                        </div>
+                      </article>
+                    }
+                  </div>
+                </section>
+              }
+
+              @for (item of selectedServiceOrder.items ?? []; track item.id) {
+                @if (item.sla; as sla) {
+                  <section
+                    class="detail-sla-panel"
+                    [class.is-breached]="sla.breached"
+                    aria-label="SLA del equipo"
+                  >
+                    <div class="detail-sla-hero">
+                      <div>
+                        <p class="detail-card-label">{{ item.code }} · SLA del equipo</p>
+                        <h3>{{ getServiceOrderSlaStageLabel(sla.stage) }}</h3>
+                      </div>
+                      <span class="detail-sla-hero__icon"><i class="fas fa-laptop"></i></span>
                     </div>
-                    @if (link.commercialVersion?.lines?.length) {
-                      <div class="detail-commercial-lines">
-                        @for (line of link.commercialVersion?.lines ?? []; track line.id) {
-                          <div class="detail-commercial-line">
-                            <div>
-                              <strong>{{ line.catalogNameSnapshot }}</strong>
-                              <span>{{ line.quantity | number: '1.0-2' }} × {{ formatMoney(line.unitPrice) }}</span>
-                            </div>
-                            <div>
-                              @if ((line.discountAmount || 0) > 0) {
-                                <span>-{{ line.discounts?.[0]?.percentage || 0 | number: '1.0-2' }}%</span>
-                              }
-                              <strong>{{ formatMoney(line.netAmount) }}</strong>
-                            </div>
+                    <div class="detail-sla-summary-grid">
+                      <article class="detail-chip-card">
+                        <span class="detail-card-label">Transcurrido</span>
+                        <strong>{{ formatMinutes(sla.elapsedMinutes) }}</strong>
+                      </article>
+                      <article class="detail-chip-card">
+                        <span class="detail-card-label">Restante</span>
+                        <strong>{{ formatMinutes(sla.remainingMinutes) }}</strong>
+                      </article>
+                      <article class="detail-chip-card">
+                        <span class="detail-card-label">Brecha</span>
+                        <strong>{{ sla.breached ? 'Sí' : 'No' }}</strong>
+                      </article>
+                    </div>
+                  </section>
+                }
+              }
+
+              @if (selectedServiceOrder.timeMetrics; as timeMetrics) {
+                <section class="detail-metrics-grid" aria-label="Tiempos SLA">
+                  <article
+                    class="detail-metric-card"
+                    [class.is-pending]="!timeMetrics.timeToDiagnosis.isComputable"
+                  >
+                    <p class="detail-card-label detail-card-label--with-icon">
+                      <i class="far fa-clock"></i>Tiempo a diagnóstico
+                    </p>
+                    <strong>{{ getMetricDisplayValue(timeMetrics.timeToDiagnosis) }}</strong>
+                  </article>
+                  <article
+                    class="detail-metric-card"
+                    [class.is-pending]="!timeMetrics.timeToServiceStart.isComputable"
+                  >
+                    <p class="detail-card-label detail-card-label--with-icon">
+                      <i class="far fa-clock"></i>Tiempo a inicio de servicio
+                    </p>
+                    <strong>{{ getMetricDisplayValue(timeMetrics.timeToServiceStart) }}</strong>
+                  </article>
+                  <article
+                    class="detail-metric-card"
+                    [class.is-pending]="!timeMetrics.timeToService.isComputable"
+                  >
+                    <p class="detail-card-label detail-card-label--with-icon">
+                      <i class="far fa-clock"></i>Tiempo de servicio
+                    </p>
+                    <strong>{{ getMetricDisplayValue(timeMetrics.timeToService) }}</strong>
+                  </article>
+                  <article
+                    class="detail-metric-card"
+                    [class.is-pending]="!timeMetrics.timeToResolution.isComputable"
+                  >
+                    <p class="detail-card-label detail-card-label--with-icon">
+                      <i class="far fa-clock"></i>Tiempo a resolución
+                    </p>
+                    <strong>{{ getMetricDisplayValue(timeMetrics.timeToResolution) }}</strong>
+                  </article>
+                  <article
+                    class="detail-metric-card"
+                    [class.is-pending]="!timeMetrics.timeToDelivery.isComputable"
+                  >
+                    <p class="detail-card-label detail-card-label--with-icon">
+                      <i class="far fa-clock"></i>Tiempo a entrega
+                    </p>
+                    <strong>{{ getMetricDisplayValue(timeMetrics.timeToDelivery) }}</strong>
+                  </article>
+                </section>
+              }
+
+              <section class="detail-diagnosis-card" aria-label="Diagnóstico del técnico">
+                <p class="detail-diagnosis-title">Diagnóstico del técnico:</p>
+                @if (isLoadingDiagnosis) {
+                  <p class="detail-diagnosis-loading">
+                    <i class="fas fa-spinner fa-spin"></i> Cargando diagnóstico...
+                  </p>
+                } @else if (currentDiagnosis) {
+                  <p class="detail-diagnosis-summary">{{ currentDiagnosis.summary }}</p>
+                  @if (currentDiagnosis.details) {
+                    <p class="detail-diagnosis-body">{{ currentDiagnosis.details }}</p>
+                  }
+                } @else {
+                  <p class="detail-diagnosis-body">Sin diagnóstico registrado.</p>
+                }
+              </section>
+
+              @if (selectedServiceOrderAgreement?.items?.length) {
+                <section
+                  class="detail-commercial-card"
+                  aria-label="Decisiones comerciales por equipo"
+                >
+                  <header class="detail-commercial-card__header">
+                    <div>
+                      <p class="detail-card-label">
+                        Cotización #{{ selectedServiceOrderAgreement?.sequenceNumber }}
+                      </p>
+                      <h3>Decisiones del cliente</h3>
+                    </div>
+                    <span>{{ formatMoney(selectedServiceOrderAgreement?.totalAmount) }}</span>
+                  </header>
+
+                  <div class="detail-commercial-card__list">
+                    @for (link of selectedServiceOrderAgreement?.items ?? []; track link.id) {
+                      <article class="detail-commercial-item">
+                        <div>
+                          <strong>{{ getCommercialItemLabel(link) }}</strong>
+                          <span>
+                            Versión #{{ link.commercialVersion?.versionNumber }} ·
+                            {{ formatMoney(link.commercialVersion?.totalAmount) }}
+                          </span>
+                          @if (getCommercialDecisionAuditLabel(link); as auditLabel) {
+                            <small>{{ auditLabel }}</small>
+                          }
+                        </div>
+                        <div class="detail-commercial-item__action">
+                          <span>{{ getCommercialVersionStatusLabel(link) }}</span>
+                          @if (canEditCommercialDiscounts(link)) {
+                            <button type="button" (click)="openLineDiscountModal(link)">
+                              <i class="fas fa-tag"></i>
+                              Editar descuentos
+                            </button>
+                          }
+                          @if (canRecordClientDecision(link)) {
+                            <button type="button" (click)="openClientDecisionModal(link)">
+                              Registrar decisión
+                            </button>
+                          }
+                        </div>
+                        @if (link.commercialVersion?.lines?.length) {
+                          <div class="detail-commercial-lines">
+                            @for (line of link.commercialVersion?.lines ?? []; track line.id) {
+                              <div class="detail-commercial-line">
+                                <div>
+                                  <strong>{{ line.catalogNameSnapshot }}</strong>
+                                  <span
+                                    >{{ line.quantity | number: '1.0-2' }} ×
+                                    {{ formatMoney(line.unitPrice) }}</span
+                                  >
+                                </div>
+                                <div>
+                                  @if ((line.discountAmount || 0) > 0) {
+                                    <span
+                                      >-{{
+                                        line.discounts?.[0]?.percentage || 0 | number: '1.0-2'
+                                      }}%</span
+                                    >
+                                  }
+                                  <strong>{{ formatMoney(line.netAmount) }}</strong>
+                                </div>
+                              </div>
+                            }
                           </div>
                         }
-                      </div>
+                      </article>
                     }
-                  </article>
-                }
-              </div>
+                  </div>
 
-              <p class="detail-commercial-card__note">
-                El registro es manual y auditable. No envía mensajes ni plantillas de WhatsApp.
-              </p>
-            </section>
-          }
+                  <p class="detail-commercial-card__note">
+                    El registro es manual y auditable. No envía mensajes ni plantillas de WhatsApp.
+                  </p>
+                </section>
+              }
 
-          <section class="detail-priority-banner" [class.is-breached]="hasActiveSlaBreach(selectedServiceOrder)">
-            <span class="detail-priority-banner__icon">
-              <i class="fas fa-laptop"></i>
-            </span>
-            <div>
-              <p class="detail-priority-banner__title">
-                {{ hasActiveSlaBreach(selectedServiceOrder) ? 'Servicio técnico priorizado' : 'Seguimiento operativo activo' }}
-              </p>
-              <p class="detail-priority-banner__copy">
-                {{
-                  hasActiveSlaBreach(selectedServiceOrder)
-                    ? 'La orden mantiene brecha activa y requiere seguimiento.'
-                    : 'La orden continúa en seguimiento y espera actualización del técnico.'
-                }}
-              </p>
+              <section
+                class="detail-priority-banner"
+                [class.is-breached]="hasActiveSlaBreach(selectedServiceOrder)"
+              >
+                <span class="detail-priority-banner__icon">
+                  <i class="fas fa-laptop"></i>
+                </span>
+                <div>
+                  <p class="detail-priority-banner__title">
+                    {{
+                      hasActiveSlaBreach(selectedServiceOrder)
+                        ? 'Servicio técnico priorizado'
+                        : 'Seguimiento operativo activo'
+                    }}
+                  </p>
+                  <p class="detail-priority-banner__copy">
+                    {{
+                      hasActiveSlaBreach(selectedServiceOrder)
+                        ? 'La orden mantiene brecha activa y requiere seguimiento.'
+                        : 'La orden continúa en seguimiento y espera actualización del técnico.'
+                    }}
+                  </p>
+                </div>
+              </section>
             </div>
-          </section>
-        </div>
-      </aside>
-      }
+          </aside>
+        }
+      </div>
     </div>
-  </div>
   }
 
   @if (clientDecisionTarget) {
@@ -553,7 +778,6 @@
       (revisionCreated)="handleLineDiscountRevisionCreated($event)"
     ></app-service-order-line-discount-modal>
   }
-
 
   @if (itemCancellationTarget) {
     <app-service-order-item-cancellation-modal
@@ -573,5 +797,3 @@
     </div>
   </div>
 </div>
-
-

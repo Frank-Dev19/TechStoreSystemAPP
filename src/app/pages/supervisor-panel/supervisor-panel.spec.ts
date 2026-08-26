@@ -30,20 +30,32 @@ describe('SupervisorPanel', () => {
   let fixture: ComponentFixture<SupervisorPanel>;
 
   const agreementServiceStub = {
-    findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
+    findAll: jasmine
+      .createSpy('findAll')
+      .and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
     createRevision: jasmine.createSpy('createRevision').and.returnValue(of({ id: 1000 })),
-    getTechnicianRevenueRankings: jasmine.createSpy('getTechnicianRevenueRankings').and.returnValue(of({ technicians: [] })),
+    getTechnicianRevenueRankings: jasmine
+      .createSpy('getTechnicianRevenueRankings')
+      .and.returnValue(of({ technicians: [] })),
   };
 
   const serviceOrderServiceStub = {
-    findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
+    findAll: jasmine
+      .createSpy('findAll')
+      .and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
     findOne: jasmine.createSpy('findOne').and.returnValue(of({} as any)),
-    getFinalNotificationFailures: jasmine.createSpy('getFinalNotificationFailures').and.returnValue(of([])),
-    retryFinalNotification: jasmine.createSpy('retryFinalNotification').and.returnValue(of({} as any)),
+    getFinalNotificationFailures: jasmine
+      .createSpy('getFinalNotificationFailures')
+      .and.returnValue(of([])),
+    retryFinalNotification: jasmine
+      .createSpy('retryFinalNotification')
+      .and.returnValue(of({} as any)),
   };
 
   const diagnosisServiceStub = {
-    findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [], total: 0, page: 1, limit: 1 })),
+    findAll: jasmine
+      .createSpy('findAll')
+      .and.returnValue(of({ data: [], total: 0, page: 1, limit: 1 })),
   };
 
   const productsServiceStub = {
@@ -80,6 +92,71 @@ describe('SupervisorPanel', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('mantiene los fallos fuera del flujo principal y los muestra en un modal bajo demanda', () => {
+    component.failedNotifications = [createFailedNotification()];
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const trigger = compiled.querySelector<HTMLButtonElement>('.notification-trigger');
+
+    expect(trigger?.textContent).toContain('Notificaciones');
+    expect(compiled.querySelector('[role="dialog"]')).toBeNull();
+
+    trigger?.click();
+    fixture.detectChanges();
+
+    const dialog = compiled.querySelector<HTMLElement>('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain('Notificaciones pendientes');
+    expect(dialog?.textContent).toContain('Informe final del servicio');
+    expect(dialog?.textContent).toContain('La plantilla configurada no estaba disponible en Meta');
+  });
+
+  it('no muestra el acceso a notificaciones cuando no existen fallos finales', () => {
+    component.failedNotifications = [];
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.notification-trigger'),
+    ).toBeNull();
+  });
+
+  it('conserva visible una notificación cuando el reintento continúa fallando', () => {
+    const notification = createFailedNotification();
+    component.failedNotifications = [notification];
+    component.openFailedNotifications();
+    serviceOrderServiceStub.retryFinalNotification.and.returnValue(
+      of({
+        ...notification,
+        status: 'FAILED_FINAL',
+        lastError: 'Meta continúa rechazando la plantilla.',
+      }),
+    );
+
+    component.retryNotification(notification);
+
+    expect(component.failedNotifications).toEqual([
+      jasmine.objectContaining({ id: notification.id, status: 'FAILED_FINAL' }),
+    ]);
+    expect(component.showFailedNotifications).toBeTrue();
+    expect(component.alertMessage).toContain('sigue pendiente');
+  });
+
+  it('retira la notificación y cierra el modal cuando el reintento resulta exitoso', () => {
+    const notification = createFailedNotification();
+    component.failedNotifications = [notification];
+    component.openFailedNotifications();
+    serviceOrderServiceStub.retryFinalNotification.and.returnValue(
+      of({ ...notification, status: 'SENT' }),
+    );
+
+    component.retryNotification(notification);
+
+    expect(component.failedNotifications).toEqual([]);
+    expect(component.showFailedNotifications).toBeFalse();
+    expect(component.alertMessage).toContain('reenviada correctamente');
   });
 
   it('muestra siempre el concepto fijo de servicio técnico en los acuerdos', () => {
@@ -126,17 +203,21 @@ describe('SupervisorPanel', () => {
 
     component.openLineDiscountModal(link);
 
-    expect(component.lineDiscountTarget).toEqual(jasmine.objectContaining({
-      serviceOrderId: 70,
-      serviceOrderItemId: 12,
-      baseVersionId: 91,
-      versionNumber: 4,
-      lines: link.commercialVersion.lines,
-    }));
+    expect(component.lineDiscountTarget).toEqual(
+      jasmine.objectContaining({
+        serviceOrderId: 70,
+        serviceOrderItemId: 12,
+        baseVersionId: 91,
+        versionNumber: 4,
+        lines: link.commercialVersion.lines,
+      }),
+    );
   });
 
   it('bloquea la edición de descuentos en snapshots aceptados', () => {
-    expect(component.canEditCommercialDiscounts({ commercialVersion: { status: 'ACCEPTED' } } as any)).toBeFalse();
+    expect(
+      component.canEditCommercialDiscounts({ commercialVersion: { status: 'ACCEPTED' } } as any),
+    ).toBeFalse();
   });
 
   it('uses orders as the primary operational section instead of quotes', () => {
@@ -155,7 +236,14 @@ describe('SupervisorPanel', () => {
 
   it('renders the redesigned order drawer and uses pendiente for missing SLA metrics', () => {
     serviceOrderServiceStub.findAll.and.returnValue(
-      of({ data: [createServiceOrder({ id: 51, code: 'SO-51', assignedToTechnicianName: 'Técnico Demo' })], total: 1, page: 1, limit: 100 }),
+      of({
+        data: [
+          createServiceOrder({ id: 51, code: 'SO-51', assignedToTechnicianName: 'Técnico Demo' }),
+        ],
+        total: 1,
+        page: 1,
+        limit: 100,
+      }),
     );
     serviceOrderServiceStub.findOne.and.returnValue(
       of(
@@ -167,17 +255,19 @@ describe('SupervisorPanel', () => {
           model: 'Nitro V',
           initialIssue: 'Sobrecalentamiento',
           timeMetrics: createTimeMetricsWithPending(),
-          items: [{
-            id: 501,
-            code: 'SO-51-01',
-            sla: {
-              stage: 'diagnosis',
-              targetMinutes: 180,
-              elapsedMinutes: 120,
-              remainingMinutes: 0,
-              breached: true,
-            },
-          } as any],
+          items: [
+            {
+              id: 501,
+              code: 'SO-51-01',
+              sla: {
+                stage: 'diagnosis',
+                targetMinutes: 180,
+                elapsedMinutes: 120,
+                remainingMinutes: 0,
+                breached: true,
+              },
+            } as any,
+          ],
         }),
       ),
     );
@@ -203,7 +293,13 @@ describe('SupervisorPanel', () => {
     fixture.detectChanges();
 
     component.setActiveSection('orders');
-    component.selectServiceOrder(createServiceOrder({ id: 51, code: 'SO-51', assignedToTechnicianName: 'Técnico Demo' }) as any);
+    component.selectServiceOrder(
+      createServiceOrder({
+        id: 51,
+        code: 'SO-51',
+        assignedToTechnicianName: 'Técnico Demo',
+      }) as any,
+    );
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
@@ -218,9 +314,24 @@ describe('SupervisorPanel', () => {
 
   it('filters orders by search term and operative status inside the orders section', () => {
     component.serviceOrders = [
-      createServiceOrder({ id: 1, code: 'SO-ACER', brand: 'Acer', operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO }),
-      createServiceOrder({ id: 2, code: 'SO-LENOVO', brand: 'Lenovo', operativeStatus: ServiceOrderOperativeStatus.ABIERTA }),
-      createServiceOrder({ id: 3, code: 'SO-DELL', brand: 'Dell', operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO }),
+      createServiceOrder({
+        id: 1,
+        code: 'SO-ACER',
+        brand: 'Acer',
+        operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO,
+      }),
+      createServiceOrder({
+        id: 2,
+        code: 'SO-LENOVO',
+        brand: 'Lenovo',
+        operativeStatus: ServiceOrderOperativeStatus.ABIERTA,
+      }),
+      createServiceOrder({
+        id: 3,
+        code: 'SO-DELL',
+        brand: 'Dell',
+        operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO,
+      }),
     ];
 
     component.orderSearchTerm = 'acer';
@@ -275,18 +386,20 @@ describe('SupervisorPanel', () => {
 
     component.openCancellationResolution(order, item);
 
-    expect(component.itemCancellationTarget).toEqual(jasmine.objectContaining({
-      mode: 'RESOLVE',
-      serviceOrderId: 70,
-      selectedItemId: 12,
-      cancellationRequestId: 91,
-    }));
+    expect(component.itemCancellationTarget).toEqual(
+      jasmine.objectContaining({
+        mode: 'RESOLVE',
+        serviceOrderId: 70,
+        selectedItemId: 12,
+        cancellationRequestId: 91,
+      }),
+    );
   });
 
   it('traduce el estado agregado de entrega parcial al español', () => {
-    expect(component.getInboxThreadOperativeStatusLabel(ServiceOrderOperativeStatus.ENTREGA_PARCIAL)).toBe(
-      'Entrega parcial',
-    );
+    expect(
+      component.getInboxThreadOperativeStatusLabel(ServiceOrderOperativeStatus.ENTREGA_PARCIAL),
+    ).toBe('Entrega parcial');
   });
 });
 
@@ -322,7 +435,23 @@ function createServiceOrder(overrides: Partial<ServiceOrder> = {}): ServiceOrder
   } as ServiceOrder;
 }
 
-function createMetric(overrides: Partial<ServiceOrderDerivedMetric> = {}): ServiceOrderDerivedMetric {
+function createFailedNotification() {
+  return {
+    id: 91,
+    serviceOrderId: 8,
+    messageType: 'service.final.report',
+    recipient: '+51932998578',
+    status: 'FAILED_FINAL',
+    lastError: 'Template name (estado_final_servicio) does not exist in es_PE',
+    attemptCount: 4,
+    createdAt: '2026-08-25T15:36:21.000Z',
+    updatedAt: '2026-08-25T16:45:00.000Z',
+  };
+}
+
+function createMetric(
+  overrides: Partial<ServiceOrderDerivedMetric> = {},
+): ServiceOrderDerivedMetric {
   return {
     valueMinutes: 30,
     isComputable: true,
@@ -333,7 +462,10 @@ function createMetric(overrides: Partial<ServiceOrderDerivedMetric> = {}): Servi
 
 function createTimeMetricsWithPending(): ServiceOrderTimeMetrics {
   return {
-    timeToDiagnosis: createMetric({ isComputable: false, missingTimestamps: ['diagnosisStartedAt'] }),
+    timeToDiagnosis: createMetric({
+      isComputable: false,
+      missingTimestamps: ['diagnosisStartedAt'],
+    }),
     timeToServiceStart: createMetric({ valueMinutes: 45 }),
     timeToService: createMetric({ valueMinutes: 90 }),
     timeToResolution: createMetric({ valueMinutes: 120 }),

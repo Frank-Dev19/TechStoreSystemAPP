@@ -23,6 +23,10 @@ $bg-light: #f5f7fa;
     border-radius: 12px;
     margin-bottom: 2rem;
     box-shadow: var(--brand-page-header-shadow);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
 
     .title-section {
       .page-title {
@@ -35,6 +39,75 @@ $bg-light: #f5f7fa;
         margin: 0.5rem 0 0 0;
         opacity: 0.95;
         font-size: 1rem;
+      }
+    }
+
+    .notification-trigger {
+      min-height: 44px;
+      padding: 0.55rem 0.65rem 0.55rem 0.75rem;
+      border: 1px solid rgba(248, 250, 252, 0.34);
+      border-radius: 999px;
+      background: rgba(248, 250, 252, 0.14);
+      color: #f8fafc;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      font: inherit;
+      font-size: 0.86rem;
+      font-weight: 650;
+      cursor: pointer;
+      transition:
+        background 180ms ease-out,
+        border-color 180ms ease-out,
+        transform 180ms ease-out;
+
+      &:hover {
+        background: rgba(248, 250, 252, 0.22);
+        border-color: rgba(248, 250, 252, 0.56);
+        transform: translateY(-1px);
+      }
+
+      &:focus-visible {
+        outline: 3px solid rgba(248, 250, 252, 0.42);
+        outline-offset: 3px;
+      }
+
+      .notification-trigger-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        background: rgba(248, 250, 252, 0.16);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      strong {
+        min-width: 26px;
+        height: 26px;
+        padding: 0 0.45rem;
+        border-radius: 999px;
+        background: #fbbf24;
+        color: #4a2b02;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.78rem;
+      }
+    }
+
+    @media (max-width: 640px) {
+      align-items: flex-start;
+      flex-direction: column;
+      padding: 1.5rem;
+
+      .notification-trigger {
+        width: 100%;
+        justify-content: flex-start;
+
+        strong {
+          margin-left: auto;
+        }
       }
     }
   }
@@ -53,7 +126,9 @@ $bg-light: #f5f7fa;
       align-items: center;
       gap: 1.25rem;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
 
       &:hover {
         transform: translateY(-4px);
@@ -688,7 +763,9 @@ $bg-light: #f5f7fa;
         border-radius: 14px;
         padding: 0.9rem 1rem;
         font-family: inherit;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        transition:
+          border-color 0.2s ease,
+          box-shadow 0.2s ease;
 
         &:focus {
           outline: none;
@@ -757,7 +834,9 @@ $bg-light: #f5f7fa;
           align-items: center;
           gap: 0.45rem;
           cursor: pointer;
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          transition:
+            transform 0.2s ease,
+            box-shadow 0.2s ease;
 
           &:disabled {
             opacity: 0.55;
@@ -1014,7 +1093,9 @@ $bg-light: #f5f7fa;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: background 0.2s ease, transform 0.2s ease;
+          transition:
+            background 0.2s ease,
+            transform 0.2s ease;
           font-size: 1.2rem;
 
           &:hover {
@@ -1348,6 +1429,333 @@ $bg-light: #f5f7fa;
         min-height: unset;
       }
     }
+  }
+}
+
+.modal-overlay.notification-modal-overlay {
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.modal-overlay .modal-content.notification-modal {
+  width: min(780px, 100%);
+  max-width: 780px;
+  max-height: min(820px, calc(100dvh - 2rem));
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 20px;
+  background: #f8fafc;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+
+  .notification-modal-header {
+    padding: 1.35rem 1.5rem;
+    border-bottom: 1px solid $border;
+    background: #f8fafc;
+    color: $primary-dark;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .notification-modal-heading {
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.9rem;
+
+    h2 {
+      margin: 0.15rem 0 0.25rem;
+      color: $primary-dark;
+      font-size: 1.35rem;
+      line-height: 1.2;
+    }
+
+    p {
+      max-width: 62ch;
+      margin: 0;
+      color: $text-muted;
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+  }
+
+  .notification-modal-icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    border-radius: 12px;
+    background: rgba($warning, 0.18);
+    color: #92400e;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .notification-modal-eyebrow,
+  .notification-card-kicker {
+    display: block;
+    color: $text-muted;
+    font-size: 0.7rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .notification-modal-close {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border: 1px solid $border;
+    border-radius: 12px;
+    background: #f1f5f9;
+    color: $primary-dark;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition:
+      background 160ms ease-out,
+      border-color 160ms ease-out;
+
+    &:hover {
+      border-color: rgba($primary, 0.28);
+      background: #e8eef6;
+    }
+
+    &:focus-visible {
+      outline: 3px solid rgba($primary, 0.2);
+      outline-offset: 2px;
+    }
+  }
+
+  .notification-modal-body {
+    min-height: 0;
+    padding: 1.25rem 1.5rem 1.5rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .notification-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  .notification-card {
+    border: 1px solid $border;
+    border-radius: 16px;
+    background: #fdfefe;
+    overflow: hidden;
+  }
+
+  .notification-card-main {
+    padding: 1.15rem 1.2rem 1rem;
+  }
+
+  .notification-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+
+    h3 {
+      margin: 0.2rem 0 0;
+      color: $primary-dark;
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+  }
+
+  .notification-status {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    background: rgba($warning, 0.16);
+    color: #854d0e;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .notification-error-summary {
+    max-width: 70ch;
+    margin: 0.85rem 0 0;
+    color: #475569;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .notification-meta {
+    margin: 1rem 0 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(90px, 0.55fr) minmax(160px, 1fr);
+    gap: 0.75rem;
+
+    div {
+      min-width: 0;
+      padding: 0.65rem 0.75rem;
+      border-radius: 10px;
+      background: #f1f5f9;
+    }
+
+    dt {
+      margin: 0 0 0.2rem;
+      color: $text-muted;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    dd {
+      margin: 0;
+      color: $primary-dark;
+      font-size: 0.82rem;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .notification-error-details {
+    margin-top: 0.9rem;
+
+    summary {
+      width: fit-content;
+      color: $primary;
+      font-size: 0.8rem;
+      font-weight: 650;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 3px solid rgba($primary, 0.18);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+    }
+
+    p {
+      margin: 0.75rem 0 0;
+      padding: 0.8rem;
+      border-radius: 10px;
+      background: #eaf0f6;
+      color: #475569;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.72rem;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+  }
+
+  .notification-card-actions {
+    padding: 0.85rem 1.2rem;
+    border-top: 1px solid $border;
+    background: #f8fafc;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .notification-retry-button {
+    min-height: 42px;
+    padding: 0.65rem 0.95rem;
+    border: 1px solid rgba($primary, 0.28);
+    border-radius: 10px;
+    background: #edf4fc;
+    color: $primary-dark;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      background 160ms ease-out,
+      border-color 160ms ease-out,
+      transform 160ms ease-out;
+
+    &:hover:not(:disabled) {
+      border-color: rgba($primary, 0.48);
+      background: #e1edf9;
+      transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+      outline: 3px solid rgba($primary, 0.2);
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 0.62;
+      cursor: wait;
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .modal-overlay.notification-modal-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .modal-overlay .modal-content.notification-modal {
+    width: 100%;
+    max-width: none;
+    max-height: 100dvh;
+    height: 100dvh;
+    border: none;
+    border-radius: 0;
+
+    .notification-modal-header {
+      padding: max(1rem, env(safe-area-inset-top)) 1rem 1rem;
+    }
+
+    .notification-modal-heading {
+      gap: 0.7rem;
+
+      h2 {
+        font-size: 1.15rem;
+      }
+
+      p {
+        font-size: 0.82rem;
+      }
+    }
+
+    .notification-modal-icon {
+      width: 38px;
+      height: 38px;
+      flex-basis: 38px;
+    }
+
+    .notification-modal-body {
+      padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
+    }
+
+    .notification-card-header {
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .notification-meta {
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
+    }
+
+    .notification-card-actions,
+    .notification-retry-button {
+      width: 100%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notification-trigger,
+  .notification-modal-close,
+  .notification-retry-button {
+    transition: none !important;
   }
 }
 
@@ -1805,8 +2213,12 @@ $bg-light: #f5f7fa;
   font-size: 0.69rem;
   font-weight: 700;
 
-  &--pending { color: #9a5a20; }
-  &--cancelled { color: #a33d3d; }
+  &--pending {
+    color: #9a5a20;
+  }
+  &--cancelled {
+    color: #a33d3d;
+  }
 }
 
 .detail-cancellation-button {
@@ -2074,7 +2486,10 @@ $bg-light: #f5f7fa;
       border-radius: 16px;
       box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
       align-items: flex-start;
-      transition: transform 180ms ease-out, box-shadow 180ms ease-out, border-color 180ms ease-out;
+      transition:
+        transform 180ms ease-out,
+        box-shadow 180ms ease-out,
+        border-color 180ms ease-out;
 
       &:hover {
         transform: translateY(-2px);
@@ -2143,7 +2558,11 @@ $bg-light: #f5f7fa;
       font-size: 13px;
       background: transparent;
       color: rgba($primary, 0.68);
-      transition: color 180ms ease-out, border-color 180ms ease-out, background-color 180ms ease-out, transform 160ms ease-out;
+      transition:
+        color 180ms ease-out,
+        border-color 180ms ease-out,
+        background-color 180ms ease-out,
+        transform 160ms ease-out;
 
       &:hover {
         background: transparent;
@@ -2285,7 +2704,10 @@ $bg-light: #f5f7fa;
       .thread-item {
         min-height: 82px;
         border-radius: 14px;
-        transition: border-color 180ms ease-out, box-shadow 180ms ease-out, transform 160ms ease-out;
+        transition:
+          border-color 180ms ease-out,
+          box-shadow 180ms ease-out,
+          transform 160ms ease-out;
 
         &:hover {
           border-color: rgba($primary, 0.22);
@@ -2350,7 +2772,10 @@ $bg-light: #f5f7fa;
         border: 1px solid $border;
         border-radius: 14px;
         background: #f9fafb;
-        transition: border-color 180ms ease-out, box-shadow 180ms ease-out, background-color 180ms ease-out;
+        transition:
+          border-color 180ms ease-out,
+          box-shadow 180ms ease-out,
+          background-color 180ms ease-out;
 
         &:focus {
           outline: none;
@@ -2495,4 +2920,3 @@ $bg-light: #f5f7fa;
     }
   }
 }
-
