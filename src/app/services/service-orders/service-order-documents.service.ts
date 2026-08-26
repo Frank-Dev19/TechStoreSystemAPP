@@ -2,20 +2,18 @@ import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import jsPDF from 'jspdf';
 import { map, Observable, tap } from 'rxjs';
-import { ServiceOrder } from '../../models/service-orders/service-order';
-import { ServiceOrderAgreement } from '../../models/service-orders/service-agreement';
+import { ServiceOrder, ServiceOrderItem } from '../../models/service-orders/service-order';
 import { config } from '../../../environments/environment';
-
-type OrderSummaryContext = {
-  serviceOrder: ServiceOrder;
-  agreement: ServiceOrderAgreement | null;
-};
+import { QzTrayPrintService } from '../printing/qz-tray-print.service';
 
 @Injectable({ providedIn: 'root' })
 export class ServiceOrderDocumentsService {
   private readonly serviceOrdersUrl = `${config.endpointServices}${config.serviceOrders.serviceOrders}`;
 
-  constructor(private readonly http: HttpClient) {}
+  constructor(
+    private readonly http: HttpClient,
+    private readonly qzTrayPrint: QzTrayPrintService,
+  ) {}
 
   downloadOrderSummaryPdf(serviceOrderId: number): Observable<void> {
     const fallbackFileName = `SO-${serviceOrderId}-resumen.pdf`;
@@ -35,70 +33,116 @@ export class ServiceOrderDocumentsService {
       );
   }
 
-  openEquipmentStickerPdf(context: OrderSummaryContext): void {
-    const { serviceOrder: o } = context;
-    const width = 118;
-    const margin = 1.5;
-    const maxChars = 68;
-    const columnChars = 34;
-    const lineHeight = 4;
-    const pageLines: string[] = [];
-
-    const fields: Array<[string, string]> = [
-      ['Tipo', getEquipmentTypeLabel(o.equipmentType, o.equipmentTypeOther)],
-      ['Marca', o.brand || '-'],
-      ['Modelo', o.model || '-'],
-      ['Serie', o.serialNumber || '-'],
-      ['Ingreso', new Date(o.createdAt).toLocaleString('es-PE')],
-      ['Accesorios', o.accessories || '-'],
-      ['Notas', o.notes || '-'],
-    ];
-
-    pageLines.push(centerThermalText('ORDEN', maxChars));
-    pageLines.push(centerThermalText(o.code, maxChars));
-    pageLines.push('-'.repeat(maxChars));
-
-    const pendingColumns: string[][] = [];
-
-    fields.forEach(([label, value]) => {
-      const fieldLines = buildThermalFieldLines(label, value, maxChars, columnChars);
-      const fitsColumn = fieldLines.every((line) => line.length <= columnChars);
-
-      if (!fitsColumn) {
-        if (pendingColumns.length === 1) {
-          pageLines.push(padThermalText(pendingColumns[0][0] || '', maxChars));
-          pendingColumns.length = 0;
-        }
-        pageLines.push(...fieldLines);
-        return;
-      }
-
-      pendingColumns.push(fieldLines);
-      if (pendingColumns.length === 2) {
-        pageLines.push(...composeThermalColumnRow(pendingColumns[0], pendingColumns[1], columnChars));
-        pendingColumns.length = 0;
-      }
+  emailOrderSummary(serviceOrderId: number, to?: string): Observable<{
+    ok: true;
+    serviceOrderId: number;
+    to: string;
+    message: string;
+  }> {
+    return this.http.post<{
+      ok: true;
+      serviceOrderId: number;
+      to: string;
+      message: string;
+    }>(`${this.serviceOrdersUrl}/${serviceOrderId}/summary-email`, {
+      ...(to ? { to } : {}),
     });
+  }
 
-    if (pendingColumns.length === 1) {
-      pageLines.push(padThermalText(pendingColumns[0][0] || '', maxChars));
-    }
+  async printEquipmentSticker(
+    serviceOrder: ServiceOrder,
+    item: ServiceOrderItem,
+    copies: number,
+  ): Promise<void> {
+    const widthMm = 62;
+    const heightMm = 35;
+    const doc = this.buildEquipmentStickerPdf(serviceOrder, item, widthMm, heightMm);
+    const dataUri = doc.output('datauristring');
 
-    pageLines.push('-'.repeat(maxChars));
-
-    const pageHeight = Math.max(30, margin * 2 + pageLines.length * lineHeight + 1.5);
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [width, pageHeight] });
-    doc.setFont('courier', 'normal');
-    doc.setFontSize(8.1);
-
-    let currentY = margin + 1.6;
-    pageLines.forEach((line) => {
-      doc.text(line, margin, currentY);
-      currentY += lineHeight;
+    await this.qzTrayPrint.printPdfLabel({
+      base64: dataUri.slice(dataUri.indexOf(',') + 1),
+      copies,
+      widthMm,
+      heightMm,
+      jobName: `Sticker ${item.code}`,
     });
+  }
 
-    const blobUrl = doc.output('bloburl');
-    window.open(blobUrl, '_blank', 'noopener');
+  private buildEquipmentStickerPdf(
+    serviceOrder: ServiceOrder,
+    item: ServiceOrderItem,
+    widthMm: number,
+    heightMm: number,
+  ): jsPDF {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [widthMm, heightMm] });
+    const left = 1.8;
+    const right = widthMm - 1.8;
+    const contentWidth = right - left;
+    const receivedAt = new Date(serviceOrder.receivedAt || serviceOrder.createdAt);
+    const clientName = (
+      serviceOrder.contactName ||
+      serviceOrder.clientSnapshotName ||
+      serviceOrder.client?.name ||
+      'CLIENTE SIN IDENTIFICAR'
+    ).trim();
+    const equipment = [
+      getEquipmentTypeLabel(item.equipmentType, item.equipmentTypeOther),
+      item.brand,
+      item.model,
+    ].filter(Boolean).join(' ');
+    const headerDate = formatStickerDate(receivedAt).toUpperCase();
+
+    doc.setTextColor(12, 18, 24);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(
+      fitInlineHeaderFontSize(doc, serviceOrder.code, headerDate, contentWidth, 6.2, 4.8),
+    );
+    doc.text(serviceOrder.code, left, 4.05);
+    doc.text(headerDate, right, 4.05, { align: 'right' });
+
+    doc.setDrawColor(12, 18, 24);
+    doc.setLineWidth(0.24);
+    doc.line(left, 5.25, right, 5.25);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(fitPdfFontSize(doc, clientName.toUpperCase(), contentWidth, 6.7, 5.2));
+    doc.text(truncatePdfText(doc, clientName.toUpperCase(), contentWidth), left, 8.35);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(fitPdfFontSize(doc, equipment.toUpperCase(), contentWidth, 5.8, 4.8));
+    doc.text(
+      truncatePdfText(doc, equipment.toUpperCase(), contentWidth),
+      left,
+      11.05,
+    );
+
+    drawStickerField(doc, 'SERIE', item.serialNumber || 'No registrada', left, contentWidth, 13.75);
+    drawStickerField(doc, 'ACCESORIOS', item.accessories || 'Sin accesorios', left, contentWidth, 16.15);
+    drawStickerField(doc, 'NOTAS', item.notes || 'Sin notas', left, contentWidth, 18.55);
+
+    doc.setDrawColor(12, 18, 24);
+    doc.setLineWidth(0.18);
+    doc.line(left, 19.75, right, 19.75);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(4.2);
+    doc.setCharSpace(0.12);
+    doc.text('FALLA REPORTADA', left, 21.75);
+    doc.setCharSpace(0);
+
+    doc.setFontSize(5.8);
+    const issueLines = limitPdfLines(
+      doc,
+      doc.splitTextToSize((item.initialIssue || 'SIN FALLA REPORTADA').toUpperCase(), contentWidth),
+      2,
+      contentWidth,
+    );
+    doc.text(issueLines, left, 24.55, { lineHeightFactor: 1.05 });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(4.4);
+    doc.text(`RECIBIDO  ${formatStickerDateTime(receivedAt).toUpperCase()}`, left, heightMm - 1.35);
+    return doc;
   }
 
   private resolveDownloadFileName(response: HttpResponse<Blob>, fallbackFileName: string): string {
@@ -150,61 +194,116 @@ function getEquipmentTypeLabel(type?: string, other?: string | null): string {
   return labels[type ?? ''] || type || '-';
 }
 
-function centerThermalText(value: string, width: number): string {
-  const normalized = String(value || '').trim().slice(0, width);
-  const leftPadding = Math.max(0, Math.floor((width - normalized.length) / 2));
-  const rightPadding = Math.max(0, width - normalized.length - leftPadding);
-  return `${' '.repeat(leftPadding)}${normalized}${' '.repeat(rightPadding)}`;
+function formatStickerDate(value: Date): string {
+  if (Number.isNaN(value.getTime())) return 'Fecha no registrada';
+  const formatted = new Intl.DateTimeFormat('es-PE', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: '2-digit',
+  }).format(value);
+  return capitalizeStickerDate(formatted);
 }
 
-function padThermalText(value: string, width: number): string {
-  const normalized = String(value || '');
-  return normalized.length >= width ? normalized.slice(0, width) : normalized.padEnd(width, ' ');
+function formatStickerDateTime(value: Date): string {
+  if (Number.isNaN(value.getTime())) return 'Fecha no registrada';
+  const date = formatStickerDate(value);
+  const time = new Intl.DateTimeFormat('es-PE', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(value);
+  return `${date} / ${time}`;
 }
 
-function composeThermalColumnRow(leftLines: string[], rightLines: string[], columnChars: number): string[] {
-  const rows: string[] = [];
-  const rowHeight = Math.max(leftLines.length, rightLines.length);
+function capitalizeStickerDate(value: string): string {
+  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
+}
 
-  for (let index = 0; index < rowHeight; index += 1) {
-    const left = padThermalText(leftLines[index] || '', columnChars);
-    const right = padThermalText(rightLines[index] || '', columnChars);
-    rows.push(`${left}${right}`);
+function limitPdfLines(
+  doc: jsPDF,
+  lines: string[] | string,
+  maximum: number,
+  maximumWidth: number,
+): string[] {
+  const values = Array.isArray(lines) ? lines : [lines];
+  if (values.length <= maximum) return values;
+  const limited = values.slice(0, maximum);
+  let finalLine = limited[maximum - 1].replace(/[.]+$/, '').trimEnd();
+  while (finalLine.length > 1 && doc.getTextWidth(`${finalLine}...`) > maximumWidth) {
+    finalLine = finalLine.slice(0, -1).trimEnd();
   }
-
-  return rows;
+  limited[maximum - 1] = `${finalLine}...`;
+  return limited;
 }
 
-function buildThermalFieldLines(label: string, value: string, maxChars: number, columnChars: number): string[] {
-  const normalized = `${label}: ${String(value || '—').replace(/\s+/g, ' ').trim()}`;
-  if (normalized.length <= columnChars) {
-    return [normalized];
+function fitPdfFontSize(
+  doc: jsPDF,
+  value: string,
+  maximumWidth: number,
+  preferredSize: number,
+  minimumSize: number,
+): number {
+  let size = preferredSize;
+  doc.setFontSize(size);
+  while (size > minimumSize && doc.getTextWidth(value) > maximumWidth) {
+    size -= 0.2;
+    doc.setFontSize(size);
   }
-
-  return wrapThermalText(normalized, maxChars);
+  return Math.max(size, minimumSize);
 }
 
-function wrapThermalText(value: string, width: number): string[] {
-  const words = String(value || '').split(' ').filter(Boolean);
-  if (!words.length) return ['—'];
+function fitInlineHeaderFontSize(
+  doc: jsPDF,
+  leftValue: string,
+  rightValue: string,
+  maximumWidth: number,
+  preferredSize: number,
+  minimumSize: number,
+): number {
+  const minimumGap = 2.5;
+  let size = preferredSize;
+  doc.setFontSize(size);
+  while (
+    size > minimumSize &&
+    doc.getTextWidth(leftValue) + doc.getTextWidth(rightValue) + minimumGap > maximumWidth
+  ) {
+    size -= 0.2;
+    doc.setFontSize(size);
+  }
+  return Math.max(size, minimumSize);
+}
 
-  const lines: string[] = [];
-  let current = '';
+function drawStickerField(
+  doc: jsPDF,
+  label: string,
+  value: string,
+  left: number,
+  maximumWidth: number,
+  y: number,
+): void {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(4.5);
+  const normalizedLabel = `${label}:`;
+  doc.text(normalizedLabel, left, y);
+  const labelWidth = doc.getTextWidth(normalizedLabel) + 1.1;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5.1);
+  doc.text(
+    truncatePdfText(doc, String(value || '-').toUpperCase(), maximumWidth - labelWidth),
+    left + labelWidth,
+    y,
+  );
+}
 
-  words.forEach((word) => {
-    if (!current) {
-      current = word;
-      return;
-    }
-    if (`${current} ${word}`.length <= width) {
-      current = `${current} ${word}`;
-      return;
-    }
-    lines.push(current);
-    current = word;
-  });
+function truncatePdfText(doc: jsPDF, value: string, maximumWidth: number): string {
+  const normalized = String(value || '-').replace(/\s+/g, ' ').trim();
+  if (doc.getTextWidth(normalized) <= maximumWidth) return normalized;
 
-  if (current) lines.push(current);
-  return lines;
+  let truncated = normalized;
+  while (truncated.length > 1 && doc.getTextWidth(`${truncated}...`) > maximumWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return `${truncated.trimEnd()}...`;
 }
 

@@ -1,0 +1,210 @@
+<div class="sale-overlay" (mousedown)="onBackdropClick($event)">
+  <section class="sale-modal" role="dialog" aria-modal="true" aria-labelledby="service-order-sale-title">
+    <header class="sale-header">
+      <div class="sale-header__identity">
+        <span class="sale-header__icon"><i class="fas fa-cash-register"></i></span>
+        <div>
+          <span class="sale-eyebrow">Venta desde orden</span>
+          <h2 id="service-order-sale-title">Registrar venta</h2>
+          <p>{{ order.code }}</p>
+        </div>
+      </div>
+      <button type="button" class="sale-close" (click)="close()" aria-label="Cerrar modal">
+        <i class="fas fa-times"></i>
+      </button>
+    </header>
+
+    <div class="sale-body">
+      <aside class="order-summary" aria-label="Resumen de la orden">
+        <div class="order-summary__heading">
+          <span>Orden a facturar</span>
+          <strong>{{ order.code }}</strong>
+        </div>
+        <dl>
+          <div>
+            <dt>Cliente operativo</dt>
+            <dd>{{ order.clientSnapshotName || order.client?.name || 'Sin cliente registrado' }}</dd>
+          </div>
+          <div>
+            <dt>Equipos</dt>
+            <dd>{{ equipmentCount }}</dd>
+          </div>
+          <div class="order-summary__total">
+            <dt>Total</dt>
+            <dd>S/ {{ saleTotal | number: '1.2-2' }}</dd>
+          </div>
+        </dl>
+        <p class="order-summary__note">
+          El comprobante incluirá las líneas de la cotización confirmada de esta orden.
+        </p>
+      </aside>
+
+      <form class="sale-form" (ngSubmit)="confirmSale()">
+        <section class="form-section">
+          <div class="section-heading">
+            <span class="section-step">1</span>
+            <div>
+              <h3>Contribuyente del comprobante</h3>
+              <p>Usa el cliente de la orden o busca otro por DNI o RUC.</p>
+            </div>
+          </div>
+
+          @if (selectedTaxpayer) {
+            <div class="taxpayer-card">
+              <span class="taxpayer-card__avatar">{{ selectedTaxpayer.name.charAt(0) }}</span>
+              <div>
+                <strong>{{ selectedTaxpayer.name }}</strong>
+                <span>{{ selectedTaxpayer.documentNumber }}</span>
+                @if (selectedTaxpayer.address) {
+                  <small>{{ selectedTaxpayer.address }}</small>
+                }
+              </div>
+              <button type="button" class="link-button" (click)="clearTaxpayer()">Cambiar</button>
+            </div>
+          } @else {
+            <label for="taxpayer-document">DNI o RUC</label>
+            <div class="search-row">
+              <input
+                id="taxpayer-document"
+                name="taxpayerDocument"
+                inputmode="numeric"
+                autocomplete="off"
+                [(ngModel)]="taxpayerSearchText"
+                placeholder="Ingresa el documento"
+                (keydown.enter)="$event.preventDefault(); searchTaxpayer()"
+              />
+              <button type="button" class="secondary-button" (click)="searchTaxpayer()" [disabled]="isSearching">
+                <i class="fas" [class.fa-search]="!isSearching" [class.fa-spinner]="isSearching" [class.fa-spin]="isSearching"></i>
+                {{ isSearching ? 'Buscando' : 'Buscar' }}
+              </button>
+            </div>
+          }
+
+          @if (showRegistration) {
+            <div class="registration-panel">
+              <div class="registration-panel__title">
+                <i class="fas fa-user-plus"></i>
+                <div>
+                  <strong>Registrar contribuyente</strong>
+                  <span>El registro quedará disponible para próximas ventas.</span>
+                </div>
+              </div>
+              <div class="form-grid form-grid--registration">
+                <div class="field field--wide">
+                  <label for="taxpayer-name">Nombre o razón social</label>
+                  <input id="taxpayer-name" name="taxpayerName" [(ngModel)]="registrationDraft.name" />
+                </div>
+                <div class="field">
+                  <label for="taxpayer-document-type">Tipo de documento</label>
+                  <select id="taxpayer-document-type" name="taxpayerDocumentType" [(ngModel)]="registrationDraft.documentTypeId">
+                    <option [ngValue]="null">Selecciona</option>
+                    @for (type of documentTypes; track type.id) {
+                      <option [ngValue]="type.id">{{ type.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="new-taxpayer-document">Número</label>
+                  <input id="new-taxpayer-document" name="newTaxpayerDocument" [(ngModel)]="registrationDraft.documentNumber" inputmode="numeric" />
+                </div>
+                <div class="field field--wide">
+                  <label for="taxpayer-address">Dirección</label>
+                  <input id="taxpayer-address" name="taxpayerAddress" [(ngModel)]="registrationDraft.address" />
+                </div>
+                <div class="field">
+                  <label for="taxpayer-email">Correo</label>
+                  <input id="taxpayer-email" name="taxpayerEmail" type="email" [(ngModel)]="registrationDraft.email" />
+                </div>
+                <div class="field">
+                  <label for="taxpayer-phone">Teléfono</label>
+                  <input id="taxpayer-phone" name="taxpayerPhone" [(ngModel)]="registrationDraft.phone" />
+                </div>
+              </div>
+              <button type="button" class="secondary-button registration-button" (click)="registerTaxpayer()" [disabled]="isRegistering">
+                {{ isRegistering ? 'Registrando...' : 'Registrar y seleccionar' }}
+              </button>
+            </div>
+          }
+        </section>
+
+        <section class="form-section">
+          <div class="section-heading">
+            <span class="section-step">2</span>
+            <div>
+              <h3>Comprobante y pago</h3>
+              <p>Define cómo se emitirá y cobrará esta orden.</p>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="sale-document-type">Tipo de comprobante</label>
+              <select id="sale-document-type" name="saleDocumentType" [(ngModel)]="documentType" (change)="onDocumentTypeChange()">
+                @for (type of documentTypeOptions; track type.value) {
+                  <option [ngValue]="type.value">{{ type.label }}</option>
+                }
+              </select>
+            </div>
+            <div class="field">
+              <label for="sale-payment-method">Forma de pago</label>
+              <select id="sale-payment-method" name="salePaymentMethod" [(ngModel)]="paymentMethod">
+                @for (method of paymentOptions; track method.value) {
+                  <option [ngValue]="method.value">{{ method.label }}</option>
+                }
+              </select>
+            </div>
+            @if (requiresReference) {
+              <div class="field">
+                <label for="sale-reference">Número de operación</label>
+                <input id="sale-reference" name="saleReference" [(ngModel)]="paymentReference" placeholder="Opcional" />
+              </div>
+            }
+            @if (requiresBank) {
+              <div class="field">
+                <label for="sale-bank">Banco</label>
+                <input id="sale-bank" name="saleBank" [(ngModel)]="bankName" placeholder="Banco" />
+              </div>
+            }
+            @if (requiresCardType) {
+              <div class="field">
+                <label for="sale-card-type">Tipo de tarjeta</label>
+                <select id="sale-card-type" name="saleCardType" [(ngModel)]="cardType">
+                  <option value="">Selecciona</option>
+                  <option value="DEBITO">Débito</option>
+                  <option value="CREDITO">Crédito</option>
+                </select>
+              </div>
+            }
+          </div>
+        </section>
+
+        @if (errorMessage) {
+          <div class="feedback feedback--error" role="alert">
+            <i class="fas fa-exclamation-circle"></i>
+            <span>{{ errorMessage }}</span>
+          </div>
+        }
+        @if (successMessage) {
+          <div class="feedback feedback--success" role="status">
+            <i class="fas fa-check-circle"></i>
+            <span>{{ successMessage }}</span>
+          </div>
+        }
+
+        <footer class="sale-footer">
+          <div class="sale-footer__amount">
+            <span>Total a cobrar</span>
+            <strong>S/ {{ saleTotal | number: '1.2-2' }}</strong>
+          </div>
+          <div class="sale-footer__actions">
+            <button type="button" class="ghost-button" (click)="close()" [disabled]="isSubmitting">Cancelar</button>
+            <button type="submit" class="primary-button" [disabled]="isSubmitting || !selectedTaxpayer || saleTotal <= 0">
+              <i class="fas" [class.fa-check]="!isSubmitting" [class.fa-spinner]="isSubmitting" [class.fa-spin]="isSubmitting"></i>
+              {{ isSubmitting ? 'Registrando...' : 'Confirmar venta' }}
+            </button>
+          </div>
+        </footer>
+      </form>
+    </div>
+  </section>
+</div>

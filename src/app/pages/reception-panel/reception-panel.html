@@ -246,6 +246,21 @@
                             <i class="fas fa-download"></i>
                           </button>
                         }
+                        @if (
+                          !hasLinkedSaleDocument(serviceOrder) &&
+                          canCreateBoletaFromOrder(serviceOrder)
+                        ) {
+                          <button
+                            class="btn-icon btn-direct-sale"
+                            type="button"
+                            (click)="openServiceOrderSaleModal(serviceOrder, $event)"
+                            title="Realizar venta"
+                            aria-label="Realizar venta de la orden"
+                          >
+                            <i class="fas fa-cash-register"></i>
+                            <span>Venta</span>
+                          </button>
+                        }
                         @if (serviceOrder.serviceType !== serviceTypeEnum.WARRANTY_SERVICE) {
                           <button
                             type="button"
@@ -294,11 +309,29 @@
                               <button
                                 type="button"
                                 class="action-menu-item"
-                                (click)="printServiceOrderSticker(serviceOrder, $event); closeActionMenu()"
+                                [disabled]="emailingSummaryOrderIds.has(serviceOrder.id)"
+                                (click)="emailServiceOrderSummary(serviceOrder, $event); closeActionMenu()"
                               >
-                                <i class="fas fa-tag"></i>
-                                <span>Sticker</span>
+                                <i
+                                  class="fas"
+                                  [ngClass]="emailingSummaryOrderIds.has(serviceOrder.id) ? 'fa-spinner fa-spin' : 'fa-envelope'"
+                                ></i>
+                                <span>Enviar resumen por correo</span>
                               </button>
+                              @if (getActiveSaleLink(serviceOrder)) {
+                                <button
+                                  type="button"
+                                  class="action-menu-item"
+                                  [disabled]="emailingReceiptOrderIds.has(serviceOrder.id)"
+                                  (click)="emailLinkedSaleDocument(serviceOrder, $event); closeActionMenu()"
+                                >
+                                  <i
+                                    class="fas"
+                                    [ngClass]="emailingReceiptOrderIds.has(serviceOrder.id) ? 'fa-spinner fa-spin' : 'fa-file-invoice'"
+                                  ></i>
+                                  <span>Enviar comprobante por correo</span>
+                                </button>
+                              }
                               @if (
                                 !hasLinkedSaleDocument(serviceOrder) &&
                                 canCreateBoletaFromOrder(serviceOrder)
@@ -724,6 +757,14 @@
                   </div>
 
                   <footer class="equipment-item-actions">
+                    <button
+                      class="btn btn-secondary equipment-sticker-action"
+                      type="button"
+                      (click)="openEquipmentStickerPrint(equipmentDetailOrder, item, $event)"
+                    >
+                      <i class="fas fa-print"></i>
+                      Imprimir sticker
+                    </button>
                     @if (canSendPickupReminder(item)) {
                       <button
                         class="btn btn-secondary"
@@ -750,6 +791,107 @@
             </div>
           }
         </div>
+      </section>
+    </div>
+  }
+
+  @if (stickerPrintTarget) {
+    <div class="modal-overlay sticker-print-overlay" (click)="closeEquipmentStickerPrint()">
+      <section
+        class="sticker-print-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sticker-print-title"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="sticker-print-header">
+          <div class="sticker-print-icon" aria-hidden="true">
+            <i class="fas fa-print"></i>
+          </div>
+          <div>
+            <p class="modal-eyebrow">Brother QL-700 · Etiqueta 62 × 35 mm</p>
+            <h2 id="sticker-print-title">Imprimir sticker</h2>
+            <p>{{ stickerPrintTarget.item.code }}</p>
+          </div>
+          <button
+            class="btn-close"
+            type="button"
+            [disabled]="isPrintingSticker"
+            (click)="closeEquipmentStickerPrint()"
+            aria-label="Cerrar impresión"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+
+        <form class="sticker-print-body" (ngSubmit)="submitEquipmentStickerPrint()">
+          <div class="sticker-equipment-summary">
+            <span>{{ getEquipmentTypeLabel(stickerPrintTarget.item.equipmentType, stickerPrintTarget.item.equipmentTypeOther) }}</span>
+            <strong>
+              {{ stickerPrintTarget.item.brand || 'Sin marca' }}
+              {{ stickerPrintTarget.item.model || 'Sin modelo' }}
+            </strong>
+            <small>{{ stickerPrintTarget.item.initialIssue || 'Sin falla reportada' }}</small>
+          </div>
+
+          <label class="sticker-quantity-field" for="sticker-print-copies">
+            <span>Número de stickers</span>
+            <div class="sticker-quantity-control">
+              <button
+                type="button"
+                aria-label="Restar un sticker"
+                [disabled]="isPrintingSticker || stickerPrintCopies <= 1"
+                (click)="stickerPrintCopies = stickerPrintCopies - 1; stickerPrintError = ''"
+              >
+                <i class="fas fa-minus"></i>
+              </button>
+              <input
+                id="sticker-print-copies"
+                name="stickerPrintCopies"
+                type="number"
+                min="1"
+                max="50"
+                step="1"
+                inputmode="numeric"
+                autocomplete="off"
+                [(ngModel)]="stickerPrintCopies"
+                [disabled]="isPrintingSticker"
+                (ngModelChange)="stickerPrintError = ''"
+              />
+              <button
+                type="button"
+                aria-label="Agregar un sticker"
+                [disabled]="isPrintingSticker || stickerPrintCopies >= 50"
+                (click)="stickerPrintCopies = stickerPrintCopies + 1; stickerPrintError = ''"
+              >
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
+            <small>Se imprimirán copias idénticas para este equipo.</small>
+          </label>
+
+          @if (stickerPrintError) {
+            <div class="sticker-print-error" role="alert">
+              <i class="fas fa-circle-exclamation"></i>
+              <span>{{ stickerPrintError }}</span>
+            </div>
+          }
+
+          <footer class="sticker-print-actions">
+            <button
+              class="btn btn-secondary"
+              type="button"
+              [disabled]="isPrintingSticker"
+              (click)="closeEquipmentStickerPrint()"
+            >
+              Cancelar
+            </button>
+            <button class="btn btn-primary" type="submit" [disabled]="isPrintingSticker">
+              <i class="fas" [ngClass]="isPrintingSticker ? 'fa-circle-notch fa-spin' : 'fa-print'"></i>
+              {{ isPrintingSticker ? 'Enviando...' : 'Imprimir' }}
+            </button>
+          </footer>
+        </form>
       </section>
     </div>
   }
@@ -2696,6 +2838,70 @@
       (closed)="itemDeliveryTarget = null"
       (deliverySaved)="handleItemDeliverySaved($event)"
     ></app-service-order-item-delivery-modal>
+  }
+
+  @if (serviceOrderSaleModalOrder) {
+    <app-service-order-sale-modal
+      [order]="serviceOrderSaleModalOrder"
+      [companyId]="companyId"
+      (closed)="closeServiceOrderSaleModal()"
+      (saleCreated)="handleServiceOrderSaleCreated()"
+    ></app-service-order-sale-modal>
+  }
+
+  @if (emailRecipientModalOrder) {
+    <div class="modal-overlay email-recipient-overlay" (click)="closeEmailRecipientModal()">
+      <section
+        class="modal-content email-recipient-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="email-recipient-title"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="modal-header">
+          <div>
+            <p class="modal-eyebrow">Envío por correo</p>
+            <h2 id="email-recipient-title">
+              {{ emailRecipientDocumentKind === 'summary' ? 'Enviar resumen' : 'Enviar comprobante' }}
+            </h2>
+            <small>Orden {{ emailRecipientModalOrder.code }}</small>
+          </div>
+          <button class="btn-close" type="button" (click)="closeEmailRecipientModal()" aria-label="Cerrar">
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+        <form class="modal-body email-recipient-body" (ngSubmit)="submitEmailRecipient()">
+          <div class="email-recipient-note">
+            <i class="fas fa-envelope-open-text"></i>
+            <p>El cliente no tiene un correo registrado. Ingresa uno para realizar únicamente este envío.</p>
+          </div>
+          <div class="form-group">
+            <label for="email-recipient-address">Correo destinatario *</label>
+            <input
+              id="email-recipient-address"
+              name="emailRecipientAddress"
+              type="email"
+              class="form-control"
+              [(ngModel)]="emailRecipientAddress"
+              (ngModelChange)="emailRecipientError = ''"
+              placeholder="cliente@correo.com"
+              autocomplete="email"
+              autofocus
+            />
+            @if (emailRecipientError) {
+              <div class="invalid-feedback email-recipient-error">{{ emailRecipientError }}</div>
+            }
+          </div>
+          <footer class="modal-footer email-recipient-footer">
+            <button class="btn btn-secondary" type="button" (click)="closeEmailRecipientModal()">Cancelar</button>
+            <button class="btn btn-primary" type="submit">
+              <i class="fas fa-paper-plane"></i>
+              Enviar correo
+            </button>
+          </footer>
+        </form>
+      </section>
+    </div>
   }
 
   <div class="alert-container" [class.show]="showAlert">

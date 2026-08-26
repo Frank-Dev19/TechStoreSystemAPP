@@ -95,7 +95,13 @@ describe('ReceptionPanel', () => {
 
   const serviceOrderDocumentsStub = {
     downloadOrderSummaryPdf: jasmine.createSpy('downloadOrderSummaryPdf').and.returnValue(of(void 0)),
-    openEquipmentStickerPdf: jasmine.createSpy('openEquipmentStickerPdf'),
+    emailOrderSummary: jasmine.createSpy('emailOrderSummary').and.returnValue(of({
+      ok: true,
+      serviceOrderId: 1,
+      to: 'cliente@test.com',
+      message: 'Resumen de la orden enviado por correo.',
+    })),
+    printEquipmentSticker: jasmine.createSpy('printEquipmentSticker').and.returnValue(Promise.resolve()),
   };
 
   const billingLinksStub = {
@@ -112,6 +118,7 @@ describe('ReceptionPanel', () => {
     getDocumentBySale: jasmine.createSpy('getDocumentBySale'),
     sendInvoice: jasmine.createSpy('sendInvoice'),
     downloadPdf: jasmine.createSpy('downloadPdf'),
+    sendDocumentEmail: jasmine.createSpy('sendDocumentEmail'),
   };
 
   const routerStub = {
@@ -136,6 +143,12 @@ describe('ReceptionPanel', () => {
     electronicBillingApiStub.getDocumentBySale.and.returnValue(of(createElectronicDocument()));
     electronicBillingApiStub.sendInvoice.and.returnValue(of({ document: createElectronicDocument() }));
     electronicBillingApiStub.downloadPdf.and.returnValue(of(new Blob(['pdf'])));
+    electronicBillingApiStub.sendDocumentEmail.and.returnValue(of({
+      ok: true,
+      saleId: 99,
+      to: 'cliente@test.com',
+      message: 'Comprobante electrónico enviado por correo.',
+    }));
 
     await TestBed.configureTestingModule({
       declarations: [ReceptionPanel],
@@ -452,6 +465,74 @@ describe('ReceptionPanel', () => {
     expect(component.canCreateBoletaFromOrder(deliveredDiagnosis)).toBeTrue();
     expect(component.canCreateBoletaFromOrder(pendingDiagnosis)).toBeFalse();
     expect(component.canCreateBoletaFromOrder(warrantyOrder)).toBeFalse();
+  });
+
+  it('envía el resumen al correo registrado de la orden', () => {
+    const order = createServiceOrder({ id: 46, clientSnapshotEmail: 'cliente@test.com' });
+
+    component.emailServiceOrderSummary(order);
+
+    expect(serviceOrderDocumentsStub.emailOrderSummary).toHaveBeenCalledWith(46, 'cliente@test.com');
+  });
+
+  it('envía el comprobante aceptado al correo registrado de la orden', () => {
+    const order = createServiceOrder({ id: 47, clientSnapshotEmail: 'cliente@test.com' });
+    component.saleLinksByOrderId[47] = [createBillingLink(47)];
+
+    component.emailLinkedSaleDocument(order);
+
+    expect(electronicBillingApiStub.sendDocumentEmail).toHaveBeenCalledWith(99, 'cliente@test.com');
+  });
+
+  it('solicita destinatario cuando se elige enviar resumen sin correo registrado', () => {
+    const order = createServiceOrder({
+      id: 48,
+      clientSnapshotEmail: null,
+      contactEmail: null,
+      client: undefined,
+    });
+    component.emailServiceOrderSummary(order);
+
+    expect(component.emailRecipientModalOrder).toBe(order);
+    expect(component.emailRecipientDocumentKind).toBe('summary');
+  });
+
+  it('envía a un correo ingresado sin modificar la ficha del cliente', () => {
+    const order = createServiceOrder({ id: 49, clientSnapshotEmail: null, contactEmail: null });
+    component.openEmailRecipientModal(order, 'summary');
+    component.emailRecipientAddress = 'temporal@example.com';
+
+    component.submitEmailRecipient();
+
+    expect(serviceOrderDocumentsStub.emailOrderSummary).toHaveBeenCalledWith(49, 'temporal@example.com');
+    expect(component.emailRecipientModalOrder).toBeNull();
+  });
+
+  it('abre la venta directa con la orden elegible sin pedir su código', () => {
+    const order = createServiceOrder({
+      serviceType: ServiceType.DIAGNOSIS,
+      economicStatus: ServiceOrderEconomicStatus.PENDIENTE,
+      technicalStatus: ServiceOrderTechnicalStatus.EN_EJECUCION,
+      operativeStatus: ServiceOrderOperativeStatus.EN_PROCESO,
+    });
+
+    component.openServiceOrderSaleModal(order);
+
+    expect(component.serviceOrderSaleModalOrder).toBe(order);
+  });
+
+  it('cierra el modal y refresca las órdenes después de registrar la venta', () => {
+    const order = createServiceOrder({
+      serviceType: ServiceType.DIAGNOSIS,
+      technicalStatus: ServiceOrderTechnicalStatus.EN_EJECUCION,
+    });
+    component.serviceOrderSaleModalOrder = order;
+    spyOn<any>(component, 'loadServiceOrders');
+
+    component.handleServiceOrderSaleCreated();
+
+    expect(component.serviceOrderSaleModalOrder).toBeNull();
+    expect((component as any).loadServiceOrders).toHaveBeenCalled();
   });
 
   it('envía los datos de contacto al crear una orden agregada', fakeAsync(() => {
@@ -1519,6 +1600,45 @@ describe('ReceptionPanel', () => {
     expect(modal.textContent).toContain('SN-811');
     serviceOrderServiceStub.findOne.calls.reset();
     serviceOrderServiceStub.findOne.and.returnValue(of(createServiceOrder()));
+  });
+
+  it('abre la cantidad desde la tarjeta e imprime solo el equipo seleccionado', fakeAsync(() => {
+    const order = createServiceOrder({
+      id: 81,
+      code: 'SO-15-08-2026-0001',
+      items: [{
+        id: 811,
+        serviceOrderId: 81,
+        position: 1,
+        code: 'SO-15-08-2026-0001-01',
+        equipmentType: EquipmentType.LAPTOP,
+        brand: 'Lenovo',
+        model: 'ThinkPad',
+        initialIssue: 'No enciende',
+      } as any],
+    });
+    const item = order.items![0];
+    serviceOrderDocumentsStub.printEquipmentSticker.calls.reset();
+
+    component.openEquipmentStickerPrint(order, item);
+    component.stickerPrintCopies = 2;
+    component.submitEquipmentStickerPrint();
+    tick();
+
+    expect(serviceOrderDocumentsStub.printEquipmentSticker).toHaveBeenCalledWith(order, item, 2);
+    expect(component.stickerPrintTarget).toBeNull();
+  }));
+
+  it('rechaza una cantidad de stickers fuera del rango permitido', () => {
+    const order = createServiceOrder({ items: [{ id: 11, code: 'SO-BASE-01' } as any] });
+    serviceOrderDocumentsStub.printEquipmentSticker.calls.reset();
+    component.openEquipmentStickerPrint(order, order.items![0]);
+    component.stickerPrintCopies = 0;
+
+    component.submitEquipmentStickerPrint();
+
+    expect(component.stickerPrintError).toContain('entre 1 y 50');
+    expect(serviceOrderDocumentsStub.printEquipmentSticker).not.toHaveBeenCalled();
   });
 });
 

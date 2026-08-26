@@ -32,6 +32,7 @@ import { ServiceOrderLineDiscountModalComponent } from "../../components/service
 import { ServiceOrderItemCancellationModalComponent } from "../../components/service-order-item-cancellation-modal/service-order-item-cancellation-modal";
 import { ServiceOrderItemDeliveryModalComponent } from "../../components/service-order-item-delivery-modal/service-order-item-delivery-modal";
 import { ServiceOrderItemProgressComponent } from "../../components/service-order-item-progress/service-order-item-progress";
+import { ServiceOrderSaleModalComponent } from "../../components/service-order-sale-modal/service-order-sale-modal";
 
 @NgModule({
     imports: [
@@ -70,6 +71,7 @@ import { ServiceOrderItemProgressComponent } from "../../components/service-orde
         ServiceOrderItemCancellationModalComponent,
         ServiceOrderItemDeliveryModalComponent,
         ServiceOrderItemProgressComponent,
+        ServiceOrderSaleModalComponent,
     ],
     providers: [DatePipe],
     exports: [

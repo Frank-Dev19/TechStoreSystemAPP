@@ -505,138 +505,8 @@
         <div class="sale-form-container">
             <div class="sale-form-left">
 
-                <div class="form-section">
-                    <h3 class="section-title"><i class="fas fa-random"></i> Flujo de venta</h3>
-                    <div class="form-group">
-                        <label>Modo</label>
-                        <select class="form-control" [ngModel]="saleCreationMode"
-                            (ngModelChange)="onSaleCreationModeChange($event)">
-                            <option value="MANUAL_PRODUCT">Venta manual de productos</option>
-                            <option value="SERVICE_ORDER">Venta desde orden/cotización</option>
-                        </select>
-                    </div>
-
-                    <div class="anchored-service-order-search" *ngIf="saleCreationMode === 'SERVICE_ORDER'">
-                        <label>Buscar orden por código</label>
-
-                        <div class="anchored-service-order-search__input">
-                            <input
-                                type="text"
-                                [(ngModel)]="serviceOrderSearchText"
-                                class="form-control"
-                                placeholder="Escribe el código completo o parcial"
-                                (input)="onEligibleServiceOrdersSearchInput()"
-                                (keydown.enter)="onEligibleServiceOrdersSearch()">
-
-                            <button
-                                type="button"
-                                class="anchored-service-order-search__trigger"
-                                [disabled]="!serviceOrderSearchText.trim()"
-                                (click)="onEligibleServiceOrdersSearch()">
-                                <i class="fas fa-search"></i>
-                                Buscar
-                            </button>
-                        </div>
-
-                        <small class="anchored-service-order-search__hint">
-                            Presiona Enter para buscar y usar una orden como ancla del cliente.
-                        </small>
-
-                        <div class="anchored-service-order-search__results" *ngIf="serviceOrderSearchMatches.length">
-                            <button
-                                type="button"
-                                class="anchored-service-order-search__result"
-                                *ngFor="let order of serviceOrderSearchMatches"
-                                (click)="selectAnchoredServiceOrder(order)">
-                                <div class="anchored-service-order-search__result-main">
-                                    <strong>{{ order.code }}</strong>
-                                    <span>{{ order.clientSnapshotName || order.client?.name || 'Cliente' }}</span>
-                                </div>
-                                <div class="anchored-service-order-search__result-meta">
-                                    <span>{{ order.receivedAt | date:'dd/MM/yy HH:mm' }}</span>
-                                    <strong>S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}</strong>
-                                </div>
-                            </button>
-                        </div>
-
-                        <div class="anchored-service-order-search__empty" *ngIf="serviceOrderSearchPerformed && !serviceOrderSearchMatches.length">
-                            <i class="fas fa-search-minus"></i>
-                            <span>{{ getGroupedServiceOrderSearchEmptyMessage() }}</span>
-                        </div>
-                    </div>
-
-                    <div class="anchored-order-context" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrder">
-                        <div class="anchored-order-context__summary">
-                            <span class="anchored-order-context__eyebrow">Cliente operativo</span>
-                            <p class="anchored-order-context__title">{{ getGroupedOperationalClientLabel() }}</p>
-                            <p class="anchored-order-context__subtitle">
-                                Orden ancla: {{ selectedServiceOrder.code }} · {{ selectedServiceOrder.receivedAt | date:'dd/MM/yy HH:mm' }}
-                            </p>
-                        </div>
-
-                        <div class="anchored-order-context__metrics">
-                            <div class="anchored-order-context__metric">
-                                <span>Seleccionadas</span>
-                                <strong>{{ selectedServiceOrders.length }}</strong>
-                            </div>
-                            <div class="anchored-order-context__metric">
-                                <span>Siguen pendientes</span>
-                                <strong>{{ getOrdersStillPendingForGroupedClient().length }}</strong>
-                            </div>
-                            <div class="anchored-order-context__metric anchored-order-context__metric--money">
-                                <span>Total seleccionado</span>
-                                <strong>S/ {{ getGroupedOrdersPendingTotal() | number:'1.2-2' }}</strong>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grouped-orders-clarity" *ngIf="saleCreationMode === 'SERVICE_ORDER' && selectedServiceOrders.length">
-                        <div class="grouped-orders-clarity__grid">
-                            <div class="grouped-orders-clarity__panel grouped-orders-clarity__panel--covered">
-                                <div class="grouped-orders-clarity__panel-header">
-                                    <h4>Se liberan con este comprobante</h4>
-                                    <span class="grouped-orders-clarity__badge grouped-orders-clarity__badge--covered">
-                                        {{ getOrdersCoveredByCurrentGroupedSale().length }}
-                                    </span>
-                                </div>
-                                <p class="grouped-orders-clarity__hint">Quedan cubiertas totalmente y podrán seguir su flujo de entrega.</p>
-
-                                <ul class="grouped-orders-clarity__list">
-                                    <li *ngFor="let order of getOrdersCoveredByCurrentGroupedSale()">
-                                        <span>{{ order.code }}</span>
-                                        <strong>S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}</strong>
-                                    </li>
-                                </ul>
-                            </div>
-
-                            <div class="grouped-orders-clarity__panel grouped-orders-clarity__panel--pending">
-                                <div class="grouped-orders-clarity__panel-header">
-                                    <h4>Siguen pendientes</h4>
-                                    <span class="grouped-orders-clarity__badge grouped-orders-clarity__badge--pending">
-                                        {{ getOrdersStillPendingForGroupedClient().length }}
-                                    </span>
-                                </div>
-                                <p class="grouped-orders-clarity__hint">
-                                    {{
-                                      getOrdersStillPendingForGroupedClient().length
-                                        ? 'Estas órdenes del mismo cliente no quedan cubiertas en esta venta agrupada.'
-                                        : 'No quedan otras órdenes pendientes del mismo cliente fuera de esta selección.'
-                                    }}
-                                </p>
-
-                                <ul class="grouped-orders-clarity__list" *ngIf="getOrdersStillPendingForGroupedClient().length">
-                                    <li *ngFor="let order of getOrdersStillPendingForGroupedClient()">
-                                        <span>{{ order.code }}</span>
-                                        <strong>S/ {{ order.montoComprometidoVigente | number:'1.2-2' }}</strong>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Seccion Productos -->
-                <div class="form-section" *ngIf="saleCreationMode === 'MANUAL_PRODUCT'">
+                <div class="form-section">
                     <h3 class="section-title"><i class="fas fa-box-open"></i> Items de la venta</h3>
                     <div class="form-group product-autocomplete">
                         <label>Producto</label>
@@ -816,7 +686,7 @@
                 </div>
 
                 <!-- Seccion Cliente -->
-                <div class="form-section" *ngIf="saleCreationMode === 'MANUAL_PRODUCT'">
+                <div class="form-section">
                     <h3 class="section-title"><i class="fas fa-user"></i> Cliente</h3>
 
                     <div class="form-group">
@@ -844,36 +714,6 @@
                         <p class="customer-detail">{{ foundCustomer.address }}</p>
                     </div>
                 </div>
-
-                <div class="form-section" *ngIf="saleCreationMode === 'SERVICE_ORDER'">
-                    <h3 class="section-title"><i class="fas fa-id-card"></i> Contribuyente fiscal</h3>
-
-                    <div class="form-group">
-                        <label>Documento del contribuyente</label>
-                        <div class="input-group">
-                            <input type="text" [(ngModel)]="customerSearchText" class="form-control"
-                                placeholder="Ingrese DNI o RUC" (keydown.enter)="onSearchCustomer()">
-                            <button class="btn-primary" type="button" (click)="onSearchCustomer()">
-                                <i class="fas fa-search"></i>
-                            </button>
-                        </div>
-
-                        <div class="client-extra-actions">
-                            <button type="button" class="btn-secondary btn-sm" (click)="onOpenNewCustomerModal()">
-                                <i class="fas fa-user-plus"></i>
-                                Registrar contribuyente
-                            </button>
-                        </div>
-                    </div>
-
-                    <div *ngIf="foundCustomer" class="customer-card">
-                        <p class="customer-name">{{ foundCustomer.name }}</p>
-                        <p class="customer-detail">{{ foundCustomer.documentNumber }}</p>
-                        <p class="customer-detail">{{ foundCustomer.kind === 'COMPANY' ? 'Empresa' : 'Persona natural' }}</p>
-                        <p class="customer-detail">{{ foundCustomer.address }}</p>
-                    </div>
-                </div>
-
 
             </div>
 
@@ -988,9 +828,9 @@
                             Cancelar
                         </button>
                         <button class="btn-primary btn-block" (click)="onConfirmSale()"
-                            [disabled]="!saleFormData?.lines || saleFormData.lines.length === 0 || (saleCreationMode === 'MANUAL_PRODUCT' ? !foundCustomer : selectedServiceOrderIds.length === 0 || !foundCustomer)">
+                            [disabled]="!saleFormData?.lines || saleFormData.lines.length === 0 || !foundCustomer">
                             <i class="fas fa-check"></i>
-                            {{ saleCreationMode === 'SERVICE_ORDER' ? 'Emitir venta' : 'Registrar Venta' }}
+                            Registrar venta
                         </button>
                     </div>
                 </div>

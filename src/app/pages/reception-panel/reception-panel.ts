@@ -84,6 +84,8 @@ interface ServiceOrderAgreementProductComposer {
   notes: string
 }
 
+type ServiceOrderEmailDocumentKind = "summary" | "receipt"
+
 interface ServiceOrderAgreementServiceComposer {
   id: number
   type: "service"
@@ -295,7 +297,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   readonly equipmentTypeOptions = Object.values(EquipmentType)
   readonly serviceTypeOptions = Object.values(ServiceType)
   readonly requestOriginOptions = Object.values(RequestOrigin)
-  private readonly companyId = Number(config.defaultCompanyId ?? 1) || 1
+  readonly companyId = Number(config.defaultCompanyId ?? 1) || 1
   showServiceOrderAgreementsModal = false
   serviceOrderAgreementsError = ""
   serviceOrderItemQuotes: ServiceOrderAgreement[] = []
@@ -307,6 +309,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   itemCancellationTarget: ServiceOrderItemCancellationTarget | null = null
   itemDeliveryTarget: ServiceOrderItemDeliveryTarget | null = null
   equipmentDetailOrder: ServiceOrder | null = null
+  stickerPrintTarget: { order: ServiceOrder; item: ServiceOrderItem } | null = null
+  stickerPrintCopies = 1
+  stickerPrintError = ""
+  isPrintingSticker = false
+  serviceOrderSaleModalOrder: ServiceOrder | null = null
   selectedEquipmentCancellationIds: number[] = []
   isLoadingEquipmentDetail = false
   quoteDetailError = ""
@@ -343,6 +350,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   isLinkingSale = false
   isViewingLinkedSaleDocument = false
   activeActionMenuOrderId: number | null = null
+  readonly emailingSummaryOrderIds = new Set<number>()
+  readonly emailingReceiptOrderIds = new Set<number>()
+  emailRecipientModalOrder: ServiceOrder | null = null
+  emailRecipientDocumentKind: ServiceOrderEmailDocumentKind | null = null
+  emailRecipientAddress = ""
+  emailRecipientError = ""
   actionMenuStyle: Record<string, string> | null = null
 
   private readonly subscriptions = new Subscription()
@@ -814,6 +827,32 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.selectedMockBoletaOrderIds = new Set([Number(serviceOrder.id)])
     this.openMockBoletaModal()
     this.closeActionMenu()
+  }
+
+  openServiceOrderSaleModal(serviceOrder: ServiceOrder, event?: Event): void {
+    event?.stopPropagation()
+    if (this.hasLinkedSaleDocument(serviceOrder)) {
+      this.showMessage("warning", "fas fa-file-invoice", "La orden ya tiene un comprobante ligado.")
+      return
+    }
+    if (!this.canCreateBoletaFromOrder(serviceOrder)) {
+      this.showMessage("warning", "fas fa-info-circle", "La orden todavía no está lista para realizar la venta.")
+      return
+    }
+
+    this.serviceOrderSaleModalOrder = serviceOrder
+    this.closeActionMenu()
+  }
+
+  closeServiceOrderSaleModal(): void {
+    this.serviceOrderSaleModalOrder = null
+  }
+
+  handleServiceOrderSaleCreated(): void {
+    this.serviceOrderSaleModalOrder = null
+    this.selectedMockBoletaOrderIds.clear()
+    this.showMessage("success", "fas fa-check-circle", "Venta registrada correctamente.")
+    this.loadServiceOrders()
   }
 
   confirmLinkSaleToOrders(): void {
@@ -1843,19 +1882,153 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     })
   }
 
-  printServiceOrderSticker(serviceOrder: ServiceOrder, event?: Event): void {
+  emailServiceOrderSummary(serviceOrder: ServiceOrder, event?: Event, recipient?: string): void {
     event?.stopPropagation()
-    this.loadServiceOrderDocumentContext(serviceOrder).subscribe({
-      next: ({ fullOrder, quote }) => {
-        this.serviceOrderDocuments.openEquipmentStickerPdf({
-          serviceOrder: fullOrder,
-          agreement: quote,
-        })
-      },
-      error: () => {
-        this.showMessage("danger", "fas fa-times-circle", "No pudimos generar el sticker de la orden.")
-      },
+    const email = (recipient ?? this.getServiceOrderContactEmail(serviceOrder)).trim()
+    if (!email) {
+      this.openEmailRecipientModal(serviceOrder, "summary")
+      return
+    }
+
+    const orderId = Number(serviceOrder.id)
+    if (this.emailingSummaryOrderIds.has(orderId)) return
+    this.emailingSummaryOrderIds.add(orderId)
+    this.serviceOrderDocuments.emailOrderSummary(orderId, email).pipe(
+      finalize(() => this.emailingSummaryOrderIds.delete(orderId)),
+    ).subscribe({
+      next: (response) => this.showMessage(
+        "success",
+        "fas fa-check-circle",
+        response.message || `Resumen enviado a ${response.to}`,
+      ),
+      error: (error) => this.showMessage(
+        "danger",
+        "fas fa-times-circle",
+        error?.error?.message || error?.message || "No pudimos enviar el resumen por correo.",
+      ),
     })
+  }
+
+  emailLinkedSaleDocument(serviceOrder: ServiceOrder, event?: Event, recipient?: string): void {
+    event?.stopPropagation()
+    const email = (recipient ?? this.getServiceOrderContactEmail(serviceOrder)).trim()
+    const activeLink = this.getActiveSaleLink(serviceOrder)
+    if (!activeLink?.sale) return
+    if (!email) {
+      this.openEmailRecipientModal(serviceOrder, "receipt")
+      return
+    }
+
+    const orderId = Number(serviceOrder.id)
+    const saleId = Number(activeLink.sale.id)
+    if (this.emailingReceiptOrderIds.has(orderId)) return
+    this.emailingReceiptOrderIds.add(orderId)
+
+    this.electronicBillingApi.getDocumentBySale(saleId).pipe(
+      catchError((error) => {
+        const status = Number(error?.status ?? error?.error?.statusCode ?? 0)
+        return status === 404
+          ? this.electronicBillingApi.sendInvoice(saleId).pipe(map((response) => response.document))
+          : throwError(() => error)
+      }),
+      switchMap((document) => {
+        if (document.status !== "ACCEPTED") {
+          return throwError(() => new Error(this.getElectronicDocumentUnavailableMessage(document)))
+        }
+        return this.electronicBillingApi.sendDocumentEmail(saleId, email)
+      }),
+      finalize(() => this.emailingReceiptOrderIds.delete(orderId)),
+    ).subscribe({
+      next: (response) => this.showMessage(
+        "success",
+        "fas fa-check-circle",
+        response.message || `Comprobante enviado a ${response.to}`,
+      ),
+      error: (error) => this.showMessage(
+        "danger",
+        "fas fa-times-circle",
+        error?.error?.message || error?.message || "No pudimos enviar el comprobante por correo.",
+      ),
+    })
+  }
+
+  openEmailRecipientModal(serviceOrder: ServiceOrder, documentKind: ServiceOrderEmailDocumentKind): void {
+    this.emailRecipientModalOrder = serviceOrder
+    this.emailRecipientDocumentKind = documentKind
+    this.emailRecipientAddress = ""
+    this.emailRecipientError = ""
+  }
+
+  closeEmailRecipientModal(): void {
+    this.emailRecipientModalOrder = null
+    this.emailRecipientDocumentKind = null
+    this.emailRecipientAddress = ""
+    this.emailRecipientError = ""
+  }
+
+  submitEmailRecipient(): void {
+    const order = this.emailRecipientModalOrder
+    const documentKind = this.emailRecipientDocumentKind
+    const email = this.emailRecipientAddress.trim()
+    if (!order || !documentKind) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      this.emailRecipientError = "Ingresa un correo electrónico válido."
+      return
+    }
+
+    this.closeEmailRecipientModal()
+    if (documentKind === "summary") {
+      this.emailServiceOrderSummary(order, undefined, email)
+      return
+    }
+    this.emailLinkedSaleDocument(order, undefined, email)
+  }
+
+  openEquipmentStickerPrint(
+    serviceOrder: ServiceOrder,
+    item: ServiceOrderItem,
+    event?: Event,
+  ): void {
+    event?.stopPropagation()
+    this.stickerPrintTarget = { order: serviceOrder, item }
+    this.stickerPrintCopies = 1
+    this.stickerPrintError = ""
+  }
+
+  closeEquipmentStickerPrint(): void {
+    if (this.isPrintingSticker) return
+    this.stickerPrintTarget = null
+    this.stickerPrintCopies = 1
+    this.stickerPrintError = ""
+  }
+
+  async submitEquipmentStickerPrint(): Promise<void> {
+    const target = this.stickerPrintTarget
+    const copies = Number(this.stickerPrintCopies)
+    if (!target) return
+    if (!Number.isInteger(copies) || copies < 1 || copies > 50) {
+      this.stickerPrintError = "Ingresa una cantidad entera entre 1 y 50 stickers."
+      return
+    }
+
+    this.isPrintingSticker = true
+    this.stickerPrintError = ""
+    try {
+      await this.serviceOrderDocuments.printEquipmentSticker(target.order, target.item, copies)
+      this.stickerPrintTarget = null
+      this.stickerPrintCopies = 1
+      this.showMessage(
+        "success",
+        "fas fa-check-circle",
+        `${copies === 1 ? "Sticker enviado" : `${copies} stickers enviados`} a la Brother QL-700.`,
+      )
+    } catch (error) {
+      this.stickerPrintError = error instanceof Error
+        ? error.message
+        : "No pudimos enviar el sticker a la impresora."
+    } finally {
+      this.isPrintingSticker = false
+    }
   }
 
   openCreateServiceOrderAgreementModal(serviceOrder: ServiceOrder, event?: Event): void {
@@ -2412,6 +2585,9 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   closeEquipmentDetails(): void {
+    if (this.stickerPrintTarget) {
+      this.closeEquipmentStickerPrint()
+    }
     this.equipmentDetailOrder = null
     this.selectedEquipmentCancellationIds = []
     this.isLoadingEquipmentDetail = false
