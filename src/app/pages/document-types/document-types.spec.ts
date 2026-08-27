@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { DocumentTypes } from './document-types';
 import { DocumentTypeKind } from '../../models/document-types/document-types-request';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
+import { CurrentUserService } from '../../services/current-user.service';
 
 describe('DocumentTypes', () => {
   let component: DocumentTypes;
@@ -26,6 +27,13 @@ describe('DocumentTypes', () => {
       imports: [CommonModule, FormsModule, ReactiveFormsModule],
       providers: [
         { provide: DocumentTypesApiService, useValue: apiStub },
+        {
+          provide: CurrentUserService,
+          useValue: {
+            restoreFromStorage: jasmine.createSpy('restoreFromStorage'),
+            hasPermission: jasmine.createSpy('hasPermission').and.returnValue(true),
+          },
+        },
       ],
     }).compileComponents();
 
@@ -47,6 +55,7 @@ describe('DocumentTypes', () => {
     component.documentTypeForm.patchValue({
       name: 'RUC',
       kind: DocumentTypeKind.COMPANY,
+      sunatCode: '6',
       digits: 11,
       description: 'Documento empresa',
     });
@@ -56,6 +65,7 @@ describe('DocumentTypes', () => {
     expect(apiStub.create).toHaveBeenCalledWith({
       name: 'RUC',
       kind: DocumentTypeKind.COMPANY,
+      sunatCode: '6',
       digits: 11,
       description: 'Documento empresa',
     });

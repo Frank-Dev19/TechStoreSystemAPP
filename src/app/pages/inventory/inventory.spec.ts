@@ -85,7 +85,14 @@ describe('Inventory', () => {
         { provide: MovementsService, useValue: movementsServiceMock },
         { provide: LotsService, useValue: lotsServiceMock },
         { provide: SerialsService, useValue: serialsServiceMock },
-        { provide: CurrentUserService, useValue: { value: { id: 1, name: 'Test User' } } },
+        {
+          provide: CurrentUserService,
+          useValue: {
+            value: { id: 1, name: 'Test User' },
+            restoreFromStorage: jasmine.createSpy('restoreFromStorage'),
+            hasPermission: jasmine.createSpy('hasPermission').and.returnValue(true),
+          },
+        },
         { provide: SuppliersApiService, useValue: suppliersApiMock },
         { provide: DocumentTypesApiService, useValue: documentTypesApiMock },
       ],

@@ -17,6 +17,8 @@ describe('Sidebar', () => {
       value: { id: 1 },
       restoreFromStorage: jasmine.createSpy('restoreFromStorage'),
       set: jasmine.createSpy('set'),
+      hasPermission: jasmine.createSpy('hasPermission').and.returnValue(false),
+      hasAnyPermission: jasmine.createSpy('hasAnyPermission').and.returnValue(false),
     };
 
     const profileServiceSpy = jasmine.createSpyObj<ProfileService>('ProfileService', ['getMe']);

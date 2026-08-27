@@ -42,6 +42,7 @@ describe('Clients', () => {
 
   const currentUserServiceStub = {
     restoreFromStorage: jasmine.createSpy('restoreFromStorage'),
+    getPermissionCodes: jasmine.createSpy('getPermissionCodes').and.returnValue(new Set<string>()),
     value: { roles: [] },
   };
 
