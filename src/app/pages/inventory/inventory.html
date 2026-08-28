@@ -1483,7 +1483,7 @@
     </div>
 
     <!-- PRODUCTS TAB  -->
-    <div class="tab-content" *ngIf="isProductsTab">
+    <div class="tab-content products-tab-content" *ngIf="isProductsTab">
         <!-- <div class="catalogs-header">
             <h2 class="section-title">
                 <i class="fas fa-database"></i>
@@ -1492,9 +1492,9 @@
             <p class="section-subtitle">Gestiona Productos</p>
         </div> -->
 
-        <div class="catalogs-grid">
+        <div class="catalogs-grid products-catalogs-grid">
             <!-- Products -->
-            <div class="catalog-section">
+            <div class="catalog-section products-catalog-section">
                 <div class="section-header">
                     <div class="header-left">
                         <h3>
@@ -1560,13 +1560,13 @@
                     </div>
                 </div>
 
-                <div class="table-container" [class.loading-overlay]="productLoading"
-                    style="max-height: 600px; overflow-y: auto;">
+                <div class="table-container responsive-table-shell products-table-container"
+                    [class.loading-overlay]="productLoading">
                     <div class="spinner-overlay" *ngIf="productLoading">
                         <i class="fas fa-spinner fa-spin"></i>
                         <span>Cargando Productos...</span>
                     </div>
-                    <table class="data-table">
+                    <table class="data-table responsive-data-table responsive-data-table--wide">
                         <thead>
                             <tr>
                                 <th>SKU</th>
@@ -1742,13 +1742,13 @@
                     </div>
                 </div>
 
-                <div class="table-container" [class.loading-overlay]="categoryLoading"
+                <div class="table-container responsive-table-shell" [class.loading-overlay]="categoryLoading"
                     style="max-height: 400px; overflow-y: auto;">
                     <div class="spinner-overlay" *ngIf="categoryLoading">
                         <i class="fas fa-spinner fa-spin"></i>
                         <span>Cargando Categorías...</span>
                     </div>
-                    <table class="data-table">
+                    <table class="data-table responsive-data-table responsive-data-table--medium">
                         <thead>
                             <tr>
                                 <th>Nombre</th>
@@ -1837,13 +1837,13 @@
                     </div>
                 </div>
 
-                <div class="table-container" [class.loading-overlay]="unitLoading"
+                <div class="table-container responsive-table-shell" [class.loading-overlay]="unitLoading"
                     style="max-height: 400px; overflow-y: auto;">
                     <div class="spinner-overlay" *ngIf="unitLoading">
                         <i class="fas fa-spinner fa-spin"></i>
                         <span>Cargando Unidades...</span>
                     </div>
-                    <table class="data-table">
+                    <table class="data-table responsive-data-table responsive-data-table--compact">
                         <thead>
                             <tr>
                                 <th>Código</th>

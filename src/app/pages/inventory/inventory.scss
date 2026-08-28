@@ -2947,6 +2947,49 @@
     }
 }
 
+/* ====== Contención responsive de la pestaña Productos ======
+   La tabla conserva su estructura y se desplaza dentro de su propio contenedor,
+   sin imponer su ancho mínimo al resto de la pantalla. */
+
+.products-tab-content,
+.products-catalogs-grid,
+.products-catalog-section {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.products-catalogs-grid {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.products-table-container {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    max-height: 600px;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+    .products-tab-content {
+        padding: 1rem;
+        overflow-x: hidden;
+    }
+
+    .products-catalog-section {
+        padding: 1rem;
+    }
+
+    .products-table-container {
+        margin-top: 1rem;
+    }
+}
+
 /* ====== Loading Overlay para tabla ====== */
 
 .table-container {

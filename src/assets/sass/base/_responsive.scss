@@ -1,0 +1,225 @@
+/* Shared responsive behavior for operational screens. Component styles keep
+   ownership of their visual design; this layer only standardizes adaptation. */
+
+:root {
+    --responsive-phone: 480px;
+    --responsive-tablet: 768px;
+    --responsive-layout: 1000px;
+    --responsive-touch-target: 44px;
+    --responsive-mobile-gap: 0.75rem;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+img,
+svg,
+canvas,
+video {
+    max-width: 100%;
+}
+
+/* Data remains tabular on small screens. The shell scrolls horizontally instead
+   of forcing columns into an unreadable width. */
+:where(
+    .table-container,
+    .table-wrapper,
+    .series-table-container,
+    .serial-table-container,
+    .import-table-container
+) {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.responsive-data-table--wide {
+    min-width: 860px;
+}
+
+.responsive-data-table--medium {
+    min-width: 640px;
+}
+
+.responsive-data-table--compact {
+    min-width: 560px;
+}
+
+@media (max-width: 1000px) {
+    :where(.filters-grid) {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Tabs are a single, stable strip. Swiping reveals additional views without
+       shrinking labels or changing the active tab's dimensions. */
+    :where(.tabs-navigation, .tabs-section) {
+        display: flex !important;
+        width: 100%;
+        max-width: 100%;
+        flex-wrap: nowrap !important;
+        gap: 0.25rem;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        overscroll-behavior-inline: contain;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    :where(.tabs-navigation, .tabs-section) > :where(button, .tab-button) {
+        flex: 0 0 auto;
+        min-height: var(--responsive-touch-target);
+        white-space: nowrap;
+    }
+
+    /* Search forms use one predictable column on phones and narrow tablets. */
+    :where(.filters-grid) {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    :where(.filters-grid) > * {
+        min-width: 0;
+        grid-column: 1 / -1 !important;
+    }
+
+    :where(
+        .search-section,
+        .filter-actions,
+        .filters-actions,
+        .actions-wrapper,
+        .header-actions,
+        .form-actions
+    ) {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: var(--responsive-mobile-gap);
+    }
+
+    /* Existing tables keep their semantic structure and become horizontally
+       scrollable. Intrinsic width prevents headers and values from collapsing. */
+    :where(
+        .table-container,
+        .table-wrapper,
+        .series-table-container,
+        .serial-table-container,
+        .import-table-container
+    ) {
+        overflow-x: auto !important;
+        touch-action: pan-x pan-y;
+    }
+
+    :where(
+        .table-container,
+        .table-wrapper,
+        .series-table-container,
+        .serial-table-container,
+        .import-table-container
+    ) > table {
+        width: max-content !important;
+        min-width: 100% !important;
+        table-layout: auto !important;
+    }
+
+    :where(
+        .table-container,
+        .table-wrapper,
+        .series-table-container,
+        .serial-table-container,
+        .import-table-container
+    ) th {
+        white-space: nowrap !important;
+    }
+
+    :where(
+        .table-container,
+        .table-wrapper,
+        .series-table-container,
+        .serial-table-container,
+        .import-table-container
+    ) td {
+        max-width: 280px;
+        overflow-wrap: anywhere;
+    }
+
+    :where(.action-buttons, .actions, .actions-cell) {
+        flex-wrap: nowrap;
+        white-space: nowrap;
+    }
+
+    :where(.btn-icon, .btn-pagination) {
+        min-width: var(--responsive-touch-target);
+        min-height: var(--responsive-touch-target);
+    }
+
+    :where(.pagination, .pagination-container) {
+        display: flex !important;
+        width: 100%;
+        max-width: 100%;
+        flex-wrap: wrap !important;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    :where(.pagination-info) {
+        flex: 1 1 100%;
+        text-align: center;
+    }
+
+    :where(.pagination-controls) {
+        display: flex !important;
+        max-width: 100%;
+        flex-wrap: wrap !important;
+        justify-content: center;
+        gap: 0.375rem;
+    }
+
+    /* Dialogs stay inside the visible viewport and preserve a scrollable body. */
+    :where(.modal-overlay) {
+        padding: 0.75rem;
+    }
+
+    :where(.modal-content) {
+        width: min(100%, calc(100vw - 1.5rem)) !important;
+        max-width: calc(100vw - 1.5rem) !important;
+        max-height: calc(100dvh - 1.5rem) !important;
+        margin: 0 auto;
+    }
+
+    :where(.modal-body) {
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    :where(.modal-footer) {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    :where(
+        .search-section,
+        .filter-actions,
+        .filters-actions,
+        .actions-wrapper,
+        .header-actions,
+        .form-actions
+    ) > :where(button, .btn, a.btn) {
+        flex: 1 1 100%;
+        width: 100%;
+        justify-content: center;
+    }
+
+    :where(.modal-footer) > :where(button, .btn) {
+        flex: 1 1 100%;
+        width: 100%;
+        justify-content: center;
+    }
+}
