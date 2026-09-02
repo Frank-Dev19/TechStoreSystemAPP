@@ -5,6 +5,7 @@ import {
   ServiceOrderCommercialStatus,
   ServiceOrderEconomicStatus,
   ServiceOrderOperativeStatus,
+  ServiceType,
 } from '../../models/service-orders/service-order';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
 import { ServiceOrderItemProgressComponent } from '../service-order-item-progress/service-order-item-progress';
@@ -49,6 +50,40 @@ describe('ServiceOrderItemDeliveryModalComponent', () => {
     expect(component.getItemBlockedReason(order.items![0])).toContain('cobertura económica total');
     expect(component.eligibleItems).toEqual([]);
     expect(serviceOrderService.deliverItems).not.toHaveBeenCalled();
+  });
+
+  it('permite entregar una garantía exonerada sin exigir cotización comercial', () => {
+    const order = createOrder();
+    order.serviceType = ServiceType.WARRANTY_SERVICE;
+    order.commercialStatus = ServiceOrderCommercialStatus.NO_REQUIERE;
+    order.economicStatus = ServiceOrderEconomicStatus.EXONERADO;
+    component.target = { order };
+    component.ngOnChanges();
+
+    expect(component.getItemBlockedReason(order.items![0])).toBeNull();
+    expect(component.eligibleItems.map((item) => item.id)).toEqual([101, 102]);
+  });
+
+  it('mantiene bloqueada una garantía que perdió su exoneración', () => {
+    const order = createOrder();
+    order.serviceType = ServiceType.WARRANTY_SERVICE;
+    order.commercialStatus = ServiceOrderCommercialStatus.NO_REQUIERE;
+    order.economicStatus = ServiceOrderEconomicStatus.TOTAL;
+    component.target = { order };
+    component.ngOnChanges();
+
+    expect(component.getItemBlockedReason(order.items![0])).toContain('debe permanecer exonerada');
+    expect(component.eligibleItems).toEqual([]);
+  });
+
+  it('continúa exigiendo cotización confirmada para una orden normal', () => {
+    const order = createOrder();
+    order.commercialStatus = ServiceOrderCommercialStatus.NO_REQUIERE;
+    component.target = { order };
+    component.ngOnChanges();
+
+    expect(component.getItemBlockedReason(order.items![0])).toContain('cotización vigente');
+    expect(component.eligibleItems).toEqual([]);
   });
 
   it('maneja el checkbox general vacío, completo e indeterminado', () => {
@@ -132,6 +167,7 @@ function createOrder(): ServiceOrder {
   return {
     id: 10,
     code: 'SO-03-08-2026-0001',
+    serviceType: ServiceType.STANDARD_SERVICE,
     commercialStatus: ServiceOrderCommercialStatus.AUTORIZADA,
     economicStatus: ServiceOrderEconomicStatus.TOTAL,
     items: [

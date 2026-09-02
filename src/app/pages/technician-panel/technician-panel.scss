@@ -131,6 +131,12 @@ $bg-light: #f5f7fa;
         padding-left: calc(1rem - 4px);
       }
 
+      &.warranty-order:not(.selected) {
+        background: #fffbeb;
+        border-left: 4px solid #f59e0b;
+        padding-left: calc(1rem - 4px);
+      }
+
       .col-code,
       .col-status {
         min-width: 0;
@@ -138,6 +144,21 @@ $bg-light: #f5f7fa;
 
       .col-code {
         overflow: hidden;
+
+        .warranty-order-label {
+          width: fit-content;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+          margin-bottom: 0.45rem;
+          padding: 0.25rem 0.5rem;
+          border-radius: 6px;
+          background: #fef3c7;
+          color: #92400e;
+          font-size: 0.68rem;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
 
         strong {
           color: $primary;
@@ -1981,6 +2002,14 @@ $bg-light: #f5f7fa;
     position: relative;
     border: 1px solid rgba(226, 232, 240, 0.9);
 
+    &.modal-content--warranty {
+      border-top: 5px solid $success;
+    }
+
+    &.modal-content--warranty-rejected {
+      border-top-color: $danger;
+    }
+
     .modal-header {
       padding: 1.5rem 1.75rem;
       border-bottom: 1px solid $border;
@@ -2046,6 +2075,43 @@ $bg-light: #f5f7fa;
         color: #1e3a8a;
         font-size: 0.92rem;
         line-height: 1.45;
+      }
+
+      .warranty-resolution-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.85rem;
+        padding: 1rem;
+        border: 1px solid #86efac;
+        border-radius: 12px;
+        background: #f0fdf4;
+        color: #166534;
+
+        > i {
+          margin-top: 0.15rem;
+          font-size: 1.25rem;
+        }
+
+        div {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        strong {
+          font-size: 0.95rem;
+        }
+
+        span {
+          font-size: 0.86rem;
+          line-height: 1.45;
+        }
+
+        &--rejected {
+          border-color: #fecaca;
+          background: #fef2f2;
+          color: #991b1b;
+        }
       }
 
       .form-group {

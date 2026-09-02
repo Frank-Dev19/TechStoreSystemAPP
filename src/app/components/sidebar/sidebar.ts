@@ -24,6 +24,7 @@ export const ROUTES: RouteInfo[] = [
   { path: "/ventas", title: "GESTION DE VENTAS", icon: "icon-chart-pie-36", class: "" },
   { path: "/auditoria", title: "GESTION DE AUDITORIA", icon: "icon-chart-pie-36", class: "" },
   { path: "/pricing", title: "GESTION DE PRECIOS", icon: "icon-chart-pie-36", class: "" },
+  { path: "/garantias", title: "GESTION DE GARANTIAS", icon: "icon-chart-pie-36", class: "" },
 ]
 
 @Component({

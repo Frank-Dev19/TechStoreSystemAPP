@@ -1,0 +1,111 @@
+<div class="warranty-page">
+  <header class="module-header">
+    <div>
+      <p class="eyebrow">POSTVENTA</p>
+      <h1>Gestión de Garantías</h1>
+      <p>Controla coberturas, recepciones y seguimiento técnico desde un único flujo.</p>
+    </div>
+    <div class="header-summary" aria-label="Resumen de garantías">
+      <span><strong>{{ coverageTotal }}</strong> coberturas</span>
+      <span><strong>{{ claimTotal }}</strong> atenciones</span>
+    </div>
+  </header>
+
+  <nav class="section-tabs" aria-label="Secciones de garantías">
+    <button type="button" [class.active]="activeTab === 'coverages'" (click)="selectTab('coverages')">
+      <i class="fas fa-shield-alt"></i> Coberturas
+    </button>
+    <button type="button" [class.active]="activeTab === 'claims'" (click)="selectTab('claims')">
+      <i class="fas fa-clipboard-check"></i> Atenciones
+    </button>
+    @if (canReport) {
+      <button type="button" [class.active]="activeTab === 'report'" (click)="selectTab('report')">
+        <i class="fas fa-chart-bar"></i> Reporte técnico
+      </button>
+    }
+  </nav>
+
+  @if (activeTab === 'coverages') {
+    <section class="workspace-section">
+      <div class="section-heading">
+        <div><h2>Coberturas del cliente</h2><p>Busca la venta o servicio original antes de registrar una atención.</p></div>
+      </div>
+      <div class="filter-grid">
+        <label class="field field-search"><span>Buscar</span><div class="input-icon"><i class="fas fa-search"></i><input [(ngModel)]="search" (keyup.enter)="searchCoverages()" placeholder="Cliente, documento, serie u orden"></div></label>
+        <label class="field"><span>Origen</span><select [(ngModel)]="sourceType"><option *ngFor="let option of sourceTypes" [ngValue]="option.value">{{ option.label }}</option></select></label>
+        <label class="field"><span>Estado</span><select [(ngModel)]="coverageStatus"><option *ngFor="let option of coverageStatuses" [ngValue]="option.value">{{ option.label }}</option></select></label>
+        <div class="filter-actions"><button class="btn primary" type="button" (click)="searchCoverages()"><i class="fas fa-search"></i> Buscar</button><button class="btn secondary" type="button" (click)="clearFilters()"><i class="fas fa-eraser"></i> Limpiar</button></div>
+      </div>
+    </section>
+
+    <section class="table-section">
+      @if (isLoading) { <div class="empty-state"><i class="fas fa-circle-notch fa-spin"></i><p>Cargando coberturas...</p></div> }
+      @else if (!coverages.length) { <div class="empty-state"><i class="fas fa-shield-alt"></i><h3>Sin coberturas para mostrar</h3><p>Prueba con otro término o filtro.</p></div> }
+      @else {
+        <div class="responsive-table">
+          <table><thead><tr><th>Origen</th><th>Cliente</th><th>Producto o servicio</th><th>Vigencia</th><th>Monto</th><th>Estado</th><th class="actions-column">Acción</th></tr></thead>
+          <tbody><tr *ngFor="let coverage of coverages">
+            <td data-label="Origen"><span class="source-badge" [class.service]="coverage.sourceType === 'SERVICE'"><i class="fas" [ngClass]="coverage.sourceType === 'PRODUCT' ? 'fa-box' : 'fa-tools'"></i>{{ sourceLabel(coverage.sourceType) }}</span><small>{{ coverage.sourceCodeSnapshot }}</small></td>
+            <td data-label="Cliente"><strong>{{ coverage.customer?.name || 'Cliente sin nombre' }}</strong><small>{{ coverage.customer?.documentNumber || 'Sin documento' }}</small></td>
+            <td data-label="Detalle"><strong>{{ coverage.sourceNameSnapshot }}</strong><small *ngIf="coverage.serialSnapshot">Serie: {{ coverage.serialSnapshot }}</small><small *ngIf="coverage.originTechnicianNameSnapshot">Técnico: {{ coverage.originTechnicianNameSnapshot }}</small></td>
+            <td data-label="Vigencia"><strong>{{ coverage.startsAt | date:'dd/MM/yyyy' }}</strong><small>hasta {{ coverage.expiresAt | date:'dd/MM/yyyy' }}</small></td>
+            <td data-label="Monto"><strong>S/ {{ coverage.coverageAmount | number:'1.2-2' }}</strong></td>
+            <td data-label="Estado"><span class="status-badge" [attr.data-status]="coverage.status">{{ coverageStatusLabel(coverage.status) }}</span></td>
+            <td data-label="Acción" class="actions-column"><button type="button" class="btn small primary" (click)="openIntake(coverage)" [disabled]="!isCoverageAvailable(coverage)" [title]="isCoverageAvailable(coverage) ? 'Registrar atención' : 'Cobertura no disponible'"><i class="fas fa-plus"></i> Atender</button></td>
+          </tr></tbody></table>
+        </div>
+        <div class="pagination"><span>Mostrando {{ coverages.length }} de {{ coverageTotal }}</span><div><button type="button" (click)="changeCoveragePage(page - 1)" [disabled]="page === 1" title="Página anterior"><i class="fas fa-chevron-left"></i></button><strong>{{ page }} / {{ coveragePages }}</strong><button type="button" (click)="changeCoveragePage(page + 1)" [disabled]="page === coveragePages" title="Página siguiente"><i class="fas fa-chevron-right"></i></button></div></div>
+      }
+    </section>
+  }
+
+  @if (activeTab === 'claims') {
+    <section class="workspace-section"><div class="section-heading"><div><h2>Atenciones registradas</h2><p>Cada ingreso consume íntegramente la cobertura de S/ 50 y crea una orden técnica.</p></div><button class="btn secondary" type="button" (click)="loadClaims()"><i class="fas fa-sync-alt"></i> Actualizar</button></div></section>
+    <section class="table-section">
+      @if (!claims.length) { <div class="empty-state"><i class="fas fa-clipboard-check"></i><h3>Aún no hay atenciones</h3><p>Las garantías recibidas aparecerán aquí.</p></div> }
+      @else { <div class="responsive-table"><table><thead><tr><th>Fecha</th><th>Cliente</th><th>Cobertura</th><th>Problema reportado</th><th>Técnico</th><th>Estado</th><th class="actions-column">Acción</th></tr></thead><tbody><tr *ngFor="let claim of claims">
+        <td data-label="Fecha"><strong>{{ claim.createdAt | date:'dd/MM/yyyy' }}</strong><small>{{ claim.createdAt | date:'HH:mm' }}</small></td>
+        <td data-label="Cliente"><strong>{{ claim.coverage.customer?.name || 'Cliente' }}</strong><small>{{ claim.coverage.customer?.documentNumber || '' }}</small></td>
+        <td data-label="Cobertura"><strong>{{ sourceLabel(claim.coverage.sourceType) }}</strong><small>{{ claim.coverage.sourceCodeSnapshot }}</small></td>
+        <td data-label="Problema"><span class="wrap-text">{{ claim.reportedIssue }}</span></td>
+        <td data-label="Técnico"><strong>{{ claim.attendingTechnician?.name || claim.coverage.originTechnicianNameSnapshot || 'Asignación automática' }}</strong></td>
+        <td data-label="Estado"><span class="status-badge" [attr.data-status]="claim.status">{{ claimStatusLabel(claim.status) }}</span></td>
+        <td data-label="Acción" class="actions-column"><button *ngIf="claim.status === 'RECEIVED'" type="button" class="icon-button danger" (click)="openCancel(claim)" title="Cancelar recepción"><i class="fas fa-ban"></i></button><span *ngIf="claim.status !== 'RECEIVED'">-</span></td>
+      </tr></tbody></table></div><div class="pagination"><span>Mostrando {{ claims.length }} de {{ claimTotal }}</span><div><button type="button" (click)="changeClaimPage(claimPage - 1)" [disabled]="claimPage === 1"><i class="fas fa-chevron-left"></i></button><strong>{{ claimPage }} / {{ claimPages }}</strong><button type="button" (click)="changeClaimPage(claimPage + 1)" [disabled]="claimPage === claimPages"><i class="fas fa-chevron-right"></i></button></div></div> }
+    </section>
+  }
+
+  @if (activeTab === 'report' && canReport) {
+    <section class="workspace-section"><div class="section-heading"><div><h2>Indicadores por técnico</h2><p>Vista administrativa para detectar recurrencias en servicios entregados.</p></div></div><div class="report-filters"><label class="field"><span>Desde</span><input type="date" [(ngModel)]="dateFrom"></label><label class="field"><span>Hasta</span><input type="date" [(ngModel)]="dateTo"></label><button class="btn primary" type="button" (click)="loadReport()"><i class="fas fa-chart-bar"></i> Generar</button></div></section>
+    <section class="table-section"><div class="responsive-table"><table><thead><tr><th>#</th><th>Técnico</th><th>Servicios entregados</th><th>Garantías consumidas</th><th>Aplicadas</th><th>Rechazadas</th><th>Tasa</th><th>Monto</th></tr></thead><tbody><tr *ngFor="let row of reportRows"><td data-label="Posición"><strong>{{ row.rank }}</strong></td><td data-label="Técnico"><strong>{{ row.technicianName }}</strong></td><td data-label="Entregados">{{ row.deliveredServices }}</td><td data-label="Consumidas">{{ row.consumedWarranties }}</td><td data-label="Aplicadas">{{ row.appliedWarranties }}</td><td data-label="Rechazadas">{{ row.rejectedWarranties }}</td><td data-label="Tasa"><strong>{{ row.warrantyRate | number:'1.1-2' }}%</strong></td><td data-label="Monto">S/ {{ row.consumedAmount | number:'1.2-2' }}</td></tr></tbody></table></div><div class="empty-state" *ngIf="!reportRows.length"><i class="fas fa-chart-line"></i><h3>Genera el reporte</h3><p>Selecciona un rango opcional y consulta los indicadores.</p></div></section>
+  }
+</div>
+
+@if (showIntakeModal && selectedCoverage) {
+  <div class="modal-overlay" (click)="closeIntake()"><section class="warranty-modal" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="intake-title">
+    <header><div><p class="eyebrow">NUEVA ATENCIÓN</p><h2 id="intake-title">Registrar garantía</h2><p>{{ selectedCoverage.sourceNameSnapshot }}</p></div><button type="button" class="icon-button" (click)="closeIntake()" [disabled]="isSubmitting" title="Cerrar"><i class="fas fa-times"></i></button></header>
+    <div class="modal-body">
+      <div class="coverage-summary"><div><span>Cliente</span><strong>{{ selectedCoverage.customer?.name }}</strong></div><div><span>Origen</span><strong>{{ sourceLabel(selectedCoverage.sourceType) }} · {{ selectedCoverage.sourceCodeSnapshot }}</strong></div><div><span>Consumo</span><strong>S/ {{ selectedCoverage.coverageAmount | number:'1.2-2' }}</strong></div><div><span>Vence</span><strong>{{ selectedCoverage.expiresAt | date:'dd/MM/yyyy' }}</strong></div></div>
+      <label class="field full"><span>Problema reportado *</span><textarea rows="3" maxlength="1000" [(ngModel)]="intake.reportedIssue" placeholder="Describe claramente lo informado por el cliente"></textarea></label>
+      @if (selectedCoverage.sourceType === 'SERVICE') {
+        <div class="assignment-note"><i class="fas fa-user-check"></i><div><strong>Técnico original</strong><p>{{ selectedCoverage.originTechnicianNameSnapshot || 'No identificado' }} atenderá la garantía, conservando la trazabilidad del servicio.</p></div></div>
+        @if (isAdmin) { <label class="toggle-row"><input type="checkbox" [(ngModel)]="useTechnicianOverride"><span>Asignar excepcionalmente a otro técnico</span></label>
+          @if (useTechnicianOverride) { <div class="form-grid"><label class="field"><span>Técnico sustituto *</span><select [(ngModel)]="intake.assignedToTechnicianId"><option [ngValue]="undefined">Seleccionar</option><option *ngFor="let technician of technicians" [ngValue]="technician.id">{{ technician.name }}</option></select></label><label class="field"><span>Motivo del cambio *</span><input [(ngModel)]="intake.technicianOverrideReason" maxlength="500" placeholder="Ausencia, indisponibilidad u otro motivo"></label></div> }
+        }
+      } @else {
+        <div class="assignment-note"><i class="fas fa-users-cog"></i><div><strong>Asignación automática</strong><p>El sistema seleccionará un técnico disponible para revisar el producto.</p></div></div>
+      }
+      <div class="form-grid">
+        <label class="field"><span>Tipo de equipo *</span><select [(ngModel)]="intake.equipmentType"><option [ngValue]="undefined">Seleccionar</option><option *ngFor="let type of equipmentTypes" [ngValue]="type">{{ equipmentTypeLabel(type) }}</option></select></label>
+        <label class="field" *ngIf="intake.equipmentType === 'OTHER'"><span>Especificar tipo *</span><input [(ngModel)]="intake.equipmentTypeOther" maxlength="120"></label>
+        <label class="field"><span>Marca</span><input [(ngModel)]="intake.brand" maxlength="100"></label><label class="field"><span>Modelo</span><input [(ngModel)]="intake.model" maxlength="150"></label><label class="field"><span>Serie</span><input [(ngModel)]="intake.serialNumber" maxlength="100"></label><label class="field"><span>Accesorios</span><input [(ngModel)]="intake.accessories" maxlength="500"></label>
+        <label class="field"><span>Prioridad</span><select [(ngModel)]="intake.priority"><option value="LOW">Baja</option><option value="MEDIUM">Media</option><option value="HIGH">Alta</option></select></label><label class="field"><span>Notas internas</span><input [(ngModel)]="intake.notes" maxlength="500"></label>
+      </div>
+    </div>
+    <footer><button class="btn secondary" type="button" (click)="closeIntake()" [disabled]="isSubmitting">Cancelar</button><button class="btn primary" type="button" (click)="submitIntake()" [disabled]="isSubmitting"><i class="fas" [ngClass]="isSubmitting ? 'fa-circle-notch fa-spin' : 'fa-clipboard-check'"></i>{{ isSubmitting ? 'Registrando...' : 'Registrar y crear orden' }}</button></footer>
+  </section></div>
+}
+
+@if (claimToCancel) { <div class="modal-overlay" (click)="closeCancel()"><section class="confirm-modal" (click)="$event.stopPropagation()"><div class="danger-icon"><i class="fas fa-ban"></i></div><h2>Cancelar recepción</h2><p>La cobertura volverá a estar disponible y la orden de garantía asociada será cancelada.</p><label class="field"><span>Motivo *</span><textarea rows="3" [(ngModel)]="cancelReason" maxlength="500"></textarea></label><div class="confirm-actions"><button class="btn secondary" (click)="closeCancel()" [disabled]="isSubmitting">Volver</button><button class="btn danger" (click)="confirmCancel()" [disabled]="isSubmitting">Confirmar cancelación</button></div></section></div> }
+
+<div class="app-toast" *ngIf="toast.show" [attr.data-type]="toast.type"><i class="fas" [ngClass]="toast.type === 'success' ? 'fa-check-circle' : toast.type === 'warning' ? 'fa-exclamation-triangle' : toast.type === 'error' ? 'fa-times-circle' : 'fa-info-circle'"></i><span>{{ toast.message }}</span></div>

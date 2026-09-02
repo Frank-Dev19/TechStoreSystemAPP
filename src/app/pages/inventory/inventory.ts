@@ -219,6 +219,8 @@ export class Inventory implements OnInit, OnDestroy {
     unit_id: null as number | null,
     is_serialized: false,
     manages_expiration: false,
+    warranty_duration_value: 30,
+    warranty_duration_unit: 'DAY' as 'DAY' | 'MONTH' | 'YEAR',
     min_stock: 0,
     max_stock: 0,
     reorder_point: 0,
@@ -235,6 +237,8 @@ export class Inventory implements OnInit, OnDestroy {
     unit_id: null as number | null,
     is_serialized: true,
     manages_expiration: false,
+    warranty_duration_value: 30,
+    warranty_duration_unit: 'DAY' as 'DAY' | 'MONTH' | 'YEAR',
     min_stock: 0,
     max_stock: 0,
     reorder_point: 0,
@@ -1917,6 +1921,8 @@ export class Inventory implements OnInit, OnDestroy {
       unit_id: null,
       is_serialized: false,
       manages_expiration: false,
+      warranty_duration_value: 30,
+      warranty_duration_unit: 'DAY',
       min_stock: 0,
       max_stock: 0,
       reorder_point: 0,
@@ -1935,6 +1941,8 @@ export class Inventory implements OnInit, OnDestroy {
       unit_id: p.unit_id ?? null,
       is_serialized: !!p.is_serialized,
       manages_expiration: !!p.manages_expiration,
+      warranty_duration_value: Number(p.warranty_duration_value ?? 0),
+      warranty_duration_unit: p.warranty_duration_unit ?? 'DAY',
       min_stock: (p as any).min_stock ?? 0,
       max_stock: (p as any).max_stock ?? 0,
       reorder_point: (p as any).reorder_point ?? 0,
@@ -1946,6 +1954,10 @@ export class Inventory implements OnInit, OnDestroy {
     const f = this.productForm;
     if (!f.sku || !f.name || !f.category_id || !f.unit_id) {
       this.showToast('error', 'Complete todos los campos requeridos');
+      return;
+    }
+    if (!Number.isInteger(Number(f.warranty_duration_value)) || Number(f.warranty_duration_value) < 1) {
+      this.showToast('error', 'La garantía del producto debe ser un periodo mayor a cero');
       return;
     }
 
@@ -1994,6 +2006,8 @@ export class Inventory implements OnInit, OnDestroy {
       unit_id: defaultUnit?.id ?? null,
       is_serialized: true,
       manages_expiration: false,
+      warranty_duration_value: 30,
+      warranty_duration_unit: 'DAY',
       min_stock: 0,
       max_stock: 0,
       reorder_point: 0,
@@ -2084,6 +2098,8 @@ export class Inventory implements OnInit, OnDestroy {
         unit_id: 0,
         is_serialized: this.importProductsForm.is_serialized,
         manages_expiration: this.importProductsForm.manages_expiration,
+        warranty_duration_value: Number(this.importProductsForm.warranty_duration_value || 0),
+        warranty_duration_unit: this.importProductsForm.warranty_duration_unit,
         min_stock: Number(this.importProductsForm.min_stock || 0),
         max_stock: Number(this.importProductsForm.max_stock || 0),
         reorder_point: Number(this.importProductsForm.reorder_point || 0),
@@ -2107,6 +2123,10 @@ export class Inventory implements OnInit, OnDestroy {
       this.showToast('error', 'Seleccione un Excel con productos válidos');
       return;
     }
+    if (!Number.isInteger(Number(this.importProductsForm.warranty_duration_value)) || Number(this.importProductsForm.warranty_duration_value) < 1) {
+      this.showToast('error', 'Configure una garantía mayor a cero para los productos importados');
+      return;
+    }
 
     const rows = this.importProductsRows.map((row) => ({
       ...row,
@@ -2114,6 +2134,8 @@ export class Inventory implements OnInit, OnDestroy {
       unit_id: this.importProductsForm.unit_id!,
       is_serialized: this.importProductsForm.is_serialized,
       manages_expiration: this.importProductsForm.manages_expiration,
+      warranty_duration_value: Number(this.importProductsForm.warranty_duration_value),
+      warranty_duration_unit: this.importProductsForm.warranty_duration_unit,
       min_stock: Number(this.importProductsForm.min_stock || 0),
       max_stock: Number(this.importProductsForm.max_stock || 0),
       reorder_point: Number(this.importProductsForm.reorder_point || 0),

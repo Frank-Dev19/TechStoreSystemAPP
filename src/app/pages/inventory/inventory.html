@@ -1945,6 +1945,21 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
+                        <label>Duración de garantía *</label>
+                        <input type="number" [(ngModel)]="productForm.warranty_duration_value" class="form-control" min="1" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Unidad de garantía *</label>
+                        <select [(ngModel)]="productForm.warranty_duration_unit" class="form-control">
+                            <option value="DAY">Días</option>
+                            <option value="MONTH">Meses</option>
+                            <option value="YEAR">Años</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="form-help-text"><i class="fas fa-shield-alt"></i> La cobertura inicia cuando la venta del producto queda emitida.</p>
+                <div class="form-row">
+                    <div class="form-group">
                         <label>Stock Mínimo</label>
                         <input type="number" [(ngModel)]="productForm.min_stock" class="form-control" min="0">
                     </div>
@@ -2058,6 +2073,21 @@
                             <input type="checkbox" [(ngModel)]="importProductsForm.manages_expiration">
                             Maneja Vencimiento
                         </label>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Duración de garantía *</label>
+                        <input type="number" [(ngModel)]="importProductsForm.warranty_duration_value" class="form-control" min="1" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Unidad de garantía *</label>
+                        <select [(ngModel)]="importProductsForm.warranty_duration_unit" class="form-control">
+                            <option value="DAY">Días</option>
+                            <option value="MONTH">Meses</option>
+                            <option value="YEAR">Años</option>
+                        </select>
                     </div>
                 </div>
 

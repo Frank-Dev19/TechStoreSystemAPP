@@ -18,6 +18,7 @@ import { ReceptionPanel } from '../../pages/reception-panel/reception-panel';
 import { ServiceOrderInboxPage } from '../../pages/service-order-inbox/service-order-inbox';
 import { TechnicianPanel } from '../../pages/technician-panel/technician-panel';
 import { SupervisorPanel } from '../../pages/supervisor-panel/supervisor-panel';
+import { WarrantiesPage } from '../../pages/warranties/warranties';
 import { RoleGuard } from '../../helpers/role.guard';
 import { PermissionGuard } from '../../helpers/permission.guard';
 import { RoleLandingGuard } from '../../helpers/role-landing.guard';
@@ -38,6 +39,7 @@ export const AdminLayoutRoutes: Routes = [
     { path: 'pricing', component: Pricing, canActivate: [PermissionGuard], data: { requiredPermissions: ['navigation.admin'] } },
     { path: 'configuracion-empresa', component: BusinessProfilePage, canActivate: [PermissionGuard], data: { requiredPermissions: ['navigation.admin'] } },
     { path: 'configuracion-correo', component: MailSettingsPage, canActivate: [PermissionGuard], data: { requiredPermissions: ['navigation.mail-settings'] } },
+    { path: 'garantias', component: WarrantiesPage, canActivate: [PermissionGuard], data: { requiredPermissions: ['navigation.warranties'] } },
     {
         path: 'reception-panel',
         component: ReceptionPanel,

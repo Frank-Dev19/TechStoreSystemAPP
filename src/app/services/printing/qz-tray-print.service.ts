@@ -1,5 +1,14 @@
 import { Injectable } from '@angular/core';
-import qz from 'qz-tray';
+
+interface QzTrayClient {
+  websocket: {
+    isActive(): boolean;
+    connect(options: { retries: number; delay: number }): Promise<void>;
+  };
+  printers: { find(): Promise<string[]> };
+  configs: { create(printer: string, options: Record<string, unknown>): unknown };
+  print(config: unknown, data: Array<Record<string, unknown>>): Promise<void>;
+}
 
 export interface QzPdfLabelJob {
   base64: string;
@@ -15,8 +24,9 @@ export class QzTrayPrintService {
 
   async printPdfLabel(job: QzPdfLabelJob): Promise<void> {
     try {
-      await this.ensureConnected();
-      const printer = await this.findBrotherPrinter();
+      const qz = this.getClient();
+      await this.ensureConnected(qz);
+      const printer = await this.findBrotherPrinter(qz);
       const printerConfig = qz.configs.create(printer, {
         copies: job.copies,
         colorType: 'blackwhite',
@@ -45,12 +55,22 @@ export class QzTrayPrintService {
     }
   }
 
-  private async ensureConnected(): Promise<void> {
+  private getClient(): QzTrayClient {
+    const qz = (globalThis as typeof globalThis & { qz?: QzTrayClient }).qz;
+    if (!qz) {
+      throw new Error(
+        'El cliente de impresión QZ Tray no está disponible. Verifica su instalación y la configuración del cliente web.',
+      );
+    }
+    return qz;
+  }
+
+  private async ensureConnected(qz: QzTrayClient): Promise<void> {
     if (qz.websocket.isActive()) return;
     await qz.websocket.connect({ retries: 2, delay: 1 });
   }
 
-  private async findBrotherPrinter(): Promise<string> {
+  private async findBrotherPrinter(qz: QzTrayClient): Promise<string> {
     const printers = (await qz.printers.find()) as string[];
     const normalizedModel = this.normalizePrinterName(this.printerModel);
     const exact = printers.find((printer) => this.normalizePrinterName(printer) === normalizedModel);

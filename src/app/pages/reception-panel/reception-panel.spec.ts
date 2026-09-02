@@ -301,6 +301,8 @@ describe('ReceptionPanel', () => {
       initialIssue: 'No enciende',
       priority: ServiceOrderPriority.LOW,
       notes: null,
+      warrantyDurationValue: 30,
+      warrantyDurationUnit: 'DAY',
       quoteItems: [],
     }];
 

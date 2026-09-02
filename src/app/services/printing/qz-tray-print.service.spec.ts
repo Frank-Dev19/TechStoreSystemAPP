@@ -1,24 +1,27 @@
 import { TestBed } from '@angular/core/testing';
-import qz from 'qz-tray';
 import { QzTrayPrintService } from './qz-tray-print.service';
 
 describe('QzTrayPrintService', () => {
   let service: QzTrayPrintService;
+  let qz: any;
 
   beforeEach(() => {
+    qz = {
+      websocket: { isActive: jasmine.createSpy('isActive').and.returnValue(true), connect: jasmine.createSpy('connect') },
+      printers: { find: jasmine.createSpy('find').and.resolveTo(['Microsoft Print to PDF', 'Brother QL-700']) },
+      configs: { create: jasmine.createSpy('create').and.returnValue({ printer: 'Brother QL-700' }) },
+      print: jasmine.createSpy('print').and.resolveTo(),
+    };
+    (globalThis as any).qz = qz;
     TestBed.configureTestingModule({});
     service = TestBed.inject(QzTrayPrintService);
   });
 
+  afterEach(() => delete (globalThis as any).qz);
+
   it('imprime en la Brother QL-700 con papel personalizado de 62 x 35 mm', async () => {
-    spyOn(qz.websocket, 'isActive').and.returnValue(true);
-    spyOn(qz.printers, 'find').and.returnValue(Promise.resolve([
-      'Microsoft Print to PDF',
-      'Brother QL-700',
-    ]));
     const config = { printer: 'Brother QL-700' };
-    const createConfig = spyOn(qz.configs, 'create').and.returnValue(config);
-    const print = spyOn(qz, 'print').and.returnValue(Promise.resolve());
+    qz.configs.create.and.returnValue(config);
 
     await service.printPdfLabel({
       base64: 'JVBERi0xLjQ=',
@@ -28,7 +31,7 @@ describe('QzTrayPrintService', () => {
       jobName: 'Sticker SO-01-01',
     });
 
-    expect(createConfig).toHaveBeenCalledWith('Brother QL-700', jasmine.objectContaining({
+    expect(qz.configs.create).toHaveBeenCalledWith('Brother QL-700', jasmine.objectContaining({
       copies: 4,
       density: 300,
       units: 'mm',
@@ -38,11 +41,19 @@ describe('QzTrayPrintService', () => {
       rasterize: true,
       scaleContent: false,
     }));
-    expect(print).toHaveBeenCalledWith(config, [{
+    expect(qz.print).toHaveBeenCalledWith(config, [{
       type: 'pixel',
       format: 'pdf',
       flavor: 'base64',
       data: 'JVBERi0xLjQ=',
     }]);
+  });
+
+  it('informa claramente cuando el cliente QZ no está cargado', async () => {
+    delete (globalThis as any).qz;
+
+    await expectAsync(service.printPdfLabel({
+      base64: 'JVBERi0xLjQ=', copies: 1, widthMm: 62, heightMm: 35, jobName: 'Sticker',
+    })).toBeRejectedWithError(/cliente de impresión QZ Tray no está disponible/i);
   });
 });

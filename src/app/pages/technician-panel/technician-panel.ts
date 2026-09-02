@@ -183,6 +183,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   showDiagnosisModal = false
   diagnosisForm: FormGroup
+  warrantyResolutionOutcome: ServiceOrderDiagnosisOutcome | null = null
   showAgreementModal = false
   agreementForm: FormGroup
   showClientDecisionModal = false
@@ -762,9 +763,20 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       this.selectServiceOrder(order)
     }
     if (!this.selectedServiceOrder) return
-    if (!this.isDiagnosisService(this.selectedServiceOrder)) return
+    const isWarrantyResolution = this.isWarrantyService(this.selectedServiceOrder)
+    if (!this.isDiagnosisService(this.selectedServiceOrder) && !isWarrantyResolution) return
+    if (
+      isWarrantyResolution &&
+      ![
+        ServiceOrderDiagnosisOutcome.WARRANTY_APPLIES,
+        ServiceOrderDiagnosisOutcome.WARRANTY_REJECTED,
+      ].includes(presetOutcome)
+    ) {
+      return
+    }
     const eligibleItems = this.diagnosisEligibleItems
     this.selectedDiagnosisItemId = eligibleItems.length === 1 ? Number(eligibleItems[0].id) : null
+    this.warrantyResolutionOutcome = isWarrantyResolution ? presetOutcome : null
     this.showDiagnosisModal = true
     this.diagnosisForm.reset({
       summary: "",
@@ -776,6 +788,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   closeDiagnosisModal(): void {
     this.showDiagnosisModal = false
     this.selectedDiagnosisItemId = null
+    this.warrantyResolutionOutcome = null
     this.diagnosisForm.reset({
       summary: "",
       details: "",
@@ -1257,16 +1270,21 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (resolution) => {
+          const warrantyMessage = this.isWarrantyResolutionFlow
+            ? selectedOutcome === ServiceOrderDiagnosisOutcome.WARRANTY_APPLIES
+              ? "Garantía aceptada. El equipo quedó autorizado para la atención sin cobro."
+              : "Garantía rechazada. La revisión quedó registrada y la atención fue cerrada sin cobro."
+            : null
           this.showMessage(
             "success",
             "fas fa-check-circle",
-            resolution === "DIAGNOSIS_FEE"
+            warrantyMessage ?? (resolution === "DIAGNOSIS_FEE"
               ? "Diagnóstico registrado. La orden quedó lista para entrega con cobro de diagnóstico."
               : resolution === "WAIVED"
                 ? "Diagnóstico registrado. La orden quedó lista para entrega sin cobro."
                 : wasInService
                   ? "Nuevo diagnóstico registrado. La orden volvió a coordinación para generar una nueva cotización."
-                  : "Diagnostico registrado correctamente.",
+                  : "Diagnostico registrado correctamente."),
           )
           this.closeDiagnosisModal()
           this.loadTechnicianOrders()
@@ -1304,6 +1322,14 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   get canSubmitDiagnosis(): boolean {
     const items = this.selectedServiceOrder?.items ?? []
     return items.length === 0 || this.selectedDiagnosisItem !== null
+  }
+
+  get isWarrantyResolutionFlow(): boolean {
+    return this.warrantyResolutionOutcome !== null && this.isWarrantyService(this.selectedServiceOrder)
+  }
+
+  get isWarrantyApprovalResolution(): boolean {
+    return this.warrantyResolutionOutcome === ServiceOrderDiagnosisOutcome.WARRANTY_APPLIES
   }
 
   getDiagnosisItemLabel(item: ServiceOrderItem): string {
@@ -1467,26 +1493,18 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   acceptWarrantyReview(order: ServiceOrder): void {
-    this.requestItemTransition(
+    this.openDiagnosisModal(
       order,
-      ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION,
-      [ServiceOrderTechnicalStatus.EN_DIAGNOSTICO],
-      "Seleccionar equipo para aceptar garantía",
-      "Elige el equipo cuya garantía deseas aceptar.",
-      "Aceptar garantía",
-      "Garantía aceptada correctamente.",
+      undefined,
+      ServiceOrderDiagnosisOutcome.WARRANTY_APPLIES,
     )
   }
 
   rejectWarrantyReview(order: ServiceOrder): void {
-    this.requestItemTransition(
+    this.openDiagnosisModal(
       order,
-      ServiceOrderTechnicalStatus.SIN_SOLUCION,
-      [ServiceOrderTechnicalStatus.EN_DIAGNOSTICO],
-      "Seleccionar equipo para rechazar garantía",
-      "Elige el equipo cuya garantía deseas rechazar.",
-      "Rechazar garantía",
-      "Garantía rechazada correctamente.",
+      undefined,
+      ServiceOrderDiagnosisOutcome.WARRANTY_REJECTED,
     )
   }
 

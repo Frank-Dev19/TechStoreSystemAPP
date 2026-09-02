@@ -29,6 +29,8 @@ export interface ImportProductRow {
   unit_id: number;
   is_serialized: boolean;
   manages_expiration: boolean;
+  warranty_duration_value: number;
+  warranty_duration_unit: 'DAY' | 'MONTH' | 'YEAR';
   min_stock: number;
   max_stock: number;
   reorder_point: number;

@@ -30,6 +30,8 @@ export type ProductApi = {
     baseUnitId?: number | null;     // o como baseUnitId (según tu backend)
     isSerialized?: boolean;
     managesExpiration?: boolean;
+    warrantyDurationValue?: number | string | null;
+    warrantyDurationUnit?: 'DAY' | 'MONTH' | 'YEAR' | null;
     minStock?: number | string | null;
     maxStock?: number | string | null;
     reorderPoint?: number | string | null;
@@ -46,6 +48,8 @@ export const mapProductFromApi = (api: ProductApi): Product => ({
     unit_id: api.unitId ?? api.baseUnitId ?? null,
     is_serialized: B(api.isSerialized),
     manages_expiration: B(api.managesExpiration),
+    warranty_duration_value: api.warrantyDurationValue == null ? 0 : N(api.warrantyDurationValue),
+    warranty_duration_unit: api.warrantyDurationUnit ?? 'DAY',
     min_stock: api.minStock == null ? null : N(api.minStock),
     max_stock: api.maxStock == null ? null : N(api.maxStock),
     reorder_point: api.reorderPoint == null ? null : N(api.reorderPoint),
@@ -61,6 +65,8 @@ export const mapProductToApi = (p: Partial<Product>) => ({
     unit_id: p.unit_id ?? null,
     is_serialized: p.is_serialized ?? false,
     manages_expiration: p.manages_expiration ?? false,
+    warranty_duration_value: p.warranty_duration_value ?? 0,
+    warranty_duration_unit: p.warranty_duration_unit ?? 'DAY',
     min_stock: p.min_stock ?? 0,
     max_stock: p.max_stock ?? 0,
     reorder_point: p.reorder_point ?? 0,

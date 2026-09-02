@@ -1,0 +1,30 @@
+/* You can add global styles to this file, and also import other style files */
+
+@import '~ag-grid-community/styles/ag-grid.css';
+
+/* You can add global styles to this file, and also import other style files */
+
+// @import "@angular/material/prebuilt-themes/deeppurple-amber.css";
+@import "@angular/material/prebuilt-themes/deeppurple-amber";
+@import "~@ng-select/ng-select/themes/default.theme.css";
+// IMPORTING PARTIALS
+@import "abstracts/functions";
+@import "abstracts/mixins";
+@import "abstracts/colors";
+@import "abstracts/variables";
+@import "base/animations";
+@import "base/base";
+@import "base/typography";
+@import "base/utilities";
+@import "components/button";
+@import "components/form";
+@import "components/select";
+@import "components/checkbox";
+@import "components/modal";
+@import "components/grid";
+@import "components/toastr";
+@import "components/sweet-alert";
+@import "components/scenario-draggable-list";
+@import "layout/footer";
+@import "layout/header";
+@import "layout/navigation";

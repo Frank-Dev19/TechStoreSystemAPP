@@ -1,0 +1,38 @@
+.toast-container .ngx-toastr {
+  font-family: "Lato", sans-serif !important;
+  font-size: 1.2rem;
+  border-radius: 8px !important;
+  font-weight: bold !important ;
+}
+.toast-warning {
+  border: 2px solid $yellow-toast-warn-b;
+  background-color: $yellow-toast-warn-bg !important;
+  color: $black-title !important;
+  background-image: url("../../icons/warning.svg") !important;
+  button span {
+    // Change close button color. It's not an icon just a plain X
+    color: $black-title !important;
+  }
+}
+
+.toast-success {
+  border: 2px solid $green-toast-success-b;
+  background-color: $green-toast-success-bg !important;
+  color: $black-title !important;
+  background-image: url("../../icons/success.svg") !important;
+  button span {
+    // Change close button color. It's not an icon just a plain X
+    color: $black-title !important;
+  }
+}
+
+.toast-error {
+  border: 2px solid $red-toast-error-b;
+  background-color: $red-toast-error-bg !important;
+  color: $black-title !important;
+  background-image: url("../../icons/error.svg") !important;
+  button span {
+    // Change close button color. It's not an icon just a plain X
+    color: $black-title !important;
+  }
+}

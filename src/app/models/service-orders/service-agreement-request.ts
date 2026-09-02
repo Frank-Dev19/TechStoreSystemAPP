@@ -31,6 +31,8 @@ export interface ServiceOrderCommercialRevisionItemRequest {
   serviceOrderItemId: number;
   baseVersionId?: number;
   notes?: string;
+  warrantyDurationValue?: number;
+  warrantyDurationUnit?: 'DAY' | 'MONTH' | 'YEAR';
   lines: ServiceOrderCommercialRevisionLineRequest[];
 }
 

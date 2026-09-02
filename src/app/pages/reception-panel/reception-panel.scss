@@ -3516,6 +3516,35 @@ $bg-light: #f5f7fa;
         text-transform: uppercase;
       }
     }
+
+    .agreement-warranty-fields {
+      margin-top: 14px;
+
+      > div {
+        display: grid;
+        grid-template-columns: minmax(70px, 0.7fr) minmax(100px, 1fr);
+        gap: 8px;
+      }
+
+      input,
+      select {
+        width: 100%;
+        min-height: 42px;
+        padding: 0 10px;
+        border: 1px solid #cfdcf0;
+        border-radius: 10px;
+        color: $primary;
+        background: #f8fafc;
+      }
+
+      small {
+        display: block;
+        margin-top: 6px;
+        color: $text-muted;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+    }
   }
 
   .agreement-context-card {

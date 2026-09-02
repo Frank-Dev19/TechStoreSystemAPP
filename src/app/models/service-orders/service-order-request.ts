@@ -6,6 +6,7 @@ import {
   ServiceOrderPriority,
   ServiceType,
 } from './service-order';
+import { WarrantyDurationUnit } from '../warranties/warranty.model';
 
 export interface RequestServiceOrderItemCancellationRequest {
   channel: ServiceOrderCancellationChannel;
@@ -48,6 +49,8 @@ export interface ServiceOrderCreateItemRequest {
   estimatedDeliveryDate?: string | null;
   notes?: string | null;
   warrantySourceItemId?: number;
+  warrantyDurationValue?: number;
+  warrantyDurationUnit?: WarrantyDurationUnit;
   initialCommercial?: ServiceOrderInitialCommercialRequest;
 }
 

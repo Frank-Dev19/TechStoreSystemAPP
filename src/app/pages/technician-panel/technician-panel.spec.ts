@@ -363,6 +363,53 @@ describe('TechnicianPanel', () => {
     expect(diagnosisServiceStub.create.calls.mostRecent().args[0].serviceOrderId).toBeUndefined();
   });
 
+  [
+    {
+      action: 'aceptar',
+      outcome: ServiceOrderDiagnosisOutcome.WARRANTY_APPLIES,
+      invoke: (panel: TechnicianPanel, order: ServiceOrder) => panel.acceptWarrantyReview(order),
+    },
+    {
+      action: 'rechazar',
+      outcome: ServiceOrderDiagnosisOutcome.WARRANTY_REJECTED,
+      invoke: (panel: TechnicianPanel, order: ServiceOrder) => panel.rejectWarrantyReview(order),
+    },
+  ].forEach(({ action, outcome, invoke }) => {
+    it(`registra el sustento técnico antes de ${action} una garantía`, () => {
+      const order = createServiceOrder({
+        id: 72,
+        serviceType: ServiceType.WARRANTY_SERVICE,
+        technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+      });
+      order.items = [
+        createServiceOrderItem(order, {
+          id: 721,
+          technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO,
+        }),
+      ];
+
+      invoke(component, order);
+
+      expect(component.showDiagnosisModal).toBeTrue();
+      expect(component.isWarrantyResolutionFlow).toBeTrue();
+      expect(component.diagnosisForm.get('outcome')?.value).toBe(outcome);
+      expect(serviceOrderServiceStub.changeItemTechnicalStatus).not.toHaveBeenCalled();
+
+      component.diagnosisForm.patchValue({
+        summary: 'Resultado de la garantía',
+        details: 'Se revisó el equipo y se documentaron los hallazgos técnicos.',
+      });
+      component.submitDiagnosis();
+
+      expect(diagnosisServiceStub.create).toHaveBeenCalledWith({
+        serviceOrderItemId: 721,
+        summary: 'Resultado de la garantía',
+        details: 'Se revisó el equipo y se documentaron los hallazgos técnicos.',
+        outcome,
+      });
+    });
+  });
+
   it('navega al inbox unificado en vez de abrir el modal legacy', async () => {
     const order = createServiceOrder({ id: 88, code: 'SO-88' });
 

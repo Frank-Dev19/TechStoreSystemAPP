@@ -98,9 +98,13 @@
             <div
               class="order-list-row"
               [class.selected]="isOrderSelected(order)"
+              [class.warranty-order]="isWarrantyService(order)"
               (click)="selectServiceOrder(order)"
             >
               <div class="col-code">
+                @if (isWarrantyService(order)) {
+                  <span class="warranty-order-label"><i class="fas fa-shield-alt"></i> Garantía</span>
+                }
                 <strong>{{ order.code || 'SIN-CÓDIGO' }}</strong>
               </div>
               <div class="col-equip">
@@ -1481,15 +1485,51 @@
 
   @if (showDiagnosisModal) {
     <div class="modal-overlay" (click)="closeDiagnosisModal()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
+      <div
+        class="modal-content"
+        [class.modal-content--warranty]="isWarrantyResolutionFlow"
+        [class.modal-content--warranty-rejected]="isWarrantyResolutionFlow && !isWarrantyApprovalResolution"
+        (click)="$event.stopPropagation()"
+      >
         <div class="modal-header">
-          <h2>Registrar diagnóstico</h2>
+          <div>
+            <h2>
+              {{
+                isWarrantyResolutionFlow
+                  ? isWarrantyApprovalResolution
+                    ? 'Aceptar garantía'
+                    : 'Rechazar garantía'
+                  : 'Registrar diagnóstico'
+              }}
+            </h2>
+            @if (isWarrantyResolutionFlow) {
+              <p>Registra el resultado técnico antes de resolver la garantía.</p>
+            }
+          </div>
           <button class="btn-close" (click)="closeDiagnosisModal()">
             <i class="fas fa-times"></i>
           </button>
         </div>
 
         <form [formGroup]="diagnosisForm" (ngSubmit)="submitDiagnosis()" class="modal-body">
+          @if (isWarrantyResolutionFlow) {
+            <div
+              class="warranty-resolution-banner"
+              [class.warranty-resolution-banner--rejected]="!isWarrantyApprovalResolution"
+            >
+              <i [class]="isWarrantyApprovalResolution ? 'fas fa-shield-alt' : 'fas fa-shield-virus'"></i>
+              <div>
+                <strong>{{ isWarrantyApprovalResolution ? 'La garantía aplica' : 'La garantía no aplica' }}</strong>
+                <span>
+                  {{
+                    isWarrantyApprovalResolution
+                      ? 'Al guardar, el equipo quedará autorizado para ser atendido sin cobro.'
+                      : 'Explica la causa del rechazo. La revisión quedará cerrada y registrada sin cobro.'
+                  }}
+                </span>
+              </div>
+            </div>
+          }
           @if (diagnosisEligibleItems.length > 1) {
             <div class="form-group">
               <label for="diagnosis-item">Equipo a diagnosticar *</label>
@@ -1523,13 +1563,13 @@
             </div>
           }
           <div class="form-group">
-            <label for="summary">Resumen del diagnóstico *</label>
+            <label for="summary">{{ isWarrantyResolutionFlow ? 'Resumen de la revisión' : 'Resumen del diagnóstico' }} *</label>
             <input
               type="text"
               id="summary"
               class="form-control"
               formControlName="summary"
-              placeholder="Ej: Falla en disco duro"
+              [placeholder]="isWarrantyResolutionFlow ? 'Ej: La falla reportada corresponde a la reparación anterior' : 'Ej: Falla en disco duro'"
               [class.is-invalid]="
                 diagnosisForm.get('summary')?.invalid && diagnosisForm.get('summary')?.touched
               "
@@ -1540,13 +1580,13 @@
           </div>
 
           <div class="form-group">
-            <label for="details">Detalles técnicos *</label>
+            <label for="details">{{ isWarrantyResolutionFlow ? 'Sustento técnico' : 'Detalles técnicos' }} *</label>
             <textarea
               id="details"
               class="form-control"
               formControlName="details"
               rows="5"
-              placeholder="Describe los hallazgos detallados..."
+              [placeholder]="isWarrantyResolutionFlow ? 'Describe los hallazgos que sustentan esta decisión...' : 'Describe los hallazgos detallados...'"
               [class.is-invalid]="
                 diagnosisForm.get('details')?.invalid && diagnosisForm.get('details')?.touched
               "
@@ -1573,11 +1613,21 @@
           }
           <button
             type="button"
-            class="btn btn-primary"
+            class="btn"
+            [class.btn-success]="isWarrantyResolutionFlow && isWarrantyApprovalResolution"
+            [class.btn-danger]="isWarrantyResolutionFlow && !isWarrantyApprovalResolution"
+            [class.btn-primary]="!isWarrantyResolutionFlow"
             (click)="submitDiagnosis()"
             [disabled]="diagnosisForm.invalid || !canSubmitDiagnosis || isSavingDiagnosis"
           >
-            <i class="fas fa-save"></i> Guardar diagnóstico
+            <i [class]="isWarrantyResolutionFlow ? (isWarrantyApprovalResolution ? 'fas fa-check-circle' : 'fas fa-ban') : 'fas fa-save'"></i>
+            {{
+              isWarrantyResolutionFlow
+                ? isWarrantyApprovalResolution
+                  ? 'Confirmar garantía'
+                  : 'Confirmar rechazo'
+                : 'Guardar diagnóstico'
+            }}
           </button>
         </div>
       </div>

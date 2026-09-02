@@ -152,6 +152,8 @@ interface CreateServiceOrderCandidateDraft {
   initialIssue: string
   priority: ServiceOrderPriority
   notes: string | null
+  warrantyDurationValue: number
+  warrantyDurationUnit: 'DAY' | 'MONTH' | 'YEAR'
   quoteItems: ServiceOrderAgreementComposerItem[]
 }
 
@@ -1224,6 +1226,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       return
     }
 
+    this.router.navigate(['/garantias'], { queryParams: { search: serviceOrder.code } })
+    return
     this.showWarrantyActionModal = true
     this.isLoadingWarrantyLines = true
     this.warrantyActionError = ""
@@ -1330,6 +1334,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   createWarrantyServiceOrderFromSelection(): void {
+    if (this.warrantySourceServiceOrder) {
+      const sourceCode = this.warrantySourceServiceOrder.code
+      this.closeWarrantyActionModal()
+      this.router.navigate(['/garantias'], { queryParams: { search: sourceCode } })
+      return
+    }
     if (!this.warrantySourceServiceOrder) {
       this.warrantyActionError = "No encontramos la orden origen para registrar la garantía."
       return
@@ -1569,6 +1579,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
               initialIssue: candidate.initialIssue,
               priority: candidate.priority,
               notes: candidate.notes,
+              warrantyDurationValue: Number(candidate.warrantyDurationValue ?? 30),
+              warrantyDurationUnit: candidate.warrantyDurationUnit ?? 'DAY',
               initialCommercial: this.buildInitialCommercialRequest(candidate),
             })),
           }
@@ -2906,6 +2918,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       initialIssue: formValue.initialIssue,
       priority: formValue.priority ?? ServiceOrderPriority.LOW,
       notes: formValue.notes || null,
+      warrantyDurationValue: 30,
+      warrantyDurationUnit: 'DAY',
       quoteItems: (this.createOrderAgreementItemsByItemIndex[0] || []).map((item) => ({ ...item })),
     }
   }
@@ -3138,7 +3152,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.isRestoringCreateServiceOrderDraft = true
     try {
       this.createServiceOrderForm.patchValue(draft.formValue, { emitEvent: false })
-      this.createServiceOrderCandidates = draft.candidates ?? []
+      this.createServiceOrderCandidates = (draft.candidates ?? []).map((candidate) => ({
+        ...candidate,
+        warrantyDurationValue: Number(candidate.warrantyDurationValue ?? 30),
+        warrantyDurationUnit: candidate.warrantyDurationUnit ?? 'DAY',
+      }))
       this.editingCreateServiceOrderCandidateIndex = draft.editingCandidateIndex ?? null
       this.createOrderAgreementItemsByItemIndex = draft.agreementItemsByItemIndex ?? {}
       this.createServiceOrderStep = Math.min(
@@ -3629,6 +3647,16 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           "warning",
           "fas fa-exclamation-circle",
           `Completa la cotización inicial del equipo ${index + 1}.`,
+        )
+        return false
+      }
+
+      const candidate = this.createServiceOrderCandidates[index]
+      if (!Number.isInteger(Number(candidate.warrantyDurationValue ?? 0)) || Number(candidate.warrantyDurationValue ?? 0) < 1) {
+        this.showMessage(
+          "warning",
+          "fas fa-shield-alt",
+          `Configura una garantía válida para el equipo ${index + 1}.`,
         )
         return false
       }

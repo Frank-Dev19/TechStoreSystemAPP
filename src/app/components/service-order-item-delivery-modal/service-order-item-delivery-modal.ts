@@ -6,6 +6,7 @@ import {
   ServiceOrderEconomicStatus,
   ServiceOrderItem,
   ServiceOrderOperativeStatus,
+  ServiceType,
 } from '../../models/service-orders/service-order';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
 
@@ -69,6 +70,7 @@ export class ServiceOrderItemDeliveryModalComponent implements OnChanges {
     }
     const hasCoverage = [ServiceOrderEconomicStatus.TOTAL, ServiceOrderEconomicStatus.EXONERADO]
       .includes(order.economicStatus);
+    const isWarrantyService = order.serviceType === ServiceType.WARRANTY_SERVICE;
 
     if (item.operativeStatus === ServiceOrderOperativeStatus.CANCELADA) {
       if (this.hasCancellationCharge(item) && !hasCoverage) {
@@ -82,7 +84,10 @@ export class ServiceOrderItemDeliveryModalComponent implements OnChanges {
     if (this.hasPendingCancellation(item)) {
       return 'El equipo tiene una cancelación pendiente.';
     }
-    if (order.commercialStatus !== ServiceOrderCommercialStatus.AUTORIZADA) {
+    if (isWarrantyService && order.economicStatus !== ServiceOrderEconomicStatus.EXONERADO) {
+      return 'La atención por garantía debe permanecer exonerada antes de entregar el equipo.';
+    }
+    if (!isWarrantyService && order.commercialStatus !== ServiceOrderCommercialStatus.AUTORIZADA) {
       return 'La cotización vigente todavía no está confirmada.';
     }
     if (!hasCoverage) {

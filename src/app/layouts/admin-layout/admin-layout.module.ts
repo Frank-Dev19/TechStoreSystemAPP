@@ -26,6 +26,7 @@ import { TechnicianPanel } from "../../pages/technician-panel/technician-panel";
 import { ReceptionPanel } from "../../pages/reception-panel/reception-panel";
 import { ServiceOrderInboxPage } from "../../pages/service-order-inbox/service-order-inbox";
 import { SupervisorPanel } from "../../pages/supervisor-panel/supervisor-panel";
+import { WarrantiesPage } from "../../pages/warranties/warranties";
 import { PhoneInputComponent } from "../../components/phone-input/phone-input";
 import { ServiceOrderClientDecisionModalComponent } from "../../components/service-order-client-decision-modal/service-order-client-decision-modal";
 import { ServiceOrderLineDiscountModalComponent } from "../../components/service-order-line-discount-modal/service-order-line-discount-modal";
@@ -66,6 +67,7 @@ import { ServiceOrderSaleModalComponent } from "../../components/service-order-s
         ReceptionPanel,
         ServiceOrderInboxPage,
         SupervisorPanel,
+        WarrantiesPage,
         ServiceOrderClientDecisionModalComponent,
         ServiceOrderLineDiscountModalComponent,
         ServiceOrderItemCancellationModalComponent,

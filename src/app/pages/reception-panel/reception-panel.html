@@ -1504,6 +1504,29 @@
                             [ngModelOptions]="{ standalone: true }"
                           />
                         </div>
+                        <div class="agreement-warranty-fields">
+                          <label>Garantía del servicio</label>
+                          <div>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              [(ngModel)]="candidate.warrantyDurationValue"
+                              [ngModelOptions]="{ standalone: true }"
+                              aria-label="Duración de garantía"
+                            />
+                            <select
+                              [(ngModel)]="candidate.warrantyDurationUnit"
+                              [ngModelOptions]="{ standalone: true }"
+                              aria-label="Unidad de garantía"
+                            >
+                              <option value="DAY">Días</option>
+                              <option value="MONTH">Meses</option>
+                              <option value="YEAR">Años</option>
+                            </select>
+                          </div>
+                          <small>La vigencia comienza cuando el equipo se entrega al cliente.</small>
+                        </div>
                         <div
                           class="agreement-minimum-copy"
                           [class.invalid]="!isTechnicalServiceLineAmountValid(technicalServiceItem)"

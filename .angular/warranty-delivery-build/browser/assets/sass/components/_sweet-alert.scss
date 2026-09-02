@@ -1,0 +1,102 @@
+.swal2-modal {
+    width: factor(24rem) !important;
+    min-height: factor(21rem) !important;
+    height: auto;
+    background: $white !important;
+    border-radius: 4px !important;
+  
+    .swal2-actions {
+      margin: 5px auto 0;
+    }
+  
+    .swal2-close {
+      outline: none;
+      height: factor(1.4rem);
+      width: factor(1.4rem);
+      top: factor(1rem);
+      right: factor(1rem);
+      font-size: 0;
+      color: $black !important;
+      background-image: url("../../icons/x-dark.svg");
+      background-size: cover !important;
+  
+      &:hover {
+        color: $black !important;
+        background-image: url("../../icons/x-dark.svg");
+        background-size: cover !important;
+      }
+
+      &:focus {
+        outline: 0;
+        box-shadow: none !important;
+      }
+    }
+  
+    .custom-alert-image {
+      color: $blue-logo !important;
+      height: factor(4.4rem) !important;
+      display: block;
+    }
+  
+    .custom-alert-content {
+      font-weight: bold;
+      font-size: factor(1.75rem);
+      line-height: factor(1.9rem);
+      padding: 0;
+      text-align: center;
+      color: $black-light-1;
+    }
+  
+    .custom-confirm-header {
+      padding: 0 factor(0.5rem);
+    }
+  
+    .custom-confirm-title {
+      margin-top: factor(1.5rem);
+      font-size: factor(1.4rem);
+      line-height: factor(1.6rem);
+      font-weight: bold;
+      color: $black-light-1;
+    }
+  
+    .custom-confirm-image {    
+      display: none;
+    }
+  
+    .custom-confirm-content {
+      margin-top: factor(1.2rem);
+      padding: 0 factor(3rem);
+      font-size: factor(1rem);
+      line-height: factor(1.25rem);
+      color: $black-light-1;
+      opacity: 0.7;
+    }
+  
+    .custom-confirm-actions{
+      display: flex !important;
+      margin-top: factor(2rem);
+      padding-left: 0;
+      padding-right: 0;
+    }
+  
+    .custom-confirm-accept, 
+    .custom-confirm-cancel{
+      border-radius: 4px;
+      background-color: $white !important;
+      padding: factor(0.7rem) factor(0.9rem);
+      color: $white;
+      font-weight: bold;
+      font-size: factor(1rem) !important;
+      line-height: factor(1.2rem);
+      font-family: "Lato", sans-serif;
+    }
+  
+    .custom-confirm-accept {
+      background-color: $primary !important;
+    }
+  
+    .custom-confirm-cancel {
+      background-color: $black !important;
+    }
+  }
+  
