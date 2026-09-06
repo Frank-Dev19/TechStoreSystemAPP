@@ -21,6 +21,7 @@
 .section-heading h2 { font-size: 19px; }
 .section-heading p { margin-top: 4px; color: #748198; font-size: 13px; }
 .filter-grid { display: grid; grid-template-columns: minmax(260px, 2fr) minmax(160px, 1fr) minmax(160px, 1fr) auto; gap: 14px; align-items: end; padding-top: 18px; }
+.claim-filter-grid { display: grid; grid-template-columns: minmax(260px, 2fr) repeat(3, minmax(150px, 1fr)) auto; gap: 14px; align-items: end; padding-top: 18px; }
 .report-filters { display: grid; grid-template-columns: repeat(2, minmax(180px, 250px)) auto; gap: 14px; align-items: end; padding-top: 18px; }
 .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .field > span { color: #344158; font-size: 12px; font-weight: 700; }
@@ -38,6 +39,38 @@
 .btn.danger { background: #d83b3b; color: #fff; }
 .btn.small { min-height: 36px; padding: 7px 11px; font-size: 12px; }
 .btn:disabled { opacity: .48; cursor: not-allowed; }
+.coverage-groups { padding: 14px; display: grid; gap: 12px; background: #f7f9fb; }
+.coverage-group { overflow: hidden; border: 1px solid #dce4ed; border-radius: 8px; background: #fff; transition: border-color .18s ease, box-shadow .18s ease; }
+.coverage-group.expanded { border-color: #a9d7bb; box-shadow: 0 5px 16px rgba(12, 81, 43, .08); }
+.group-summary, .item-summary { width: 100%; border: 0; color: #26354d; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.group-summary { min-height: 96px; padding: 16px; display: grid; grid-template-columns: minmax(150px, 1.05fr) minmax(190px, 1.3fr) minmax(120px, .75fr) minmax(180px, 1.25fr) minmax(110px, .7fr) 18px; gap: 18px; align-items: center; }
+.group-summary:hover { background: #fbfdfb; }
+.group-origin, .group-customer, .group-volume, .group-total { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.group-origin strong { margin-top: 8px; color: #16345d; }
+.group-origin small, .group-customer small, .group-volume small, .group-total small { color: #7b8798; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.group-customer strong, .group-volume strong, .group-total strong { overflow-wrap: anywhere; }
+.group-customer span, .group-volume span { margin-top: 3px; color: #718096; font-size: 12px; }
+.group-statuses, .item-statuses { display: flex; flex-wrap: wrap; gap: 6px; }
+.count-pill { display: inline-flex; align-items: center; min-height: 26px; padding: 4px 8px; border-radius: 999px; background: #edf1f5; color: #536176; font-size: 10px; font-weight: 750; white-space: nowrap; }
+.count-pill.active { background: #dcf6e5; color: #087532; }
+.count-pill.reserved { background: #fff0c9; color: #8c6200; }
+.count-pill.consumed { background: #e7edf4; color: #526176; }
+.count-pill.expired, .count-pill.revoked { background: #fde2e2; color: #ad2626; }
+.group-chevron, .item-chevron { color: #78869a; transition: transform .18s ease; }
+.coverage-group.expanded > .group-summary .group-chevron, .coverage-item.expanded > .item-summary .item-chevron { transform: rotate(180deg); }
+.group-body { padding: 0 16px 16px; border-top: 1px solid #e5ebf1; background: #fbfcfd; }
+.coverage-item { border-bottom: 1px solid #e4eaf1; }
+.coverage-item:last-child { border-bottom: 0; }
+.item-summary { min-height: 72px; padding: 12px 4px; display: grid; grid-template-columns: 42px minmax(180px, 1.4fr) 72px minmax(180px, 1fr) 105px 18px; gap: 14px; align-items: center; }
+.item-summary:hover { background: #f5f9f6; }
+.item-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 7px; color: #117b3d; background: #e6f5eb; }
+.item-name, .item-quantity { min-width: 0; display: flex; flex-direction: column; }
+.item-name strong { overflow-wrap: anywhere; }
+.item-name small, .item-quantity small { margin-top: 3px; color: #768397; font-size: 11px; }
+.item-quantity strong { font-size: 18px; }
+.item-amount { font-weight: 750; text-align: right; }
+.unit-table { margin-bottom: 12px; border: 1px solid #dfe6ee; border-radius: 7px; background: #fff; }
+.unit-table table { min-width: 720px; }
 .responsive-table { width: 100%; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; min-width: 940px; }
 th { padding: 14px 16px; background: #f5f8fb; color: #4b596e; font-size: 11px; text-align: left; text-transform: uppercase; border-bottom: 1px solid #dce4ed; }
@@ -53,10 +86,12 @@ td small { margin-top: 4px; color: #78859a; }
 .status-badge[data-status="ACTIVE"], .status-badge[data-status="RESOLVED_APPLIES"] { background: #dcf6e5; color: #087532; }
 .status-badge[data-status="RESERVED"], .status-badge[data-status="RECEIVED"] { background: #fff0c9; color: #8c6200; }
 .status-badge[data-status="IN_REVIEW"] { background: #dcecff; color: #205d9e; }
+.status-badge[data-status="RESOLVED_REJECTED"] { background: #fde2e2; color: #ad2626; }
 .status-badge[data-status="REVOKED"], .status-badge[data-status="CANCELLED"] { background: #fde2e2; color: #ad2626; }
 .actions-column { text-align: center; }
 .icon-button { width: 38px; height: 38px; border: 1px solid #dce4ed; border-radius: 7px; background: #f7f9fb; color: #526076; cursor: pointer; }
 .icon-button.danger { color: #c53030; background: #fff2f2; border-color: #ffd5d5; }
+.row-actions { display: flex; align-items: center; justify-content: center; gap: 7px; }
 .pagination { min-height: 62px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 14px; color: #748198; font-size: 12px; }
 .pagination > div { display: flex; align-items: center; gap: 12px; }
 .pagination button { width: 36px; height: 36px; border: 1px solid #dce4ed; border-radius: 6px; background: #fff; color: #425066; }
@@ -84,6 +119,22 @@ td small { margin-top: 4px; color: #78859a; }
 .toggle-row { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; color: #344158; font-weight: 650; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .warranty-modal > footer { position: sticky; bottom: 0; padding: 16px 24px; display: flex; justify-content: flex-end; gap: 10px; background: #fff; border-top: 1px solid #e2e8f0; }
+.claim-detail-modal { width: min(880px, 100%); }
+.claim-detail-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.claim-detail-summary > div { min-width: 0; padding: 13px; border: 1px solid #dfe7ef; border-radius: 7px; background: #f7faf9; }
+.claim-detail-summary span, .claim-detail-summary strong, .claim-detail-summary small { display: block; }
+.claim-detail-summary > div > span { color: #768397; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.claim-detail-summary strong { margin-top: 5px; overflow-wrap: anywhere; }
+.claim-detail-summary small { margin-top: 4px; color: #718096; }
+.claim-detail-summary .status-badge { display: inline-flex; }
+.diagnosis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.detail-block { min-width: 0; padding: 16px; border: 1px solid #dfe7ef; border-radius: 7px; background: #fff; }
+.detail-block h3 { margin: 0 0 9px; color: #24405f; font-size: 13px; }
+.detail-block h3 i { margin-right: 7px; color: #168b46; }
+.detail-block p { margin: 0; color: #4c596d; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pending-detail { padding: 16px; display: flex; align-items: center; gap: 10px; border: 1px solid #f0dfb4; border-radius: 7px; color: #775614; background: #fff9e9; }
+.detail-metadata { margin-top: 14px; padding: 14px 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; border-radius: 7px; color: #647187; background: #f4f7fa; font-size: 12px; }
+.detail-metadata span { overflow-wrap: anywhere; }
 .confirm-modal { width: min(480px, 100%); padding: 26px; text-align: center; }
 .confirm-modal h2 { margin: 12px 0 5px; }
 .confirm-modal > p { color: #68758a; }
@@ -94,9 +145,14 @@ td small { margin-top: 4px; color: #78859a; }
 .app-toast[data-type="success"] { background: #137b3d; }.app-toast[data-type="error"] { background: #bb3333; }.app-toast[data-type="warning"] { background: #956a0b; }
 
 @media (max-width: 980px) {
-  .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filter-grid, .claim-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-actions { align-self: end; }
-  .coverage-summary { grid-template-columns: repeat(2, 1fr); }
+  .coverage-summary, .claim-detail-summary { grid-template-columns: repeat(2, 1fr); }
+  .group-summary { grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.2fr) minmax(170px, 1fr) 18px; }
+  .group-volume { display: none; }
+  .group-total { display: none; }
+  .item-summary { grid-template-columns: 42px minmax(170px, 1.3fr) 65px minmax(160px, 1fr) 18px; }
+  .item-amount { display: none; }
 }
 @media (max-width: 767px) {
   .warranty-page { padding: 14px 12px 28px; }
@@ -108,9 +164,23 @@ td small { margin-top: 4px; color: #78859a; }
   .section-tabs button { padding: 0 12px; }
   .workspace-section { padding: 16px; }
   .section-heading { align-items: flex-start; flex-direction: column; }
-  .filter-grid, .report-filters, .form-grid { grid-template-columns: 1fr; }
+  .filter-grid, .claim-filter-grid, .report-filters, .form-grid, .diagnosis-grid, .detail-metadata { grid-template-columns: 1fr; }
   .filter-actions, .filter-actions .btn, .report-filters .btn { width: 100%; }
   .filter-actions { flex-direction: column; }
+  .coverage-groups { padding: 10px; }
+  .group-summary { min-height: 0; padding: 14px; grid-template-columns: minmax(0, 1fr) 18px; gap: 12px; align-items: start; }
+  .group-origin, .group-customer, .group-statuses { grid-column: 1; }
+  .group-chevron { grid-column: 2; grid-row: 1; margin-top: 6px; }
+  .group-customer { padding-top: 10px; border-top: 1px solid #edf1f5; }
+  .group-statuses { margin-top: 2px; }
+  .group-body { padding: 0 12px 12px; }
+  .item-summary { padding: 13px 2px; grid-template-columns: 38px minmax(0, 1fr) 18px; gap: 10px; align-items: start; }
+  .item-name { grid-column: 2; }
+  .item-quantity { grid-column: 2; flex-direction: row; align-items: baseline; gap: 5px; }
+  .item-statuses { grid-column: 2; }
+  .item-chevron { grid-column: 3; grid-row: 1; margin-top: 8px; }
+  .unit-table { margin-left: 0; margin-right: 0; padding: 8px; overflow: visible; }
+  .unit-table table { min-width: 0; }
   .responsive-table { overflow: visible; padding: 10px; }
   table, thead, tbody, tr, th, td { display: block; min-width: 0; }
   thead { display: none; }

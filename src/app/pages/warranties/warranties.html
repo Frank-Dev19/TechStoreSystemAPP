@@ -40,29 +40,86 @@
 
     <section class="table-section">
       @if (isLoading) { <div class="empty-state"><i class="fas fa-circle-notch fa-spin"></i><p>Cargando coberturas...</p></div> }
-      @else if (!coverages.length) { <div class="empty-state"><i class="fas fa-shield-alt"></i><h3>Sin coberturas para mostrar</h3><p>Prueba con otro término o filtro.</p></div> }
+      @else if (!coverageGroups.length) { <div class="empty-state"><i class="fas fa-shield-alt"></i><h3>Sin coberturas para mostrar</h3><p>Prueba con otro término o filtro.</p></div> }
       @else {
-        <div class="responsive-table">
-          <table><thead><tr><th>Origen</th><th>Cliente</th><th>Producto o servicio</th><th>Vigencia</th><th>Monto</th><th>Estado</th><th class="actions-column">Acción</th></tr></thead>
-          <tbody><tr *ngFor="let coverage of coverages">
-            <td data-label="Origen"><span class="source-badge" [class.service]="coverage.sourceType === 'SERVICE'"><i class="fas" [ngClass]="coverage.sourceType === 'PRODUCT' ? 'fa-box' : 'fa-tools'"></i>{{ sourceLabel(coverage.sourceType) }}</span><small>{{ coverage.sourceCodeSnapshot }}</small></td>
-            <td data-label="Cliente"><strong>{{ coverage.customer?.name || 'Cliente sin nombre' }}</strong><small>{{ coverage.customer?.documentNumber || 'Sin documento' }}</small></td>
-            <td data-label="Detalle"><strong>{{ coverage.sourceNameSnapshot }}</strong><small *ngIf="coverage.serialSnapshot">Serie: {{ coverage.serialSnapshot }}</small><small *ngIf="coverage.originTechnicianNameSnapshot">Técnico: {{ coverage.originTechnicianNameSnapshot }}</small></td>
-            <td data-label="Vigencia"><strong>{{ coverage.startsAt | date:'dd/MM/yyyy' }}</strong><small>hasta {{ coverage.expiresAt | date:'dd/MM/yyyy' }}</small></td>
-            <td data-label="Monto"><strong>S/ {{ coverage.coverageAmount | number:'1.2-2' }}</strong></td>
-            <td data-label="Estado"><span class="status-badge" [attr.data-status]="coverage.status">{{ coverageStatusLabel(coverage.status) }}</span></td>
-            <td data-label="Acción" class="actions-column"><button type="button" class="btn small primary" (click)="openIntake(coverage)" [disabled]="!isCoverageAvailable(coverage)" [title]="isCoverageAvailable(coverage) ? 'Registrar atención' : 'Cobertura no disponible'"><i class="fas fa-plus"></i> Atender</button></td>
-          </tr></tbody></table>
+        <div class="coverage-groups">
+          @for (group of coverageGroups; track group.key) {
+            <article class="coverage-group" [class.expanded]="isGroupExpanded(group)">
+              <button type="button" class="group-summary" (click)="toggleGroup(group)" [attr.aria-expanded]="isGroupExpanded(group)">
+                <span class="group-origin">
+                  <span class="source-badge" [class.service]="group.sourceType === 'SERVICE'"><i class="fas" [ngClass]="group.sourceType === 'PRODUCT' ? 'fa-receipt' : 'fa-tools'"></i>{{ sourceLabel(group.sourceType) }}</span>
+                  <strong>{{ group.referenceCode }}</strong>
+                  <small>{{ group.createdAt | date:'dd/MM/yyyy HH:mm' }}</small>
+                </span>
+                <span class="group-customer"><small>Cliente</small><strong>{{ group.customer?.name || 'Cliente sin nombre' }}</strong><span>{{ group.customer?.documentNumber || 'Sin documento' }}</span></span>
+                <span class="group-volume"><small>Contenido</small><strong>{{ group.unitCount }} {{ group.unitCount === 1 ? 'cobertura' : 'coberturas' }}</strong><span>{{ group.itemGroups.length }} {{ itemLabel(group.itemGroups.length) }}</span></span>
+                <span class="group-statuses">
+                  @if (group.statusCounts.ACTIVE) { <span class="count-pill active">{{ group.statusCounts.ACTIVE }} vigentes</span> }
+                  @if (group.statusCounts.RESERVED) { <span class="count-pill reserved">{{ group.statusCounts.RESERVED }} en atención</span> }
+                  @if (group.statusCounts.CONSUMED) { <span class="count-pill consumed">{{ group.statusCounts.CONSUMED }} consumidas</span> }
+                  @if (group.statusCounts.EXPIRED) { <span class="count-pill expired">{{ group.statusCounts.EXPIRED }} vencidas</span> }
+                  @if (group.statusCounts.REVOKED) { <span class="count-pill revoked">{{ group.statusCounts.REVOKED }} revocadas</span> }
+                </span>
+                <span class="group-total"><small>Cobertura total</small><strong>S/ {{ group.coverageAmount | number:'1.2-2' }}</strong></span>
+                <i class="fas fa-chevron-down group-chevron" aria-hidden="true"></i>
+              </button>
+
+              @if (isGroupExpanded(group)) {
+                <div class="group-body">
+                  @for (item of group.itemGroups; track item.key) {
+                    <section class="coverage-item" [class.expanded]="isItemExpanded(group, item)">
+                      <button type="button" class="item-summary" (click)="toggleItem(group, item)" [attr.aria-expanded]="isItemExpanded(group, item)">
+                        <span class="item-icon"><i class="fas" [ngClass]="group.sourceType === 'PRODUCT' ? 'fa-box-open' : 'fa-laptop-medical'"></i></span>
+                        <span class="item-name"><strong>{{ item.sourceName }}</strong><small>{{ item.sourceCode }}</small></span>
+                        <span class="item-quantity"><strong>{{ item.unitCount }}</strong><small>{{ item.unitCount === 1 ? 'unidad' : 'unidades' }}</small></span>
+                        <span class="item-statuses">
+                          @if (item.statusCounts.ACTIVE) { <span class="count-pill active">{{ item.statusCounts.ACTIVE }} vigentes</span> }
+                          @if (item.statusCounts.RESERVED) { <span class="count-pill reserved">{{ item.statusCounts.RESERVED }} en atención</span> }
+                          @if (item.statusCounts.CONSUMED) { <span class="count-pill consumed">{{ item.statusCounts.CONSUMED }} consumidas</span> }
+                          @if (item.statusCounts.EXPIRED) { <span class="count-pill expired">{{ item.statusCounts.EXPIRED }} vencidas</span> }
+                          @if (item.statusCounts.REVOKED) { <span class="count-pill revoked">{{ item.statusCounts.REVOKED }} revocadas</span> }
+                        </span>
+                        <span class="item-amount">S/ {{ item.coverageAmount | number:'1.2-2' }}</span>
+                        <i class="fas fa-chevron-down item-chevron" aria-hidden="true"></i>
+                      </button>
+
+                      @if (isItemExpanded(group, item)) {
+                        <div class="responsive-table unit-table">
+                          <table><thead><tr><th>Unidad / serie</th><th>Vigencia</th><th>Monto</th><th>Estado</th><th class="actions-column">Acción</th></tr></thead>
+                          <tbody><tr *ngFor="let coverage of item.coverages; let unitIndex = index">
+                            <td data-label="Unidad / serie"><strong>{{ coverage.serialSnapshot || ('Unidad ' + (unitIndex + 1)) }}</strong><small *ngIf="coverage.originTechnicianNameSnapshot">Técnico: {{ coverage.originTechnicianNameSnapshot }}</small></td>
+                            <td data-label="Vigencia"><strong>{{ coverage.startsAt | date:'dd/MM/yyyy' }}</strong><small>hasta {{ coverage.expiresAt | date:'dd/MM/yyyy' }}</small></td>
+                            <td data-label="Monto"><strong>S/ {{ coverage.coverageAmount | number:'1.2-2' }}</strong></td>
+                            <td data-label="Estado"><span class="status-badge" [attr.data-status]="coverage.status">{{ coverageStatusLabel(coverage.status) }}</span></td>
+                            <td data-label="Acción" class="actions-column"><button type="button" class="btn small primary" (click)="openIntake(coverage)" [disabled]="!isCoverageAvailable(coverage)" [title]="isCoverageAvailable(coverage) ? 'Registrar atención' : 'Cobertura no disponible'"><i class="fas fa-plus"></i> Atender</button></td>
+                          </tr></tbody></table>
+                        </div>
+                      }
+                    </section>
+                  }
+                </div>
+              }
+            </article>
+          }
         </div>
-        <div class="pagination"><span>Mostrando {{ coverages.length }} de {{ coverageTotal }}</span><div><button type="button" (click)="changeCoveragePage(page - 1)" [disabled]="page === 1" title="Página anterior"><i class="fas fa-chevron-left"></i></button><strong>{{ page }} / {{ coveragePages }}</strong><button type="button" (click)="changeCoveragePage(page + 1)" [disabled]="page === coveragePages" title="Página siguiente"><i class="fas fa-chevron-right"></i></button></div></div>
+        <div class="pagination"><span>Mostrando {{ coverageGroups.length }} de {{ coverageGroupTotal }} operaciones · {{ coverageTotal }} coberturas</span><div><button type="button" (click)="changeCoveragePage(page - 1)" [disabled]="page === 1" title="Página anterior"><i class="fas fa-chevron-left"></i></button><strong>{{ page }} / {{ coveragePages }}</strong><button type="button" (click)="changeCoveragePage(page + 1)" [disabled]="page === coveragePages" title="Página siguiente"><i class="fas fa-chevron-right"></i></button></div></div>
       }
     </section>
   }
 
   @if (activeTab === 'claims') {
-    <section class="workspace-section"><div class="section-heading"><div><h2>Atenciones registradas</h2><p>Cada ingreso consume íntegramente la cobertura de S/ 50 y crea una orden técnica.</p></div><button class="btn secondary" type="button" (click)="loadClaims()"><i class="fas fa-sync-alt"></i> Actualizar</button></div></section>
+    <section class="workspace-section">
+      <div class="section-heading"><div><h2>Atenciones registradas</h2><p>Cada ingreso consume íntegramente la cobertura de S/ 50 y crea una orden técnica.</p></div></div>
+      <div class="claim-filter-grid">
+        <label class="field field-search"><span>Buscar</span><div class="input-icon"><i class="fas fa-search"></i><input [(ngModel)]="claimSearch" (keyup.enter)="searchClaims()" placeholder="Cliente, documento, serie, orden o problema"></div></label>
+        <label class="field"><span>Origen</span><select [(ngModel)]="claimSourceType"><option *ngFor="let option of sourceTypes" [ngValue]="option.value">{{ option.label }}</option></select></label>
+        <label class="field"><span>Estado</span><select [(ngModel)]="claimStatus"><option *ngFor="let option of claimStatuses" [ngValue]="option.value">{{ option.label }}</option></select></label>
+        <label class="field"><span>Resultado</span><select [(ngModel)]="claimOutcome"><option *ngFor="let option of claimOutcomes" [ngValue]="option.value">{{ option.label }}</option></select></label>
+        <div class="filter-actions"><button class="btn primary" type="button" (click)="searchClaims()"><i class="fas fa-search"></i> Buscar</button><button class="btn secondary" type="button" (click)="clearClaimFilters()"><i class="fas fa-eraser"></i> Limpiar</button><button class="icon-button" type="button" (click)="loadClaims()" title="Actualizar"><i class="fas fa-sync-alt"></i></button></div>
+      </div>
+    </section>
     <section class="table-section">
-      @if (!claims.length) { <div class="empty-state"><i class="fas fa-clipboard-check"></i><h3>Aún no hay atenciones</h3><p>Las garantías recibidas aparecerán aquí.</p></div> }
+      @if (!claims.length) { <div class="empty-state"><i class="fas fa-clipboard-check"></i><h3>Sin atenciones para mostrar</h3><p>Prueba con otro término o filtro.</p></div> }
       @else { <div class="responsive-table"><table><thead><tr><th>Fecha</th><th>Cliente</th><th>Cobertura</th><th>Problema reportado</th><th>Técnico</th><th>Estado</th><th class="actions-column">Acción</th></tr></thead><tbody><tr *ngFor="let claim of claims">
         <td data-label="Fecha"><strong>{{ claim.createdAt | date:'dd/MM/yyyy' }}</strong><small>{{ claim.createdAt | date:'HH:mm' }}</small></td>
         <td data-label="Cliente"><strong>{{ claim.coverage.customer?.name || 'Cliente' }}</strong><small>{{ claim.coverage.customer?.documentNumber || '' }}</small></td>
@@ -70,7 +127,7 @@
         <td data-label="Problema"><span class="wrap-text">{{ claim.reportedIssue }}</span></td>
         <td data-label="Técnico"><strong>{{ claim.attendingTechnician?.name || claim.coverage.originTechnicianNameSnapshot || 'Asignación automática' }}</strong></td>
         <td data-label="Estado"><span class="status-badge" [attr.data-status]="claim.status">{{ claimStatusLabel(claim.status) }}</span></td>
-        <td data-label="Acción" class="actions-column"><button *ngIf="claim.status === 'RECEIVED'" type="button" class="icon-button danger" (click)="openCancel(claim)" title="Cancelar recepción"><i class="fas fa-ban"></i></button><span *ngIf="claim.status !== 'RECEIVED'">-</span></td>
+        <td data-label="Acción" class="actions-column"><div class="row-actions"><button type="button" class="icon-button" (click)="openClaimDetail(claim)" title="Ver detalle de la atención"><i class="fas fa-eye"></i></button><button *ngIf="claim.status === 'RECEIVED'" type="button" class="icon-button danger" (click)="openCancel(claim)" title="Cancelar recepción"><i class="fas fa-ban"></i></button></div></td>
       </tr></tbody></table></div><div class="pagination"><span>Mostrando {{ claims.length }} de {{ claimTotal }}</span><div><button type="button" (click)="changeClaimPage(claimPage - 1)" [disabled]="claimPage === 1"><i class="fas fa-chevron-left"></i></button><strong>{{ claimPage }} / {{ claimPages }}</strong><button type="button" (click)="changeClaimPage(claimPage + 1)" [disabled]="claimPage === claimPages"><i class="fas fa-chevron-right"></i></button></div></div> }
     </section>
   }
@@ -80,6 +137,31 @@
     <section class="table-section"><div class="responsive-table"><table><thead><tr><th>#</th><th>Técnico</th><th>Servicios entregados</th><th>Garantías consumidas</th><th>Aplicadas</th><th>Rechazadas</th><th>Tasa</th><th>Monto</th></tr></thead><tbody><tr *ngFor="let row of reportRows"><td data-label="Posición"><strong>{{ row.rank }}</strong></td><td data-label="Técnico"><strong>{{ row.technicianName }}</strong></td><td data-label="Entregados">{{ row.deliveredServices }}</td><td data-label="Consumidas">{{ row.consumedWarranties }}</td><td data-label="Aplicadas">{{ row.appliedWarranties }}</td><td data-label="Rechazadas">{{ row.rejectedWarranties }}</td><td data-label="Tasa"><strong>{{ row.warrantyRate | number:'1.1-2' }}%</strong></td><td data-label="Monto">S/ {{ row.consumedAmount | number:'1.2-2' }}</td></tr></tbody></table></div><div class="empty-state" *ngIf="!reportRows.length"><i class="fas fa-chart-line"></i><h3>Genera el reporte</h3><p>Selecciona un rango opcional y consulta los indicadores.</p></div></section>
   }
 </div>
+
+@if (selectedClaim) {
+  <div class="modal-overlay" (click)="closeClaimDetail()"><section class="warranty-modal claim-detail-modal" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="claim-detail-title">
+    <header><div><p class="eyebrow">DETALLE DE ATENCIÓN</p><h2 id="claim-detail-title">{{ selectedClaim.serviceOrder?.code || selectedClaim.coverage.sourceCodeSnapshot }}</h2><p>{{ selectedClaim.coverage.customer?.name || 'Cliente' }}</p></div><button type="button" class="icon-button" (click)="closeClaimDetail()" title="Cerrar"><i class="fas fa-times"></i></button></header>
+    <div class="modal-body">
+      <div class="claim-detail-summary">
+        <div><span>Estado</span><strong><span class="status-badge" [attr.data-status]="selectedClaim.status">{{ claimStatusLabel(selectedClaim.status) }}</span></strong></div>
+        <div><span>Resultado</span><strong>{{ claimOutcomeLabel(selectedClaim.outcome) }}</strong></div>
+        <div><span>Origen</span><strong>{{ sourceLabel(selectedClaim.coverage.sourceType) }}</strong><small>{{ selectedClaim.coverage.sourceCodeSnapshot }}</small></div>
+        <div><span>Técnico</span><strong>{{ selectedClaim.attendingTechnician?.name || selectedClaim.coverage.originTechnicianNameSnapshot || 'Sin asignar' }}</strong></div>
+      </div>
+      <section class="detail-block"><h3><i class="fas fa-comment-medical"></i> Problema reportado</h3><p>{{ selectedClaim.reportedIssue }}</p></section>
+      @if (selectedClaim.diagnosis) {
+        <div class="diagnosis-grid">
+          <section class="detail-block"><h3><i class="fas fa-clipboard-list"></i> Resumen de la revisión</h3><p>{{ selectedClaim.diagnosis.summary || 'Sin resumen registrado' }}</p></section>
+          <section class="detail-block"><h3><i class="fas fa-microscope"></i> Sustento técnico</h3><p>{{ selectedClaim.diagnosis.details || selectedClaim.diagnosis.outcomeReason || 'Sin sustento registrado' }}</p></section>
+        </div>
+      } @else {
+        <div class="pending-detail"><i class="fas fa-hourglass-half"></i><span>El técnico aún no ha registrado el resultado de la revisión.</span></div>
+      }
+      <div class="detail-metadata"><span><strong>Producto o equipo:</strong> {{ selectedClaim.coverage.sourceNameSnapshot }}</span><span><strong>Serie:</strong> {{ selectedClaim.coverage.serialSnapshot || 'No registrada' }}</span><span><strong>Recepción:</strong> {{ selectedClaim.createdAt | date:'dd/MM/yyyy HH:mm' }}</span><span><strong>Resolución:</strong> {{ selectedClaim.resolvedAt ? (selectedClaim.resolvedAt | date:'dd/MM/yyyy HH:mm') : 'Pendiente' }}</span></div>
+    </div>
+    <footer><button class="btn primary" type="button" (click)="closeClaimDetail()">Cerrar</button></footer>
+  </section></div>
+}
 
 @if (showIntakeModal && selectedCoverage) {
   <div class="modal-overlay" (click)="closeIntake()"><section class="warranty-modal" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="intake-title">

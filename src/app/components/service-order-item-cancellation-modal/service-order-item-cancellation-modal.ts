@@ -109,6 +109,7 @@ export class ServiceOrderItemCancellationModalComponent implements OnChanges {
           ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO,
           ServiceOrderTechnicalStatus.RESUELTA,
           ServiceOrderTechnicalStatus.SIN_SOLUCION,
+          ServiceOrderTechnicalStatus.GARANTIA_RECHAZADA,
         ].includes(item.technicalStatus),
     );
   }

@@ -179,6 +179,15 @@
                     </td>
                     <td class="code-cell">
                       <strong>{{ serviceOrder.code }}</strong>
+                      @if (serviceOrder.serviceType === serviceTypeEnum.WARRANTY_SERVICE) {
+                        <span
+                          class="warranty-order-badge"
+                          title="Orden generada por una atención de garantía"
+                        >
+                          <i class="fas fa-shield-alt" aria-hidden="true"></i>
+                          Garantía
+                        </span>
+                      }
                       <small>{{ serviceOrder.createdAt | date: 'dd/MM HH:mm' }}</small>
                       @if (serviceOrder.economicStatus === 'TOTAL') {
                         <small class="paid-label">Conciliada</small>

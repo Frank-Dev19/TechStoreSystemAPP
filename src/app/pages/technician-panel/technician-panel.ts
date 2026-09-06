@@ -358,7 +358,10 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       [ServiceOrderTechnicalStatus.EN_EJECUCION, ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO].includes(order.technicalStatus),
     )
 
-    this.repairedOrders = orders.filter((order) => order.technicalStatus === ServiceOrderTechnicalStatus.RESUELTA)
+    this.repairedOrders = orders.filter((order) =>
+      [ServiceOrderTechnicalStatus.RESUELTA, ServiceOrderTechnicalStatus.GARANTIA_RECHAZADA]
+        .includes(order.technicalStatus),
+    )
 
     if (this.selectedServiceOrder) {
       const previousItemId = this.selectedServiceOrderItemId
@@ -557,6 +560,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       case ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO:
         return "badge badge-waiting"
       case ServiceOrderTechnicalStatus.RESUELTA:
+      case ServiceOrderTechnicalStatus.GARANTIA_RECHAZADA:
         return "badge badge-success-strong"
       default:
         return "badge badge-info-strong"
@@ -582,6 +586,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         return "En servicio"
       case ServiceOrderTechnicalStatus.RESUELTA:
         return "Finalizado"
+      case ServiceOrderTechnicalStatus.GARANTIA_RECHAZADA:
+        return "Garantía rechazada"
       case ServiceOrderTechnicalStatus.EN_DIAGNOSTICO:
         return "En diagnóstico"
       default:
@@ -602,6 +608,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       case ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION:
         return "fas fa-wrench"
       case ServiceOrderTechnicalStatus.RESUELTA:
+      case ServiceOrderTechnicalStatus.GARANTIA_RECHAZADA:
         return "fas fa-circle-check"
       default:
         return "fas fa-hourglass-half"
@@ -2705,6 +2712,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         return "Servicio finalizado"
       case ServiceOrderTechnicalStatus.SIN_SOLUCION:
         return "Sin solución"
+      case ServiceOrderTechnicalStatus.GARANTIA_RECHAZADA:
+        return "Garantía rechazada · lista para entrega"
       default:
         return order.technicalStatus
     }

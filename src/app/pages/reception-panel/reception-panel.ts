@@ -211,6 +211,7 @@ const SERVICE_ORDER_TECHNICAL_STATUS_LABELS: Partial<Record<ServiceOrderTechnica
   [ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO]: "Esperando repuestos",
   [ServiceOrderTechnicalStatus.RESUELTA]: "Servicio finalizado",
   [ServiceOrderTechnicalStatus.SIN_SOLUCION]: "Sin solución",
+  [ServiceOrderTechnicalStatus.GARANTIA_RECHAZADA]: "Garantía rechazada",
 }
 
 const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {

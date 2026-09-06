@@ -5,6 +5,7 @@ import { ServiceOrder } from '../models/service-orders/service-order';
 import {
   WarrantyClaim,
   WarrantyCoverage,
+  WarrantyCoverageGroupPage,
   WarrantyIntakeRequest,
   WarrantyPage,
   WarrantyTechnicianReport,
@@ -19,6 +20,17 @@ export interface WarrantySearchFilter {
   search?: string;
 }
 
+export interface WarrantyClaimSearchFilter {
+  page?: number;
+  limit?: number;
+  sourceType?: string;
+  status?: string;
+  outcome?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class WarrantiesApiService {
   constructor(private readonly base: BaseService) {}
@@ -29,9 +41,15 @@ export class WarrantiesApiService {
     });
   }
 
-  findClaims(filter: WarrantySearchFilter): Observable<WarrantyPage<WarrantyClaim>> {
-    return this.base.get<WarrantyPage<WarrantyClaim>>('/warranties/claims', {
+  findCoverageGroups(filter: WarrantySearchFilter): Observable<WarrantyCoverageGroupPage> {
+    return this.base.get<WarrantyCoverageGroupPage>('/warranties/coverage-groups', {
       params: this.params(filter),
+    });
+  }
+
+  findClaims(filter: WarrantyClaimSearchFilter): Observable<WarrantyPage<WarrantyClaim>> {
+    return this.base.get<WarrantyPage<WarrantyClaim>>('/warranties/claims', {
+      params: this.claimParams(filter),
     });
   }
 
@@ -58,6 +76,20 @@ export class WarrantiesApiService {
     if (filter.customerId) params['customerId'] = filter.customerId;
     if (filter.sourceType) params['sourceType'] = filter.sourceType;
     if (filter.status) params['status'] = filter.status;
+    if (filter.search?.trim()) params['search'] = filter.search.trim();
+    return params;
+  }
+
+  private claimParams(filter: WarrantyClaimSearchFilter): Record<string, string | number> {
+    const params: Record<string, string | number> = {
+      page: filter.page ?? 1,
+      limit: filter.limit ?? 20,
+    };
+    if (filter.sourceType) params['sourceType'] = filter.sourceType;
+    if (filter.status) params['status'] = filter.status;
+    if (filter.outcome) params['outcome'] = filter.outcome;
+    if (filter.dateFrom) params['dateFrom'] = filter.dateFrom;
+    if (filter.dateTo) params['dateTo'] = filter.dateTo;
     if (filter.search?.trim()) params['search'] = filter.search.trim();
     return params;
   }

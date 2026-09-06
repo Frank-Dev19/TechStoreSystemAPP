@@ -44,6 +44,31 @@ export interface WarrantyCoverage {
   createdAt: string;
 }
 
+export type WarrantyCoverageStatusCounts = Record<WarrantyCoverageStatus, number>;
+
+export interface WarrantyCoverageItemGroup {
+  key: string;
+  sourceCode: string;
+  sourceName: string;
+  productId: number | null;
+  unitCount: number;
+  coverageAmount: number;
+  statusCounts: WarrantyCoverageStatusCounts;
+  coverages: WarrantyCoverage[];
+}
+
+export interface WarrantyCoverageGroup {
+  key: string;
+  sourceType: WarrantySourceType;
+  referenceCode: string;
+  customer?: WarrantyCustomer;
+  createdAt: string;
+  unitCount: number;
+  coverageAmount: number;
+  statusCounts: WarrantyCoverageStatusCounts;
+  itemGroups: WarrantyCoverageItemGroup[];
+}
+
 export interface WarrantyClaim {
   id: number;
   coverageId: number;
@@ -53,6 +78,16 @@ export interface WarrantyClaim {
   serviceOrderItemId: number | null;
   diagnosisId: number | null;
   outcome: 'WARRANTY_APPLIES' | 'WARRANTY_REJECTED' | null;
+  diagnosis?: {
+    id: number;
+    outcome: string;
+    summary: string;
+    details: string | null;
+    outcomeReason: string | null;
+    recommendedAction: string | null;
+    createdAt: string;
+  } | null;
+  serviceOrder?: { id: number; code: string } | null;
   originTechnicianId: number | null;
   attendingTechnicianId: number | null;
   attendingTechnician?: { id: number; name: string } | null;
@@ -86,6 +121,10 @@ export interface WarrantyPage<T> {
   total: number;
   page: number;
   limit: number;
+}
+
+export interface WarrantyCoverageGroupPage extends WarrantyPage<WarrantyCoverageGroup> {
+  coverageTotal: number;
 }
 
 export interface WarrantyIntakeRequest {

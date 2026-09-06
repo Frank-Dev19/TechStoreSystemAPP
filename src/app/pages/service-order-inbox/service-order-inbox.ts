@@ -48,6 +48,7 @@ const SERVICE_ORDER_LABELS: Record<string, string> = {
   ESPERANDO_REPUESTOS_O_TERCERO: 'Esperando repuestos o servicio externo',
   RESUELTA: 'Resuelta',
   SIN_SOLUCION: 'Sin solución',
+  GARANTIA_RECHAZADA: 'Garantía rechazada',
   NO_REQUIERE: 'No requiere',
   PENDIENTE_PROPUESTA: 'Pendiente de propuesta',
   PROPUESTA_EMITIDA: 'Propuesta emitida',

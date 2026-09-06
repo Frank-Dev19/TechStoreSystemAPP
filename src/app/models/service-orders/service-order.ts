@@ -216,6 +216,7 @@ export enum ServiceOrderTechnicalStatus {
   ESPERANDO_REPUESTOS_O_TERCERO = 'ESPERANDO_REPUESTOS_O_TERCERO',
   RESUELTA = 'RESUELTA',
   SIN_SOLUCION = 'SIN_SOLUCION',
+  GARANTIA_RECHAZADA = 'GARANTIA_RECHAZADA',
 }
 
 export enum ServiceOrderCommercialStatus {
