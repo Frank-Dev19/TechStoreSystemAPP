@@ -1,5 +1,6 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { Navbar } from './navbar';
@@ -47,5 +48,39 @@ describe('Navbar', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('uses the deepest active route title and links to the current module', () => {
+    const childRoute = {
+      firstChild: null,
+      snapshot: { data: { navbarTitle: 'GESTIÓN DE VENTAS' } },
+    } as unknown as ActivatedRoute;
+    component['activatedRoute'] = {
+      firstChild: childRoute,
+      snapshot: { data: {} },
+    } as unknown as ActivatedRoute;
+
+    const router = TestBed.inject(Router);
+    spyOnProperty(router, 'url', 'get').and.returnValue('/ventas?tab=caja#resumen');
+
+    component['updateNavigationContext']();
+
+    expect(component.navbarTitle).toBe('GESTIÓN DE VENTAS');
+    expect(component.navbarLink).toBe('/ventas');
+  });
+
+  it('uses safe defaults when the active route has no navbar metadata', () => {
+    component['activatedRoute'] = {
+      firstChild: null,
+      snapshot: { data: {} },
+    } as unknown as ActivatedRoute;
+
+    const router = TestBed.inject(Router);
+    spyOnProperty(router, 'url', 'get').and.returnValue('/');
+
+    component['updateNavigationContext']();
+
+    expect(component.navbarTitle).toBe('SISTEMA DE GESTIÓN');
+    expect(component.navbarLink).toBe('/home');
   });
 });

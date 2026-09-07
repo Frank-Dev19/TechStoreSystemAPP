@@ -1,10 +1,8 @@
 import { Component, OnInit, ElementRef, OnDestroy, HostListener } from '@angular/core';
-import { ROUTES } from '../sidebar/sidebar';
-import { Location } from '@angular/common';
 import { LoginService } from '../../services/login-service.service';
-import { Router } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
-import { Subscription } from 'rxjs';
+import { filter, Subscription } from 'rxjs';
 import { CurrentUserService } from '../../services/current-user.service';
 import { ProfileService } from '../../services/profile.service';
 import { User } from '../../models/user/user';
@@ -17,7 +15,8 @@ import { User } from '../../models/user/user';
 })
 export class Navbar implements OnInit, OnDestroy {
   authenticatedUser: User | null = null;
-  private listTitles: any[] = [];
+  navbarTitle = 'SISTEMA DE GESTIÓN';
+  navbarLink = '/home';
   private sidebarVisible = false;
   private userSub?: Subscription;
   private routerSub?: Subscription;
@@ -25,9 +24,9 @@ export class Navbar implements OnInit, OnDestroy {
   isDropdownOpen = false;
 
   constructor(
-    private locationSvc: Location,
     private element: ElementRef,
     private router: Router,
+    private activatedRoute: ActivatedRoute,
     private modalService: NgbModal,
     private loginService: LoginService,
     private currentUserService: CurrentUserService,
@@ -47,10 +46,13 @@ export class Navbar implements OnInit, OnDestroy {
       });
     }
 
-    this.listTitles = ROUTES.filter(t => t);
-
-    // Cierra sidebar/overlay al navegar
-    this.routerSub = this.router.events.subscribe(() => this.sidebarCloseIfAny());
+    this.updateNavigationContext();
+    this.routerSub = this.router.events
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .subscribe(() => {
+        this.updateNavigationContext();
+        this.sidebarCloseIfAny();
+      });
   }
 
   ngOnDestroy(): void {
@@ -117,13 +119,19 @@ export class Navbar implements OnInit, OnDestroy {
     else this.sidebarOpen();
   }
 
-  getTitle(): string {
-    let p = this.locationSvc.prepareExternalUrl(this.locationSvc.path());
-    if (p.charAt(0) === '#') p = p.slice(1);
-    for (let i = 0; i < this.listTitles.length; i++) {
-      if (this.listTitles[i].path === p) return this.listTitles[i].title;
+  private updateNavigationContext(): void {
+    let activeRoute = this.activatedRoute;
+    while (activeRoute.firstChild) {
+      activeRoute = activeRoute.firstChild;
     }
-    return 'SISTEMA DE GESTIÓN';
+
+    const routeTitle = activeRoute.snapshot.data['navbarTitle'];
+    this.navbarTitle = typeof routeTitle === 'string' && routeTitle.trim()
+      ? routeTitle
+      : 'SISTEMA DE GESTIÓN';
+
+    const currentPath = this.router.url.split(/[?#]/, 1)[0];
+    this.navbarLink = currentPath && currentPath !== '/' ? currentPath : '/home';
   }
 
   logout(): void {
