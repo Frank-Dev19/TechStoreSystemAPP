@@ -61,6 +61,7 @@ interface AgreementProductComposer {
   unitPrice: number
   recommendedPrice?: number
   minAllowedPrice?: number
+  laborWaiverReason?: 'INTERNAL_SERVICE'
   discountPct?: number
   discountOverrideReason?: string
   requiresPurchase: boolean
@@ -75,6 +76,7 @@ interface AgreementServiceComposer {
   serviceCodeSnapshot: string | null
   serviceNameSnapshot: string
   unitPrice: number
+  laborWaiverReason?: 'INTERNAL_SERVICE'
   discountPct?: number
   discountOverrideReason?: string
   notes: string
@@ -1074,10 +1076,21 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       && Number(item.unitPrice) >= Number(item.minAllowedPrice ?? 0)
   }
 
+  get canWaiveLabor(): boolean {
+    return this.currentUserService.hasAllPermissions(['service-order-agreement.apply-discount', 'service-order-agreement.override-discount-limit'])
+  }
+
+  setLaborWaiver(item: AgreementComposerItem, enabled: boolean): void {
+    if (!this.canWaiveLabor || item.type === 'product' || !this.isAgreementEditable()) return
+    item.laborWaiverReason = enabled ? 'INTERNAL_SERVICE' : undefined
+    item.discountPct = 0
+    item.discountOverrideReason = ''
+  }
+
   calculateAgreementItemDiscount(item: AgreementComposerItem): number {
     if (item.type === "product") return 0
     const gross = this.calculateAgreementItemGross(item)
-    const percentage = Math.min(100, Math.max(0, Number(item.discountPct ?? 0)))
+    const percentage = Math.min(100, Math.max(0, Number(item.laborWaiverReason ? 100 : item.discountPct ?? 0)))
     return Number((gross * percentage / 100).toFixed(2))
   }
 
@@ -2176,7 +2189,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           productNameSnapshot: line.catalogNameSnapshot,
           quantity: Number(line.quantity),
           unitPrice: Number(line.unitPrice),
-          discountPct: Number(line.discounts?.[0]?.percentage ?? 0),
+          laborWaiverReason: line.discounts?.[0]?.ruleName === 'Exoneración de mano de obra: Servicio interno' ? 'INTERNAL_SERVICE' : undefined,
+          discountPct: line.discounts?.[0]?.ruleName === 'Exoneración de mano de obra: Servicio interno' ? 0 : Number(line.discounts?.[0]?.percentage ?? 0),
           discountOverrideReason: line.discounts?.[0]?.overrideReason ?? "",
           requiresPurchase: Boolean(line.requiresPurchase),
           notes: line.notes ?? "",
@@ -2193,7 +2207,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           serviceCodeSnapshot: line.catalogCodeSnapshot,
           serviceNameSnapshot: line.catalogNameSnapshot,
           unitPrice: Number(line.unitPrice),
-          discountPct: Number(line.discounts?.[0]?.percentage ?? 0),
+          laborWaiverReason: line.discounts?.[0]?.ruleName === 'Exoneración de mano de obra: Servicio interno' ? 'INTERNAL_SERVICE' : undefined,
+          discountPct: line.discounts?.[0]?.ruleName === 'Exoneración de mano de obra: Servicio interno' ? 0 : Number(line.discounts?.[0]?.percentage ?? 0),
           discountOverrideReason: line.discounts?.[0]?.overrideReason ?? "",
           notes: line.notes ?? "",
           permissions: this.buildUiMeta("NEW", true, false),
@@ -2209,7 +2224,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           serviceCodeSnapshot: line.catalogCodeSnapshot,
           serviceNameSnapshot: line.catalogNameSnapshot,
           unitPrice: Number(line.unitPrice),
-          discountPct: Number(line.discounts?.[0]?.percentage ?? 0),
+          laborWaiverReason: line.discounts?.[0]?.ruleName === 'Exoneración de mano de obra: Servicio interno' ? 'INTERNAL_SERVICE' : undefined,
+          discountPct: line.discounts?.[0]?.ruleName === 'Exoneración de mano de obra: Servicio interno' ? 0 : Number(line.discounts?.[0]?.percentage ?? 0),
           discountOverrideReason: line.discounts?.[0]?.overrideReason ?? "",
           notes: line.notes ?? "",
           permissions: this.buildUiMeta("INHERITED", false, false),
@@ -2269,8 +2285,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         ...(technicalService.serviceId ? { serviceId: Number(technicalService.serviceId) } : {}),
         quantity: 1,
         unitPrice: Number(Number(technicalService.unitPrice).toFixed(2)),
-        ...(discountPct > 0 ? { discountPct } : {}),
-        ...(discountOverrideReason ? { discountOverrideReason } : {}),
+        ...(technicalService.laborWaiverReason ? { laborWaiverReason: technicalService.laborWaiverReason } : discountPct > 0 ? { discountPct } : {}),
+        ...(!technicalService.laborWaiverReason && discountOverrideReason ? { discountOverrideReason } : {}),
         ...(technicalService.notes ? { notes: technicalService.notes } : {}),
       })
     }
@@ -2283,8 +2299,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         ...(service.serviceId ? { serviceId: Number(service.serviceId) } : {}),
         quantity: 1,
         unitPrice: Number(Number(service.unitPrice).toFixed(2)),
-        ...(discountPct > 0 ? { discountPct } : {}),
-        ...(discountOverrideReason ? { discountOverrideReason } : {}),
+        ...(service.laborWaiverReason ? { laborWaiverReason: service.laborWaiverReason } : discountPct > 0 ? { discountPct } : {}),
+        ...(!service.laborWaiverReason && discountOverrideReason ? { discountOverrideReason } : {}),
         ...(service.notes ? { notes: service.notes } : {}),
       })
     }
@@ -2748,6 +2764,3 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
 }
-
-
-

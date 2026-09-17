@@ -9,6 +9,11 @@ export const config = {
 
   authMethod: '/auth/',
   defaultCompanyId: 1,
+  printing: {
+    preferredPrinter: 'Brother QL-700',
+    allowFallbackPrinter: false,
+    qzSigningBase: '/printing/qz',
+  },
 
   inventory: {
     base: '/inventory',

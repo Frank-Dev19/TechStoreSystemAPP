@@ -1,0 +1,572 @@
+<section class="materials">
+  <button
+    type="button"
+    class="materials__toggle"
+    [attr.aria-expanded]="expanded"
+    [attr.aria-controls]="uid"
+    (click)="toggle()"
+    [disabled]="busy"
+  >
+    <span class="materials__heading"
+      ><i class="fas fa-boxes" aria-hidden="true"></i
+      ><span
+        >Guías internas y materiales<small
+          >Entregas al técnico y trazabilidad de series</small
+        ></span
+      ></span
+    >
+    <i
+      class="fas"
+      [class.fa-chevron-up]="expanded"
+      [class.fa-chevron-down]="!expanded"
+      aria-hidden="true"
+    ></i>
+  </button>
+  @if (expanded) {
+    <div class="materials__body" [id]="uid" [attr.aria-busy]="loading || busy">
+      @if (!itemId && items.length > 1) {
+        <label class="materials__equipment"
+          >Equipo<select
+            class="form-select"
+            [(ngModel)]="selectedItemId"
+            (ngModelChange)="selectItem()"
+            [disabled]="busy"
+          >
+            @for (item of items; track item.id) {
+              <option [ngValue]="+item.id">
+                {{ item.code }} · {{ item.brand }} {{ item.model }}
+              </option>
+            }
+          </select></label
+        >
+      }
+      @if (error && !issueLine && !returnLine && !reviewSerial) {
+        <p class="materials__feedback materials__feedback--error" role="alert">{{ error }}</p>
+      }
+      @if (success) {
+        <p class="materials__feedback materials__feedback--success" role="status">
+          <i class="fas fa-check-circle" aria-hidden="true"></i>{{ success }}
+        </p>
+      }
+      @if (loading) {
+        <div class="materials__loading" role="status">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Cargando
+          materiales…
+        </div>
+      }
+      @if (!loading && !state) {
+        <div class="materials__empty">
+          <p>
+            {{
+              selectedItemId
+                ? 'No se pudieron cargar los materiales de este equipo.'
+                : 'Selecciona un equipo para consultar sus materiales.'
+            }}
+          </p>
+          @if (selectedItemId) {
+            <button type="button" class="btn btn-outline-secondary" (click)="load()">
+              Reintentar
+            </button>
+          }
+        </div>
+      }
+      @if (state && !loading) {
+        <div class="materials__summary">
+          <div>
+            <span class="materials__eyebrow">{{ state.itemCode }}</span
+            ><span class="materials__status" [class.materials__status--success]="reconciled">{{
+              statusLabel
+            }}</span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-secondary"
+            (click)="load()"
+            [disabled]="busy"
+            aria-label="Actualizar materiales"
+          >
+            <i class="fas fa-sync-alt" aria-hidden="true"></i><span>Actualizar</span>
+          </button>
+        </div>
+        @if (!state.version) {
+          <p class="materials__empty">
+            Este equipo aún no tiene una cotización aprobada. Los productos aparecerán aquí cuando
+            el cliente los autorice.
+          </p>
+        }
+        @if (!hasMaterials && state.version) {
+          <p class="materials__empty">
+            La cotización incluye solo servicios. Puedes continuar sin registrar una entrega de
+            materiales.
+          </p>
+        }
+        @if (productProgress.length) {
+          <div class="materials__section-heading">
+            <h3>Productos autorizados</h3>
+            <span>Cotización aprobada</span>
+          </div>
+          <ul class="materials__products">
+            @for (row of productProgress; track row.line.productId) {
+              <li>
+                <div class="materials__product-name">
+                  <strong>{{ row.line.catalogNameSnapshot }}</strong
+                  ><span>{{
+                    row.line.product?.isSerialized ? 'Control por serie' : 'Control por cantidad'
+                  }}</span>
+                </div>
+                <div class="materials__quantities">
+                  <span
+                    ><b>{{ row.authorized | number: '1.0-4' }}</b> Aprobado</span
+                  ><span
+                    ><b>{{ row.issued | number: '1.0-4' }}</b> Entregado</span
+                  ><span [class.materials__pending]="row.pending > 0"
+                    ><b>{{ row.pending | number: '1.0-4' }}</b> Pendiente</span
+                  >
+                </div>
+                @if (canManage && !frozen && row.pending > 0) {
+                  <button
+                    type="button"
+                    class="btn btn-outline-primary"
+                    (click)="openIssue(row.line, $event)"
+                    [disabled]="busy || !state.technicianId"
+                    [attr.aria-label]="'Entregar ' + row.line.catalogNameSnapshot"
+                  >
+                    Entregar
+                  </button>
+                } @else if (!row.pending && row.issued === row.authorized) {
+                  <span class="materials__complete"
+                    ><i class="fas fa-check" aria-hidden="true"></i> Completo</span
+                  >
+                }
+              </li>
+            }
+          </ul>
+          @if (!state.technicianId) {
+            <p class="materials__note">Asigna un técnico al equipo para habilitar las entregas.</p>
+          }
+        }
+        @if (issueLine) {
+          <form
+            #editor
+            tabindex="-1"
+            class="materials__form"
+            (ngSubmit)="submitIssue()"
+            (keydown.escape)="!busy && closeForm()"
+            [attr.aria-label]="'Entregar ' + issueLine.catalogNameSnapshot"
+          >
+            <div>
+              <h3>Entregar al técnico</h3>
+              <p>
+                {{ issueLine.catalogNameSnapshot }} · Pendiente:
+                <strong>{{ issueRemaining | number: '1.0-4' }}</strong>
+              </p>
+            </div>
+            <p class="materials__note">
+              Selecciona los productos que entregas físicamente. Al confirmar, se descontarán del
+              inventario.
+            </p>
+            @if (stockLoading) {
+              <p role="status">Consultando disponibilidad…</p>
+            } @else if (stockError) {
+              <div class="materials__feedback materials__feedback--error" role="alert">
+                <span>{{ stockError }}</span
+                ><button type="button" class="btn btn-outline-secondary" (click)="loadStock()">
+                  Reintentar consulta
+                </button>
+              </div>
+            } @else if (issueLine.product?.isSerialized) {
+              <label [for]="uid + '-serials'"
+                >Series disponibles
+                <span class="materials__hint"
+                  >{{ selectedSerials.length }} seleccionadas · Máximo {{ issueRemaining }}</span
+                ></label
+              >
+              <ng-select
+                name="serials"
+                [labelForId]="uid + '-serials'"
+                [items]="serials"
+                bindLabel="serialCode"
+                bindValue="id"
+                [multiple]="true"
+                [maxSelectedItems]="issueRemaining"
+                [closeOnSelect]="true"
+                [(ngModel)]="selectedSerials"
+                placeholder="Buscar por número de serie"
+                notFoundText="No hay series disponibles"
+                [disabled]="busy"
+              ></ng-select>
+              @if (!serials.length) {
+                <p class="materials__note">
+                  No hay series utilizables en inventario. Revisa las existencias y vuelve a
+                  consultar.
+                </p>
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary materials__retry"
+                  (click)="loadStock()"
+                >
+                  Consultar de nuevo
+                </button>
+              }
+            } @else {
+              <div class="materials__fields">
+                <label
+                  >Cantidad<input
+                    class="form-control"
+                    name="quantity"
+                    type="number"
+                    min="0.0001"
+                    [max]="issueRemaining"
+                    step="0.0001"
+                    [(ngModel)]="quantity"
+                    [disabled]="busy"
+                    required
+                /></label>
+                <label
+                  >Lote<select
+                    class="form-select"
+                    name="lot"
+                    [(ngModel)]="lotId"
+                    [disabled]="busy"
+                    [required]="!!issueLine.product?.managesExpiration"
+                  >
+                    <option [ngValue]="null">
+                      {{ issueLine.product?.managesExpiration ? 'Selecciona un lote' : 'Sin lote' }}
+                    </option>
+                    @for (lot of lots; track lot.id) {
+                      <option [ngValue]="lot.id">{{ lot.lotCode }}</option>
+                    }
+                  </select></label
+                >
+              </div>
+            }
+            @if (error) {
+              <p class="materials__feedback materials__feedback--error" role="alert">{{ error }}</p>
+            }
+            <div class="materials__actions">
+              <button
+                class="btn btn-primary"
+                [disabled]="
+                  busy ||
+                  stockLoading ||
+                  !!stockError ||
+                  (issueLine.product?.isSerialized && !selectedSerials.length)
+                "
+              >
+                {{ busy ? 'Registrando…' : 'Confirmar entrega' }}</button
+              ><button
+                type="button"
+                class="btn btn-outline-secondary"
+                (click)="closeForm()"
+                [disabled]="busy"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        }
+        @if (activeLines.length) {
+          <div class="materials__section-heading">
+            <h3>Materiales en poder del técnico</h3>
+            <span
+              >{{ state.deliveries.length }}
+              {{ state.deliveries.length === 1 ? 'guía' : 'guías' }}</span
+            >
+          </div>
+          <ul class="materials__deliveries">
+            @for (line of activeLines; track line.id) {
+              <li>
+                <div class="materials__delivery-main">
+                  <div>
+                    <span class="materials__eyebrow"
+                      >GI-{{ line.deliveryId }}
+                      @if (deliveryDate(line)) {
+                        · {{ deliveryDate(line) | date: 'dd/MM/yyyy' }}
+                      }</span
+                    ><strong>{{ name(line) }}</strong>
+                    @if (line.serialCode) {
+                      <span class="materials__serial">{{ line.serialCode }}</span>
+                    } @else {
+                      <span class="materials__hint">Sin control por serie</span>
+                    }
+                  </div>
+                  <span
+                    class="materials__badge"
+                    [class.materials__badge--warning]="
+                      condition(line)?.condition === 'UNDER_REVIEW'
+                    "
+                    >{{
+                      outstanding(line) > 0
+                        ? reconciled
+                          ? 'Uso confirmado'
+                          : 'Entregado al técnico'
+                        : 'Recibido por falla'
+                    }}</span
+                  >
+                </div>
+                <div class="materials__delivery-footer">
+                  <span
+                    >Cantidad: <strong>{{ line.quantity | number: '1.0-4' }}</strong>
+                    @if (condition(line)) {
+                      · {{ conditionLabel(condition(line).condition) }}
+                    }
+                  </span>
+                  @if (canManage && !!line.serialId && !line.saleId && outstanding(line) > 0) {
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-secondary"
+                      (click)="openReturn(line, $event)"
+                      [disabled]="busy"
+                    >
+                      Recibir devolución por falla
+                    </button>
+                  }
+                  @if (line.saleId) {
+                    <span class="materials__hint">Venta #{{ line.saleId }}</span>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        }
+        @if (returnedLines.length) {
+          <div class="materials__section-heading materials__section-heading--returned">
+            <h3>Productos devueltos</h3>
+            <span
+              >{{ returnedLines.length }}
+              {{ returnedLines.length === 1 ? 'producto' : 'productos' }}</span
+            >
+          </div>
+          <ul class="materials__deliveries materials__returns">
+            @for (line of returnedLines; track line.id) {
+              <li>
+                <div class="materials__delivery-main">
+                  <div>
+                    <span class="materials__eyebrow"
+                      >Guía original GI-{{ line.deliveryId }}
+                      @if (deliveryDate(line)) {
+                        · {{ deliveryDate(line) | date: 'dd/MM/yyyy' }}
+                      }</span
+                    ><strong>{{ name(line) }}</strong>
+                    @if (line.serialCode) {
+                      <span class="materials__serial">{{ line.serialCode }}</span>
+                    }
+                  </div>
+                  <span
+                    class="materials__badge"
+                    [class.materials__badge--warning]="
+                      condition(line)?.condition === 'UNDER_REVIEW'
+                    "
+                    >{{ conditionLabel(condition(line)?.condition || 'UNDER_REVIEW') }}</span
+                  >
+                </div>
+                <div class="materials__return-detail">
+                  <span
+                    >Devuelto: <strong>{{ line.returnedQuantity | number: '1.0-4' }}</strong></span
+                  >
+                  @if (returnRecord(line.id); as returned) {
+                    <span>{{ returned.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    <p><strong>Falla reportada:</strong> {{ returned.reason }}</p>
+                  }
+                </div>
+                @if (state.isAdmin && !readOnly && condition(line)?.condition === 'UNDER_REVIEW') {
+                  <div class="materials__delivery-footer">
+                    <span>Pendiente de revisión administrativa</span>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-primary"
+                      (click)="openReview(condition(line), $event)"
+                      [disabled]="busy"
+                    >
+                      Revisar pieza
+                    </button>
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        }
+        @if (returnLine) {
+          <form
+            #editor
+            tabindex="-1"
+            class="materials__form"
+            (ngSubmit)="submitReturn()"
+            (keydown.escape)="!busy && closeForm()"
+            aria-label="Recibir devolución por falla de fábrica"
+          >
+            <div>
+              <h3>Recibir devolución por falla de fábrica</h3>
+              <p>
+                {{ name(returnLine) }} ·
+                <strong class="materials__serial">{{ returnLine.serialCode }}</strong>
+              </p>
+            </div>
+            <p class="materials__note">
+              Recibe esta unidad solo si el técnico reporta una falla de fábrica. Quedará bloqueada
+              hasta que un administrador la revise.
+            </p>
+            <label
+              >Falla reportada<textarea
+                class="form-control"
+                name="reason"
+                [(ngModel)]="reason"
+                maxlength="1000"
+                rows="3"
+                required
+                [disabled]="busy"
+                placeholder="Describe la falla observada en esta pieza"
+              ></textarea>
+            </label>
+            @if (error) {
+              <p class="materials__feedback materials__feedback--error" role="alert">{{ error }}</p>
+            }
+            <div class="materials__actions">
+              <button class="btn btn-primary" [disabled]="busy">
+                {{ busy ? 'Registrando…' : 'Confirmar recepción' }}</button
+              ><button
+                type="button"
+                class="btn btn-outline-secondary"
+                (click)="closeForm()"
+                [disabled]="busy"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        }
+        @if (reviewSerial) {
+          <form
+            #editor
+            tabindex="-1"
+            class="materials__form"
+            (ngSubmit)="submitReview()"
+            (keydown.escape)="!busy && closeForm()"
+            aria-label="Revisión de pieza"
+          >
+            <div>
+              <h3>Revisar pieza</h3>
+              <p class="materials__serial">{{ reviewSerial.serialCode }}</p>
+            </div>
+            <label
+              >Resultado de la revisión<select
+                class="form-select"
+                name="condition"
+                [(ngModel)]="reviewCondition"
+                [disabled]="busy"
+                required
+              >
+                <option value="" disabled>Selecciona un resultado</option>
+                <option value="USABLE">Utilizable, habilitar para nuevas entregas</option>
+                <option value="UNUSABLE">Inutilizable, mantener bloqueada</option>
+              </select></label
+            ><label
+              >Motivo del resultado<textarea
+                class="form-control"
+                name="reviewReason"
+                [(ngModel)]="reason"
+                [disabled]="busy"
+                required
+                maxlength="1000"
+                rows="3"
+                placeholder="Describe qué se comprobó durante la revisión"
+              ></textarea>
+            </label>
+            @if (error) {
+              <p class="materials__feedback materials__feedback--error" role="alert">{{ error }}</p>
+            }
+            <div class="materials__actions">
+              <button class="btn btn-primary" [disabled]="busy">
+                {{ busy ? 'Guardando…' : 'Guardar revisión' }}</button
+              ><button
+                type="button"
+                class="btn btn-outline-secondary"
+                (click)="closeForm()"
+                [disabled]="busy"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        }
+        @if (pendingReviews.length) {
+          <p class="materials__note">
+            <i class="fas fa-search" aria-hidden="true"></i> {{ pendingReviews.length }}
+            {{ pendingReviews.length === 1 ? 'pieza pendiente' : 'piezas pendientes' }} de revisión
+            por el administrador. Puedes continuar con un reemplazo entregado y conciliado.
+          </p>
+        }
+        @if (hasMaterials && state.version && !issueLine && !returnLine && !reviewSerial) {
+          <div class="materials__confirmation">
+            <h3>
+              {{
+                reconciled ? 'Materiales listos para la venta' : 'Confirmar el uso de materiales'
+              }}
+            </h3>
+            @if (reconciled) {
+              <p>
+                La venta utilizará estas piezas y sus series, sin volver a descontar inventario.
+              </p>
+            } @else if (reconciliationBlock) {
+              <p [id]="uid + '-block'">{{ reconciliationBlock }}</p>
+            } @else {
+              <p>
+                Verifica que las piezas entregadas se usaron en este equipo. Al confirmar, serán el
+                origen de los productos incluidos en la venta.
+              </p>
+            }
+            @if (canReconcile && !frozen && !reconciled) {
+              <button
+                type="button"
+                class="btn btn-primary"
+                [disabled]="busy || !!reconciliationBlock"
+                [attr.aria-describedby]="reconciliationBlock ? uid + '-block' : null"
+                (click)="reconcile()"
+              >
+                {{ busy ? 'Confirmando…' : 'Confirmar materiales utilizados' }}
+              </button>
+            }
+          </div>
+        }
+        @if (state.returns.length || state.conditionHistory.length) {
+          <details class="materials__history">
+            <summary>
+              Historial de fallas y revisiones
+              <span>{{ state.returns.length + state.conditionHistory.length }}</span>
+            </summary>
+            <ul>
+              @for (entry of state.returns; track entry.id) {
+                <li>
+                  <strong
+                    >{{ returnedSerial(entry.deliveryLineId) }} · Recibido por falla de
+                    fábrica</strong
+                  >
+                  <p>{{ entry.reason }}</p>
+                  <small
+                    >{{ entry.createdAt | date: 'dd/MM/yyyy HH:mm' }} · Usuario #{{
+                      entry.actorId
+                    }}</small
+                  >
+                </li>
+              }
+              @for (event of state.conditionHistory; track event.id) {
+                <li>
+                  <strong
+                    >{{ serialCode(event.serialId) }} ·
+                    {{ conditionLabel(event.condition) }}</strong
+                  >
+                  <p>{{ event.reason }}</p>
+                  <small
+                    >{{ event.createdAt | date: 'dd/MM/yyyy HH:mm' }} · Usuario #{{
+                      event.actorId
+                    }}</small
+                  >
+                </li>
+              }
+            </ul>
+          </details>
+        }
+      }
+    </div>
+  }
+</section>

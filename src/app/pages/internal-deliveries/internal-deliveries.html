@@ -1,0 +1,418 @@
+<main class="delivery-register">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Inventario</p>
+      <h1>Entregas internas</h1>
+      <p>Controla materiales de órdenes e insumos entregados directamente a cada técnico.</p>
+    </div>
+    @if (canCreate) {
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="toggleEditor()"
+        [attr.aria-expanded]="editorOpen"
+        aria-controls="manual-delivery-editor"
+      >
+        <i
+          class="fas"
+          [class.fa-plus]="!editorOpen"
+          [class.fa-times]="editorOpen"
+          aria-hidden="true"
+        ></i>
+        {{ editorOpen ? 'Cerrar' : 'Nueva entrega a técnico' }}
+      </button>
+    }
+  </header>
+
+  @if (editorSuccess) {
+    <p class="feedback feedback--success" role="status">{{ editorSuccess }}</p>
+  }
+  @if (editorOpen) {
+    <form id="manual-delivery-editor" class="manual-editor" (ngSubmit)="saveManual()">
+      <div class="editor-heading">
+        <div>
+          <p class="eyebrow">Salida de almacén</p>
+          <h2>Nueva entrega a técnico</h2>
+        </div>
+        <p>
+          El producto saldrá del almacén y quedará registrado bajo custodia del técnico. No se
+          añadirá a una cotización ni a una venta.
+        </p>
+      </div>
+      <div class="editor-grid">
+        <label for="manual-technician"
+          >Técnico receptor
+          <ng-select
+            labelForId="manual-technician"
+            name="manualTechnician"
+            [items]="manualTechnicians"
+            bindLabel="name"
+            bindValue="id"
+            [(ngModel)]="manualTechnicianId"
+            placeholder="Buscar técnico"
+            notFoundText="Sin coincidencias"
+            [searchable]="true"
+            [clearable]="true"
+            [disabled]="saving"
+          ></ng-select>
+        </label>
+        <label for="manual-product"
+          >Producto
+          <ng-select
+            labelForId="manual-product"
+            name="product"
+            [items]="products"
+            bindLabel="name"
+            bindValue="id"
+            [(ngModel)]="productId"
+            (ngModelChange)="productChanged()"
+            placeholder="Buscar por nombre"
+            notFoundText="Sin coincidencias"
+            [searchable]="true"
+            [clearable]="true"
+            [disabled]="saving"
+          ></ng-select>
+        </label>
+        @if (optionsLoading) {
+          <p class="availability" role="status">Consultando disponibilidad…</p>
+        }
+        @if (options) {
+          <div class="availability">
+            <span>Disponible</span
+            ><strong
+              >{{ options.availableQuantity | number: '1.0-4' }} {{ options.product.unit }}</strong
+            >
+          </div>
+          @if (selectedProduct?.managesExpiration || options.lots.length) {
+            <label for="manual-lot"
+              >Lote
+              <select
+                id="manual-lot"
+                name="lot"
+                class="form-select"
+                [(ngModel)]="lotId"
+                [disabled]="saving"
+                [required]="!!options.lots.length"
+              >
+                <option [ngValue]="null">Selecciona un lote</option>
+                @for (lot of options.lots; track lot.id) {
+                  <option [ngValue]="lot.id">
+                    {{ lot.lotCode }} · {{ lot.availableQuantity | number: '1.0-4' }} disponibles
+                  </option>
+                }
+              </select>
+            </label>
+          }
+          @if (selectedProduct?.isSerialized) {
+            <label for="manual-serials" class="editor-wide"
+              >Series
+              <ng-select
+                labelForId="manual-serials"
+                name="serials"
+                [items]="options.serials"
+                bindLabel="serialCode"
+                bindValue="id"
+                [multiple]="true"
+                [closeOnSelect]="false"
+                [(ngModel)]="serialIds"
+                (ngModelChange)="serialsChanged()"
+                placeholder="Busca y selecciona las unidades físicas"
+                notFoundText="No hay series disponibles"
+                [disabled]="saving"
+              ></ng-select>
+              <small
+                >{{ serialIds.length }}
+                {{
+                  serialIds.length === 1 ? 'unidad seleccionada' : 'unidades seleccionadas'
+                }}</small
+              >
+            </label>
+          } @else {
+            <label for="manual-quantity"
+              >Cantidad
+              <input
+                id="manual-quantity"
+                name="quantity"
+                class="form-control"
+                type="number"
+                min="0.0001"
+                step="0.0001"
+                [max]="selectedLotAvailable"
+                [(ngModel)]="quantity"
+                [disabled]="saving"
+                required
+              />
+              <small
+                >Máximo disponible: {{ selectedLotAvailable | number: '1.0-4' }}
+                {{ options.product.unit }}</small
+              >
+            </label>
+          }
+        }
+        <label for="manual-notes" class="editor-wide"
+          >Motivo u observación <span class="optional">Opcional</span>
+          <textarea
+            id="manual-notes"
+            name="notes"
+            class="form-control"
+            rows="2"
+            maxlength="1000"
+            [(ngModel)]="notes"
+            [disabled]="saving"
+            placeholder="Ej. Insumo para mantenimientos preventivos"
+          ></textarea>
+        </label>
+      </div>
+      @if (optionsError) {
+        <p class="feedback" role="alert">{{ optionsError }}</p>
+      }
+      @if (editorError) {
+        <p class="feedback" role="alert">{{ editorError }}</p>
+      }
+      <div class="editor-actions">
+        <button class="btn btn-primary" [disabled]="saving || manualInvalid">
+          {{ saving ? 'Registrando…' : 'Confirmar entrega' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          (click)="toggleEditor()"
+          [disabled]="saving"
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  }
+
+  <form class="filters" (ngSubmit)="search()">
+    <div class="technician-filter">
+      <label for="delivery-technician">Técnico</label>
+      <ng-select
+        labelForId="delivery-technician"
+        name="technician"
+        [items]="technicians"
+        bindLabel="name"
+        bindValue="id"
+        [(ngModel)]="technicianId"
+        placeholder="Todos los técnicos"
+        notFoundText="Sin coincidencias"
+        [searchable]="true"
+        [clearable]="true"
+      ></ng-select>
+    </div>
+    <div>
+      <label for="delivery-type">Tipo de entrega</label>
+      <select id="delivery-type" name="type" class="form-select" [(ngModel)]="deliveryType">
+        <option value="">Todas</option>
+        <option value="ORDER">Material de orden</option>
+        <option value="MANUAL">Insumo para técnico</option>
+      </select>
+    </div>
+    <div>
+      <label for="delivery-from">Desde</label
+      ><input
+        id="delivery-from"
+        name="from"
+        type="date"
+        class="form-control"
+        [(ngModel)]="from"
+        [max]="to || '9999-12-31'"
+      />
+    </div>
+    <div>
+      <label for="delivery-to">Hasta</label
+      ><input
+        id="delivery-to"
+        name="to"
+        type="date"
+        class="form-control"
+        [(ngModel)]="to"
+        [min]="from"
+      />
+    </div>
+    <div class="filter-actions">
+      <button class="btn btn-primary" [disabled]="loading || invalidRange">Aplicar filtros</button
+      ><button
+        type="button"
+        class="btn btn-outline-secondary"
+        (click)="clear()"
+        [disabled]="loading"
+      >
+        Limpiar
+      </button>
+    </div>
+    <small class="filter-note">Fechas de entrega, ambos días incluidos. Hora de Lima.</small>
+    @if (invalidRange) {
+      <p class="feedback" role="alert">Desde no puede ser posterior a Hasta.</p>
+    }
+    @if (technicianError) {
+      <p class="feedback" role="alert">
+        {{ technicianError }}
+        <button type="button" class="btn btn-link" (click)="loadTechnicians()">
+          Reintentar técnicos
+        </button>
+      </p>
+    }
+  </form>
+
+  <section class="results" aria-label="Listado de entregas internas" [attr.aria-busy]="loading">
+    <div class="results-heading">
+      <h2>Entregas registradas</h2>
+      <span aria-live="polite">{{
+        loading ? 'Consultando…' : total + (total === 1 ? ' entrega' : ' entregas')
+      }}</span>
+    </div>
+    @if (loading) {
+      <div class="loading" role="status">Cargando entregas…</div>
+    } @else if (error) {
+      <div class="empty" role="alert">
+        <p>{{ error }}</p>
+        <button class="btn btn-outline-primary" (click)="load()">Reintentar</button>
+      </div>
+    } @else if (!rows.length) {
+      <div class="empty">
+        <h3>No hay entregas para mostrar</h3>
+        <p>Prueba con otros filtros o registra una entrega manual a un técnico.</p>
+      </div>
+    } @else {
+      <div
+        class="table-scroll"
+        tabindex="0"
+        role="region"
+        aria-label="Entregas internas, tabla desplazable"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Entrega</th>
+              <th scope="col">Tipo</th>
+              <th scope="col">Técnico</th>
+              <th scope="col">Origen</th>
+              <th scope="col">Materiales</th>
+              <th scope="col">Situación</th>
+              <th scope="col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows; track row.id) {
+              <tr>
+                <td>
+                  <strong>{{ row.type === 'MANUAL' ? 'EI' : 'GI' }}-{{ row.id }}</strong
+                  ><small>{{ row.createdAt | date: 'dd/MM/yyyy HH:mm' : '-0500' }}</small>
+                </td>
+                <td>
+                  <span class="type-badge" [class.type-badge--manual]="row.type === 'MANUAL'">{{
+                    row.type === 'MANUAL' ? 'Insumo para técnico' : 'Material de orden'
+                  }}</span>
+                </td>
+                <td>{{ row.technicianName }}</td>
+                <td>
+                  @if (row.type === 'ORDER') {
+                    <strong>{{ row.orderCode }}</strong
+                    ><small>{{ row.itemCode }} · {{ row.brand }} {{ row.model }}</small>
+                  } @else {
+                    <span>Entrega manual</span><small>Sin origen comercial</small>
+                  }
+                </td>
+                <td>
+                  <span>{{ row.lines[0]?.productName || 'Sin líneas' }}</span
+                  ><small
+                    >{{ row.lines.length }} {{ row.lines.length === 1 ? 'línea' : 'líneas' }}</small
+                  >
+                </td>
+                <td>
+                  <span
+                    class="status"
+                    [class.confirmed]="
+                      row.status === 'CONFIRMED' ||
+                      row.status === 'SOLD' ||
+                      row.status === 'IN_CUSTODY'
+                    "
+                    >{{ labels[row.status] || row.status }}</span
+                  >
+                </td>
+                <td>
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary"
+                      [attr.aria-expanded]="expandedId === row.id"
+                      [attr.aria-controls]="'delivery-detail-' + row.id"
+                      (click)="expandedId = expandedId === row.id ? null : row.id"
+                    >
+                      {{ expandedId === row.id ? 'Ocultar' : 'Detalle' }}
+                    </button>
+                    @if (row.type === 'ORDER') {
+                      <a
+                        class="btn btn-outline-primary"
+                        routerLink="/supervisor-panel"
+                        [queryParams]="{
+                          orderId: row.orderId,
+                          itemId: row.itemId,
+                          section: 'materials',
+                        }"
+                        >Ver orden<span class="visually-hidden"> {{ row.orderCode }}</span></a
+                      >
+                    }
+                  </div>
+                </td>
+              </tr>
+              @if (expandedId === row.id) {
+                <tr class="detail-row">
+                  <td colspan="7" [id]="'delivery-detail-' + row.id">
+                    <p>
+                      <strong
+                        >Detalle de {{ row.type === 'MANUAL' ? 'EI' : 'GI' }}-{{ row.id }}</strong
+                      >
+                      · Entregado por {{ row.issuerName || 'Usuario no disponible' }}
+                    </p>
+                    @if (row.notes) {
+                      <p class="delivery-notes">{{ row.notes }}</p>
+                    }
+                    <ul>
+                      @for (line of row.lines; track line.id) {
+                        <li>
+                          <strong>{{ line.productName }}</strong
+                          ><span>Cantidad: {{ line.quantity | number: '1.0-4' }}</span
+                          ><span>Serie: {{ line.serialCode || 'Sin control por serie' }}</span>
+                          @if (line.returnedQuantity) {
+                            <span
+                              >Recibido por falla:
+                              {{ line.returnedQuantity | number: '1.0-4' }}</span
+                            >
+                          }
+                          @if (line.saleId) {
+                            <span>Venta #{{ line.saleId }}</span>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      <nav class="pagination-bar" aria-label="Paginación de entregas">
+        <span>Página {{ page }} de {{ pages }}</span>
+        <div>
+          <button
+            class="btn btn-outline-secondary"
+            [disabled]="page <= 1"
+            (click)="navigate(page - 1)"
+          >
+            Anterior</button
+          ><button
+            class="btn btn-outline-secondary"
+            [disabled]="page >= pages"
+            (click)="navigate(page + 1)"
+          >
+            Siguiente
+          </button>
+        </div>
+      </nav>
+    }
+  </section>
+</main>

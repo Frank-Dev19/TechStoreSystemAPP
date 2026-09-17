@@ -2,8 +2,8 @@ import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { of } from 'rxjs';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
+import { BehaviorSubject, of } from 'rxjs';
 
 import {
   EquipmentType,
@@ -66,15 +66,18 @@ describe('SupervisorPanel', () => {
     getThreadByOrder: jasmine.createSpy('getThreadByOrder').and.returnValue(of({ id: 17 } as any)),
   };
 
+  const routeParams = new BehaviorSubject(convertToParamMap({}));
   const routerStub = {
     navigate: jasmine.createSpy('navigate').and.returnValue(Promise.resolve(true)),
   };
 
   beforeEach(async () => {
+    routeParams.next(convertToParamMap({}));
     await TestBed.configureTestingModule({
       declarations: [SupervisorPanel],
       imports: [CommonModule, FormsModule],
       providers: [
+        { provide: ActivatedRoute, useValue: { queryParamMap: routeParams.asObservable() } },
         { provide: ServiceOrderAgreementService, useValue: agreementServiceStub },
         { provide: ServiceOrderService, useValue: serviceOrderServiceStub },
         { provide: ServiceOrderDiagnosisService, useValue: diagnosisServiceStub },
@@ -90,8 +93,23 @@ describe('SupervisorPanel', () => {
     fixture.detectChanges();
   });
 
+  it('opens the requested order and equipment outside the current list', () => {
+    serviceOrderServiceStub.findOne.and.returnValue(of({ id: 999, items: [{ id: 777 }] } as any));
+    routeParams.next(convertToParamMap({ orderId: 999, itemId: 777, section: 'materials' }));
+    expect(serviceOrderServiceStub.findOne).toHaveBeenCalledWith(999);
+    expect(component.selectedServiceOrder?.id).toBe(999);
+    expect(component.materialItemId).toBe(777);
+    expect(component.openMaterials).toBeTrue();
+    (component as any).loadServiceOrders();
+    expect(component.selectedServiceOrder?.id).toBe(999);
+  });
+
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('presenta las órdenes STANDARD_SERVICE como servicio express', () => {
+    expect(component.getServiceTypeLabel(ServiceType.STANDARD_SERVICE)).toBe('Servicio express');
   });
 
   it('mantiene los fallos fuera del flujo principal y los muestra en un modal bajo demanda', () => {
@@ -310,6 +328,27 @@ describe('SupervisorPanel', () => {
     expect(compiled.textContent).toContain('WhatsApp');
     expect(compiled.textContent).toContain('Pendiente');
     expect(compiled.textContent).not.toContain('No computable');
+  });
+
+  it('oculta diagnóstico y su métrica en una orden Express', () => {
+    fixture = TestBed.createComponent(SupervisorPanel);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    component.setActiveSection('orders');
+    component.selectedServiceOrder = createServiceOrder({
+      id: 52,
+      code: 'SO-EXPRESS',
+      serviceType: ServiceType.STANDARD_SERVICE,
+    });
+    component.currentDiagnosis = null;
+    fixture.detectChanges();
+
+    const content = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(content).not.toContain('Tiempo a diagnóstico');
+    expect(content).not.toContain('Diagnóstico del técnico');
+    expect(content).not.toContain('Sin diagnóstico registrado.');
+    expect(content).toContain('Tiempo a inicio de servicio');
   });
 
   it('filters orders by search term and operative status inside the orders section', () => {

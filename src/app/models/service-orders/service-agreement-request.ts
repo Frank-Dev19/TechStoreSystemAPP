@@ -37,6 +37,7 @@ export interface ServiceOrderCommercialRevisionItemRequest {
 }
 
 export interface ServiceOrderCommercialRevisionLineRequest {
+  laborWaiverReason?: 'INTERNAL_SERVICE';
   type: 'PRODUCT' | 'SERVICE';
   productId?: number;
   serviceId?: number;

@@ -39,6 +39,20 @@ describe('Sidebar', () => {
     fixture.detectChanges();
   });
 
+  it('shows every navigation entry for admin even with an empty permission snapshot', () => {
+    component.authenticatedUser = { id: 1, roles: [{ name: 'admin' }], effectivePermissions: [] } as any;
+    fixture.detectChanges();
+    const links = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a')).map(link => link.getAttribute('href'));
+    for (const route of ['/clientes', '/proveedores', '/ventas', '/garantias', '/reception-panel', '/technician-panel', '/supervisor-panel', '/internal-deliveries']) expect(links).toContain(route);
+    expect(component.can('navigation.inventory-manage')).toBeTrue();
+    expect(component.canAny('navigation.inventory-kardex')).toBeTrue();
+  });
+
+  it('keeps permission checks for other roles', () => {
+    component.authenticatedUser = { id: 2, roles: [{ name: 'technician' }] } as any;
+    expect(component.can('navigation.sales')).toBeFalse();
+  });
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });

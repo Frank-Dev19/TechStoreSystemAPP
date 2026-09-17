@@ -1,3 +1,4 @@
+import { CurrentUserService } from '../../services/current-user.service';
 import { CommonModule } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -17,7 +18,7 @@ describe('ServiceOrderLineDiscountModalComponent', () => {
     await TestBed.configureTestingModule({
       declarations: [ServiceOrderLineDiscountModalComponent],
       imports: [CommonModule, ReactiveFormsModule],
-      providers: [{ provide: ServiceOrderAgreementService, useValue: agreementService }],
+      providers: [{ provide: CurrentUserService, useValue: { hasAllPermissions: () => true } }, { provide: ServiceOrderAgreementService, useValue: agreementService }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ServiceOrderLineDiscountModalComponent);
@@ -86,6 +87,20 @@ describe('ServiceOrderLineDiscountModalComponent', () => {
     };
     component.ngOnChanges();
     agreementService.createRevision.calls.reset();
+  });
+
+  it('exonera solo el servicio y envía el motivo explícito conservando los repuestos', () => {
+    agreementService.createRevision.and.returnValue(of({} as ServiceOrderAgreement));
+    component.setLaborWaiver(0, true);
+    expect(component.getNetTotal()).toBe(160);
+    expect(component.target.lines[0].unitPrice).toBe(100);
+    component.submit();
+    const lines = agreementService.createRevision.calls.mostRecent().args[0].items[0].lines;
+    expect(lines[0].laborWaiverReason).toBe('INTERNAL_SERVICE');
+    expect(lines[0].discountPct).toBeUndefined();
+    expect(lines[1].laborWaiverReason).toBeUndefined();
+    component.setLaborWaiver(0, false);
+    expect(component.getNetTotal()).toBe(260);
   });
 
   it('crea una nueva versión con descuento de servicio y conserva íntegro el precio del producto', () => {

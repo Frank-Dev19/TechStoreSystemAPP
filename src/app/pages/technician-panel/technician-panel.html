@@ -199,6 +199,11 @@
             </div>
           </section>
         }
+        <app-service-order-materials
+          [order]="selectedServiceOrder"
+          [itemId]="selectedServiceOrderItem?.id"
+          [allowInventoryActions]="false"
+        ></app-service-order-materials>
         <div class="detail-actions-bar">
           <div class="detail-actions-flex">
             <button
@@ -953,6 +958,11 @@
                   </div>
                   @if (usesItemCommercialComposer()) {
                     <div class="agreement-discount-editor">
+                      <label class="labor-waiver-option">
+                        <input type="checkbox" [disabled]="!canWaiveLabor || !isAgreementEditable()" [ngModel]="!!technicalServiceItem.laborWaiverReason" (ngModelChange)="setLaborWaiver(technicalServiceItem, $event)" [ngModelOptions]="{ standalone: true }" />
+                        Exonerar mano de obra por servicio interno
+                      </label>
+                      @if (technicalServiceItem.laborWaiverReason) { <p>Motivo: Servicio interno. Los repuestos conservan su precio.</p> }
                       <label>Descuento de la línea</label>
                       <div class="agreement-discount-editor__input">
                         <input
@@ -961,7 +971,8 @@
                           max="100"
                           step="0.01"
                           [disabled]="!isAgreementEditable()"
-                          [ngModel]="technicalServiceItem.discountPct || 0"
+                          [readonly]="!!technicalServiceItem.laborWaiverReason"
+                          [ngModel]="technicalServiceItem.laborWaiverReason ? 100 : technicalServiceItem.discountPct || 0"
                           (ngModelChange)="
                             updateAgreementItemDiscount(technicalServiceItem, $event)
                           "

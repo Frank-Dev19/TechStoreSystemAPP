@@ -22,6 +22,7 @@ export interface ResolveServiceOrderItemCancellationRequest {
 export type ServiceOrderInitialCommercialLineType = 'PRODUCT' | 'SERVICE';
 
 export interface ServiceOrderInitialCommercialLineRequest {
+  laborWaiverReason?: 'INTERNAL_SERVICE';
   type: ServiceOrderInitialCommercialLineType;
   productId?: number;
   serviceId?: number;

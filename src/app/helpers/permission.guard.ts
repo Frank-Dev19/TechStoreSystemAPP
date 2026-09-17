@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot } from '@angular/router';
 import { CurrentUserService } from '../services/current-user.service';
+import { hasAdminRole } from '../utils/role.utils';
 
 @Injectable({ providedIn: 'root' })
 export class PermissionGuard implements CanActivate {
@@ -21,7 +22,7 @@ export class PermissionGuard implements CanActivate {
     const hasAny = !anyPermissions.length
       || this.currentUserService.hasAnyPermission(anyPermissions, user);
 
-    if (user && hasRequired && hasAny) {
+    if (user && (hasAdminRole(user.roles) || (hasRequired && hasAny))) {
       return true;
     }
 

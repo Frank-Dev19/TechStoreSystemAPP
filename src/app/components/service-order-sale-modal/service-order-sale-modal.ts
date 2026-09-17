@@ -7,9 +7,15 @@ import { DocumentTypeResponse } from '../../models/document-types/document-types
 import { DocumentType, PaymentMethod } from '../../models/sales/enums';
 import { Sale } from '../../models/sales/sale.model';
 import { ServiceOrder } from '../../models/service-orders/service-order';
+import {
+  ServiceOrderAgreement,
+  ServiceOrderAgreementStatus,
+  ServiceOrderItemCommercialLine,
+} from '../../models/service-orders/service-agreement';
 import { ClientsApiService } from '../../services/clients-api.service';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { SalesApiService } from '../../services/sales/sales-api.service';
+import { ServiceOrderAgreementService } from '../../services/service-orders/service-agreement.service';
 
 interface TaxpayerRegistrationDraft {
   name: string;
@@ -60,6 +66,8 @@ export class ServiceOrderSaleModalComponent implements OnInit {
   isSubmitting = false;
   showRegistration = false;
   registrationDraft: TaxpayerRegistrationDraft = this.emptyRegistrationDraft();
+  saleAgreement: ServiceOrderAgreement | null = null;
+  isLoadingSaleDetail = false;
 
   private initialized = false;
 
@@ -67,6 +75,7 @@ export class ServiceOrderSaleModalComponent implements OnInit {
     private readonly clientsApi: ClientsApiService,
     private readonly documentTypesApi: DocumentTypesApiService,
     private readonly salesApi: SalesApiService,
+    private readonly agreementApi: ServiceOrderAgreementService,
   ) {}
 
   ngOnInit(): void {
@@ -74,6 +83,7 @@ export class ServiceOrderSaleModalComponent implements OnInit {
     this.initialized = true;
     this.loadDocumentTypes();
     this.loadOperationalClient();
+    this.loadSaleAgreement();
   }
 
   @HostListener('document:keydown.escape')
@@ -82,7 +92,14 @@ export class ServiceOrderSaleModalComponent implements OnInit {
   }
 
   get saleTotal(): number {
-    return Number(Number(this.order?.montoComprometidoVigente ?? 0).toFixed(2));
+    const amount = this.saleAgreement?.totalAmount ?? this.order?.montoComprometidoVigente ?? 0;
+    return Number(Number(amount).toFixed(2));
+  }
+
+  get saleLines(): ServiceOrderItemCommercialLine[] {
+    return (this.saleAgreement?.items ?? []).flatMap(
+      (item) => item.commercialVersion?.lines ?? [],
+    );
   }
 
   get equipmentCount(): number {
@@ -254,6 +271,26 @@ export class ServiceOrderSaleModalComponent implements OnInit {
       next: (client) => this.selectTaxpayer(client),
       error: () => undefined,
     });
+  }
+
+  private loadSaleAgreement(): void {
+    if (!this.order?.id) return;
+    this.isLoadingSaleDetail = true;
+    this.agreementApi
+      .findAll({
+        serviceOrderId: Number(this.order.id),
+        status: ServiceOrderAgreementStatus.CONFIRMED,
+        page: 1,
+        limit: 20,
+      })
+      .pipe(finalize(() => (this.isLoadingSaleDetail = false)))
+      .subscribe({
+        next: ({ data }) => {
+          this.saleAgreement = [...(data ?? [])]
+            .sort((a, b) => Number(b.sequenceNumber) - Number(a.sequenceNumber))[0] ?? null;
+        },
+        error: () => (this.saleAgreement = null),
+      });
   }
 
   private loadDocumentTypes(): void {

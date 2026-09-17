@@ -35,8 +35,28 @@
           </div>
         </dl>
         <p class="order-summary__note">
-          El comprobante incluirá las líneas de la cotización confirmada de esta orden.
+          El comprobante incluirá el servicio autorizado y los productos conciliados, con las series de sus guías internas.
         </p>
+        <details class="sale-detail">
+          <summary>Ver detalle de la venta</summary>
+          @if (isLoadingSaleDetail) {
+            <p class="sale-detail__state"><i class="fas fa-spinner fa-spin"></i> Cargando detalle...</p>
+          } @else if (saleLines.length) {
+            <div class="sale-detail__lines">
+              @for (line of saleLines; track line.id) {
+                <div class="sale-detail__line">
+                  <div>
+                    <strong>{{ line.catalogNameSnapshot }}</strong>
+                    <span>{{ line.quantity | number: '1.0-2' }} × S/ {{ line.unitPrice | number: '1.2-2' }}</span>
+                  </div>
+                  <strong>S/ {{ line.netAmount | number: '1.2-2' }}</strong>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="sale-detail__state">No pudimos cargar el detalle. El total de la orden seguirá disponible.</p>
+          }
+        </details>
       </aside>
 
       <form class="sale-form" (ngSubmit)="confirmSale()">

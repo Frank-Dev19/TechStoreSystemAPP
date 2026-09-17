@@ -1,4 +1,7 @@
 import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import { config } from '../../../environments/environment';
 
 interface QzTrayClient {
   websocket: {
@@ -8,6 +11,18 @@ interface QzTrayClient {
   printers: { find(): Promise<string[]> };
   configs: { create(printer: string, options: Record<string, unknown>): unknown };
   print(config: unknown, data: Array<Record<string, unknown>>): Promise<void>;
+  security: {
+    setCertificatePromise(
+      resolver: (resolve: (certificate: string) => void, reject: (error: unknown) => void) => void,
+    ): void;
+    setSignatureAlgorithm(algorithm: 'SHA512'): void;
+    setSignaturePromise(
+      resolver: (payload: string) => (
+        resolve: (signature: string) => void,
+        reject: (error: unknown) => void,
+      ) => void,
+    ): void;
+  };
 }
 
 export interface QzPdfLabelJob {
@@ -18,16 +33,47 @@ export interface QzPdfLabelJob {
   jobName: string;
 }
 
+interface PrinterTarget {
+  name: string;
+  usesA4Fallback: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class QzTrayPrintService {
-  private readonly printerModel = 'Brother QL-700';
+  private readonly printerModel = config.printing.preferredPrinter;
+  private readonly signingUrl = `${config.endpointServices}${config.printing.qzSigningBase}`;
+  private securityConfigured = false;
 
-  async printPdfLabel(job: QzPdfLabelJob): Promise<void> {
+  constructor(private readonly http: HttpClient) {}
+
+  async printPdfLabel(job: QzPdfLabelJob): Promise<string> {
     try {
       const qz = this.getClient();
+      this.configureSecurity(qz);
       await this.ensureConnected(qz);
-      const printer = await this.findBrotherPrinter(qz);
-      const printerConfig = qz.configs.create(printer, {
+      const target = await this.findPrinterTarget(qz);
+      const printerConfig = qz.configs.create(target.name, target.usesA4Fallback ? {
+        bounds: {
+          x: 10,
+          y: 10,
+          width: job.widthMm,
+          height: job.heightMm,
+        },
+        copies: job.copies,
+        colorType: 'blackwhite',
+        jobName: job.jobName,
+        legacy: true,
+        margins: 0,
+        orientation: 'portrait',
+        rasterize: true,
+        scaleContent: true,
+        size: {
+          width: 210,
+          height: 297,
+          custom: false,
+        },
+        units: 'mm',
+      } : {
         copies: job.copies,
         colorType: 'blackwhite',
         density: 300,
@@ -50,6 +96,7 @@ export class QzTrayPrintService {
         flavor: 'base64',
         data: job.base64,
       }]);
+      return target.name;
     } catch (error) {
       throw new Error(this.resolvePrintError(error));
     }
@@ -65,21 +112,47 @@ export class QzTrayPrintService {
     return qz;
   }
 
+  private configureSecurity(qz: QzTrayClient): void {
+    if (this.securityConfigured) return;
+
+    qz.security.setCertificatePromise((resolve, reject) => {
+      firstValueFrom(
+        this.http.get(`${this.signingUrl}/certificate`, { responseType: 'text' }),
+      ).then(resolve, reject);
+    });
+    qz.security.setSignatureAlgorithm('SHA512');
+    qz.security.setSignaturePromise((payload: string) => (resolve, reject) => {
+      firstValueFrom(
+        this.http.post<{ signature: string }>(`${this.signingUrl}/sign`, { payload }),
+      ).then((response) => resolve(response.signature), reject);
+    });
+    this.securityConfigured = true;
+  }
+
   private async ensureConnected(qz: QzTrayClient): Promise<void> {
     if (qz.websocket.isActive()) return;
     await qz.websocket.connect({ retries: 2, delay: 1 });
   }
 
-  private async findBrotherPrinter(qz: QzTrayClient): Promise<string> {
+  private async findPrinterTarget(qz: QzTrayClient): Promise<PrinterTarget> {
     const printers = (await qz.printers.find()) as string[];
     const normalizedModel = this.normalizePrinterName(this.printerModel);
     const exact = printers.find((printer) => this.normalizePrinterName(printer) === normalizedModel);
     const compatible = exact ?? printers.find((printer) => this.normalizePrinterName(printer).includes('brotherql700'));
 
+    if (!compatible && config.printing.allowFallbackPrinter) {
+      const physicalPrinter = printers.find((printer) => !this.isVirtualPrinter(printer));
+      if (physicalPrinter) return { name: physicalPrinter, usesA4Fallback: true };
+    }
+
     if (!compatible) {
       throw new Error(`No encontramos la impresora ${this.printerModel} instalada en este equipo.`);
     }
-    return compatible;
+    return { name: compatible, usesA4Fallback: false };
+  }
+
+  private isVirtualPrinter(printer: string): boolean {
+    return /pdf|onenote|fax|xps|document writer/i.test(printer);
   }
 
   private normalizePrinterName(value: string): string {

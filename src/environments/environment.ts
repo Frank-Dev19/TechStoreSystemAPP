@@ -8,6 +8,11 @@ export const config = {
   endpointServices: 'http://localhost:3000',
   authMethod: '/auth/',
   defaultCompanyId: 1,
+  printing: {
+    preferredPrinter: 'Brother QL-700',
+    allowFallbackPrinter: true,
+    qzSigningBase: '/printing/qz',
+  },
 
   // modulos API
   inventory: {

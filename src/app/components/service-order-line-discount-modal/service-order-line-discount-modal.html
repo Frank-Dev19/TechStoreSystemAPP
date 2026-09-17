@@ -39,6 +39,13 @@
             </div>
 
             @if (line.type === 'SERVICE') {
+            <label class="labor-waiver-option">
+              <input type="checkbox" [checked]="isLaborWaived(index)" [disabled]="!canWaiveLabor || isSaving" (change)="setLaborWaiver(index, $any($event.target).checked)" />
+              Exonerar mano de obra por servicio interno
+            </label>
+            @if (isLaborWaived(index)) {
+              <p class="discount-notice">Motivo: Servicio interno. Mano de obra sin cobro; los repuestos conservan su precio.</p>
+            } @else {
             <div class="discount-control">
               <label [for]="'discount-percentage-' + line.id">Descuento porcentual</label>
               <div class="discount-control__entry">
@@ -65,6 +72,7 @@
                 }
               </div>
             </div>
+            }
             } @else {
               <div class="discount-notice">
                 <i class="fas fa-box"></i>
@@ -77,7 +85,7 @@
               <span>Neto <strong>S/ {{ getNetAmount(line, index) | number: '1.2-2' }}</strong></span>
             </div>
 
-            @if (line.type === 'SERVICE' && getPercentage(index) > 0) {
+            @if (line.type === 'SERVICE' && !isLaborWaived(index) && getPercentage(index) > 0) {
               <label class="discount-reason">
                 <span>Motivo de autorización <small>(obligatorio solo si supera el límite)</small></span>
                 <textarea

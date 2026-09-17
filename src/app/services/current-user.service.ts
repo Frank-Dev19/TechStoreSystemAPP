@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { User } from '../models/user/user';
+import { hasAdminRole } from '../utils/role.utils';
 
 @Injectable({ providedIn: 'root' })
 export class CurrentUserService {
@@ -32,15 +33,18 @@ export class CurrentUserService {
     }
 
     hasPermission(permission: string, user: User | null = this.value): boolean {
+        if (hasAdminRole(user?.roles)) return true;
         return this.getPermissionCodes(user).has(permission);
     }
 
     hasAllPermissions(permissions: readonly string[], user: User | null = this.value): boolean {
+        if (hasAdminRole(user?.roles)) return true;
         const granted = this.getPermissionCodes(user);
         return permissions.every((permission) => granted.has(permission));
     }
 
     hasAnyPermission(permissions: readonly string[], user: User | null = this.value): boolean {
+        if (hasAdminRole(user?.roles)) return true;
         const granted = this.getPermissionCodes(user);
         return permissions.some((permission) => granted.has(permission));
     }

@@ -1,0 +1,4 @@
+- [x] Remove retired workflow-specific labels and branches from the creation wizard.
+- [x] Reject retired form values and drafts; add regression tests (RED then GREEN).
+- [x] Run reception tests: 64 passed.
+- [x] Production build passed (existing CommonJS dependency warnings).

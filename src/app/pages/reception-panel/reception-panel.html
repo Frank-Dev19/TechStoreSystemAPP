@@ -818,7 +818,7 @@
             <i class="fas fa-print"></i>
           </div>
           <div>
-            <p class="modal-eyebrow">Brother QL-700 · Etiqueta 62 × 35 mm</p>
+            <p class="modal-eyebrow">QZ Tray · Etiqueta 62 × 35 mm</p>
             <h2 id="sticker-print-title">Imprimir sticker</h2>
             <p>{{ stickerPrintTarget.item.code }}</p>
           </div>
@@ -937,9 +937,6 @@
                 <p class="wizard-eyebrow">{{ getCreateOrderWorkflowAccent() }}</p>
                 <h3>{{ getServiceTypeLabel(getSelectedWorkflowServiceType()) }}</h3>
               </div>
-              <span class="wizard-origin-badge">{{
-                isInternalRequestOrigin() ? 'Origen interno' : 'Origen cliente'
-              }}</span>
             </div>
             <div class="wizard-step-row">
               @for (step of getCreateServiceOrderSteps(); let i = $index; track step.key) {
@@ -1009,21 +1006,13 @@
                               <i class="fas fa-stethoscope"></i>
                               {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.DIAGNOSIS) || 0 }} diagnóstico
                             </span>
-                            <span class="tech-badge" [class.has-load]="getTechnicianActiveCountForType(candidate, serviceTypeEnum.WARRANTY_SERVICE) > 0">
-                              <i class="fas fa-shield-alt"></i>
-                              {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.WARRANTY_SERVICE) || 0 }} garantía
-                            </span>
                             <span class="tech-badge" [class.has-load]="getTechnicianActiveCountForType(candidate, serviceTypeEnum.STANDARD_SERVICE) > 0">
                               <i class="fas fa-concierge-bell"></i>
-                              {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.STANDARD_SERVICE) || 0 }} estándar
+                              {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.STANDARD_SERVICE) || 0 }} express
                             </span>
                             <span class="tech-badge" [class.has-load]="getTechnicianActiveCountForType(candidate, serviceTypeEnum.ASSEMBLY) > 0">
                               <i class="fas fa-toolbox"></i>
                               {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.ASSEMBLY) || 0 }} ensamblaje
-                            </span>
-                            <span class="tech-badge" [class.has-load]="getTechnicianActiveCountForType(candidate, serviceTypeEnum.CUSTOMER_SERVICE) > 0">
-                              <i class="fas fa-user-friends"></i>
-                              {{ getTechnicianActiveCountForType(candidate, serviceTypeEnum.CUSTOMER_SERVICE) || 0 }} atención
                             </span>
                           </div>
                         </div>
@@ -1059,19 +1048,9 @@
                       </option>
                     }
                   </select>
-                </div>
-
-                <div class="form-group">
-                  <label for="requestOrigin">Origen de la orden *</label>
-                  <select
-                    id="requestOrigin"
-                    class="form-control"
-                    formControlName="requestOrigin"
-                    (change)="onCreateRequestOriginChange()"
-                  >
-                    <option [ngValue]="requestOriginEnum.CLIENT">Cliente</option>
-                    <option [ngValue]="requestOriginEnum.INTERNAL">Interno</option>
-                  </select>
+                  @if (createServiceOrderForm.get('workflowServiceType')?.hasError('unsupportedWorkflow')) {
+                    <p class="invalid-feedback d-block">Selecciona Express, Diagnóstico o Ensamblaje para continuar.</p>
+                  }
                 </div>
 
               </div>
@@ -1079,7 +1058,7 @@
           }
 
           @if (isCreateServiceOrderStepActive(2)) {
-            @if (!isInternalRequestOrigin()) {
+
               <div class="form-section">
                 <div class="section-header">
                   <h4>{{ getCreateOrderClientTitle() }}</h4>
@@ -1264,14 +1243,7 @@
                   </div>
                 </div>
               </div>
-            } @else {
-              <div class="form-section">
-                <div class="section-header">
-                  <h4>Responsable interno</h4>
-                  <p>Esta orden se registrará sin cliente asociado porque el origen es interno.</p>
-                </div>
-              </div>
-            }
+
           }
 
           @if (isCreateServiceOrderStepActive(3)) {
@@ -1323,8 +1295,8 @@
                   <div class="form-grid">
                     <div class="form-group">
                       <label>Tipo de equipo *</label>
-                      <select 
-                        class="form-control" 
+                      <select
+                        class="form-control"
                         formControlName="equipmentType"
                         [class.is-invalid]="
                           getCreateServiceOrderControl('equipmentType')?.invalid &&
@@ -1513,6 +1485,8 @@
                             [ngModelOptions]="{ standalone: true }"
                           />
                         </div>
+                        <label class="labor-waiver-option"><input type="checkbox" [disabled]="!canWaiveLabor" [ngModel]="!!technicalServiceItem.laborWaiverReason" (ngModelChange)="setLaborWaiver(technicalServiceItem, $event)" [ngModelOptions]="{ standalone: true }"> Exonerar mano de obra por servicio interno</label>
+                        @if (technicalServiceItem.laborWaiverReason) { <p class="labor-waiver-summary">Servicio interno · Exonerado: S/ {{ technicalServiceItem.unitPrice | number:'1.2-2' }} · Mano de obra a cobrar: S/ 0.00. Los repuestos se cobran.</p> }
                         <div class="agreement-warranty-fields">
                           <label>Garantía del servicio</label>
                           <div>
@@ -1683,7 +1657,9 @@
                     </strong>
                   </div>
                   <div class="agreement-total-meta">
-                    <span>Servicio: S/ {{ technicalServiceOption.price | number: '1.2-2' }}</span>
+                    @if (getCreateOrderAgreementTechnicalServiceItem(itemIndex); as laborItem) {
+                      <span>Mano de obra a cobrar: S/ {{ calculateItemSubtotal(laborItem) | number: '1.2-2' }}</span>
+                    }
                     @if (getCreateOrderAgreementProductItems(itemIndex).length > 0) {
                       <span>
                         Productos ({{ getCreateOrderAgreementProductItems(itemIndex).length }}): S/
@@ -1712,20 +1688,12 @@
                     <strong>{{ getServiceTypeLabel(getSelectedWorkflowServiceType()) }}</strong>
                   </div>
                   <div class="info-tile">
-                    <span class="muted">Origen</span>
-                    <strong>{{ isInternalRequestOrigin() ? 'Interno' : 'Cliente' }}</strong>
-                  </div>
-                  <div class="info-tile">
                     <span class="muted">Técnico asignado</span>
                     <strong>{{ selectedAssignmentTechnician?.technicianName || '-' }}</strong>
                   </div>
-                  @if (!isInternalRequestOrigin()) {
+
                     <div class="info-tile">
-                      <span class="muted">{{
-                        getSelectedWorkflowServiceType() === serviceTypeEnum.CUSTOMER_SERVICE
-                          ? 'Socio o contacto'
-                          : 'Contacto'
-                      }}</span>
+                      <span class="muted">Contacto</span>
                       <strong>{{ createServiceOrderForm.get('contactName')?.value || '-' }}</strong>
                     </div>
                     <div class="info-tile">
@@ -1734,7 +1702,7 @@
                         createServiceOrderForm.get('contactPhone')?.value || '-'
                       }}</strong>
                     </div>
-                  }
+
                   @if (requiresCreateServiceOrderInitialAgreementStep()) {
                     <div class="info-tile total-emphasis">
                       <span class="muted">Total estimado</span>
@@ -1834,6 +1802,9 @@
                                       : getServiceLabel(quoteItem.serviceId)
                                   }}
                                 </strong>
+                                @if (quoteItem.type === 'service' && quoteItem.laborWaiverReason) {
+                                  <span class="muted small">Servicio interno · Mano de obra exonerada: S/ {{ quoteItem.unitPrice | number: '1.2-2' }}</span>
+                                }
                                 @if (quoteItem.notes) {
                                   <span class="muted small">{{ quoteItem.notes }}</span>
                                 }
@@ -2726,7 +2697,7 @@
               <label for="edit-serviceType">Tipo de servicio *</label>
               <select id="edit-serviceType" class="form-control" formControlName="serviceType">
                 <option value="DIAGNOSIS">Diagnóstico</option>
-                <option value="STANDARD_SERVICE">Estándar</option>
+                <option value="STANDARD_SERVICE">Express</option>
                 <option value="WARRANTY_SERVICE">Garantía</option>
                 <option value="ASSEMBLY">Ensamblaje</option>
                 <option value="CUSTOMER_SERVICE">Atención al cliente</option>
@@ -2946,4 +2917,3 @@
     </div>
   </div>
 </div>
-

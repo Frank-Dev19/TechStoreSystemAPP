@@ -343,3 +343,14 @@
     width: 100%;
   }
 }
+
+.labor-waiver-option {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+  margin-block: .75rem;
+  font-size: .875rem;
+  cursor: pointer;
+  input[type="checkbox"] { width: 1.125rem; height: 1.125rem; flex: 0 0 auto; }
+}
+.labor-waiver-summary { font-size: .875rem; line-height: 1.5; }

@@ -1,6 +1,7 @@
-import { Component, HostListener, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
-import { catchError, finalize, of } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, DestroyRef, HostListener, OnInit, inject } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { catchError, finalize, of, switchMap } from 'rxjs';
 import {
   ServiceOrderAgreement,
   ServiceOrderAgreementItemLink,
@@ -43,6 +44,10 @@ const TECHNICAL_SERVICE_LABEL = 'Servicio técnico';
   styleUrls: ['./supervisor-panel.scss'],
 })
 export class SupervisorPanel implements OnInit {
+  private readonly route = inject(ActivatedRoute, { optional: true });
+  private readonly destroyRef = inject(DestroyRef);
+  materialItemId: number | null = null;
+  openMaterials = false;
   activeSection: 'ranking' | 'orders' = 'orders';
   activeTab: 'open' | 'answered' | 'all' = 'open';
   currentPage = 1;
@@ -94,7 +99,7 @@ export class SupervisorPanel implements OnInit {
 
   private readonly serviceTypeLabels: Record<string, string> = {
     [ServiceType.DIAGNOSIS]: 'Diagnóstico',
-    [ServiceType.STANDARD_SERVICE]: 'Servicio estándar',
+    [ServiceType.STANDARD_SERVICE]: 'Servicio express',
     [ServiceType.WARRANTY_SERVICE]: 'Garantía',
     [ServiceType.ASSEMBLY]: 'Ensamblaje',
     [ServiceType.CUSTOMER_SERVICE]: 'Atención al cliente',
@@ -134,6 +139,24 @@ export class SupervisorPanel implements OnInit {
     this.loadProducts();
     this.loadTechnicianRankings();
     this.loadFailedNotifications();
+    this.route?.queryParamMap.pipe(
+      switchMap(params => {
+        const orderId = Number(params.get('orderId'));
+        if (!Number.isSafeInteger(orderId) || orderId <= 0) return of(null);
+        return this.serviceOrderService.findOne(orderId).pipe(
+          switchMap(order => of({ order, itemId: Number(params.get('itemId')), materials: params.get('section') === 'materials' })),
+          catchError(() => { this.showMessage('danger', 'fas fa-exclamation-circle', 'No se pudo abrir la orden solicitada. Puede no existir o no estar disponible.'); return of(null); }),
+        );
+      }), takeUntilDestroyed(this.destroyRef),
+    ).subscribe(result => {
+      if (!result) return;
+      this.activeSection = 'orders';
+      this.selectedServiceOrder = result.order;
+      this.loadCurrentDiagnosis(result.order.id);
+      this.loadOrderAgreements(result.order.id);
+      this.materialItemId = result.order.items?.some(item => Number(item.id) === result.itemId) ? result.itemId : null;
+      this.openMaterials = result.materials;
+    });
   }
 
   loadFailedNotifications(): void {
@@ -307,11 +330,10 @@ export class SupervisorPanel implements OnInit {
             this.serviceOrders.find(
               (order) => Number(order.id) === Number(this.selectedServiceOrder?.id),
             ) ?? null;
-          this.selectedServiceOrder = updated;
+          // A linked order may be outside this page; absence here does not mean deletion.
           if (updated) {
+            this.selectedServiceOrder = updated;
             this.loadOrderContext(updated.id);
-          } else {
-            this.clearSelectedServiceOrder();
           }
         }
 
@@ -480,6 +502,8 @@ export class SupervisorPanel implements OnInit {
   }
 
   selectServiceOrder(order: ServiceOrder): void {
+    this.materialItemId = null;
+    this.openMaterials = false;
     this.selectedServiceOrder = order;
     this.loadOrderContext(order.id);
   }
@@ -690,6 +714,12 @@ export class SupervisorPanel implements OnInit {
   getServiceTypeLabel(serviceType?: string | null): string {
     if (!serviceType) return 'Sin tipo';
     return this.serviceTypeLabels[serviceType] ?? serviceType;
+  }
+
+  showsDiagnosisContext(order: ServiceOrder | null): boolean {
+    return [ServiceType.DIAGNOSIS, ServiceType.WARRANTY_SERVICE].includes(
+      order?.serviceType as ServiceType,
+    )
   }
 
   getProductLabel(productId: number | null): string {

@@ -1694,6 +1694,7 @@ $bg-light: #f5f7fa;
   }
 }
 
+
 @media (max-width: 640px) {
   .modal-overlay.notification-modal-overlay {
     padding: 0;
@@ -2917,6 +2918,93 @@ $bg-light: #f5f7fa;
       .detail-content {
         background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
       }
+    }
+  }
+}
+
+// Mobile-first layout contract for the supervisor workspace.
+.supervisor-panel {
+  padding: 1rem;
+  gap: 1rem;
+
+  .panel-header {
+    padding: 1.25rem;
+  }
+
+  .stats-grid,
+  .panel-container .serviceOrderAgreements-grid,
+  .panel-container .orders-workspace,
+  .panel-container .detail-metrics-grid,
+  .panel-container .detail-equipment-grid,
+  .panel-container .detail-operational-grid,
+  .panel-container .detail-sla-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel-container {
+    padding: 1rem;
+
+    .surface-toolbar {
+      flex-direction: column;
+
+      .thread-input,
+      .tab-btn {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .thread-input {
+        flex: 0 0 auto;
+        min-height: 52px;
+      }
+    }
+
+    .detail-view {
+      position: relative;
+      top: 0;
+      max-height: none;
+    }
+  }
+}
+
+@media (min-width: 768px) {
+  .supervisor-panel {
+    padding: 1.5rem;
+    gap: 1.5rem;
+
+    .panel-header {
+      padding: 1.75rem;
+    }
+
+    .stats-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .panel-container .serviceOrderAgreements-grid {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .panel-container .detail-equipment-grid,
+    .panel-container .detail-operational-grid,
+    .panel-container .detail-sla-summary-grid,
+    .panel-container .detail-metrics-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
+@media (min-width: 1381px) {
+  .supervisor-panel {
+    padding: 2rem;
+
+    .panel-container .orders-workspace {
+      grid-template-columns: minmax(0, 1.15fr) minmax(360px, 500px);
+    }
+
+    .panel-container .detail-view {
+      position: sticky;
+      top: 1rem;
+      max-height: calc(100dvh - 2rem);
     }
   }
 }

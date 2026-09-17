@@ -89,10 +89,12 @@ export class Sidebar implements OnInit {
   }
 
   can(permission: string): boolean {
+    if (hasAdminRole(this.authenticatedUser?.roles)) return true
     return this.currentUserService.hasPermission(permission, this.authenticatedUser);
   }
 
   canAny(...permissions: string[]): boolean {
+    if (hasAdminRole(this.authenticatedUser?.roles)) return true
     return this.currentUserService.hasAnyPermission(permissions, this.authenticatedUser);
   }
 

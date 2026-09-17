@@ -449,7 +449,7 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
 
   formatServiceType(value: ServiceType | null | undefined): string {
     const labels: Record<ServiceType, string> = {
-      [ServiceType.STANDARD_SERVICE]: 'Servicio estándar',
+      [ServiceType.STANDARD_SERVICE]: 'Servicio express',
       [ServiceType.DIAGNOSIS]: 'Diagnóstico',
       [ServiceType.WARRANTY_SERVICE]: 'Garantía',
       [ServiceType.ASSEMBLY]: 'Ensamblaje',

@@ -7,6 +7,7 @@ import { ServiceOrderEconomicStatus, ServiceOrderOperativeStatus, ServiceOrderTe
 import { ClientsApiService } from '../../services/clients-api.service';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { SalesApiService } from '../../services/sales/sales-api.service';
+import { ServiceOrderAgreementService } from '../../services/service-orders/service-agreement.service';
 import { ServiceOrderSaleModalComponent } from './service-order-sale-modal';
 
 describe('ServiceOrderSaleModalComponent', () => {
@@ -36,12 +37,22 @@ describe('ServiceOrderSaleModalComponent', () => {
   const salesApi = {
     createFromServiceAgreements: jasmine.createSpy('createFromServiceAgreements').and.returnValue(of({ id: 99 })),
   };
+  const agreementApi = {
+    findAll: jasmine.createSpy('findAll').and.returnValue(of({
+      data: [createAgreement(82)],
+      total: 1,
+      page: 1,
+      limit: 20,
+    })),
+  };
 
   beforeEach(async () => {
     clientsApi.findOne.and.returnValue(of(taxpayer));
     clientsApi.findAll.and.returnValue(of({ data: [taxpayer], total: 1, page: 1, limit: 1 }));
     salesApi.createFromServiceAgreements.calls.reset();
     salesApi.createFromServiceAgreements.and.returnValue(of({ id: 99 }));
+    agreementApi.findAll.calls.reset();
+    agreementApi.findAll.and.returnValue(of({ data: [createAgreement(82)], total: 1, page: 1, limit: 20 }));
 
     await TestBed.configureTestingModule({
       declarations: [ServiceOrderSaleModalComponent],
@@ -50,6 +61,7 @@ describe('ServiceOrderSaleModalComponent', () => {
         { provide: ClientsApiService, useValue: clientsApi },
         { provide: DocumentTypesApiService, useValue: documentTypesApi },
         { provide: SalesApiService, useValue: salesApi },
+        { provide: ServiceOrderAgreementService, useValue: agreementApi },
       ],
     }).compileComponents();
 
@@ -95,6 +107,37 @@ describe('ServiceOrderSaleModalComponent', () => {
     expect(component.isSubmitting).toBeFalse();
   });
 
+  it('usa el total de la cotización confirmada cuando la proyección de la orden está en cero', () => {
+    agreementApi.findAll.and.returnValue(of({
+      data: [createAgreement(508.52)],
+      total: 1,
+      page: 1,
+      limit: 20,
+    }));
+    fixture = TestBed.createComponent(ServiceOrderSaleModalComponent);
+    component = fixture.componentInstance;
+    component.order = { ...createOrder(), montoComprometidoVigente: 0 };
+    component.ngOnInit();
+
+    component.confirmSale();
+
+    expect(component.saleTotal).toBe(508.52);
+    expect(salesApi.createFromServiceAgreements).toHaveBeenCalledOnceWith(
+      jasmine.objectContaining({
+        payments: [jasmine.objectContaining({ amount: 508.52 })],
+      }),
+    );
+  });
+
+  it('presenta el detalle comercial bajo demanda sin incrustar materiales', () => {
+    fixture.detectChanges();
+    const content = fixture.nativeElement.textContent;
+
+    expect(content).toContain('Ver detalle de la venta');
+    expect(content).toContain('Servicio técnico');
+    expect(content).not.toContain('Guías internas y materiales');
+  });
+
   function createOrder() {
     return {
       id: 17,
@@ -110,3 +153,28 @@ describe('ServiceOrderSaleModalComponent', () => {
     } as any;
   }
 });
+
+function createAgreement(totalAmount: number) {
+  return {
+    id: 31,
+    serviceOrderId: 17,
+    sequenceNumber: 1,
+    status: 'CONFIRMED',
+    totalAmount,
+    items: [{
+      id: 51,
+      commercialVersionId: 61,
+      commercialVersion: {
+        id: 61,
+        lines: [{
+          id: 71,
+          type: 'SERVICE',
+          catalogNameSnapshot: 'Servicio técnico',
+          quantity: 1,
+          unitPrice: totalAmount,
+          netAmount: totalAmount,
+        }],
+      },
+    }],
+  } as any;
+}

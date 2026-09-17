@@ -1,3 +1,5 @@
+import { InternalDeliveries } from "../../pages/internal-deliveries/internal-deliveries";
+import { ServiceOrderMaterialsComponent } from '../../components/service-order-materials/service-order-materials';
 import { NgModule } from "@angular/core";
 import { HttpClientModule } from "@angular/common/http";
 import { RouterModule } from "@angular/router";
@@ -49,6 +51,8 @@ import { ServiceOrderSaleModalComponent } from "../../components/service-order-s
         PhoneInputComponent
     ],
     declarations: [
+        InternalDeliveries,
+        ServiceOrderMaterialsComponent,
         Home,
         Dashboard,
         Clients,

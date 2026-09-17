@@ -135,6 +135,7 @@ describe('ReceptionPanel', () => {
   };
 
   const currentUserServiceStub = {
+    hasAllPermissions: () => true,
     value: { id: 99 },
   };
 
@@ -177,6 +178,37 @@ describe('ReceptionPanel', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
   });
+
+  for (const removedType of [ServiceType.WARRANTY_SERVICE, ServiceType.CUSTOMER_SERVICE]) {
+    it('mantiene la identificación del cliente para ensamblaje y retira origen del formulario', () => {
+    component.createServiceOrderForm.patchValue({ workflowServiceType: ServiceType.ASSEMBLY, contactName: 'Colaborador' });
+    component.onCreateWorkflowServiceTypeChange();
+    expect(component.createServiceOrderForm.get('requestOrigin')).toBeNull();
+    expect(component.createServiceOrderForm.get('contactName')?.enabled).toBeTrue();
+    expect(component.createServiceOrderForm.get('contactName')?.value).toBe('Colaborador');
+    expect(component.getCreateServiceOrderSteps().find(step => step.key === 'client')?.label).toBe('Cliente');
+  });
+
+  it('exonera mano de obra sin cambiar el precio base ni el subtotal del repuesto', () => {
+    const labor = { type: 'service', unitPrice: 80 } as any;
+    const part = { type: 'product', unitPrice: 150, quantity: 1 } as any;
+    component.setLaborWaiver(labor, true);
+    expect(labor.unitPrice).toBe(80);
+    expect(component.calculateItemSubtotal(labor)).toBe(0);
+    expect(component.calculateItemSubtotal(part)).toBe(150);
+    component.setLaborWaiver(labor, false);
+    expect(component.calculateItemSubtotal(labor)).toBe(80);
+  });
+
+  it(`rechaza ${removedType} en el wizard y al recuperar borradores`, () => {
+      component.createServiceOrderForm.patchValue({ workflowServiceType: removedType })
+      expect(component.createServiceOrderForm.get('workflowServiceType')?.valid).toBeFalse()
+      const key = 'techstore:reception:create-service-order-draft:v2:1:99'
+      localStorage.setItem(key, JSON.stringify({ version: 2, updatedAt: Date.now(), formValue: { workflowServiceType: removedType }, candidates: [], step: 4 }))
+      expect((component as any).restoreCreateServiceOrderDraft()).toBeFalse()
+      expect(localStorage.getItem(key)).toBeNull()
+    })
+  }
 
   it('should create', () => {
     expect(component).toBeTruthy();
@@ -763,6 +795,31 @@ describe('ReceptionPanel', () => {
       }),
     ])
     expect(component.createServiceOrderStep).toBe(3)
+  })
+
+  it('conserva bloqueados los datos recuperados de un cliente al cerrar y reabrir el wizard', () => {
+    component.openCreateServiceOrderModal()
+    component.createServiceOrderForm.patchValue({
+      clientId: 15,
+      contactName: 'Cliente existente',
+      contactEmail: 'cliente@example.com',
+      contactPhone: '+51987654321',
+    })
+    ;(component as any).setCustomerFieldsEnabled(false)
+
+    component.closeCreateServiceOrderModal(true)
+    component.openCreateServiceOrderModal()
+
+    expect(component.createServiceOrderForm.get('contactName')?.disabled).toBeTrue()
+    expect(component.createServiceOrderForm.get('contactEmail')?.disabled).toBeTrue()
+    expect(component.createServiceOrderForm.get('contactPhone')?.disabled).toBeTrue()
+    expect(component.createServiceOrderForm.getRawValue()).toEqual(
+      jasmine.objectContaining({
+        contactName: 'Cliente existente',
+        contactEmail: 'cliente@example.com',
+        contactPhone: '+51987654321',
+      }),
+    )
   })
 
   it('descarta de forma segura un borrador con contrato legacy', () => {
@@ -1478,7 +1535,7 @@ describe('ReceptionPanel', () => {
     expect(serviceItem.unitPrice).toBe(85);
   });
 
-  it('inicializa el acuerdo inicial estándar del wizard con la línea fija de servicio técnico', () => {
+  it('inicializa el acuerdo inicial express del wizard con la línea fija de servicio técnico', () => {
     component.openCreateServiceOrderModal();
     component.createServiceOrderForm.patchValue({ workflowServiceType: ServiceType.STANDARD_SERVICE });
 
@@ -1493,7 +1550,7 @@ describe('ReceptionPanel', () => {
     ]);
   });
 
-  it('no permite eliminar la línea fija de servicio técnico del acuerdo inicial estándar', () => {
+  it('no permite eliminar la línea fija de servicio técnico del acuerdo inicial express', () => {
     component.openCreateServiceOrderModal();
     component.createServiceOrderForm.patchValue({ workflowServiceType: ServiceType.STANDARD_SERVICE });
     component.onCreateWorkflowServiceTypeChange();
@@ -1509,7 +1566,7 @@ describe('ReceptionPanel', () => {
     );
   });
 
-  it('renderiza el acuerdo inicial estándar sin CTA ni selector de servicios genéricos', () => {
+  it('renderiza el acuerdo inicial express sin CTA ni selector de servicios genéricos', () => {
     component.openCreateServiceOrderModal();
     component.createServiceOrderForm.patchValue({
       workflowServiceType: ServiceType.STANDARD_SERVICE,
@@ -1534,6 +1591,24 @@ describe('ReceptionPanel', () => {
     expect(sectionText).not.toContain('Agregar servicio');
     expect(sectionText).toContain('Servicio técnico');
     expect(initialAgreementSection.querySelectorAll('ng-select').length).toBe(0);
+  });
+
+  it('presenta STANDARD_SERVICE como Express en el wizard', () => {
+    component.openCreateServiceOrderModal();
+    component.createServiceOrderStep = component.getCreateServiceOrderSteps().findIndex(
+      (step) => step.key === 'workflow',
+    );
+    fixture.detectChanges();
+
+    const options = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLSelectElement>(
+        'select[formControlName="workflowServiceType"] option',
+      ),
+    ).map((option) => option.textContent?.trim());
+
+    expect(component.getServiceTypeLabel(ServiceType.STANDARD_SERVICE)).toBe('Express');
+    expect(options).toContain('Express');
+    expect(options).not.toContain('Estándar');
   });
   it('selecciona varios equipos desde el modal y prepara una sola cancelación', () => {
     const order = createServiceOrder({

@@ -87,6 +87,7 @@ interface ServiceOrderAgreementProductComposer {
 type ServiceOrderEmailDocumentKind = "summary" | "receipt"
 
 interface ServiceOrderAgreementServiceComposer {
+  laborWaiverReason?: 'INTERNAL_SERVICE'
   id: number
   type: "service"
   serviceId: number | null
@@ -168,6 +169,7 @@ interface CreateServiceOrderDraft {
   candidates: CreateServiceOrderCandidateDraft[]
   editingCandidateIndex: number | null
   agreementItemsByItemIndex: Record<number, ServiceOrderAgreementComposerItem[]>
+  disabledCustomerControls?: string[]
 }
 
 interface EquipmentDraftSnapshot {
@@ -215,7 +217,7 @@ const SERVICE_ORDER_TECHNICAL_STATUS_LABELS: Partial<Record<ServiceOrderTechnica
 }
 
 const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
-  [ServiceType.STANDARD_SERVICE]: "Estándar",
+  [ServiceType.STANDARD_SERVICE]: "Express",
   [ServiceType.DIAGNOSIS]: "Diagnóstico",
   [ServiceType.WARRANTY_SERVICE]: "Garantía",
   [ServiceType.ASSEMBLY]: "Ensamblaje",
@@ -251,7 +253,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   isLoadingDiagnosis = false
   readonly serviceTypeEnum = ServiceType
   readonly serviceOrderOperativeStatusEnum = ServiceOrderOperativeStatus
-  readonly requestOriginEnum = RequestOrigin
   readonly serviceOrderAgreementStatusEnum = ServiceOrderAgreementStatus
   readonly clientKindEnum = ClientKind
   expectedDocumentDigits: number | null = null
@@ -298,8 +299,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   alertIcon = ""
 
   readonly equipmentTypeOptions = Object.values(EquipmentType)
-  readonly serviceTypeOptions = Object.values(ServiceType)
-  readonly requestOriginOptions = Object.values(RequestOrigin)
+  readonly serviceTypeOptions = [
+    ServiceType.STANDARD_SERVICE,
+    ServiceType.DIAGNOSIS,
+    ServiceType.ASSEMBLY,
+  ]
   readonly companyId = Number(config.defaultCompanyId ?? 1) || 1
   showServiceOrderAgreementsModal = false
   serviceOrderAgreementsError = ""
@@ -434,8 +438,11 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   private createServiceOrderFormGroup(): FormGroup {
     const group = this.formBuilder.group({
-      requestOrigin: [RequestOrigin.CLIENT, Validators.required],
-      workflowServiceType: [ServiceType.DIAGNOSIS, Validators.required],
+      workflowServiceType: [ServiceType.DIAGNOSIS, [
+        Validators.required,
+        (control: { value: ServiceType }) => this.serviceTypeOptions.includes(control.value)
+          ? null : { unsupportedWorkflow: true },
+      ]],
       clientId: [null],
       clientKind: [ClientKind.PERSON, Validators.required],
       clientContactId: [null],
@@ -1507,13 +1514,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   private applyClientContact(partnerId: number | null): void {
-    if (this.isInternalRequestOrigin()) {
-      this.createServiceOrderForm.patchValue(
-        { clientId: null, contactName: "", contactEmail: "", contactPhone: "", contactPhoneCountry: DEFAULT_PHONE_COUNTRY, contactPhoneNationalNumber: "" },
-        { emitEvent: false },
-      )
-      return
-    }
     if (!partnerId) {
       this.createServiceOrderForm.patchValue(
         { contactName: "", contactEmail: "", contactPhone: "", contactPhoneCountry: DEFAULT_PHONE_COUNTRY, contactPhoneNationalNumber: "" },
@@ -1531,7 +1531,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.syncPhoneControls(this.createServiceOrderForm)
     // Validate shared context fields only (equipment is already captured in candidates)
     const sharedContextFields = [
-      "requestOrigin", "workflowServiceType", "assignedToTechnicianId",
+      "workflowServiceType", "assignedToTechnicianId",
       "contactName", "contactPhone", "contactEmail", "documentTypeId",
     ]
     if (!this.areControlsValid(sharedContextFields)) {
@@ -1562,7 +1562,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         switchMap(({ clientId, clientContactId }) => {
           this.syncCandidateCommercialDrafts()
           const payload: ServiceOrderSaveRequest = {
-            requestOrigin: formValue.requestOrigin,
+            requestOrigin: RequestOrigin.CLIENT,
             clientId: clientId || null,
             clientContactId: clientContactId ?? null,
             assignedToTechnicianId: this.toNumericId(formValue.assignedToTechnicianId)!,
@@ -1608,9 +1608,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   private resolveClientId(formValue: Record<string, any>): Observable<{ clientId: number | null; clientContactId: number | null }> {
-    if (formValue["requestOrigin"] === RequestOrigin.INTERNAL) {
-      return of({ clientId: null, clientContactId: null })
-    }
 
     const workflowServiceType = this.getSelectedWorkflowServiceType()
     const existingPartnerId = Number(this.createServiceOrderForm.get("clientId")?.value)
@@ -2027,13 +2024,13 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.isPrintingSticker = true
     this.stickerPrintError = ""
     try {
-      await this.serviceOrderDocuments.printEquipmentSticker(target.order, target.item, copies)
+      const printer = await this.serviceOrderDocuments.printEquipmentSticker(target.order, target.item, copies)
       this.stickerPrintTarget = null
       this.stickerPrintCopies = 1
       this.showMessage(
         "success",
         "fas fa-check-circle",
-        `${copies === 1 ? "Sticker enviado" : `${copies} stickers enviados`} a la Brother QL-700.`,
+        `${copies === 1 ? "Sticker enviado" : `${copies} stickers enviados`} a ${printer || "la impresora"}.`,
       )
     } catch (error) {
       this.stickerPrintError = error instanceof Error
@@ -2140,7 +2137,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     if (this.isNonBillableServiceContext()) {
       return 0
     }
-    return Number(item.unitPrice ?? TECHNICAL_SERVICE_OPTION.price)
+    return item.laborWaiverReason ? 0 : Number(item.unitPrice ?? TECHNICAL_SERVICE_OPTION.price)
   }
 
   calculateServiceOrderAgreementTotal(): number {
@@ -2763,29 +2760,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
 
   onCreateWorkflowServiceTypeChange(): void {
     const serviceType = this.createServiceOrderForm.get("workflowServiceType")?.value as ServiceType | null
-    if (serviceType === ServiceType.ASSEMBLY) {
-      this.createServiceOrderForm.patchValue({ requestOrigin: RequestOrigin.INTERNAL }, { emitEvent: false })
-      this.clearCreateClientData()
-      this.setCustomerFieldsEnabled(false)
-    } else if (this.isInternalRequestOrigin()) {
-      this.createServiceOrderForm.patchValue({ requestOrigin: RequestOrigin.CLIENT }, { emitEvent: false })
-      this.setCustomerFieldsEnabled(true)
-    }
     this.createOrderAgreementItemsByItemIndex[0] = this.buildDefaultAgreementItemsForServiceType(serviceType)
     this.loadTechnicianAssignmentSuggestion(true)
-  }
-
-  onCreateRequestOriginChange(): void {
-    if (this.isInternalRequestOrigin()) {
-      this.clearCreateClientData()
-      this.setCustomerFieldsEnabled(false)
-      return
-    }
-    this.setCustomerFieldsEnabled(true)
-  }
-
-  isInternalRequestOrigin(): boolean {
-    return this.createServiceOrderForm.get("requestOrigin")?.value === RequestOrigin.INTERNAL
   }
 
   getCreateServiceOrderSteps(): CreateServiceOrderStep[] {
@@ -2798,14 +2774,12 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       {
         key: "workflow",
         label: "Tipo de atención",
-        description: "Define el flujo general y el origen de la orden.",
+        description: "Define el tipo de trabajo que se realizará.",
       },
       {
         key: "client",
-        label: this.isInternalRequestOrigin() ? "Responsable interno" : "Cliente",
-        description: this.isInternalRequestOrigin()
-          ? "Confirma que la orden será interna."
-          : "Identifica al cliente o regístralo si aún no existe.",
+        label: "Cliente",
+        description: "Identifica a la persona atendida o regístrala si aún no existe.",
       },
       {
         key: "items",
@@ -3135,6 +3109,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       candidates: this.createServiceOrderCandidates,
       editingCandidateIndex: this.editingCreateServiceOrderCandidateIndex,
       agreementItemsByItemIndex: this.createOrderAgreementItemsByItemIndex,
+      disabledCustomerControls: this.getDisabledCustomerControls(),
     }
 
     try {
@@ -3164,7 +3139,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
         Math.max(Number(draft.step) || 0, 0),
         this.getCreateServiceOrderSteps().length - 1,
       )
-      this.setCustomerFieldsEnabled(!this.isInternalRequestOrigin())
+      this.restoreCustomerFieldState(draft)
       return true
     } finally {
       this.isRestoringCreateServiceOrderDraft = false
@@ -3184,6 +3159,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       const draft = JSON.parse(serialized) as CreateServiceOrderDraft
       if (
         draft?.version !== 2 ||
+        !this.serviceTypeOptions.includes(draft.formValue?.['workflowServiceType'] as ServiceType) ||
         !Number.isFinite(draft.updatedAt) ||
         Date.now() - draft.updatedAt > CREATE_SERVICE_ORDER_DRAFT_TTL_MS
       ) {
@@ -3225,22 +3201,10 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   getCreateOrderClientTitle(): string {
-    if (this.isInternalRequestOrigin()) {
-      return "Responsable interno"
-    }
-    if (this.getSelectedWorkflowServiceType() === ServiceType.CUSTOMER_SERVICE) {
-      return "Socio o contacto"
-    }
     return "Datos del cliente"
   }
 
   getCreateOrderClientDescription(): string {
-    if (this.isInternalRequestOrigin()) {
-      return "Esta orden se registrará sin cliente asociado porque el origen es interno."
-    }
-    if (this.getSelectedWorkflowServiceType() === ServiceType.CUSTOMER_SERVICE) {
-      return "Identifica al socio o contacto responsable. Luego la cotización cobrará sólo repuestos."
-    }
     return "Identifica al cliente y completa los datos de contacto."
   }
 
@@ -3310,9 +3274,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     if (this.getSelectedWorkflowServiceType() === ServiceType.ASSEMBLY) {
       return "Equipos o detalle de ensamblaje"
     }
-    if (this.getSelectedWorkflowServiceType() === ServiceType.CUSTOMER_SERVICE) {
-      return "Equipos del socio"
-    }
     return "Equipos de la orden"
   }
 
@@ -3320,8 +3281,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     switch (this.getSelectedWorkflowServiceType()) {
       case ServiceType.ASSEMBLY:
         return "Registra el detalle del armado o de los equipos involucrados."
-      case ServiceType.CUSTOMER_SERVICE:
-        return "Registra el equipo del socio y el contexto del servicio. Más adelante se cotizarán sólo los repuestos."
       default:
         return "Registra los equipos y el detalle principal del servicio."
     }
@@ -3330,18 +3289,22 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   getCreateOrderWorkflowAccent(): string {
     switch (this.getSelectedWorkflowServiceType()) {
       case ServiceType.STANDARD_SERVICE:
-        return "Servicio directo"
+        return "Servicio express"
       case ServiceType.DIAGNOSIS:
         return "Diagnóstico técnico"
-      case ServiceType.WARRANTY_SERVICE:
-        return "Revisión de garantía"
       case ServiceType.ASSEMBLY:
         return "Trabajo de ensamblaje"
-      case ServiceType.CUSTOMER_SERVICE:
-        return "Atención a socio"
       default:
         return "Orden de servicio"
     }
+  }
+
+  get canWaiveLabor(): boolean {
+    return this.currentUserService.hasAllPermissions(['service-order-agreement.apply-discount', 'service-order-agreement.override-discount-limit'])
+  }
+  setLaborWaiver(item: ServiceOrderAgreementServiceComposer, enabled: boolean): void {
+    if (!this.canWaiveLabor) return
+    item.laborWaiverReason = enabled ? 'INTERNAL_SERVICE' : undefined
   }
 
   getCreateOrderAgreementItems(index: number): ServiceOrderAgreementComposerItem[] {
@@ -3585,16 +3548,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   private setCustomerFieldsEnabled(enabled: boolean): void {
-    const controls = [
-      "companyName",
-      "companyTradeName",
-      "contactName",
-      "contactEmail",
-      "contactPhone",
-      "contactPhoneCountry",
-      "contactPhoneNationalNumber",
-    ]
-    controls.forEach((controlName) => {
+    this.getCustomerControlNames().forEach((controlName) => {
       const control = this.createServiceOrderForm.get(controlName)
       if (!control) return
       if (enabled) {
@@ -3605,11 +3559,42 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     })
   }
 
+  private getCustomerControlNames(): string[] {
+    return [
+      "companyName",
+      "companyTradeName",
+      "contactName",
+      "contactEmail",
+      "contactPhone",
+      "contactPhoneCountry",
+      "contactPhoneNationalNumber",
+    ]
+  }
+
+  private getDisabledCustomerControls(): string[] {
+    return this.getCustomerControlNames().filter(
+      (controlName) => this.createServiceOrderForm.get(controlName)?.disabled,
+    )
+  }
+
+  private restoreCustomerFieldState(draft: CreateServiceOrderDraft): void {
+    this.setCustomerFieldsEnabled(true)
+    const allowed = new Set(this.getCustomerControlNames())
+    const savedControls = Array.isArray(draft.disabledCustomerControls)
+      ? draft.disabledCustomerControls.filter((controlName) => allowed.has(controlName))
+      : Number(draft.formValue?.['clientId']) > 0
+        ? this.getCustomerControlNames()
+        : []
+    savedControls.forEach((controlName) =>
+      this.createServiceOrderForm.get(controlName)?.disable({ emitEvent: false }),
+    )
+  }
+
   private validateCurrentCreateServiceOrderStep(): boolean {
     const step = this.getCurrentCreateServiceOrderStep().key
     if (step === "workflow") {
-      this.markControlsAsTouched(["workflowServiceType", "requestOrigin"])
-      return this.areControlsValid(["workflowServiceType", "requestOrigin"])
+      this.markControlsAsTouched(["workflowServiceType"])
+      return this.areControlsValid(["workflowServiceType"])
     }
 
     if (step === "assignment") {
@@ -3618,9 +3603,6 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
 
     if (step === "client") {
-      if (this.isInternalRequestOrigin()) {
-        return true
-      }
       this.markControlsAsTouched(["documentNumber", "documentTypeId", "contactName", "contactPhone", "contactEmail"])
       return this.areControlsValid(["documentNumber", "documentTypeId", "contactName", "contactPhone", "contactEmail"])
     }
@@ -3799,6 +3781,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
           quantity: 1,
           unitPrice: Number(item.unitPrice) || 0,
           notes: item.notes || undefined,
+          ...(item.laborWaiverReason ? { laborWaiverReason: item.laborWaiverReason } : {}),
         }
       }),
     }

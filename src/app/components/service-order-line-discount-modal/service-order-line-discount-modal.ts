@@ -1,6 +1,7 @@
 import { Component, EventEmitter, inject, Input, OnChanges, Output } from '@angular/core';
 import { FormArray, FormControl, FormGroup, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
+import { CurrentUserService } from '../../services/current-user.service';
 import {
   ServiceOrderAgreement,
   ServiceOrderItemCommercialLine,
@@ -19,6 +20,7 @@ export interface ServiceOrderLineDiscountTarget {
 }
 
 type DiscountLineForm = FormGroup<{
+  laborWaived: FormControl<boolean>;
   percentage: FormControl<number>;
   overrideReason: FormControl<string>;
 }>;
@@ -30,6 +32,7 @@ type DiscountLineForm = FormGroup<{
   styleUrls: ['./service-order-line-discount-modal.scss'],
 })
 export class ServiceOrderLineDiscountModalComponent implements OnChanges {
+  private readonly currentUserService = inject(CurrentUserService);
   private readonly agreementService = inject(ServiceOrderAgreementService);
 
   @Input({ required: true }) target!: ServiceOrderLineDiscountTarget;
@@ -50,6 +53,7 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
   ngOnChanges(): void {
     const forms = (this.target?.lines ?? []).map((line) =>
       new FormGroup({
+        laborWaived: new FormControl(this.isCurrentLaborWaived(line), { nonNullable: true }),
         percentage: new FormControl(line.type === 'PRODUCT' ? 0 : this.getCurrentPercentage(line), {
           nonNullable: true,
           validators: [Validators.required, Validators.min(0), Validators.max(100)],
@@ -64,6 +68,23 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
     this.errorMessage = '';
   }
 
+  get canWaiveLabor(): boolean {
+    return this.currentUserService.hasAllPermissions(['service-order-agreement.apply-discount', 'service-order-agreement.override-discount-limit']);
+  }
+
+  isCurrentLaborWaived(line: ServiceOrderItemCommercialLine): boolean {
+    return line.type === 'SERVICE' && line.discounts?.[0]?.ruleName === 'Exoneración de mano de obra: Servicio interno';
+  }
+
+  isLaborWaived(index: number): boolean {
+    return this.lineForms.at(index)?.controls.laborWaived.value ?? false;
+  }
+
+  setLaborWaiver(index: number, enabled: boolean): void {
+    if (!this.canWaiveLabor || this.target.lines[index]?.type !== 'SERVICE') return;
+    this.lineForms.at(index).patchValue({ laborWaived: enabled, percentage: enabled ? 100 : 0, overrideReason: enabled ? 'Servicio interno' : '' });
+  }
+
   close(): void {
     if (!this.isSaving) this.closed.emit();
   }
@@ -73,6 +94,7 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
       this.lineForms.at(index)?.controls.percentage.setValue(0);
       return;
     }
+    if (this.isLaborWaived(index)) return;
     const percentage = Math.min(100, Math.max(0, Number(value) || 0));
     this.lineForms.at(index)?.controls.percentage.setValue(percentage);
     this.errorMessage = '';
@@ -118,7 +140,7 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
 
   hasChanges(): boolean {
     return (this.target?.lines ?? []).some(
-      (line, index) => this.getCurrentPercentage(line) !== this.getPercentage(index),
+      (line, index) => this.getCurrentPercentage(line) !== this.getPercentage(index) || this.isCurrentLaborWaived(line) !== this.isLaborWaived(index) || (line.discounts?.[0]?.overrideReason ?? '') !== this.lineForms.at(index).controls.overrideReason.value,
     );
   }
 
@@ -177,8 +199,8 @@ export class ServiceOrderLineDiscountModalComponent implements OnChanges {
       ...(line.type === 'SERVICE' && line.serviceId ? { serviceId: Number(line.serviceId) } : {}),
       quantity: Number(line.quantity),
       unitPrice: Number(line.unitPrice),
-      ...(discountPct > 0 ? { discountPct } : {}),
-      ...(overrideReason ? { discountOverrideReason: overrideReason } : {}),
+      ...(this.isLaborWaived(index) ? { laborWaiverReason: 'INTERNAL_SERVICE' as const } : discountPct > 0 ? { discountPct } : {}),
+      ...(!this.isLaborWaived(index) && overrideReason ? { discountOverrideReason: overrideReason } : {}),
       ...(line.type === 'PRODUCT' && line.requiresPurchase ? { requiresPurchase: true } : {}),
       ...(line.notes?.trim() ? { notes: line.notes.trim() } : {}),
     };

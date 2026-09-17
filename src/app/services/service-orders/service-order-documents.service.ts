@@ -53,13 +53,13 @@ export class ServiceOrderDocumentsService {
     serviceOrder: ServiceOrder,
     item: ServiceOrderItem,
     copies: number,
-  ): Promise<void> {
+  ): Promise<string> {
     const widthMm = 62;
     const heightMm = 35;
     const doc = this.buildEquipmentStickerPdf(serviceOrder, item, widthMm, heightMm);
     const dataUri = doc.output('datauristring');
 
-    await this.qzTrayPrint.printPdfLabel({
+    return this.qzTrayPrint.printPdfLabel({
       base64: dataUri.slice(dataUri.indexOf(',') + 1),
       copies,
       widthMm,

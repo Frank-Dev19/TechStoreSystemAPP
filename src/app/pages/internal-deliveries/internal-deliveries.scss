@@ -1,0 +1,342 @@
+@use '../../../styles/operational-tokens' as ui;
+
+.delivery-register {
+  min-height: 100vh;
+  padding: 1rem;
+  color: ui.$text;
+  background: ui.$background;
+  font-size: 0.9375rem;
+
+  h1 {
+    margin: 0.25rem 0 0.5rem;
+    font-size: 1.625rem;
+    font-weight: 700;
+  }
+  h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 650;
+  }
+  label {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+    font-weight: 600;
+  }
+  .eyebrow {
+    margin: 0;
+    color: ui.$muted;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .page-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    p:not(.eyebrow) {
+      max-width: 70ch;
+      margin: 0;
+      color: ui.$muted;
+    }
+  }
+  .manual-editor,
+  .filters,
+  .results {
+    border: 1px solid ui.$border;
+    border-radius: ui.$radius;
+    background: ui.$surface;
+  }
+  .manual-editor {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+  }
+  .editor-heading {
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    > p {
+      max-width: 70ch;
+      margin: 0;
+      color: ui.$muted;
+    }
+  }
+  .editor-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+  .editor-wide {
+    grid-column: 1 / -1;
+  }
+  .optional {
+    color: ui.$muted;
+    font-size: 0.75rem;
+    font-weight: 400;
+  }
+  .availability {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 44px;
+    margin: 0;
+    color: ui.$muted;
+    strong {
+      color: ui.$text;
+      font-size: 1.0625rem;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+  .editor-actions,
+  .filter-actions,
+  .row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .editor-actions {
+    margin-top: 1rem;
+  }
+  .editor-actions .btn,
+  .filter-actions .btn {
+    flex: 1 1 9rem;
+  }
+  small {
+    color: ui.$muted;
+    font-weight: 400;
+  }
+  textarea {
+    resize: vertical;
+  }
+
+  .filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+  }
+  .filter-note,
+  .feedback {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: ui.$muted;
+  }
+  .feedback {
+    padding: 0.75rem;
+    border-radius: 6px;
+    background: #fef2f2;
+    color: #991b1b;
+    overflow-wrap: anywhere;
+    &--success {
+      margin-bottom: 1rem;
+      background: #ecfdf3;
+      color: #166534;
+    }
+  }
+
+  .results {
+    overflow: hidden;
+  }
+  .results-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+  }
+  .results-heading span {
+    color: ui.$muted;
+    white-space: nowrap;
+  }
+  .table-scroll {
+    overflow-x: auto;
+    contain: inline-size layout paint;
+  }
+  table {
+    width: 100%;
+    min-width: 1120px;
+    border-collapse: collapse;
+  }
+  th {
+    background: ui.$background;
+    color: ui.$muted;
+    font-size: 0.75rem;
+  }
+  td,
+  th {
+    padding: 1rem;
+    border-bottom: 1px solid ui.$border;
+    text-align: left;
+    vertical-align: top;
+  }
+  td small {
+    display: block;
+    margin-top: 0.25rem;
+  }
+  td strong {
+    font-weight: 600;
+  }
+  tbody tr:hover {
+    background: ui.$background;
+  }
+  .type-badge,
+  .status {
+    display: inline-block;
+    padding: 0.25rem 0.625rem;
+    border-radius: 6px;
+    background: #e8eef7;
+    color: #294b73;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+  .type-badge--manual {
+    background: #eef6ef;
+    color: #285b37;
+  }
+  .status {
+    background: #fef3c7;
+    color: #854d0e;
+  }
+  .status.confirmed {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .detail-row {
+    background: ui.$background;
+  }
+  .detail-row p {
+    margin: 0 0 0.75rem;
+  }
+  .detail-row ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .detail-row li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    padding: 0.625rem 0;
+    overflow-wrap: anywhere;
+  }
+  .detail-row li strong {
+    min-width: 180px;
+  }
+  .delivery-notes {
+    max-width: 70ch;
+    color: ui.$muted;
+    white-space: pre-line;
+  }
+  .pagination-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+  }
+  .pagination-bar div {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .empty,
+  .loading {
+    padding: 3rem 1.5rem;
+    background: ui.$background;
+    color: ui.$muted;
+    text-align: center;
+  }
+  .empty h3 {
+    color: ui.$text;
+    font-size: 1.125rem;
+  }
+  .empty p {
+    max-width: 65ch;
+    margin: 0.5rem auto 1rem;
+  }
+  .btn,
+  .form-control,
+  .form-select {
+    min-height: 44px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    white-space: normal;
+  }
+  :is(button, a, input, select, textarea):focus-visible,
+  .table-scroll:focus-visible {
+    outline: 3px solid ui.$focus;
+    outline-offset: 2px;
+  }
+}
+
+:host ::ng-deep .delivery-register .ng-select {
+  min-width: 0;
+  .ng-select-container {
+    min-height: 44px;
+    border: 1px solid ui.$border;
+    border-radius: 6px;
+    background: ui.$surface;
+  }
+  .ng-value {
+    max-width: 100%;
+  }
+  .ng-value-label {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (min-width: 768px) {
+  .delivery-register {
+    padding: 2rem;
+    h1 {
+      font-size: 2rem;
+    }
+    .page-header {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .manual-editor,
+    .filters {
+      padding: 1.25rem;
+    }
+    .editor-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .filters {
+      grid-template-columns: minmax(220px, 1.5fr) minmax(170px, 1fr) repeat(2, minmax(145px, 0.8fr));
+    }
+    .filter-actions {
+      grid-column: 1 / -1;
+    }
+    .editor-actions .btn,
+    .filter-actions .btn {
+      flex: 0 1 auto;
+    }
+    .results-heading,
+    .pagination-bar {
+      padding: 1.25rem;
+    }
+  }
+}
+
+@media (min-width: 1180px) {
+  .delivery-register .editor-grid {
+    grid-template-columns: minmax(240px, 1.2fr) minmax(260px, 1.5fr) minmax(170px, 0.8fr);
+  }
+  .delivery-register .filters {
+    grid-template-columns: minmax(240px, 1.5fr) minmax(190px, 1fr) repeat(2, 165px) auto;
+  }
+  .delivery-register .filter-actions {
+    grid-column: auto;
+  }
+}

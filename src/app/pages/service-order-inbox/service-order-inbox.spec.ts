@@ -277,9 +277,10 @@ describe('ServiceOrderInboxPage', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Detalles generales');
   }));
 
-  it('explica que una orden estándar no requiere diagnóstico', () => {
+  it('explica que una orden express no requiere diagnóstico', () => {
     component.selectedOrderDetail = { serviceType: 'STANDARD_SERVICE' } as any;
     expect(component.orderHasDiagnosisFlow).toBeFalse();
+    expect(component.formatServiceType('STANDARD_SERVICE' as any)).toBe('Servicio express');
   });
 
   it('traduce al español los estados y resultados técnicos del modal', () => {

@@ -82,6 +82,7 @@ describe('TechnicianPanel', () => {
   };
 
   const currentUserServiceStub = {
+    hasAllPermissions: () => true,
     value: { id: 77 },
   };
 
@@ -131,6 +132,15 @@ describe('TechnicianPanel', () => {
     fixture = TestBed.createComponent(TechnicianPanel);
     component = fixture.componentInstance;
     fixture.detectChanges();
+  });
+
+  it('calcula la exoneración sin modificar el importe bruto ni los repuestos', () => {
+    const labor = { type: 'service', unitPrice: 80, laborWaiverReason: 'INTERNAL_SERVICE' } as any;
+    const part = { type: 'product', unitPrice: 150, quantity: 1 } as any;
+    expect(component.calculateAgreementItemGross(labor)).toBe(80);
+    expect(component.calculateAgreementItemDiscount(labor)).toBe(80);
+    expect(component.calculateAgreementItemSubtotal(labor)).toBe(0);
+    expect(component.calculateAgreementItemSubtotal(part)).toBe(150);
   });
 
   it('should create', () => {
