@@ -31,9 +31,38 @@ import { SerialsService } from '../../services/inventory/serials.service';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import autoTable from 'jspdf-autotable';
+import {
+  getMovementReasonLabel as movementReasonLabel,
+  getSourceDocumentLabel as sourceDocumentLabel,
+} from '../../utils/inventory-movement-labels';
 
 // ===== Util =====
 type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+export function formatKardexDateColumn(worksheet: XLSX.WorkSheet): void {
+  if (!worksheet['!ref']) return;
+  const range = XLSX.utils.decode_range(worksheet['!ref']);
+  for (let row = range.s.r + 1; row <= range.e.r; row++) {
+    const cell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
+    if (!cell) continue;
+    if (cell.t === 's') {
+      const match = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/.exec(String(cell.v));
+      if (!match) continue;
+      cell.t = 'd';
+      cell.v = new Date(
+        Number(match[3]),
+        Number(match[2]) - 1,
+        Number(match[1]),
+        Number(match[4]),
+        Number(match[5]),
+      );
+    } else if (cell.t !== 'n' && cell.t !== 'd') {
+      continue;
+    }
+    cell.z = 'dd/mm/yyyy hh:mm';
+    delete cell.w;
+  }
+}
 type OperationProductSearchMode = 'entry' | 'exit' | 'adjustment';
 
 @Component({
@@ -143,6 +172,14 @@ export class Inventory implements OnInit, OnDestroy {
   kardexTotal = 0;
   kardexLoading = false;
   datePresetKardex = 'last30days';
+  showKardexExportModal = false;
+  kardexExporting = false;
+  kardexExportForm = {
+    dateFrom: '',
+    dateTo: '',
+    product_id: null as number | null,
+    reason_code: null as string | null,
+  };
 
   // -----------------------------
   // FORM STATE
@@ -1870,14 +1907,70 @@ export class Inventory implements OnInit, OnDestroy {
     }
   }
 
-  exportKardexCsv(): void {
-    let csv = 'Fecha,Tipo,Motivo,Producto,Cantidad,Costo Unit.,Costo Total,Saldo Cant.,Saldo Costo,CPP\n';
-    for (const m of this.pagedKardex) {
-      const p = this.getProductBySku(m.product_id);
-      csv += `"${new Date(m.occurred_at).toLocaleString()}","${this.getMovementTypeLabel(m.type)}","${m.reason_code}","${p?.name ?? ''}",${m.qty},${Number(m.unit_cost).toFixed(2)},${Number(m.total_cost).toFixed(2)},${m.balance_qty_post},${Number(m.balance_total_cost_post).toFixed(2)},${Number(m.balance_avg_cost_post).toFixed(2)}\n`;
+  openKardexExportModal(): void {
+    const today = new Date();
+    const defaultFrom = new Date(today);
+    defaultFrom.setDate(today.getDate() - 30);
+    const formatDate = (date: Date) => [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    this.kardexExportForm = {
+      dateFrom: this.kardexFilters.dateFrom || formatDate(defaultFrom),
+      dateTo: this.kardexFilters.dateTo || formatDate(today),
+      product_id: this.kardexFilters.product_id ?? null,
+      reason_code: this.kardexFilters.reason_code ?? null,
+    };
+    this.showKardexExportModal = true;
+  }
+
+  closeKardexExportModal(): void {
+    if (this.kardexExporting) return;
+    this.showKardexExportModal = false;
+  }
+
+  async exportKardexExcel(): Promise<void> {
+    const filters = this.kardexExportForm;
+    if (!filters.dateFrom || !filters.dateTo) {
+      this.showToast('error', 'Seleccione la fecha inicial y la fecha final');
+      return;
     }
-    this.downloadFile(csv, 'kardex-export.csv', 'text/csv');
-    this.showToast('success', 'Kardex exportado');
+    if (filters.dateFrom > filters.dateTo) {
+      this.showToast('error', 'La fecha inicial no puede ser posterior a la fecha final');
+      return;
+    }
+
+    try {
+      this.kardexExporting = true;
+      const blob = await this.kardexSvc.exportCsv(filters).toPromise();
+      if (!blob) throw new Error('El archivo exportado está vacío');
+      const content = await blob.arrayBuffer();
+      this.saveKardexWorkbook(content, `kardex-${filters.dateFrom}-a-${filters.dateTo}.xlsx`);
+      this.showKardexExportModal = false;
+      this.showToast('success', 'Kardex exportado en Excel');
+    } catch (error: any) {
+      this.showToast('error', error?.error?.message || 'No se pudo exportar el Kardex');
+    } finally {
+      this.kardexExporting = false;
+    }
+  }
+
+  saveKardexWorkbook(content: ArrayBuffer, filename: string): void {
+    const workbook = XLSX.read(content, { type: 'array', raw: true, cellDates: true });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) throw new Error('El archivo exportado no contiene información');
+
+    const worksheet = workbook.Sheets[firstSheetName];
+    formatKardexDateColumn(worksheet);
+    worksheet['!cols'] = [
+      { wch: 19 }, { wch: 15 }, { wch: 23 }, { wch: 22 }, { wch: 14 },
+      { wch: 28 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 26 },
+      { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+      { wch: 14 }, { wch: 22 },
+    ];
+    XLSX.writeFile(workbook, filename, { compression: true });
   }
 
   printKardex(): void {
@@ -1888,6 +1981,14 @@ export class Inventory implements OnInit, OnDestroy {
   getMovementTypeLabel(type: Movement['type']): string {
     const map: Record<string, string> = { IN: 'Entrada', OUT: 'Salida', ADJ: 'Ajuste', TRANSFER: 'Transferencia' };
     return map[type] ?? type;
+  }
+
+  getMovementReasonLabel(code: string | null | undefined): string {
+    return movementReasonLabel(code);
+  }
+
+  getSourceDocumentLabel(code: string | null | undefined): string {
+    return sourceDocumentLabel(code);
   }
 
   // MODAL KARDEX
@@ -2208,7 +2309,9 @@ export class Inventory implements OnInit, OnDestroy {
         this.categories.push(c);
         this.categoryMap.set(c.id, c);
         this.showToast('success', 'Categoría creada');
+        this.categoryFilter.page = 1;
       }
+      await Promise.all([this.loadCategories(), this.loadPagedCategories()]);
       this.closeCategoryModal();
     } catch {
       this.showToast('error', 'No se pudo guardar la categoría');
@@ -2221,6 +2324,10 @@ export class Inventory implements OnInit, OnDestroy {
       await this.catalogsSvc.deleteCategory(id).toPromise();
       this.categories = this.categories.filter((c) => c.id !== id);
       this.categoryMap.delete(id);
+      if (this.pagedCategories.length === 1 && this.categoryFilter.page > 1) {
+        this.categoryFilter.page--;
+      }
+      await Promise.all([this.loadCategories(), this.loadPagedCategories()]);
       this.showToast('success', 'Categoría eliminada');
     } catch {
       this.showToast('error', 'No se pudo eliminar la categoría');
@@ -2260,7 +2367,9 @@ export class Inventory implements OnInit, OnDestroy {
         const u = await this.catalogsSvc.createUnit(f).toPromise();
         this.units.push(u);
         this.showToast('success', 'Unidad creada');
+        this.unitFilter.page = 1;
       }
+      await Promise.all([this.loadUnits(), this.loadPagedUnits()]);
       this.closeUnitModal();
     } catch {
       this.showToast('error', 'No se pudo guardar la unidad');
@@ -2272,6 +2381,10 @@ export class Inventory implements OnInit, OnDestroy {
     try {
       await this.catalogsSvc.deleteUnit(id).toPromise();
       this.units = this.units.filter((u) => u.id !== id);
+      if (this.pagedUnits.length === 1 && this.unitFilter.page > 1) {
+        this.unitFilter.page--;
+      }
+      await Promise.all([this.loadUnits(), this.loadPagedUnits()]);
       this.showToast('success', 'Unidad eliminada');
     } catch {
       this.showToast('error', 'No se pudo eliminar la unidad');
@@ -2363,6 +2476,18 @@ export class Inventory implements OnInit, OnDestroy {
     link.download = filename;
     link.click();
     window.URL.revokeObjectURL(url);
+  }
+
+  downloadBlob(blob: Blob, filename: string): void {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
   }
 
 

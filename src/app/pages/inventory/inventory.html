@@ -1316,9 +1316,9 @@
                 <p class="section-subtitle">Historial completo de movimientos con costo promedio ponderado</p>
             </div>
             <div class="header-actions">
-                <button class="btn-secondary" (click)="exportKardexCsv()">
+                <button class="btn-secondary" (click)="openKardexExportModal()">
                     <i class="fas fa-file-csv"></i>
-                    Exportar CSV
+                    Exportar Excel
                 </button>
                 <button class="btn-secondary" (click)="printKardex()">
                     <i class="fas fa-print"></i>
@@ -1425,8 +1425,8 @@
                                     {{ getMovementTypeLabel(mov.type) }}
                                 </span>
                             </td>
-                            <td>{{ mov.reason_code }}</td>
-                            <td>{{ mov.source_doc_type || '-' }}</td>
+                            <td>{{ getMovementReasonLabel(mov.reason_code) }}</td>
+                            <td>{{ getSourceDocumentLabel(mov.source_doc_type) }}</td>
                             <td><code>{{ mov.product?.sku || '-' }}</code></td>
                             <td>{{ mov.product?.name || '-' }}</td>
                             <td>{{ mov.product?.category?.name || '-' }}</td>
@@ -1899,97 +1899,178 @@
 
     <!-- SECCION PARA LOS MODALES   -->
 
-    <!-- Product Modal -->
-    <div class="modal-overlay" *ngIf="showProductModal" (click)="closeProductModal()">
-        <div class="modal-content modal-large" (click)="$event.stopPropagation()">
+    <!-- Kardex Export Modal -->
+    <div class="modal-overlay" *ngIf="showKardexExportModal" (click)="closeKardexExportModal()">
+        <div class="modal-content modal-small kardex-export-modal" (click)="$event.stopPropagation()">
             <div class="modal-header">
-                <h3>{{ editingProduct ? 'Editar Producto' : 'Nuevo Producto' }}</h3>
-                <button class="close-button" (click)="closeProductModal()">
+                <div>
+                    <h3>Exportar Kardex</h3>
+                    <p>Selecciona el periodo que deseas incluir en el archivo.</p>
+                </div>
+                <button class="close-button" (click)="closeKardexExportModal()" [disabled]="kardexExporting"
+                    title="Cerrar">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <div class="form-row">
                     <div class="form-group">
-                        <label>SKU *</label>
-                        <input type="text" [(ngModel)]="productForm.sku" class="form-control">
+                        <label>Fecha desde *</label>
+                        <input type="date" [(ngModel)]="kardexExportForm.dateFrom" class="form-control"
+                            [max]="kardexExportForm.dateTo">
                     </div>
                     <div class="form-group">
-                        <label>Nombre *</label>
-                        <input type="text" [(ngModel)]="productForm.name" class="form-control">
+                        <label>Fecha hasta *</label>
+                        <input type="date" [(ngModel)]="kardexExportForm.dateTo" class="form-control"
+                            [min]="kardexExportForm.dateFrom">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Marca</label>
-                    <input type="text" [(ngModel)]="productForm.brand" class="form-control">
+                    <label>Producto</label>
+                    <select [(ngModel)]="kardexExportForm.product_id" class="form-control">
+                        <option [ngValue]="null">Todos los productos</option>
+                        <option *ngFor="let product of products" [ngValue]="product.id">
+                            {{ product.sku }} - {{ product.name }}
+                        </option>
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label>Descripción</label>
-                    <textarea [(ngModel)]="productForm.description" class="form-control" rows="2"></textarea>
+                    <label>Motivo</label>
+                    <select [(ngModel)]="kardexExportForm.reason_code" class="form-control">
+                        <option [ngValue]="null">Todos los motivos</option>
+                        <option value="COMPRA">Compra</option>
+                        <option value="VENTA">Venta</option>
+                        <option value="SALE_CANCELLATION">Anulación de venta</option>
+                        <option value="AJUSTE_INV">Ajuste de inventario</option>
+                        <option value="DAÑO">Daño</option>
+                        <option value="PERDIDA">Pérdida</option>
+                        <option value="CONSUMO_INT">Consumo interno</option>
+                    </select>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Categoría *</label>
-                        <select [(ngModel)]="productForm.category_id" class="form-control">
-                            <option [ngValue]="null">Seleccionar</option>
-                            <option *ngFor="let cat of categories" [ngValue]="cat.id">{{ cat.name }}</option>
-                        </select>
+                <p class="export-scope-note">
+                    <i class="fas fa-info-circle"></i>
+                    Se incluirán todos los movimientos del periodo, sin limitarse a la página visible.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" (click)="closeKardexExportModal()" [disabled]="kardexExporting">
+                    Cancelar
+                </button>
+                <button class="btn-success" (click)="exportKardexExcel()" [disabled]="kardexExporting">
+                    <i class="fas" [ngClass]="kardexExporting ? 'fa-spinner fa-spin' : 'fa-file-excel'"></i>
+                    {{ kardexExporting ? 'Exportando...' : 'Exportar Excel' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Modal -->
+    <div class="modal-overlay" *ngIf="showProductModal" (click)="closeProductModal()">
+        <div class="modal-content modal-large product-modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>{{ editingProduct ? 'Editar Producto' : 'Nuevo Producto' }}</h3>
+                <button class="close-button" (click)="closeProductModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body product-modal-body">
+                <section class="product-form-section">
+                    <div class="product-form-section-title">
+                        <i class="fas fa-box"></i>
+                        <div><strong>Información del producto</strong><span>Datos principales para identificarlo.</span></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>SKU *</label>
+                            <input type="text" [(ngModel)]="productForm.sku" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Nombre *</label>
+                            <input type="text" [(ngModel)]="productForm.name" class="form-control">
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label>Unidad *</label>
-                        <select [(ngModel)]="productForm.unit_id" class="form-control">
-                            <option [ngValue]="null">Seleccionar</option>
-                            <option *ngFor="let unit of units" [ngValue]="unit.id">{{ unit.name }}</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Duración de garantía *</label>
-                        <input type="number" [(ngModel)]="productForm.warranty_duration_value" class="form-control" min="1" step="1">
+                        <label>Marca</label>
+                        <input type="text" [(ngModel)]="productForm.brand" class="form-control">
                     </div>
                     <div class="form-group">
-                        <label>Unidad de garantía *</label>
-                        <select [(ngModel)]="productForm.warranty_duration_unit" class="form-control">
-                            <option value="DAY">Días</option>
-                            <option value="MONTH">Meses</option>
-                            <option value="YEAR">Años</option>
-                        </select>
+                        <label>Descripción</label>
+                        <textarea [(ngModel)]="productForm.description" class="form-control" rows="3"></textarea>
                     </div>
-                </div>
-                <p class="form-help-text"><i class="fas fa-shield-alt"></i> La cobertura inicia cuando la venta del producto queda emitida.</p>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Stock Mínimo</label>
-                        <input type="number" [(ngModel)]="productForm.min_stock" class="form-control" min="0">
+                </section>
+
+                <section class="product-form-section">
+                    <div class="product-form-section-title">
+                        <i class="fas fa-tags"></i>
+                        <div><strong>Clasificación y garantía</strong><span>Catálogo y cobertura comercial.</span></div>
                     </div>
-                    <div class="form-group">
-                        <label>Stock Máximo</label>
-                        <input type="number" [(ngModel)]="productForm.max_stock" class="form-control" min="0">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Categoría *</label>
+                            <select [(ngModel)]="productForm.category_id" class="form-control">
+                                <option [ngValue]="null">Seleccionar</option>
+                                <option *ngFor="let cat of categories" [ngValue]="cat.id">{{ cat.name }}</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Unidad *</label>
+                            <select [(ngModel)]="productForm.unit_id" class="form-control">
+                                <option [ngValue]="null">Seleccionar</option>
+                                <option *ngFor="let unit of units" [ngValue]="unit.id">{{ unit.name }}</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Punto de Reorden</label>
-                        <input type="number" [(ngModel)]="productForm.reorder_point" class="form-control" min="0">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Duración de garantía *</label>
+                            <input type="number" [(ngModel)]="productForm.warranty_duration_value" class="form-control" min="1" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Unidad de garantía *</label>
+                            <select [(ngModel)]="productForm.warranty_duration_unit" class="form-control">
+                                <option value="DAY">Días</option>
+                                <option value="MONTH">Meses</option>
+                                <option value="YEAR">Años</option>
+                            </select>
+                        </div>
                     </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>
+                    <p class="form-help-text"><i class="fas fa-shield-alt"></i> La cobertura inicia cuando la venta del producto queda emitida.</p>
+                </section>
+
+                <section class="product-form-section">
+                    <div class="product-form-section-title">
+                        <i class="fas fa-warehouse"></i>
+                        <div><strong>Control de inventario</strong><span>Niveles utilizados para seguimiento y reposición.</span></div>
+                    </div>
+                    <div class="form-row inventory-levels-row">
+                        <div class="form-group">
+                            <label>Stock mínimo</label>
+                            <input type="number" [(ngModel)]="productForm.min_stock" class="form-control" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Stock máximo</label>
+                            <input type="number" [(ngModel)]="productForm.max_stock" class="form-control" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Punto de reorden</label>
+                            <input type="number" [(ngModel)]="productForm.reorder_point" class="form-control" min="0">
+                        </div>
+                    </div>
+                    <div class="product-tracking-options">
+                        <label class="tracking-option">
                             <input type="checkbox" [(ngModel)]="productForm.is_serialized">
-                            Maneja Seriales
+                            <span><i class="fas fa-barcode"></i><strong>Maneja seriales</strong><small>Control individual por número de serie.</small></span>
                         </label>
-                    </div>
-                    <div class="form-group">
-                        <label>
+                        <label class="tracking-option">
                             <input type="checkbox" [(ngModel)]="productForm.manages_expiration">
-                            Maneja Vencimiento
+                            <span><i class="fas fa-calendar-alt"></i><strong>Maneja vencimiento</strong><small>Control por lotes y fecha de caducidad.</small></span>
                         </label>
                     </div>
-                </div>
+                </section>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" (click)="closeProductModal()">Cancelar</button>
-                <button class="btn-primary" (click)="saveProduct()">
+                <button class="btn-success" (click)="saveProduct()">
                     <i class="fas fa-save"></i>
                     Guardar
                 </button>

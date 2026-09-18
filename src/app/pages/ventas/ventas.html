@@ -146,7 +146,7 @@
             <div class="metric-card danger">
                 <div class="metric-icon"><i class="fas fa-undo-alt"></i></div>
                 <div class="metric-content">
-                    <label>Anulaciones</label>
+                    <label>Anulaciones y devoluciones</label>
                     <span class="metric-value">S/ {{ currentCashRegister.totalReturns || 0 | number:'1.2-2' }}</span>
                 </div>
             </div>
@@ -381,6 +381,18 @@
 
         <!-- TABLE -->
         <div class="table-section">
+            <div class="electronic-batch-toolbar" *ngIf="!isLoading">
+                <div>
+                    <strong>Emisión electrónica</strong>
+                    <span>Selecciona hasta 50 comprobantes pendientes.</span>
+                </div>
+                <button class="btn-primary" (click)="sendSelectedElectronicInvoices()"
+                    [disabled]="selectedElectronicSaleIds.size === 0 || isSendingElectronicBatch">
+                    <i class="fas" [class.fa-spinner]="isSendingElectronicBatch"
+                        [class.fa-spin]="isSendingElectronicBatch" [class.fa-paper-plane]="!isSendingElectronicBatch"></i>
+                    Emitir seleccionados ({{ selectedElectronicSaleIds.size }})
+                </button>
+            </div>
             <div class="table-loading" *ngIf="isLoading">
                 <i class="fas fa-spinner fa-spin"></i>
                 <span>Cargando ventas...</span>
@@ -390,6 +402,11 @@
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th class="selection-column">
+                                <input type="checkbox" aria-label="Seleccionar comprobantes pendientes"
+                                    [checked]="allSendableElectronicSalesSelected"
+                                    (change)="toggleAllElectronicSales($any($event.target).checked)">
+                            </th>
                             <th>Fecha</th>
                             <th>Tipo</th>
                             <th>Numero</th>
@@ -403,6 +420,12 @@
                     </thead>
                     <tbody>
                         <tr *ngFor="let sale of sales" class="sale-row">
+                            <td class="selection-column">
+                                <input type="checkbox" [disabled]="!canSendElectronicInvoice(sale)"
+                                    [checked]="isElectronicSaleSelected(sale.id)"
+                                    [attr.aria-label]="'Seleccionar ' + sale.series + '-' + sale.number"
+                                    (change)="toggleElectronicSale(sale, $any($event.target).checked)">
+                            </td>
                             <td>{{ sale.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
                             <td>
                                 <span class="doc-type-badge">
@@ -417,7 +440,7 @@
                             </td>
                             <td>
                                 <span class="status-badge"
-                                    [ngClass]="'status-' + (sale.status === 'CONFIRMED' ? 'emitido' : (sale.status === 'CANCELLED' ? 'anulado' : 'pendiente'))">
+                                    [ngClass]="'status-' + (sale.status === 'CONFIRMED' ? 'emitido' : (['CANCELLED', 'REFUNDED'].includes(sale.status) ? 'anulado' : 'pendiente'))">
                                     {{ getStatusLabel(sale.status) }}
                                 </span>
                             </td>
@@ -432,6 +455,14 @@
                                         [class.fa-times-circle]="getElectronicDocumentForSale(sale)?.status === 'REJECTED'"
                                         [class.fa-exclamation-triangle]="getElectronicDocumentForSale(sale)?.status === 'ERROR'"></i>
                                     {{ getElectronicStatusLabel(getElectronicDocumentForSale(sale)?.status) }}
+                                </span>
+                                <span class="cancellation-status pending"
+                                    *ngIf="getElectronicDocumentForSale(sale)?.cancellationStatus === 'PENDING'">
+                                    Baja pendiente
+                                </span>
+                                <span class="cancellation-status rejected"
+                                    *ngIf="getElectronicDocumentForSale(sale)?.cancellationStatus === 'REJECTED'">
+                                    Baja rechazada
                                 </span>
                             </td>
                             <td class="actions">
@@ -453,14 +484,23 @@
                                 </button>
                                 <!-- Nota de Credito y Guia de Remision temporalmente deshabilitados -->
                                 <button class="btn-icon danger" *ngIf="sale.status === 'CONFIRMED'"
+                                    [disabled]="cancellationLoadingBySaleId[sale.id]"
                                     (click)="onCancelSale(sale)" title="Anular Venta">
                                     <i class="fas fa-ban"></i>
+                                </button>
+                                <button class="btn-icon warning"
+                                    *ngIf="getElectronicDocumentForSale(sale)?.cancellationStatus === 'PENDING'"
+                                    [disabled]="cancellationLoadingBySaleId[sale.id]"
+                                    (click)="refreshElectronicCancellation(sale)" title="Consultar anulación en SUNAT">
+                                    <i class="fas" [class.fa-spinner]="cancellationLoadingBySaleId[sale.id]"
+                                        [class.fa-spin]="cancellationLoadingBySaleId[sale.id]"
+                                        [class.fa-rotate]="!cancellationLoadingBySaleId[sale.id]"></i>
                                 </button>
                             </td>
                         </tr>
 
                         <tr *ngIf="sales.length === 0">
-                            <td colspan="9" class="empty-message">
+                            <td colspan="10" class="empty-message">
                                 <i class="fas fa-inbox"></i>
                                 <p>No se encontraron ventas</p>
                             </td>
@@ -708,10 +748,30 @@
                         </div>
                     </div>
 
-                    <div *ngIf="foundCustomer" class="customer-card">
-                        <p class="customer-name">{{ foundCustomer.name }}</p>
-                        <p class="customer-detail">{{ foundCustomer.documentNumber }}</p>
-                        <p class="customer-detail">{{ foundCustomer.address }}</p>
+                    <div *ngIf="foundCustomer" class="selected-customer-summary" role="status">
+                        <div class="selected-customer-summary__header">
+                            <span class="selected-customer-summary__icon" aria-hidden="true">
+                                <i class="fas fa-user-check"></i>
+                            </span>
+                            <div>
+                                <span class="selected-customer-summary__eyebrow">Cliente seleccionado</span>
+                                <strong>{{ foundCustomer.name }}</strong>
+                            </div>
+                        </div>
+                        <div class="selected-customer-summary__details">
+                            <span>
+                                <i class="fas fa-id-card" aria-hidden="true"></i>
+                                <span>{{ foundCustomer.documentType?.name || 'Documento' }}: {{ foundCustomer.documentNumber }}</span>
+                            </span>
+                            <span>
+                                <i class="fas fa-map-marker-alt" aria-hidden="true"></i>
+                                <span>{{ foundCustomer.address || 'Dirección no registrada' }}</span>
+                            </span>
+                            <span [class.selected-customer-summary__missing]="!foundCustomer.email">
+                                <i class="fas fa-envelope" aria-hidden="true"></i>
+                                <span>{{ foundCustomer.email || 'Sin correo para envío automático' }}</span>
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -823,14 +883,16 @@
                 <!-- Botones de Accion -->
                 <div class="form-section">
                     <div class="action-buttons">
-                        <button class="btn-secondary btn-block" (click)="onCancelSaleForm()">
+                        <button class="btn-secondary btn-block" (click)="onCancelSaleForm()"
+                            [disabled]="isCreatingSale">
                             <i class="fas fa-times"></i>
                             Cancelar
                         </button>
                         <button class="btn-primary btn-block" (click)="onConfirmSale()"
-                            [disabled]="!saleFormData?.lines || saleFormData.lines.length === 0 || !foundCustomer">
-                            <i class="fas fa-check"></i>
-                            Registrar venta
+                            [disabled]="isCreatingSale || !saleFormData?.lines || saleFormData.lines.length === 0 || !foundCustomer">
+                            <i class="fas" [class.fa-check]="!isCreatingSale"
+                                [class.fa-spinner]="isCreatingSale" [class.fa-spin]="isCreatingSale"></i>
+                            {{ isCreatingSale ? 'Registrando...' : 'Registrar venta' }}
                         </button>
                     </div>
                 </div>
@@ -923,7 +985,7 @@
             <div class="metric-card total">
                 <div class="metric-icon"><i class="fas fa-coins"></i></div>
                 <div class="metric-content">
-                    <label>Total Ventas</label>
+                    <label>Flujo neto</label>
                     <span class="metric-value">S/ {{ cashFlowMetrics.total.toFixed(2) }}</span>
                 </div>
             </div>
@@ -965,7 +1027,7 @@
             <div class="metric-card danger">
                 <div class="metric-icon"><i class="fas fa-undo-alt"></i></div>
                 <div class="metric-content">
-                    <label>Anulaciones</label>
+                    <label>Anulaciones y devoluciones</label>
                     <span class="metric-value">S/ {{ cashFlowMetrics.returns.toFixed(2) }}</span>
                 </div>
             </div>
@@ -1306,23 +1368,56 @@
                 <button class="close-button" (click)="closeCancelModal()"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">
-                <p>Esta seguro de anular la venta <strong>{{ saleToCancel?.series }}-{{
+                <p *ngIf="!completingAcceptedCreditNote">Esta seguro de anular la venta <strong>{{ saleToCancel?.series }}-{{
                         saleToCancel?.number }}</strong>?</p>
+                <div class="return-warning recovery-warning" *ngIf="completingAcceptedCreditNote">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                    <span>La nota de crédito ya fue aceptada por SUNAT. Esta acción solo completará la devolución de dinero, inventario y estado de la venta; no emitirá otro documento.</span>
+                </div>
                 <div class="form-group">
                     <label>Motivo de anulacion</label>
-                    <select [(ngModel)]="cancelReason" class="form-control">
-                        <option value="ERROR">Error de venta</option>
-                        <option value="RETURN">Devolucion</option>
+                    <select [(ngModel)]="cancelReason" class="form-control" [disabled]="completingAcceptedCreditNote">
+                        <option value="VOID">Comprobante emitido por error y no entregado</option>
+                        <option value="ANNULMENT">Anular una operación ya entregada</option>
+                        <option value="RETURN">Devolución total al cliente</option>
                     </select>
                 </div>
-                <div *ngIf="cancelReason === 'RETURN'" class="return-warning">
+                <div class="return-warning" *ngIf="cancelReason === 'VOID' && saleToCancel && getElectronicDocumentForSale(saleToCancel)?.status === 'ACCEPTED'">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <span>Se registrara una devolucion por S/ {{ saleToCancel?.total | number:'1.2-2' }} y se descontara de la caja actual.</span>
+                    <span>Use esta opción solo si el comprobante no fue entregado al cliente. Se solicitará su baja a SUNAT.</span>
+                </div>
+                <div class="return-warning" *ngIf="cancelReason === 'ANNULMENT' && !completingAcceptedCreditNote">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                    <span>Si SUNAT ya aceptó el comprobante, se emitirá una nota de crédito por anulación. También se revertirán el pago y el inventario.</span>
+                </div>
+                <div class="return-warning" *ngIf="cancelReason === 'RETURN' && !completingAcceptedCreditNote">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                    <span>La devolución es total. Si SUNAT ya aceptó el comprobante, se emitirá una nota de crédito antes de devolver inventario y dinero.</span>
+                </div>
+                <div class="form-group">
+                    <label>Observaciones</label>
+                    <textarea [(ngModel)]="cancelObservations" class="form-control" rows="3"
+                        placeholder="Describe brevemente el motivo de la anulación"></textarea>
+                </div>
+                <div class="form-group" *ngIf="cancelReason !== 'VOID'">
+                    <label>Medio del reembolso</label>
+                    <select [(ngModel)]="refundMethod" class="form-control">
+                        <option value="CASH">Efectivo</option>
+                        <option value="CARD">Tarjeta</option>
+                        <option value="TRANSFER">Transferencia</option>
+                        <option value="YAPE">Yape</option>
+                        <option value="PLIN">Plin</option>
+                    </select>
+                    <small>El movimiento quedará registrado en la caja asociada a la venta.</small>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" (click)="closeCancelModal()">Cancelar</button>
-                <button class="btn-primary" (click)="confirmCancelSale()">Anular Venta</button>
+                <button class="btn-primary" (click)="confirmCancelSale()"
+                    [disabled]="!!saleToCancel && cancellationLoadingBySaleId[saleToCancel.id]">
+                    <i class="fas fa-spinner fa-spin" *ngIf="saleToCancel && cancellationLoadingBySaleId[saleToCancel.id]"></i>
+                    {{ completingAcceptedCreditNote ? 'Completar devolución' : (cancelReason === 'VOID' ? 'Solicitar baja' : 'Emitir nota y revertir') }}
+                </button>
             </div>
         </div>
     </div>
@@ -1358,43 +1453,6 @@
                         [class.fa-spin]="pendingElectronicInvoiceSale && electronicBillingLoadingBySaleId[pendingElectronicInvoiceSale.id]"
                         [class.fa-paper-plane]="!pendingElectronicInvoiceSale || !electronicBillingLoadingBySaleId[pendingElectronicInvoiceSale.id]"></i>
                     Emitir
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Credit Note Modal -->
-    <div class="modal-overlay" *ngIf="showCreditNoteModal" (click)="showCreditNoteModal = false">
-        <div class="modal-content modal-large" (click)="$event.stopPropagation()">
-            <div class="modal-header">
-                <h3><i class="fas fa-file-invoice-dollar"></i> Nota de Credito</h3>
-                <button class="close-button" (click)="showCreditNoteModal = false"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Motivo</label>
-                    <select [(ngModel)]="creditNoteFormData.reasonCode" class="form-control">
-                        <option value="ANULACION">Anulacion de la operacion</option>
-                        <option value="DESCUENTO">Descuento</option>
-                        <option value="DEVOLUCION">Devolucion parcial</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Observaciones</label>
-                    <textarea [(ngModel)]="creditNoteFormData.observations" class="form-control" rows="3"></textarea>
-                </div>
-                <div class="totals-summary">
-                    <div class="total-row">
-                        <span>Monto</span>
-                        <span>S/ {{ (creditNoteFormData?.grandTotal || 0).toFixed(2) }}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" (click)="showCreditNoteModal = false">Cancelar</button>
-                <button class="btn-primary" (click)="onConfirmCreditNote()">
-                    <i class="fas fa-check"></i>
-                    Emitir Nota de Credito
                 </button>
             </div>
         </div>
@@ -1480,7 +1538,7 @@
                 <div class="detail-row">
                     <span class="detail-label">Estado:</span>
                     <span class="detail-value status"
-                        [class]="'status-' + (selectedSale.status === 'CONFIRMED' ? 'emitido' : (selectedSale.status === 'CANCELLED' ? 'anulado' : 'pendiente'))">
+                        [class]="'status-' + (selectedSale.status === 'CONFIRMED' ? 'emitido' : (['CANCELLED', 'REFUNDED'].includes(selectedSale.status) ? 'anulado' : 'pendiente'))">
                         {{ getStatusLabel(selectedSale.status) }}
                     </span>
                 </div>
@@ -1544,6 +1602,61 @@
                             [class.fa-spinner]="electronicEmailLoadingBySaleId[selectedSale.id]"
                             [class.fa-spin]="electronicEmailLoadingBySaleId[selectedSale.id]"
                             [class.fa-envelope]="!electronicEmailLoadingBySaleId[selectedSale.id]"></i>
+                        Correo
+                    </button>
+                </div>
+            </div>
+
+            <!-- Nota de credito asociada -->
+            <div class="detail-section credit-note-section" *ngIf="selectedCreditNote">
+                <h4 class="detail-section-title">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                    Nota de crédito
+                </h4>
+                <div class="credit-note-heading">
+                    <div>
+                        <strong>{{ selectedCreditNote.series }}-{{ selectedCreditNote.number }}</strong>
+                        <span>{{ getCreditNoteReasonLabel(selectedCreditNote.reasonCode) }}</span>
+                    </div>
+                    <span class="electronic-status-badge"
+                        [ngClass]="getElectronicStatusClass(selectedCreditNote.status)">
+                        {{ getElectronicStatusLabel(selectedCreditNote.status) }}
+                    </span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Monto:</span>
+                    <span class="detail-value">S/ {{ selectedCreditNote.amount | number:'1.2-2' }}</span>
+                </div>
+                <div class="detail-row" *ngIf="selectedCreditNote.sunatDescription || selectedCreditNote.errorMessage">
+                    <span class="detail-label">Respuesta SUNAT:</span>
+                    <span class="detail-value">{{ selectedCreditNote.sunatDescription || selectedCreditNote.errorMessage }}</span>
+                </div>
+                <div class="return-warning recovery-warning" *ngIf="selectedCreditNote.localApplicationPending">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Nota aceptada por SUNAT. La devolución local todavía está pendiente.</span>
+                </div>
+                <div class="detail-actions">
+                    <button class="btn-primary" (click)="completeAcceptedCreditNoteRefund()"
+                        *ngIf="selectedCreditNote.localApplicationPending">
+                        <i class="fas fa-undo-alt"></i> Completar devolución
+                    </button>
+                    <button class="btn-secondary" (click)="onDownloadCreditNote('pdf')"
+                        [disabled]="selectedCreditNote.status !== 'ACCEPTED'">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </button>
+                    <button class="btn-secondary" (click)="onDownloadCreditNote('xml')"
+                        [disabled]="!selectedCreditNote.hasXml">
+                        <i class="fas fa-code"></i> XML
+                    </button>
+                    <button class="btn-secondary" (click)="onDownloadCreditNote('cdr')"
+                        [disabled]="!selectedCreditNote.hasCdr">
+                        <i class="fas fa-file-archive"></i> CDR
+                    </button>
+                    <button class="btn-secondary" (click)="onSendCreditNoteEmail()"
+                        [disabled]="selectedCreditNote.status !== 'ACCEPTED' || isSendingCreditNoteEmail">
+                        <i class="fas" [class.fa-spinner]="isSendingCreditNoteEmail"
+                            [class.fa-spin]="isSendingCreditNoteEmail"
+                            [class.fa-envelope]="!isSendingCreditNoteEmail"></i>
                         Correo
                     </button>
                 </div>

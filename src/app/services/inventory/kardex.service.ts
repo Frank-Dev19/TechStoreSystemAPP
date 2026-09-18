@@ -15,6 +15,8 @@ export interface KardexFilters {
     limit?: number;
 }
 
+export type KardexExportFilters = Omit<KardexFilters, 'page' | 'limit'>;
+
 export interface PaginatedResponse<T> {
     data: T[];
     total: number;
@@ -45,5 +47,17 @@ export class KardexService {
                 };
             })
         );
+    }
+
+    exportCsv(params: KardexExportFilters): Observable<Blob> {
+        const options: HttpOptions = {
+            params: {
+                ...(params.dateFrom ? { date_from: params.dateFrom } : {}),
+                ...(params.dateTo ? { date_to: params.dateTo } : {}),
+                ...(params.product_id ? { product_id: params.product_id } : {}),
+                ...(params.reason_code ? { reason_code: params.reason_code } : {}),
+            },
+        };
+        return this.base.getBlob(`${config.inventory.kardex}/export`, options);
     }
 }

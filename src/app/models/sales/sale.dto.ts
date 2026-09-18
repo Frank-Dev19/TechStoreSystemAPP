@@ -25,6 +25,7 @@ export interface CreateSalePaymentDto {
 }
 
 export interface CreateSaleDto {
+    idempotencyKey: string
     companyId: number
     customerId: number
     saleType: SaleType
@@ -45,6 +46,7 @@ export interface CreateSaleDto {
 }
 
 export interface CreateSaleFromServiceAgreementsDto {
+    idempotencyKey: string
     companyId: number
     serviceOrderIds: number[]
     taxpayerCustomerId: number

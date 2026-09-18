@@ -5,7 +5,11 @@ import { BaseService } from '../base.service';
 import { config } from '../../../environments/environment';
 import {
   ElectronicDocument,
+  ElectronicCreditNote,
+  ElectronicCancellationResponse,
+  ElectronicRefundResponse,
   SendElectronicDocumentEmailResponse,
+  SendInvoicesBatchResponse,
   SendInvoiceResponse,
 } from '../../models/electronic-billing/electronic-document.model';
 
@@ -24,6 +28,62 @@ export class ElectronicBillingApiService {
 
   sendInvoice(saleId: number): Observable<SendInvoiceResponse> {
     return this.base.post<SendInvoiceResponse>(`${this.baseUrl}/sales/${saleId}/send-invoice`);
+  }
+
+  sendInvoicesBatch(saleIds: number[]): Observable<SendInvoicesBatchResponse> {
+    return this.base.post<SendInvoicesBatchResponse>(`${this.baseUrl}/invoices/batch`, { saleIds });
+  }
+
+  requestCancellation(
+    saleId: number,
+    payload: { reason: string; observations?: string },
+  ): Observable<ElectronicCancellationResponse> {
+    return this.base.post<ElectronicCancellationResponse>(
+      `${this.baseUrl}/sales/${saleId}/cancellation`,
+      payload,
+    );
+  }
+
+  refreshCancellationStatus(saleId: number): Observable<ElectronicCancellationResponse> {
+    return this.base.post<ElectronicCancellationResponse>(
+      `${this.baseUrl}/sales/${saleId}/cancellation/status`,
+      {},
+    );
+  }
+
+  requestFullRefund(
+    saleId: number,
+    payload: { reasonCode: '01' | '06'; reason: string; refundMethod: string; observations?: string },
+  ): Observable<ElectronicRefundResponse> {
+    return this.base.post<ElectronicRefundResponse>(
+      `${this.baseUrl}/sales/${saleId}/refund`,
+      payload,
+    );
+  }
+
+  getCreditNoteBySale(saleId: number): Observable<ElectronicCreditNote> {
+    return this.base.get<ElectronicCreditNote>(`${this.baseUrl}/sales/${saleId}/credit-note`, {
+      withLoader: false,
+    });
+  }
+
+  downloadCreditNotePdf(saleId: number): Observable<Blob> {
+    return this.downloadFile(`${this.baseUrl}/sales/${saleId}/credit-note/pdf`);
+  }
+
+  downloadCreditNoteXml(saleId: number): Observable<Blob> {
+    return this.downloadFile(`${this.baseUrl}/sales/${saleId}/credit-note/xml`);
+  }
+
+  downloadCreditNoteCdr(saleId: number): Observable<Blob> {
+    return this.downloadFile(`${this.baseUrl}/sales/${saleId}/credit-note/cdr`);
+  }
+
+  sendCreditNoteEmail(saleId: number, to?: string): Observable<SendElectronicDocumentEmailResponse> {
+    return this.base.post<SendElectronicDocumentEmailResponse>(
+      `${this.baseUrl}/sales/${saleId}/credit-note/email`,
+      { ...(to ? { to } : {}) },
+    );
   }
 
   sendDocumentEmail(saleId: number, to?: string): Observable<SendElectronicDocumentEmailResponse> {

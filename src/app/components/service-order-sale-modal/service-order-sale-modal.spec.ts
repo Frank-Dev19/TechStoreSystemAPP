@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 
 import { DocumentType, PaymentMethod } from '../../models/sales/enums';
 import { ServiceOrderEconomicStatus, ServiceOrderOperativeStatus, ServiceOrderTechnicalStatus, ServiceType } from '../../models/service-orders/service-order';
@@ -94,6 +94,24 @@ describe('ServiceOrderSaleModalComponent', () => {
 
     expect(salesApi.createFromServiceAgreements).not.toHaveBeenCalled();
     expect(component.errorMessage).toBe('Una factura requiere un contribuyente con RUC.');
+  });
+
+  it('ignora una segunda confirmación mientras la misma venta sigue en proceso', () => {
+    const pendingResponse = new Subject<any>();
+    salesApi.createFromServiceAgreements.and.returnValue(pendingResponse);
+
+    component.confirmSale();
+    component.confirmSale();
+
+    expect(salesApi.createFromServiceAgreements).toHaveBeenCalledTimes(1);
+    expect(salesApi.createFromServiceAgreements).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        idempotencyKey: jasmine.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        ),
+      }),
+    );
+    pendingResponse.complete();
   });
 
   it('conserva el modal abierto y muestra el detalle cuando falta stock', () => {

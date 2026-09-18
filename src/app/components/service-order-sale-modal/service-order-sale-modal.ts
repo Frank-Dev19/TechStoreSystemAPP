@@ -16,6 +16,7 @@ import { ClientsApiService } from '../../services/clients-api.service';
 import { DocumentTypesApiService } from '../../services/document-types-api.service';
 import { SalesApiService } from '../../services/sales/sales-api.service';
 import { ServiceOrderAgreementService } from '../../services/service-orders/service-agreement.service';
+import { createIdempotencyKey } from '../../utils/idempotency-key';
 
 interface TaxpayerRegistrationDraft {
   name: string;
@@ -70,6 +71,7 @@ export class ServiceOrderSaleModalComponent implements OnInit {
   isLoadingSaleDetail = false;
 
   private initialized = false;
+  private readonly saleCreationKey = createIdempotencyKey();
 
   constructor(
     private readonly clientsApi: ClientsApiService,
@@ -225,6 +227,7 @@ export class ServiceOrderSaleModalComponent implements OnInit {
   }
 
   confirmSale(): void {
+    if (this.isSubmitting) return;
     this.errorMessage = '';
     this.successMessage = '';
     if (!this.selectedTaxpayer) {
@@ -247,6 +250,7 @@ export class ServiceOrderSaleModalComponent implements OnInit {
 
     this.isSubmitting = true;
     this.salesApi.createFromServiceAgreements({
+      idempotencyKey: this.saleCreationKey,
       companyId: this.companyId,
       serviceOrderIds: [Number(this.order.id)],
       taxpayerCustomerId: Number(this.selectedTaxpayer.id),

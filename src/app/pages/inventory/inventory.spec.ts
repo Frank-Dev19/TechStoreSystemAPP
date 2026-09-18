@@ -3,8 +3,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { fakeAsync, tick } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { of } from 'rxjs';
+import * as XLSX from 'xlsx';
 
-import { Inventory } from './inventory';
+import { formatKardexDateColumn, Inventory } from './inventory';
 import { ProductsService } from '../../services/inventory/products.service';
 import { CatalogsService } from '../../services/inventory/catalogs.service';
 import { StockService } from '../../services/inventory/stock.service';
@@ -40,7 +41,18 @@ describe('Inventory', () => {
     productsServiceMock = jasmine.createSpyObj<ProductsService>('ProductsService', ['listWithFilter']);
     productsServiceMock.listWithFilter.and.returnValue(of({ data: remoteProductsResponse, total: remoteProductsResponse.length }) as any);
 
-    catalogsServiceMock = jasmine.createSpyObj<CatalogsService>('CatalogsService', ['listCategories', 'listCategoriesWithFilter', 'listUnits', 'listUnitsWithFilter']);
+    catalogsServiceMock = jasmine.createSpyObj<CatalogsService>('CatalogsService', [
+      'listCategories',
+      'listCategoriesWithFilter',
+      'createCategory',
+      'updateCategory',
+      'deleteCategory',
+      'listUnits',
+      'listUnitsWithFilter',
+      'createUnit',
+      'updateUnit',
+      'deleteUnit',
+    ]);
     catalogsServiceMock.listCategories.and.returnValue(of([]) as any);
     catalogsServiceMock.listCategoriesWithFilter.and.returnValue(of({ data: [], total: 0 }) as any);
     catalogsServiceMock.listUnits.and.returnValue(of([]) as any);
@@ -50,8 +62,9 @@ describe('Inventory', () => {
     stockServiceMock.listPaged.and.returnValue(of({ data: [], total: 0, metrics: {} }) as any);
     stockServiceMock.getCurrentStock.and.returnValue(of({ total_qty: 0, avg_cost: 0 }) as any);
 
-    kardexServiceMock = jasmine.createSpyObj<KardexService>('KardexService', ['list']);
+    kardexServiceMock = jasmine.createSpyObj<KardexService>('KardexService', ['list', 'exportCsv']);
     kardexServiceMock.list.and.returnValue(of({ data: [], total: 0 }) as any);
+    kardexServiceMock.exportCsv.and.returnValue(of(new Blob(['csv'], { type: 'text/csv' })));
 
     countsServiceMock = jasmine.createSpyObj<CountsHttpService>('CountsHttpService', ['list']);
     countsServiceMock.list.and.returnValue(of([]) as any);
@@ -173,4 +186,74 @@ describe('Inventory', () => {
       avg_cost: 250,
     }) as any);
   }));
+
+  it('should reload category references and the paginated table after creating a category', fakeAsync(() => {
+    const created = { id: 9, name: 'Teclados', description: '' } as any;
+    catalogsServiceMock.createCategory.and.returnValue(of(created));
+    catalogsServiceMock.listCategories.and.returnValue(of([created]));
+    catalogsServiceMock.listCategoriesWithFilter.and.returnValue(of({ data: [created], total: 1 }) as any);
+    component.categoryForm = { name: 'Teclados', description: '' };
+
+    component.saveCategory();
+    tick();
+
+    expect(component.categoryFilter.page).toBe(1);
+    expect(catalogsServiceMock.listCategories).toHaveBeenCalled();
+    expect(catalogsServiceMock.listCategoriesWithFilter).toHaveBeenCalled();
+    expect(component.pagedCategories).toEqual([created]);
+  }));
+
+  it('should reload unit references and the paginated table after creating a unit', fakeAsync(() => {
+    const created = { id: 4, name: 'Caja', abbreviation: 'CJ' } as any;
+    catalogsServiceMock.createUnit.and.returnValue(of(created));
+    catalogsServiceMock.listUnits.and.returnValue(of([created]));
+    catalogsServiceMock.listUnitsWithFilter.and.returnValue(of({ data: [created], total: 1 }) as any);
+    component.unitForm = { name: 'Caja', abbreviation: 'CJ' };
+
+    component.saveUnit();
+    tick();
+
+    expect(component.unitFilter.page).toBe(1);
+    expect(catalogsServiceMock.listUnits).toHaveBeenCalled();
+    expect(catalogsServiceMock.listUnitsWithFilter).toHaveBeenCalled();
+    expect(component.pagedUnits).toEqual([created]);
+  }));
+
+  it('should export the selected kardex range as an Excel workbook independently of the current page', async () => {
+    spyOn(component, 'saveKardexWorkbook');
+    component.kardexExportForm = {
+      dateFrom: '2026-09-14',
+      dateTo: '2026-09-16',
+      product_id: 7,
+      reason_code: 'VENTA',
+    };
+
+    await component.exportKardexExcel();
+
+    expect(kardexServiceMock.exportCsv).toHaveBeenCalledOnceWith({
+      dateFrom: '2026-09-14',
+      dateTo: '2026-09-16',
+      product_id: 7,
+      reason_code: 'VENTA',
+    });
+    expect(component.saveKardexWorkbook).toHaveBeenCalledWith(
+      jasmine.any(ArrayBuffer),
+      'kardex-2026-09-14-a-2026-09-16.xlsx',
+    );
+  });
+
+  it('should format Excel serial values as visible kardex dates and times', () => {
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ['Fecha/Hora', 'Producto'],
+      ['16/09/2026 19:35', 'Mouse'],
+    ]);
+
+    formatKardexDateColumn(worksheet);
+
+    expect(worksheet['A2'].t).toBe('d');
+    expect((worksheet['A2'].v as Date).getDate()).toBe(16);
+    expect((worksheet['A2'].v as Date).getMonth()).toBe(8);
+    expect(worksheet['A2'].z).toBe('dd/mm/yyyy hh:mm');
+    expect(worksheet['A2'].w).toBeUndefined();
+  });
 });

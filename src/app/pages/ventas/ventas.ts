@@ -2,7 +2,7 @@ import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
 import { SalesApiService } from '../../services/sales/sales-api.service';
 import { DocumentSeriesApiService } from '../../services/sales/document-series-api.service';
 import { ProductsApiService } from '../../services/products-api.service';
-import { catchError, forkJoin, lastValueFrom, of } from 'rxjs';
+import { catchError, finalize, firstValueFrom, forkJoin, lastValueFrom, Observable, of } from 'rxjs';
 import { CashFlowApiService } from '../../services/sales/cash-flow-api.service';
 import { ClientsApiService } from '../../services/clients-api.service';
 import { PricingStockApiService } from '../../services/pricing-stock-api.service';
@@ -19,7 +19,8 @@ import { DocumentType } from '../../models/sales/enums';
 import { ClientKind, ClientSaveRequest } from '../../models/clients-request';
 import { ClientResponse } from '../../models/clients-response';
 import { ElectronicBillingApiService } from '../../services/electronic-billing/electronic-billing-api.service';
-import { ElectronicDocument, ElectronicDocumentStatus } from '../../models/electronic-billing/electronic-document.model';
+import { ElectronicCreditNote, ElectronicDocument, ElectronicDocumentStatus } from '../../models/electronic-billing/electronic-document.model';
+import { createIdempotencyKey } from '../../utils/idempotency-key';
 // ============================================
 // INTERFACES & TYPES (siguiendo exactamente el prompt)
 // ============================================
@@ -81,7 +82,7 @@ export const cardTypeOptions = [
   { value: 'CREDITO', label: 'Credito' },
   { value: 'DEBITO', label: 'Debito' }
 ]
-export type SaleStatus = 'PENDIENTE' | 'EMITIDO' | 'ANULADO'
+export type SaleStatus = 'PENDIENTE' | 'EMITIDO' | 'ANULADO' | 'DEVUELTO'
 
 export interface SaleLine {
   itemType: 'PRODUCT' | 'SERVICE'
@@ -112,6 +113,21 @@ interface SaleCatalogSearchResult {
   product?: Product
 }
 
+interface SaveFileHandleLike {
+  createWritable(): Promise<{
+    write(data: Blob): Promise<void>;
+    close(): Promise<void>;
+  }>;
+}
+
+type ShowSaveFilePicker = (options: {
+  suggestedName: string;
+  types: Array<{
+    description: string;
+    accept: Record<string, string[]>;
+  }>;
+}) => Promise<SaveFileHandleLike>;
+
 export interface Sale {
   id: number
   companyId: number
@@ -140,6 +156,10 @@ export interface Sale {
   cancelledBy?: string
   cancelledReason?: string
   cancelledAt?: string
+  refundedBy?: string
+  refundedReason?: string
+  refundedAt?: string
+  refundMethod?: string
   createdAt: string
   updatedAt: string
   items: any[]
@@ -158,62 +178,6 @@ export interface Sale {
 //     unitPrice: number
 //   }[]
 // }
-
-export interface CreditNote {
-  id: number
-  saleId: number
-  saleSeries: string
-  saleNumber: string
-  saleIssueDate: string
-  series: string
-  number: string
-  issueDate: string
-  currency: 'PEN' | 'USD'
-  reasonCode: string
-  reasonDescription: string
-  customerId: number
-  customerName: string
-  customerDocumentType: string
-  customerDocumentNumber: string
-  customerAddress: string
-  totalTaxableAmount: number
-  totalExemptAmount: number
-  totalUnaffectedAmount: number
-  totalIsc: number
-  totalIcbper: number
-  totalDiscount: number
-  totalIgv: number
-  grandTotal: number
-  amountInWords: string
-  paymentCondition: 'CONTADO' | 'CREDITO'
-  installments?: CreditNoteInstallment[]
-  observations?: string | null
-  status: 'DRAFT' | 'ISSUED' | 'CANCELLED'
-  createdAt: string
-  createdBy: string
-  updatedAt?: string
-  updatedBy?: string
-}
-
-export interface CreditNoteItem {
-  id: number
-  creditNoteId: number
-  productId: number | null
-  itemCode: string
-  description: string
-  unitOfMeasure: string
-  quantity: number
-  unitPrice: number
-  lineAmount: number
-}
-
-export interface CreditNoteInstallment {
-  id: number
-  creditNoteId: number
-  installmentNumber: number
-  dueDate: string
-  amount: number
-}
 
 export interface ShippingGuide {
   id: number
@@ -334,9 +298,17 @@ export class Ventas implements OnInit {
   selectedSale: Sale | null = null
   electronicDocumentsBySaleId: { [saleId: number]: ElectronicDocument | null } = {}
   selectedElectronicDocument: ElectronicDocument | null = null
+  selectedCreditNote: ElectronicCreditNote | null = null
+  isLoadingSelectedCreditNote = false
+  isSendingCreditNoteEmail = false
   electronicBillingLoadingBySaleId: { [saleId: number]: boolean } = {}
   electronicEmailLoadingBySaleId: { [saleId: number]: boolean } = {}
+  cancellationLoadingBySaleId: { [saleId: number]: boolean } = {}
+  selectedElectronicSaleIds = new Set<number>()
+  isSendingElectronicBatch = false
   isLoading = false
+  isCreatingSale = false
+  private saleCreationKey: string | null = null
 
   // Cache para precios y stock de productos con informacion completa
   productPriceStockMap: {
@@ -365,14 +337,16 @@ export class Ventas implements OnInit {
 
   // UI STATES
   activeTab: 'sales' | 'cashflow' | 'create' | 'cashbox' | 'document-series' = 'sales'
-  showCreditNoteModal = false
   showDispatchGuideModal = false
   showCancelConfirmModal = false
   showLotSerialModal = false
   showElectronicInvoiceConfirmModal = false
   pendingElectronicInvoiceSale: Sale | null = null
   saleToCancel: Sale | null = null
-  cancelReason: 'ERROR' | 'RETURN' = 'ERROR'
+  cancelReason: 'VOID' | 'ANNULMENT' | 'RETURN' = 'VOID'
+  cancelObservations = ''
+  refundMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'YAPE' | 'PLIN' = 'CASH'
+  completingAcceptedCreditNote = false
   //showDetailDrawer = false
   showNewCustomerModal = false
   newCustomerForm: NewCustomerForm = {}
@@ -390,7 +364,6 @@ export class Ventas implements OnInit {
 
   //FORM DATA
   saleFormData: any = null
-  creditNoteFormData: Partial<CreditNote> | null = null
   dispatchGuideFormData: Partial<ShippingGuide> | null = null
   currentSaleItem: any = {}
   customerSearchText = ''
@@ -472,7 +445,7 @@ export class Ventas implements OnInit {
     DocumentType.NOTA_DEBITO,
     DocumentType.GUIA_REMISION,
   ];
-  saleStatuses: SaleStatus[] = ['PENDIENTE', 'EMITIDO', 'ANULADO']
+  saleStatuses: SaleStatus[] = ['PENDIENTE', 'EMITIDO', 'ANULADO', 'DEVUELTO']
   paymentTypes: string[] = ['CASH', 'CARD', 'TRANSFER', 'YAPE', 'PLIN', 'CREDIT']
   paymentTypeLabels: { [key: string]: string } = {
     'CASH': 'Efectivo',
@@ -728,12 +701,15 @@ export class Ventas implements OnInit {
         apiFilters.status = 'CONFIRMED'
       } else if (this.salesFilters.status === 'ANULADO') {
         apiFilters.status = 'CANCELLED'
+      } else if (this.salesFilters.status === 'DEVUELTO') {
+        apiFilters.status = 'REFUNDED'
       }
     }
 
     this.salesApi.list(apiFilters).subscribe({
       next: (resp: any) => {
         this.sales = resp.data
+        this.selectedElectronicSaleIds.clear()
         this.totalItems = resp.total
         this.loadElectronicDocumentsForSales()
         this.loadMetrics()
@@ -785,6 +761,8 @@ export class Ventas implements OnInit {
         apiFilters.status = 'CONFIRMED'
       } else if (this.salesFilters.status === 'ANULADO') {
         apiFilters.status = 'CANCELLED'
+      } else if (this.salesFilters.status === 'DEVUELTO') {
+        apiFilters.status = 'REFUNDED'
       }
     }
 
@@ -966,6 +944,7 @@ export class Ventas implements OnInit {
           return
         }
         this.currentOpenRegister = reg
+        this.saleCreationKey = createIdempotencyKey()
         this.foundCustomer = null
         this.saleFormData = {
           documentType: 'BOLETA',
@@ -1138,6 +1117,7 @@ export class Ventas implements OnInit {
   onCancelSaleForm(): void {
     this.foundCustomer = null
     this.saleFormData = null
+    this.saleCreationKey = null
     this.paymentOperationNumber = ''   // <- limpiar
     this.paymentReference = ''
     this.paymentBankName = ''
@@ -1147,6 +1127,7 @@ export class Ventas implements OnInit {
 
 
   onConfirmSale(): void {
+    if (this.isCreatingSale) return
     if (!this.saleFormData || !this.saleFormData.lines || this.saleFormData.lines.length === 0) {
       this.showToast('error', 'Agregue al menos un item')
       return
@@ -1186,6 +1167,7 @@ export class Ventas implements OnInit {
     // CASH: reference, bankName, cardType = null
 
     const createDto: any = {
+      idempotencyKey: this.saleCreationKey ??= createIdempotencyKey(),
       companyId: this.COMPANY_ID,
       customerId: Number(this.foundCustomer.id),
       saleType: 'PRODUCT',
@@ -1210,7 +1192,10 @@ export class Ventas implements OnInit {
       applyAutoDiscounts: true
     }
 
-    this.salesApi.create(createDto).subscribe({
+    this.isCreatingSale = true
+    this.salesApi.create(createDto).pipe(
+      finalize(() => { this.isCreatingSale = false }),
+    ).subscribe({
       next: (newSale) => {
         this.showToast('success', 'Venta registrada exitosamente')
         this.onCancelSaleForm()
@@ -1425,33 +1410,6 @@ export class Ventas implements OnInit {
   }
 
   // ============================================
-  // CREDIT NOTES
-  // ============================================
-
-  onOpenCreditNoteModal(sale: Sale): void {
-    if (sale.status !== 'EMITIDO') {
-      this.showToast('warning', 'Solo se pueden crear notas de Credito para ventas emitidas')
-      return
-    }
-    this.creditNoteFormData = {
-      saleId: sale.id,
-      saleSeries: sale.series,
-      saleNumber: sale.number,
-      series: 'NC01',
-      currency: 'PEN',
-      totalTaxableAmount: sale.subtotal,
-      totalIgv: sale.taxAmount,
-      grandTotal: sale.total,
-    }
-    this.showCreditNoteModal = true
-  }
-
-  onConfirmCreditNote(): void {
-    this.showToast('success', 'Nota de Credito emitida')
-    this.showCreditNoteModal = false
-  }
-
-  // ============================================
   // DISPATCH GUIDES
   // ============================================
 
@@ -1488,66 +1446,167 @@ export class Ventas implements OnInit {
   // ============================================
 
   onCancelSale(sale: Sale): void {
+    if (
+      this.selectedCreditNote?.saleId === sale.id
+      && this.selectedCreditNote.localApplicationPending
+    ) {
+      this.openAcceptedCreditNoteRecovery(sale, this.selectedCreditNote)
+      return
+    }
     this.saleToCancel = sale
+    this.showCancelConfirmModal = true
+  }
+
+  completeAcceptedCreditNoteRefund(): void {
+    if (!this.selectedSale || !this.selectedCreditNote?.localApplicationPending) return
+    this.openAcceptedCreditNoteRecovery(this.selectedSale, this.selectedCreditNote)
+  }
+
+  private openAcceptedCreditNoteRecovery(sale: Sale, note: ElectronicCreditNote): void {
+    this.saleToCancel = sale
+    this.completingAcceptedCreditNote = true
+    this.cancelReason = note.reasonCode === '01' ? 'ANNULMENT' : 'RETURN'
+    this.cancelObservations = note.observations || ''
+    const allowedMethods = ['CASH', 'CARD', 'TRANSFER', 'YAPE', 'PLIN'] as const
+    this.refundMethod = allowedMethods.includes(note.refundMethod as typeof allowedMethods[number])
+      ? note.refundMethod as typeof allowedMethods[number]
+      : 'CASH'
     this.showCancelConfirmModal = true
   }
 
   confirmCancelSale(): void {
     if (!this.saleToCancel) return
-
-    const totalVenta = Number(this.saleToCancel.total)
-
-    // Primero intentamos crear la transaccion de caja (RETURN)
-    const returnTransaction: any = {
-      type: 'RETURN',
-      subtype: 'CASH',
-      amount: totalVenta,
-      description: `${this.cancelReason === 'RETURN' ? 'Devolucion' : 'Anulacion por error'} venta ${this.saleToCancel.series}-${this.saleToCancel.number}`,
-      reference: ''
-    }
-
-    this.cashFlowApi.createTransaction(1, returnTransaction).subscribe({
-      next: () => {
-        // Solo si la transaccion de caja fue exitosa, cancelamos la venta
-        this.salesApi.cancel(this.saleToCancel!.id, { reason: 'ANULADA', observations: '' } as any).subscribe({
-          next: () => {
-            // Actualizar la venta en el array de sales
-            const saleIndex = this.sales.findIndex(s => s.id === this.saleToCancel!.id)
-            if (saleIndex >= 0) {
-              this.sales[saleIndex].status = 'CANCELLED'
-              // Forzar deteccion de cambios
-              this.sales = [...this.sales]
-            }
-
-            // Actualizar datos
-            this.loadRegisters()
-            this.loadOpenRegister()
-            this.loadCashFlowData()
-            // this.calculateMetrics()
-
-            // Mostrar toast y cerrar modal con delay para que se muestre correctamente
-            this.closeCancelModal()
-            setTimeout(() => {
-              this.showToast('success', 'Venta anulada correctamente')
-            }, 100)
-          },
-          error: () => {
-            this.showToast('error', 'Error al anular la venta')
-          }
+    const sale = this.saleToCancel
+    this.cancellationLoadingBySaleId[sale.id] = true
+    const request$: Observable<any> = this.cancelReason !== 'VOID'
+      ? this.electronicBillingApi.requestFullRefund(sale.id, {
+          reasonCode: this.cancelReason === 'ANNULMENT' ? '01' : '06',
+          reason: this.cancelReason === 'ANNULMENT' ? 'ANULACION DE LA OPERACION' : 'DEVOLUCION TOTAL',
+          refundMethod: this.refundMethod,
+          observations: this.cancelObservations.trim() || undefined,
         })
+      : this.electronicBillingApi.requestCancellation(sale.id, {
+          reason: 'ERROR EN LA OPERACION',
+          observations: this.cancelObservations.trim() || undefined,
+        })
+    request$.subscribe({
+      next: (response) => {
+        if ('document' in response && response.document) this.electronicDocumentsBySaleId[sale.id] = response.document
+        if ('creditNote' in response && response.creditNote && this.selectedSale?.id === sale.id) {
+          this.selectedCreditNote = response.creditNote
+        }
+        if (!('pending' in response) || !response.pending) this.updateSaleStatus(response.sale.id, response.sale.status)
+        this.closeCancelModal()
+        this.showToast('pending' in response && response.pending ? 'info' : 'success', response.message)
+        this.refreshSalesAfterCancellation()
       },
       error: (err) => {
-        // Si falla la transaccion de caja (ej: no hay efectivo), NO cancelamos la venta
-        const msg = err?.error?.message || 'No se pudo completar la anulacion'
-        this.showToast('error', msg)
-      }
+        this.cancellationLoadingBySaleId[sale.id] = false
+        this.showToast('error', this.getApiErrorMessage(err, 'No se pudo anular la venta'))
+        this.refreshCreditNoteRecoveryState(sale)
+      },
+      complete: () => { this.cancellationLoadingBySaleId[sale.id] = false },
+    })
+  }
+
+  refreshElectronicCancellation(sale: Sale): void {
+    this.cancellationLoadingBySaleId[sale.id] = true
+    this.electronicBillingApi.refreshCancellationStatus(sale.id).subscribe({
+      next: (response) => {
+        if (response.document) this.electronicDocumentsBySaleId[sale.id] = response.document
+        if (!response.pending) this.updateSaleStatus(response.sale.id, response.sale.status)
+        this.showToast(response.pending ? 'info' : 'success', response.message)
+        this.refreshSalesAfterCancellation()
+      },
+      error: (err) => {
+        this.cancellationLoadingBySaleId[sale.id] = false
+        this.showToast('error', this.getApiErrorMessage(err, 'No se pudo consultar la anulación'))
+      },
+      complete: () => { this.cancellationLoadingBySaleId[sale.id] = false },
+    })
+  }
+
+  private updateSaleStatus(saleId: number, status: string): void {
+    const sale = this.sales.find((current) => current.id === saleId)
+    if (sale) sale.status = status
+    this.sales = [...this.sales]
+  }
+
+  private refreshSalesAfterCancellation(): void {
+    this.loadRegisters()
+    this.loadOpenRegister()
+    this.loadCashFlowData()
+    this.loadMetrics()
+  }
+
+  private getApiErrorMessage(error: any, fallback: string): string {
+    const message = error?.error?.message || error?.message || fallback
+    return Array.isArray(message) ? message.join(', ') : String(message)
+  }
+
+  private refreshCreditNoteRecoveryState(sale: Sale): void {
+    this.electronicBillingApi.getCreditNoteBySale(sale.id).pipe(
+      catchError(() => of(null)),
+    ).subscribe((note) => {
+      if (this.selectedSale?.id === sale.id) this.selectedCreditNote = note
+      if (!note?.localApplicationPending) return
+      this.openAcceptedCreditNoteRecovery(sale, note)
+      this.showToast('info', 'SUNAT aceptó la nota. Seleccione un medio con saldo para completar la devolución local.')
     })
   }
 
   closeCancelModal(): void {
     this.showCancelConfirmModal = false
     this.saleToCancel = null
-    this.cancelReason = 'ERROR'
+    this.cancelReason = 'VOID'
+    this.cancelObservations = ''
+    this.refundMethod = 'CASH'
+    this.completingAcceptedCreditNote = false
+  }
+
+  toggleElectronicSale(sale: Sale, checked: boolean): void {
+    checked ? this.selectedElectronicSaleIds.add(sale.id) : this.selectedElectronicSaleIds.delete(sale.id)
+  }
+
+  toggleAllElectronicSales(checked: boolean): void {
+    this.selectedElectronicSaleIds.clear()
+    if (checked) this.sales.filter((sale) => this.canSendElectronicInvoice(sale)).forEach((sale) => this.selectedElectronicSaleIds.add(sale.id))
+  }
+
+  isElectronicSaleSelected(saleId: number): boolean {
+    return this.selectedElectronicSaleIds.has(saleId)
+  }
+
+  get allSendableElectronicSalesSelected(): boolean {
+    const sendable = this.sales.filter((sale) => this.canSendElectronicInvoice(sale))
+    return !!sendable.length && sendable.every((sale) => this.selectedElectronicSaleIds.has(sale.id))
+  }
+
+  sendSelectedElectronicInvoices(): void {
+    const saleIds = [...this.selectedElectronicSaleIds]
+    if (!saleIds.length || this.isSendingElectronicBatch) return
+    this.isSendingElectronicBatch = true
+    this.electronicBillingApi.sendInvoicesBatch(saleIds).subscribe({
+      next: (response) => {
+        response.results.forEach((result) => {
+          if (result.document) this.electronicDocumentsBySaleId[result.saleId] = result.document
+        })
+        this.selectedElectronicSaleIds.clear()
+        this.showToast(
+          response.failed || response.emailsFailed ? 'info' : 'success',
+          `${response.accepted} aceptados${response.pending ? `, ${response.pending} enviados` : ''}`
+            + `${response.failed ? `, ${response.failed} con error` : ''}`
+            + `${response.emailsSent ? `; ${response.emailsSent} correos enviados` : ''}`
+            + `${response.emailsSkipped ? `; ${response.emailsSkipped} sin correo registrado` : ''}`
+            + `${response.emailsFailed ? `; ${response.emailsFailed} correos no enviados` : ''}`,
+        )
+      },
+      error: (err) => {
+        this.isSendingElectronicBatch = false
+        this.showToast('error', this.getApiErrorMessage(err, 'No se pudo emitir el lote'))
+      },
+      complete: () => { this.isSendingElectronicBatch = false },
+    })
   }
 
   // ============================================
@@ -1592,6 +1651,15 @@ export class Ventas implements OnInit {
       this.selectedElectronicDocument = document;
       this.electronicDocumentsBySaleId[saleId] = document;
     });
+
+    this.isLoadingSelectedCreditNote = true;
+    this.selectedCreditNote = null;
+    this.electronicBillingApi.getCreditNoteBySale(saleId).pipe(
+      catchError(() => of(null))
+    ).subscribe({
+      next: (note) => { this.selectedCreditNote = note; },
+      complete: () => { this.isLoadingSelectedCreditNote = false; },
+    });
   }
 
   onSendElectronicInvoice(sale: Sale | null): void {
@@ -1632,7 +1700,12 @@ export class Ventas implements OnInit {
         }
 
         if (response.document.status === 'ACCEPTED') {
-          this.showToast('success', response.document.sunatDescription || 'Comprobante aceptado por SUNAT');
+          const acceptedMessage = response.document.sunatDescription || 'Comprobante aceptado por SUNAT';
+          const emailDelivery = response.emailDelivery;
+          this.showToast(
+            emailDelivery?.status === 'FAILED' ? 'warning' : 'success',
+            emailDelivery ? `${acceptedMessage}. ${emailDelivery.message}` : acceptedMessage,
+          );
         } else if (response.document.status === 'REJECTED') {
           this.showToast('error', response.document.errorMessage || response.document.sunatDescription || 'SUNAT rechazo el comprobante');
         } else {
@@ -1724,22 +1797,109 @@ export class Ventas implements OnInit {
     });
   }
 
-  private downloadElectronicFile(request$: any, filename: string, successMessage: string): void {
-    request$.subscribe({
-      next: (blob: Blob) => {
-        this.downloadBlob(blob, filename);
-        this.showToast('success', successMessage);
-      },
+  onDownloadCreditNote(fileType: 'pdf' | 'xml' | 'cdr'): void {
+    const sale = this.selectedSale;
+    const note = this.selectedCreditNote;
+    if (!sale || !note) return;
+    const request$ = fileType === 'pdf'
+      ? this.electronicBillingApi.downloadCreditNotePdf(sale.id)
+      : fileType === 'xml'
+        ? this.electronicBillingApi.downloadCreditNoteXml(sale.id)
+        : this.electronicBillingApi.downloadCreditNoteCdr(sale.id);
+    const prefix = fileType === 'cdr' ? 'R-' : '';
+    this.downloadElectronicFile(
+      request$,
+      `${prefix}07-${note.series}-${note.number}.${fileType === 'cdr' ? 'zip' : fileType}`,
+      `${fileType.toUpperCase()} de la nota de crédito descargado`,
+    );
+  }
+
+  onSendCreditNoteEmail(): void {
+    if (!this.selectedSale || !this.selectedCreditNote || this.isSendingCreditNoteEmail) return;
+    this.isSendingCreditNoteEmail = true;
+    this.electronicBillingApi.sendCreditNoteEmail(this.selectedSale.id).subscribe({
+      next: (response) => this.showToast('success', response.message),
       error: (err: any) => {
-        const message = err?.error?.message || err?.message || 'No se pudo descargar el archivo electronico';
-        this.showToast('error', Array.isArray(message) ? message.join(', ') : message);
+        this.isSendingCreditNoteEmail = false;
+        this.showToast('error', this.getApiErrorMessage(err, 'No se pudo enviar la nota de crédito'));
       },
+      complete: () => { this.isSendingCreditNoteEmail = false; },
     });
+  }
+
+  private async downloadElectronicFile(
+    request$: Observable<Blob>,
+    filename: string,
+    successMessage: string,
+  ): Promise<void> {
+    const showSaveFilePicker = this.getShowSaveFilePicker();
+    let fileHandle: SaveFileHandleLike | null = null;
+
+    if (showSaveFilePicker) {
+      try {
+        // Debe ejecutarse antes de esperar la respuesta HTTP para conservar
+        // la activación directa del clic exigida por Brave/Chromium.
+        fileHandle = await showSaveFilePicker(this.buildSaveFilePickerOptions(filename));
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
+        // Si el navegador expone la API pero no permite usarla en este contexto,
+        // conservamos la descarga tradicional como alternativa compatible.
+        console.warn('No se pudo abrir el selector nativo de archivos.', error);
+      }
+    }
+
+    try {
+      const blob = await firstValueFrom(request$);
+      if (fileHandle) {
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      } else {
+        this.downloadBlob(blob, filename);
+      }
+      this.showToast('success', successMessage);
+    } catch (err: any) {
+      const message = err?.error?.message || err?.message || 'No se pudo descargar el archivo electronico';
+      this.showToast('error', Array.isArray(message) ? message.join(', ') : message);
+    }
+  }
+
+  private getShowSaveFilePicker(): ShowSaveFilePicker | null {
+    const browserWindow = window as typeof window & {
+      showSaveFilePicker?: ShowSaveFilePicker;
+    };
+    return browserWindow.showSaveFilePicker?.bind(window) ?? null;
+  }
+
+  private buildSaveFilePickerOptions(filename: string): {
+    suggestedName: string;
+    types: Array<{ description: string; accept: Record<string, string[]> }>;
+  } {
+    const extension = `.${filename.split('.').pop()?.toLowerCase() || 'bin'}`;
+    const types: Record<string, { description: string; mimeType: string }> = {
+      '.pdf': { description: 'Documento PDF', mimeType: 'application/pdf' },
+      '.xml': { description: 'Documento XML', mimeType: 'application/xml' },
+      '.zip': { description: 'Archivo ZIP', mimeType: 'application/zip' },
+    };
+    const selectedType = types[extension] ?? {
+      description: 'Archivo',
+      mimeType: 'application/octet-stream',
+    };
+    return {
+      suggestedName: filename,
+      types: [{
+        description: selectedType.description,
+        accept: { [selectedType.mimeType]: [extension] },
+      }],
+    };
   }
 
   closeDetailDrawer(): void {
     this.selectedSale = null
     this.selectedElectronicDocument = null
+    this.selectedCreditNote = null
   }
 
 
@@ -1776,8 +1936,10 @@ export class Ventas implements OnInit {
       'PENDIENTE': 'Pendiente',
       'EMITIDO': 'Emitido',
       'ANULADO': 'Anulado',
+      'DEVUELTO': 'Devuelto',
       'CONFIRMED': 'Emitido',
       'CANCELLED': 'Anulado',
+      'REFUNDED': 'Devuelto',
       'DRAFT': 'Borrador'
     }
     return labels[status] || status
@@ -1812,6 +1974,10 @@ export class Ventas implements OnInit {
       default:
         return 'electronic-pending';
     }
+  }
+
+  getCreditNoteReasonLabel(reasonCode: string): string {
+    return reasonCode === '01' ? 'Anulación de la operación' : 'Devolución total';
   }
 
   canSendElectronicInvoice(sale: Sale | null): boolean {
@@ -1871,7 +2037,7 @@ export class Ventas implements OnInit {
 
   getStatusClass(status: SaleStatus): string {
     if (status === 'EMITIDO') return 'success'
-    if (status === 'ANULADO') return 'danger'
+    if (status === 'ANULADO' || status === 'DEVUELTO') return 'danger'
     return 'warning'
   }
 
@@ -1898,8 +2064,14 @@ export class Ventas implements OnInit {
     const link = document.createElement('a')
     link.href = url
     link.download = filename
-    link.click()
-    window.URL.revokeObjectURL(url)
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    try {
+      link.click()
+    } finally {
+      document.body.removeChild(link)
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+    }
   }
 
   private calculateMetrics(): void {

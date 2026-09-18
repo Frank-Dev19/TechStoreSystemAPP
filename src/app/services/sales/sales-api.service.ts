@@ -92,6 +92,7 @@ export class SalesApiService {
     }
 
     createFromServiceOrder(payload: {
+        idempotencyKey: string;
         serviceOrderId: number;
         companyId: number;
         documentType: string;

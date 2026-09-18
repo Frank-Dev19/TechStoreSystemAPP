@@ -1,7 +1,7 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { of } from 'rxjs';
+import { Observable, of, Subject } from 'rxjs';
 
 import { CashFlowApiService } from '../../services/sales/cash-flow-api.service';
 import { ClientsApiService } from '../../services/clients-api.service';
@@ -30,6 +30,7 @@ describe('Ventas', () => {
   beforeEach(async () => {
     spyOn(Ventas.prototype, 'ngOnInit').and.stub();
     salesApiStub.create.calls.reset();
+    salesApiStub.create.and.returnValue(of({ id: 10 }));
     electronicBillingApiStub.downloadPdf.and.returnValue(of(new Blob(['pdf'])));
 
     await TestBed.configureTestingModule({
@@ -61,7 +62,7 @@ describe('Ventas', () => {
     expect(component).toBeTruthy();
   });
 
-  it('descarga exclusivamente el PDF del comprobante electrónico aceptado', () => {
+  it('descarga exclusivamente el PDF del comprobante electrónico aceptado', fakeAsync(() => {
     const showToastSpy = spyOn(component, 'showToast');
     spyOn<any>(component, 'downloadBlob');
     component.electronicDocumentsBySaleId[77] = {
@@ -79,9 +80,68 @@ describe('Ventas', () => {
     };
 
     component.onDownloadSalePdf({ id: 77, companyId: 1, documentType: 'FACTURA', series: 'F001', number: '123' } as never);
+    tick();
 
     expect(electronicBillingApiStub.downloadPdf).toHaveBeenCalledWith(77);
     expect(showToastSpy).toHaveBeenCalledWith('success', 'PDF electronico descargado');
+  }));
+
+  it('usa el selector nativo y confirma solo después de escribir el archivo', async () => {
+    const blob = new Blob(['pdf'], { type: 'application/pdf' });
+    const write = jasmine.createSpy('write').and.resolveTo();
+    const close = jasmine.createSpy('close').and.resolveTo();
+    const createWritable = jasmine.createSpy('createWritable').and.resolveTo({ write, close });
+    const picker = jasmine.createSpy('showSaveFilePicker').and.resolveTo({ createWritable });
+    const showToastSpy = spyOn(component, 'showToast');
+    Object.defineProperty(window, 'showSaveFilePicker', {
+      configurable: true,
+      value: picker,
+    });
+
+    try {
+      await (component as any).downloadElectronicFile(
+        of(blob),
+        'comprobante.pdf',
+        'PDF electrónico descargado',
+      );
+
+      expect(picker).toHaveBeenCalledWith(jasmine.objectContaining({
+        suggestedName: 'comprobante.pdf',
+      }));
+      expect(write).toHaveBeenCalledOnceWith(blob);
+      expect(close).toHaveBeenCalled();
+      expect(showToastSpy).toHaveBeenCalledWith('success', 'PDF electrónico descargado');
+    } finally {
+      delete (window as any).showSaveFilePicker;
+    }
+  });
+
+  it('no solicita el archivo ni muestra error cuando el usuario cancela el selector', async () => {
+    const request$ = new Observable<Blob>((subscriber) => {
+      subscriber.error(new Error('La solicitud no debió iniciarse'));
+    });
+    const picker = jasmine.createSpy('showSaveFilePicker').and.rejectWith(
+      new DOMException('Cancelado', 'AbortError'),
+    );
+    const showToastSpy = spyOn(component, 'showToast');
+    const downloadSpy = spyOn<any>(component, 'downloadBlob');
+    Object.defineProperty(window, 'showSaveFilePicker', {
+      configurable: true,
+      value: picker,
+    });
+
+    try {
+      await (component as any).downloadElectronicFile(
+        request$,
+        'comprobante.pdf',
+        'PDF electrónico descargado',
+      );
+
+      expect(downloadSpy).not.toHaveBeenCalled();
+      expect(showToastSpy).not.toHaveBeenCalled();
+    } finally {
+      delete (window as any).showSaveFilePicker;
+    }
   });
 
   it('mantiene la venta general como venta manual de productos', () => {
@@ -104,6 +164,29 @@ describe('Ventas', () => {
       items: [jasmine.objectContaining({ itemType: 'PRODUCT', productId: 3, serviceId: null })],
     }));
     expect(showToastSpy).toHaveBeenCalledWith('success', 'Venta registrada exitosamente');
+  });
+
+  it('envía una sola solicitud cuando se confirma dos veces antes de recibir respuesta', () => {
+    const pendingResponse = new Subject<any>();
+    salesApiStub.create.and.returnValue(pendingResponse);
+    component.saleFormData = {
+      documentType: 'BOLETA',
+      paymentType: 'YAPE',
+      lines: [{ itemType: 'PRODUCT', productId: 3, productName: 'Mouse', quantity: 2, unitPrice: 108.56 }],
+      total: 217.12,
+    };
+    component.foundCustomer = { id: 55, name: 'Cliente', documentNumber: '123' } as any;
+
+    component.onConfirmSale();
+    component.onConfirmSale();
+
+    expect(salesApiStub.create).toHaveBeenCalledTimes(1);
+    expect(salesApiStub.create).toHaveBeenCalledWith(jasmine.objectContaining({
+      idempotencyKey: jasmine.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      ),
+    }));
+    pendingResponse.complete();
   });
 
   it('no muestra búsqueda ni modo de venta desde orden', () => {
