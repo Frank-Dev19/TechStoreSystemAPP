@@ -33,8 +33,11 @@ export const AdminLayoutRoutes: Routes = [
   {
     path: 'internal-deliveries',
     component: InternalDeliveries,
-    canActivate: [RoleGuard],
-    data: { navbarTitle: 'ENTREGAS INTERNAS', allowedRoles: SUPERVISOR_ROLE_NAMES },
+    canActivate: [PermissionGuard],
+    data: {
+      navbarTitle: 'ENTREGAS INTERNAS',
+      requiredPermissions: ['navigation.internal-deliveries', 'internal-deliveries.read'],
+    },
   },
   {
     path: 'home',

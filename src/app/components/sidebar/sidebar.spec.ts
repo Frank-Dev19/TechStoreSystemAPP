@@ -9,10 +9,11 @@ import { ProfileService } from '../../services/profile.service';
 describe('Sidebar', () => {
   let component: Sidebar;
   let fixture: ComponentFixture<Sidebar>;
+  let currentUserServiceStub: any;
 
   beforeEach(async () => {
     const user$ = new BehaviorSubject(null);
-    const currentUserServiceStub = {
+    currentUserServiceStub = {
       user$,
       value: { id: 1 },
       restoreFromStorage: jasmine.createSpy('restoreFromStorage'),
@@ -51,6 +52,24 @@ describe('Sidebar', () => {
   it('keeps permission checks for other roles', () => {
     component.authenticatedUser = { id: 2, roles: [{ name: 'technician' }] } as any;
     expect(component.can('navigation.sales')).toBeFalse();
+  });
+
+  it('shows internal deliveries independently from the inventory summary', () => {
+    currentUserServiceStub.hasPermission.and.callFake(
+      (permission: string) => permission === 'navigation.internal-deliveries',
+    );
+    currentUserServiceStub.hasAnyPermission.and.callFake(
+      (permissions: string[]) => permissions.includes('navigation.internal-deliveries'),
+    );
+    component.authenticatedUser = { id: 2, roles: [{ name: 'recepcionist' }] } as any;
+
+    fixture.detectChanges();
+
+    const links = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('a'),
+    ).map((link) => link.getAttribute('href'));
+    expect(links).toContain('/internal-deliveries');
+    expect(links).not.toContain('/inventory');
   });
 
   it('should create', () => {

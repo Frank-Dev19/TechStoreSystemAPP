@@ -1,6 +1,15 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription } from 'rxjs';
+import {
+  catchError,
+  debounceTime,
+  distinctUntilChanged,
+  finalize,
+  of,
+  Subject,
+  Subscription,
+  switchMap,
+} from 'rxjs';
 import { BaseService } from '../../services/base.service';
 import { CurrentUserService } from '../../services/current-user.service';
 
@@ -71,7 +80,10 @@ export class InternalDeliveries implements OnInit, OnDestroy {
   readonly limit = 20;
   rows: DeliveryRow[] = [];
   technicians: TechnicianOption[] = [];
+  manualTechnicians: TechnicianOption[] = [];
   products: ProductOption[] = [];
+  activeProduct: ProductOption | null = null;
+  productsLoading = false;
   total = 0;
   loading = false;
   error = '';
@@ -92,6 +104,7 @@ export class InternalDeliveries implements OnInit, OnDestroy {
   optionsError = '';
   private request?: Subscription;
   private optionsRequest?: Subscription;
+  readonly productSearch$ = new Subject<string>();
   private subscriptions = new Subscription();
   readonly labels: Record<string, string> = {
     PENDING: 'Por confirmar uso',
@@ -108,7 +121,10 @@ export class InternalDeliveries implements OnInit, OnDestroy {
   ) {}
   ngOnInit() {
     this.loadTechnicians();
-    if (this.canCreate) this.loadProducts();
+    if (this.canCreate) {
+      this.configureProductSearch();
+      this.searchProducts('');
+    }
     this.subscriptions.add(
       this.route.queryParamMap.subscribe((params) => {
         this.technicianId =
@@ -128,7 +144,7 @@ export class InternalDeliveries implements OnInit, OnDestroy {
     this.subscriptions.unsubscribe();
   }
   get canCreate() {
-    return this.current.hasPermission('inventory-manage.manage');
+    return this.current.hasPermission('internal-deliveries.create');
   }
   get pages() {
     return Math.max(1, Math.ceil(this.total / this.limit));
@@ -137,10 +153,8 @@ export class InternalDeliveries implements OnInit, OnDestroy {
     return !!this.from && !!this.to && this.from > this.to;
   }
   get selectedProduct() {
+    if (Number(this.activeProduct?.id) === Number(this.productId)) return this.activeProduct;
     return this.products.find((product) => Number(product.id) === Number(this.productId)) ?? null;
-  }
-  get manualTechnicians() {
-    return this.technicians.filter((technician) => technician.canReceiveManual);
   }
   get selectedLotAvailable() {
     return (
@@ -171,23 +185,53 @@ export class InternalDeliveries implements OnInit, OnDestroy {
           withLoader: false,
         })
         .subscribe({
-          next: (values) => (this.technicians = values),
+          next: (values) => {
+            this.technicians = values;
+            this.manualTechnicians = values.filter((technician) => technician.canReceiveManual);
+          },
           error: () => (this.technicianError = 'No se pudo cargar la lista de técnicos.'),
         }),
     );
   }
-  loadProducts() {
+
+  private configureProductSearch() {
     this.subscriptions.add(
-      this.base
-        .get<ProductOption[]>('/inventory/catalogs/products/all', { withLoader: false })
-        .subscribe({
-          next: (values) => (this.products = values),
-          error: () => (this.editorError = 'No se pudo cargar el catálogo de productos.'),
-        }),
+      this.productSearch$
+        .pipe(
+          debounceTime(250),
+          distinctUntilChanged(),
+          switchMap((term) => this.productRequest(term)),
+        )
+        .subscribe((values) => (this.products = values)),
     );
   }
-  productChanged() {
+
+  searchProducts(term: string) {
+    this.productSearch$.next(term.trim());
+  }
+
+  private productRequest(term: string) {
+    this.productsLoading = true;
+    this.editorError = '';
+    const params: Record<string, string | number> = { page: 1, limit: 20 };
+    if (term) params['search'] = term;
+    return this.base
+      .get<{ data: ProductOption[] }>('/inventory/catalogs/products', {
+        params,
+        withLoader: false,
+      })
+      .pipe(
+        catchError(() => {
+          this.editorError = 'No se pudo buscar el catálogo de productos.';
+          return of({ data: [] as ProductOption[] });
+        }),
+        finalize(() => (this.productsLoading = false)),
+        switchMap((result) => of(result.data)),
+      );
+  }
+  productChanged(product?: ProductOption) {
     this.optionsRequest?.unsubscribe();
+    this.activeProduct = product ?? this.selectedProduct;
     this.options = null;
     this.optionsError = '';
     this.serialIds = [];
@@ -226,15 +270,27 @@ export class InternalDeliveries implements OnInit, OnDestroy {
     this.optionsError = '';
     this.lotId = selected[0]?.lotId ?? null;
   }
-  toggleEditor() {
-    this.editorOpen = !this.editorOpen;
+  openEditor() {
+    this.resetEditor();
     this.editorError = '';
     this.editorSuccess = '';
-    if (!this.editorOpen) this.resetEditor();
+    this.editorOpen = true;
+    this.searchProducts('');
+  }
+  closeEditor() {
+    if (this.saving) return;
+    this.editorOpen = false;
+    this.editorError = '';
+    this.resetEditor();
+  }
+  @HostListener('document:keydown.escape')
+  closeEditorOnEscape() {
+    if (this.editorOpen) this.closeEditor();
   }
   resetEditor() {
     this.manualTechnicianId = null;
     this.productId = null;
+    this.activeProduct = null;
     this.quantity = 1;
     this.lotId = null;
     this.serialIds = [];
@@ -271,6 +327,7 @@ export class InternalDeliveries implements OnInit, OnDestroy {
         next: (result) => {
           this.saving = false;
           this.editorSuccess = `${result.code} registrada correctamente.`;
+          this.editorOpen = false;
           this.resetEditor();
           this.load();
         },

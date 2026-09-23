@@ -23,7 +23,11 @@
         /* ← No bloquea clics */
     }
 
-    /* El .sidebar-panel interno sí tiene width y pointer-events según su estado */
+    .sidebar.open {
+        width: 280px;
+        transform: none !important;
+        pointer-events: auto;
+    }
 }
 
 /* Panel principal: deja espacio al navbar fixed */

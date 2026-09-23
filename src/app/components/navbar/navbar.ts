@@ -72,18 +72,22 @@ export class Navbar implements OnInit, OnDestroy {
 
   @HostListener('window:resize')
   onResize(): void {
-    if (window.innerWidth >= 1001) this.sidebarCloseIfAny(); // saliendo de móvil, ciérralo
+    if (!window.matchMedia('(max-width: 1000px)').matches) this.sidebarCloseIfAny();
   }
 
   /* ===== Sidebar off-canvas: ahora con clase .open en .sidebar-panel ===== */
   sidebarOpen(): void {
-    if (window.innerWidth >= 1001) return; // solo móvil
+    // Match the CSS breakpoint even when overflowing content expands innerWidth.
+    if (!window.matchMedia('(max-width: 1000px)').matches) return;
+    const sidebarContainer = document.querySelector('.sidebar') as HTMLElement | null;
     const sidebarPanel = document.querySelector('.sidebar-panel') as HTMLElement | null;
     const mainPanel = document.querySelector('.main-panel') as HTMLElement | null;
-    if (!sidebarPanel || !mainPanel) return;
+    if (!sidebarContainer || !sidebarPanel || !mainPanel) return;
 
     if (!sidebarPanel.classList.contains('open')) {
+      sidebarContainer.classList.add('open');
       sidebarPanel.classList.add('open');
+      document.body.classList.add('sidebar-open');
 
       // overlay
       let layer = mainPanel.querySelector('.close-layer') as HTMLElement | null;
@@ -101,11 +105,14 @@ export class Navbar implements OnInit, OnDestroy {
   }
 
   sidebarCloseIfAny(): void {
+    const sidebarContainer = document.querySelector('.sidebar') as HTMLElement | null;
     const sidebarPanel = document.querySelector('.sidebar-panel') as HTMLElement | null;
     const mainPanel = document.querySelector('.main-panel') as HTMLElement | null;
     const layer = mainPanel?.querySelector('.close-layer') as HTMLElement | null;
 
+    sidebarContainer?.classList.remove('open');
     sidebarPanel?.classList.remove('open');
+    document.body.classList.remove('sidebar-open');
 
     if (layer) {
       layer.classList.remove('visible');

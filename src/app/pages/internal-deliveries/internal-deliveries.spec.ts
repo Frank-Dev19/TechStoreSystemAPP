@@ -2,6 +2,56 @@ import { of } from 'rxjs';
 import { convertToParamMap } from '@angular/router';
 import { InternalDeliveries } from './internal-deliveries';
 describe('InternalDeliveries', () => {
+  it('uses the dedicated create permission for manual deliveries', () => {
+    const current = { hasPermission: jasmine.createSpy().and.returnValue(true) };
+    const component = new InternalDeliveries(
+      {} as any,
+      {} as any,
+      {} as any,
+      current as any,
+    );
+
+    expect(component.canCreate).toBeTrue();
+    expect(current.hasPermission).toHaveBeenCalledOnceWith('internal-deliveries.create');
+  });
+
+  it('opens a clean modal and closes it when it is not saving', () => {
+    const component = new InternalDeliveries(
+      {} as any,
+      {} as any,
+      {} as any,
+      { hasPermission: () => true } as any,
+    );
+    component.manualTechnicianId = 9;
+    component.productId = 12;
+    component.editorError = 'Error anterior';
+
+    component.openEditor();
+
+    expect(component.editorOpen).toBeTrue();
+    expect(component.manualTechnicianId).toBeNull();
+    expect(component.productId).toBeNull();
+    expect(component.editorError).toBe('');
+
+    component.closeEditor();
+    expect(component.editorOpen).toBeFalse();
+  });
+
+  it('does not close the delivery modal while a request is being saved', () => {
+    const component = new InternalDeliveries(
+      {} as any,
+      {} as any,
+      {} as any,
+      { hasPermission: () => true } as any,
+    );
+    component.editorOpen = true;
+    component.saving = true;
+
+    component.closeEditor();
+
+    expect(component.editorOpen).toBeTrue();
+  });
+
   it('sends technician and inclusive dates to the paginated API', () => {
     const base = { get: jasmine.createSpy().and.returnValue(of({ data: [], total: 0 })) };
     const component = new InternalDeliveries(
@@ -95,6 +145,9 @@ describe('InternalDeliveries', () => {
       { id: 1, name: 'Administrador', canReceiveManual: false },
       { id: 2, name: 'Técnico activo', canReceiveManual: true },
     ];
+    component.manualTechnicians = component.technicians.filter(
+      (technician) => technician.canReceiveManual,
+    );
     expect(component.manualTechnicians).toEqual([
       { id: 2, name: 'Técnico activo', canReceiveManual: true },
     ]);

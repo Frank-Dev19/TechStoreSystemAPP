@@ -83,4 +83,42 @@ describe('Navbar', () => {
     expect(component.navbarTitle).toBe('SISTEMA DE GESTIÓN');
     expect(component.navbarLink).toBe('/home');
   });
+
+  it('uses the CSS mobile breakpoint even when innerWidth expands to 1040px', () => {
+    const sidebar = document.createElement('div');
+    sidebar.className = 'sidebar';
+    const sidebarPanel = document.createElement('div');
+    sidebarPanel.className = 'sidebar-panel';
+    sidebar.appendChild(sidebarPanel);
+    const mainPanel = document.createElement('div');
+    mainPanel.className = 'main-panel';
+    document.body.append(sidebar, mainPanel);
+    spyOnProperty(window, 'innerWidth', 'get').and.returnValue(1040);
+    const media = { matches: true } as MediaQueryList;
+    spyOn(window, 'matchMedia').and.callFake((query) => {
+      expect(query).toBe('(max-width: 1000px)');
+      return media;
+    });
+
+    component.sidebarOpen();
+
+    expect(sidebar.classList.contains('open')).toBeTrue();
+    expect(sidebarPanel.classList.contains('open')).toBeTrue();
+    expect(document.body.classList.contains('sidebar-open')).toBeTrue();
+
+    component.onResize();
+    expect(sidebarPanel.classList.contains('open')).toBeTrue();
+
+    Object.assign(media, { matches: false });
+    component.onResize();
+
+    expect(sidebar.classList.contains('open')).toBeFalse();
+    expect(sidebarPanel.classList.contains('open')).toBeFalse();
+    expect(document.body.classList.contains('sidebar-open')).toBeFalse();
+    component.sidebarOpen();
+    expect(sidebar.classList.contains('open')).toBeFalse();
+    expect(sidebarPanel.classList.contains('open')).toBeFalse();
+    sidebar.remove();
+    mainPanel.remove();
+  });
 });

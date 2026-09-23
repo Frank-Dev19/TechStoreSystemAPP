@@ -147,7 +147,11 @@
           <li
             class="nav-item"
             *ngIf="
-              canAny('navigation.inventory-kardex', 'navigation.inventory-manage') || isSupervisor()
+              canAny(
+                'navigation.inventory-kardex',
+                'navigation.inventory-manage',
+                'navigation.internal-deliveries'
+              )
             "
           >
             <a class="nav-link" href="javascript:void(0);" (click)="toggleSubMenu('Modulo3')">
@@ -180,12 +184,14 @@
               </svg>
             </a>
             <ul class="nav submenu" [class.show]="isSubMenuOpen('Modulo3')">
-              <li>
+              <li
+                *ngIf="canAny('navigation.inventory-kardex', 'navigation.inventory-manage')"
+              >
                 <a class="nav-link submenu-link" routerLink="/inventory">
                   <i class="submenu-dot"></i>Resumen de Inventario
                 </a>
               </li>
-              <li>
+              <li *ngIf="can('navigation.internal-deliveries')">
                 <a
                   class="nav-link submenu-link"
                   routerLink="/internal-deliveries"
