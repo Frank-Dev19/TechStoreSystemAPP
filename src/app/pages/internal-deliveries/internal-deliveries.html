@@ -1,477 +1,121 @@
-<main class="delivery-register">
-  <header class="page-header">
-    <div class="page-header__content">
-      <div class="page-header__icon" aria-hidden="true"><i class="fas fa-dolly"></i></div>
-      <div>
-        <h1>Entregas internas</h1>
-        <p>Control de materiales e insumos entregados directamente al personal técnico.</p>
-      </div>
+<main class="dispatch-page">
+  <header class="dispatch-hero">
+    <div class="hero-copy">
+      <span class="hero-icon"><i class="fas fa-truck-loading" aria-hidden="true"></i></span>
+      <div><h1>Gestión de despachos</h1><p>Solicitudes, salidas de almacén y trazabilidad técnica en un solo lugar.</p></div>
     </div>
-    <div class="page-header__status">
-      <span><i class="fas fa-warehouse" aria-hidden="true"></i> Almacén único</span>
-      <span><i class="fas fa-clipboard-list" aria-hidden="true"></i> {{ total }} registradas</span>
+    <div class="hero-actions">
+      <span class="warehouse-chip"><i class="fas fa-warehouse"></i> Almacén único</span>
+      <div class="notification-wrap">
+        <button class="notification-button" type="button" (click)="noticeOpen = !noticeOpen" aria-label="Solicitudes pendientes" [attr.aria-expanded]="noticeOpen">
+          <i class="fas fa-bell"></i><span>Solicitudes</span>
+          @if (summary.total) { <strong>{{ summary.total }}</strong> }
+        </button>
+        @if (noticeOpen) {
+          <div class="notification-menu">
+            <header><strong>Acciones pendientes</strong><button type="button" (click)="loadSummary()" title="Actualizar"><i class="fas fa-sync-alt"></i></button></header>
+            <button type="button" (click)="setTab('ORDER')"><span>Materiales de orden</span><b>{{ summary.order }}</b></button>
+            <button type="button" (click)="setTab('INTERNAL_SUPPLY')"><span>Insumos internos</span><b>{{ summary.internal }}</b></button>
+            <button type="button" (click)="setTab('WARRANTY_REPLACEMENT')"><span>Reemplazos por garantía</span><b>{{ summary.warranty }}</b></button>
+          </div>
+        }
+      </div>
     </div>
   </header>
 
-  <section class="page-toolbar" aria-label="Acciones de entregas internas">
-    <div>
-      <h2><i class="fas fa-truck-loading" aria-hidden="true"></i> Gestión de entregas</h2>
-      <p>Consulta el historial y registra nuevas salidas bajo custodia de un técnico.</p>
-    </div>
-    @if (canCreate) {
-      <button type="button" class="btn-create" (click)="openEditor()">
-        <i class="fas fa-plus" aria-hidden="true"></i>
-        Nueva entrega a técnico
-      </button>
-    }
-  </section>
+  <nav class="dispatch-tabs" aria-label="Vistas de gestión de despachos">
+    <button type="button" [class.active]="activeTab === 'ORDER'" (click)="setTab('ORDER')"><i class="fas fa-tools"></i> Materiales de orden <span>{{ tabCount('ORDER') }}</span></button>
+    <button type="button" [class.active]="activeTab === 'INTERNAL_SUPPLY'" (click)="setTab('INTERNAL_SUPPLY')"><i class="fas fa-box-open"></i> Insumos internos <span>{{ tabCount('INTERNAL_SUPPLY') }}</span></button>
+    <button type="button" [class.active]="activeTab === 'WARRANTY_REPLACEMENT'" (click)="setTab('WARRANTY_REPLACEMENT')"><i class="fas fa-shield-alt"></i> Reemplazos por garantía <span>{{ tabCount('WARRANTY_REPLACEMENT') }}</span></button>
+    <button type="button" [class.active]="activeTab === 'HISTORY'" (click)="setTab('HISTORY')"><i class="fas fa-history"></i> Historial</button>
+  </nav>
 
-  @if (editorSuccess) {
-    <p class="feedback feedback--success" role="status">{{ editorSuccess }}</p>
-  }
-  @if (editorOpen) {
-    <div class="modal-overlay" (click)="closeEditor()" role="presentation">
-      <section
-        class="modal-content delivery-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="delivery-modal-title"
-        (click)="$event.stopPropagation()"
-      >
-        <header class="modal-header">
-          <div class="modal-heading">
-            <span class="modal-heading__icon" aria-hidden="true"><i class="fas fa-dolly"></i></span>
-            <div>
-              <span>Salida de almacén</span>
-              <h2 id="delivery-modal-title">Nueva entrega a técnico</h2>
-            </div>
-          </div>
-          <button
-            type="button"
-            class="modal-close"
-            (click)="closeEditor()"
-            [disabled]="saving"
-            title="Cerrar"
-            aria-label="Cerrar"
-          >
-            <i class="fas fa-times" aria-hidden="true"></i>
-          </button>
-        </header>
-
-        <form id="manual-delivery-editor" (ngSubmit)="saveManual()">
-          <div class="modal-body">
-            <div class="modal-notice">
-              <i class="fas fa-info-circle" aria-hidden="true"></i>
-              <p>
-                El producto saldrá del almacén y quedará bajo custodia del técnico. Esta operación
-                no crea una cotización ni una venta.
-              </p>
-            </div>
-
-            <div class="editor-grid">
-              <div class="form-group">
-                <label for="manual-technician">
-                  <i class="fas fa-user-cog" aria-hidden="true"></i> Técnico receptor
-                </label>
-          <ng-select
-            labelForId="manual-technician"
-            name="manualTechnician"
-            [items]="manualTechnicians"
-            bindLabel="name"
-            bindValue="id"
-            [(ngModel)]="manualTechnicianId"
-            placeholder="Buscar técnico"
-            notFoundText="Sin coincidencias"
-            [searchable]="true"
-            [clearable]="true"
-            [disabled]="saving"
-          ></ng-select>
-              </div>
-              <div class="form-group">
-                <label for="manual-product">
-                  <i class="fas fa-box" aria-hidden="true"></i> Producto
-                </label>
-          <ng-select
-            labelForId="manual-product"
-            name="product"
-            [items]="products"
-            bindLabel="name"
-            bindValue="id"
-            [(ngModel)]="productId"
-            (change)="productChanged($event)"
-            [loading]="productsLoading"
-            [typeahead]="productSearch$"
-            [minTermLength]="2"
-            placeholder="Buscar por nombre o SKU"
-            notFoundText="Sin coincidencias"
-            typeToSearchText="Escribe al menos 2 caracteres"
-            loadingText="Buscando productos..."
-            [searchable]="true"
-            [clearable]="true"
-            [disabled]="saving"
-          ></ng-select>
-              </div>
-        @if (optionsLoading) {
-                <p class="availability editor-wide" role="status">
-                  <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
-                  Consultando disponibilidad…
-                </p>
-        }
-        @if (options) {
-          <div class="availability">
-                  <span>Disponibilidad actual</span>
-                  <strong>{{ options.availableQuantity | number: '1.0-4' }} {{ options.product.unit }}</strong>
-          </div>
-          @if (selectedProduct?.managesExpiration || options.lots.length) {
-                <div class="form-group">
-                  <label for="manual-lot"><i class="fas fa-layer-group" aria-hidden="true"></i> Lote</label>
-              <select
-                id="manual-lot"
-                name="lot"
-                class="form-select"
-                [(ngModel)]="lotId"
-                [disabled]="saving"
-                [required]="!!options.lots.length"
-              >
-                <option [ngValue]="null">Selecciona un lote</option>
-                @for (lot of options.lots; track lot.id) {
-                  <option [ngValue]="lot.id">
-                    {{ lot.lotCode }} · {{ lot.availableQuantity | number: '1.0-4' }} disponibles
-                  </option>
-                }
-              </select>
-                </div>
+  <section class="dispatch-panel">
+    <header class="panel-heading">
+      <div>
+        <h2>
+          @switch (activeTab) {
+            @case ('ORDER') { Materiales pendientes de orden }
+            @case ('INTERNAL_SUPPLY') { Solicitudes de insumos internos }
+            @case ('WARRANTY_REPLACEMENT') { Reemplazos por falla de fábrica }
+            @default { Historial de despachos }
           }
-          @if (selectedProduct?.isSerialized) {
-                <div class="form-group editor-wide">
-                  <label for="manual-serials"><i class="fas fa-barcode" aria-hidden="true"></i> Series</label>
-              <ng-select
-                labelForId="manual-serials"
-                name="serials"
-                [items]="options.serials"
-                bindLabel="serialCode"
-                bindValue="id"
-                [multiple]="true"
-                [closeOnSelect]="false"
-                [(ngModel)]="serialIds"
-                (ngModelChange)="serialsChanged()"
-                placeholder="Busca y selecciona las unidades físicas"
-                notFoundText="No hay series disponibles"
-                [disabled]="saving"
-              ></ng-select>
-              <small
-                >{{ serialIds.length }}
-                {{
-                  serialIds.length === 1 ? 'unidad seleccionada' : 'unidades seleccionadas'
-                }}</small
-              >
-                </div>
-          } @else {
-                <div class="form-group">
-                  <label for="manual-quantity"><i class="fas fa-cubes" aria-hidden="true"></i> Cantidad</label>
-              <input
-                id="manual-quantity"
-                name="quantity"
-                class="form-control"
-                type="number"
-                min="0.0001"
-                step="0.0001"
-                [max]="selectedLotAvailable"
-                [(ngModel)]="quantity"
-                [disabled]="saving"
-                required
-              />
-              <small
-                >Máximo disponible: {{ selectedLotAvailable | number: '1.0-4' }}
-                {{ options.product.unit }}</small
-              >
-                </div>
+        </h2>
+        <p>
+          @switch (activeTab) {
+            @case ('ORDER') { Cotizaciones aprobadas que requieren materiales para iniciar la atención. }
+            @case ('INTERNAL_SUPPLY') { Solicitudes digitales registradas por el personal técnico. }
+            @case ('WARRANTY_REPLACEMENT') { Productos exactos pendientes de reemplazo por garantía. }
+            @default { Todas las salidas confirmadas, con su origen y responsable. }
           }
-        }
-              <div class="form-group editor-wide">
-                <label for="manual-notes">
-                  <i class="fas fa-comment-alt" aria-hidden="true"></i>
-                  Motivo u observación <span class="optional">Opcional</span>
-                </label>
-          <textarea
-            id="manual-notes"
-            name="notes"
-            class="form-control"
-            rows="2"
-            maxlength="1000"
-            [(ngModel)]="notes"
-            [disabled]="saving"
-            placeholder="Ej. Insumo para mantenimientos preventivos"
-          ></textarea>
-              </div>
-            </div>
-      @if (optionsError) {
-        <p class="feedback" role="alert">{{ optionsError }}</p>
-      }
-      @if (editorError) {
-        <p class="feedback" role="alert">{{ editorError }}</p>
-      }
-          </div>
-          <footer class="modal-footer">
-            <button type="button" class="btn-secondary" (click)="closeEditor()" [disabled]="saving">
-              Cancelar
-            </button>
-            <button class="btn-confirm" [disabled]="saving || manualInvalid">
-              <i class="fas" [class.fa-check]="!saving" [class.fa-spinner]="saving" [class.fa-spin]="saving" aria-hidden="true"></i>
-              {{ saving ? 'Registrando…' : 'Confirmar entrega' }}
-            </button>
-          </footer>
-        </form>
-      </section>
-    </div>
-  }
-
-  <section class="filters-card" aria-labelledby="delivery-filters-title">
-    <div class="section-heading">
-      <h2 id="delivery-filters-title"><i class="fas fa-filter" aria-hidden="true"></i> Filtros de búsqueda</h2>
-      <span class="results-indicator">{{ total }} {{ total === 1 ? 'resultado' : 'resultados' }}</span>
-    </div>
-    <form class="filters-grid" (ngSubmit)="search()">
-    <div class="technician-filter">
-        <label for="delivery-technician"><i class="fas fa-user-cog" aria-hidden="true"></i> Técnico</label>
-      <ng-select
-        labelForId="delivery-technician"
-        name="technician"
-        [items]="technicians"
-        bindLabel="name"
-        bindValue="id"
-        [(ngModel)]="technicianId"
-        placeholder="Todos los técnicos"
-        notFoundText="Sin coincidencias"
-        [searchable]="true"
-        [clearable]="true"
-      ></ng-select>
-    </div>
-    <div>
-        <label for="delivery-type"><i class="fas fa-tags" aria-hidden="true"></i> Tipo de entrega</label>
-      <select id="delivery-type" name="type" class="form-select" [(ngModel)]="deliveryType">
-        <option value="">Todas</option>
-        <option value="ORDER">Material de orden</option>
-        <option value="MANUAL">Insumo para técnico</option>
-      </select>
-    </div>
-    <div>
-        <label for="delivery-from"><i class="fas fa-calendar-alt" aria-hidden="true"></i> Desde</label
-      ><input
-        id="delivery-from"
-        name="from"
-        type="date"
-        class="form-control"
-        [(ngModel)]="from"
-        [max]="to || '9999-12-31'"
-      />
-    </div>
-    <div>
-        <label for="delivery-to"><i class="fas fa-calendar-check" aria-hidden="true"></i> Hasta</label
-      ><input
-        id="delivery-to"
-        name="to"
-        type="date"
-        class="form-control"
-        [(ngModel)]="to"
-        [min]="from"
-      />
-    </div>
-    <div class="filter-actions">
-        <button class="btn-search" [disabled]="loading || invalidRange">
-          <i class="fas fa-search" aria-hidden="true"></i> Buscar
-        </button>
-        <button
-        type="button"
-          class="btn-secondary"
-        (click)="clear()"
-        [disabled]="loading"
-      >
-          <i class="fas fa-eraser" aria-hidden="true"></i> Limpiar
-      </button>
-        <button type="button" class="btn-secondary" (click)="load()" [disabled]="loading">
-          <i class="fas fa-sync-alt" [class.fa-spin]="loading" aria-hidden="true"></i> Actualizar
-        </button>
-    </div>
-    <small class="filter-note">Fechas de entrega, ambos días incluidos. Hora de Lima.</small>
-    @if (invalidRange) {
-      <p class="feedback" role="alert">Desde no puede ser posterior a Hasta.</p>
-    }
-    @if (technicianError) {
-      <p class="feedback" role="alert">
-        {{ technicianError }}
-        <button type="button" class="btn btn-link" (click)="loadTechnicians()">
-          Reintentar técnicos
-        </button>
-      </p>
-    }
-    </form>
-  </section>
-
-  <section class="results-card" aria-label="Listado de entregas internas" [attr.aria-busy]="loading">
-    <div class="section-heading results-heading">
-      <h2><i class="fas fa-list-alt" aria-hidden="true"></i> Entregas registradas</h2>
-      <span aria-live="polite">{{
-        loading ? 'Consultando…' : total + (total === 1 ? ' entrega' : ' entregas')
-      }}</span>
-    </div>
-    @if (loading) {
-      <div class="loading" role="status">Cargando entregas…</div>
-    } @else if (error) {
-      <div class="empty" role="alert">
-        <p>{{ error }}</p>
-        <button class="btn btn-outline-primary" (click)="load()">Reintentar</button>
+        </p>
       </div>
-    } @else if (!rows.length) {
-      <div class="empty">
-        <h3>No hay entregas para mostrar</h3>
-        <p>Prueba con otros filtros o registra una entrega manual a un técnico.</p>
-      </div>
-    } @else {
-      <div
-        class="table-scroll"
-        tabindex="0"
-        role="region"
-        aria-label="Entregas internas, tabla desplazable"
-      >
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Entrega</th>
-              <th scope="col">Tipo</th>
-              <th scope="col">Técnico</th>
-              <th scope="col">Origen</th>
-              <th scope="col">Materiales</th>
-              <th scope="col">Situación</th>
-              <th scope="col">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (row of rows; track row.id) {
-              <tr>
-                <td>
-                  <strong>{{ row.type === 'MANUAL' ? 'EI' : 'GI' }}-{{ row.id }}</strong
-                  ><small>{{ row.createdAt | date: 'dd/MM/yyyy HH:mm' : '-0500' }}</small>
-                </td>
-                <td>
-                  <span class="type-badge" [class.type-badge--manual]="row.type === 'MANUAL'">{{
-                    row.type === 'MANUAL' ? 'Insumo para técnico' : 'Material de orden'
-                  }}</span>
-                </td>
-                <td>{{ row.technicianName }}</td>
-                <td>
-                  @if (row.type === 'ORDER') {
-                    <strong>{{ row.orderCode }}</strong
-                    ><small>{{ row.itemCode }} · {{ row.brand }} {{ row.model }}</small>
-                  } @else {
-                    <span>Entrega manual</span><small>Sin origen comercial</small>
-                  }
-                </td>
-                <td>
-                  <span>{{ row.lines[0]?.productName || 'Sin líneas' }}</span
-                  ><small
-                    >{{ row.lines.length }} {{ row.lines.length === 1 ? 'línea' : 'líneas' }}</small
-                  >
-                </td>
-                <td>
-                  <span
-                    class="status"
-                    [class.confirmed]="
-                      row.status === 'CONFIRMED' ||
-                      row.status === 'SOLD' ||
-                      row.status === 'IN_CUSTODY'
-                    "
-                    >{{ labels[row.status] || row.status }}</span
-                  >
-                </td>
-                <td>
-                  <div class="row-actions">
-                    <button
-                      type="button"
-                      class="btn btn-outline-secondary"
-                      [attr.aria-expanded]="expandedId === row.id"
-                      [attr.aria-controls]="'delivery-detail-' + row.id"
-                      (click)="expandedId = expandedId === row.id ? null : row.id"
-                    >
-                      <i
-                        class="fas"
-                        [class.fa-eye]="expandedId !== row.id"
-                        [class.fa-eye-slash]="expandedId === row.id"
-                        aria-hidden="true"
-                      ></i>
-                      {{ expandedId === row.id ? 'Ocultar' : 'Detalle' }}
-                    </button>
-                    @if (row.type === 'ORDER') {
-                      <a
-                        class="btn btn-outline-primary"
-                        routerLink="/supervisor-panel"
-                        [queryParams]="{
-                          orderId: row.orderId,
-                          itemId: row.itemId,
-                          section: 'materials',
-                        }"
-                        ><i class="fas fa-external-link-alt" aria-hidden="true"></i> Ver orden<span
-                          class="visually-hidden"
-                        >
-                          {{ row.orderCode }}</span
-                        ></a
-                      >
-                    }
-                  </div>
-                </td>
-              </tr>
-              @if (expandedId === row.id) {
-                <tr class="detail-row">
-                  <td colspan="7" [id]="'delivery-detail-' + row.id">
-                    <p>
-                      <strong
-                        >Detalle de {{ row.type === 'MANUAL' ? 'EI' : 'GI' }}-{{ row.id }}</strong
-                      >
-                      · Entregado por {{ row.issuerName || 'Usuario no disponible' }}
-                    </p>
-                    @if (row.notes) {
-                      <p class="delivery-notes">{{ row.notes }}</p>
-                    }
-                    <ul>
-                      @for (line of row.lines; track line.id) {
-                        <li>
-                          <strong>{{ line.productName }}</strong
-                          ><span>Cantidad: {{ line.quantity | number: '1.0-4' }}</span
-                          ><span>Serie: {{ line.serialCode || 'Sin control por serie' }}</span>
-                          @if (line.returnedQuantity) {
-                            <span
-                              >Recibido por falla:
-                              {{ line.returnedQuantity | number: '1.0-4' }}</span
-                            >
-                          }
-                          @if (line.saleId) {
-                            <span>Venta #{{ line.saleId }}</span>
-                          }
-                        </li>
+      <button type="button" class="icon-button" (click)="load()" title="Actualizar"><i class="fas fa-sync-alt"></i></button>
+    </header>
+
+    @if (loading) { <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Cargando información…</p></div> }
+    @else if (error) { <div class="empty-state error"><i class="fas fa-exclamation-circle"></i><p>{{ error }}</p><button type="button" (click)="load()">Reintentar</button></div> }
+    @else if (activeTab !== 'HISTORY' && !rows.length) { <div class="empty-state"><i class="fas fa-check-circle"></i><h3>No hay solicitudes pendientes</h3><p>La cola está al día para esta vista.</p></div> }
+    @else if (activeTab === 'HISTORY' && !history.length) { <div class="empty-state"><i class="fas fa-archive"></i><h3>Aún no hay despachos</h3></div> }
+    @else {
+      <div class="table-scroll" role="region" tabindex="0" aria-label="Gestión de despachos">
+        @if (activeTab !== 'HISTORY') {
+          <table>
+            <thead><tr><th>Solicitud</th><th>Técnico</th><th>Producto</th><th>Cantidad</th><th>Motivo / origen</th><th>Acciones</th></tr></thead>
+            <tbody>
+              @for (row of rows; track row.type + '-' + row.id) {
+                <tr>
+                  <td><strong>{{ row.type === 'ORDER' ? row.orderCode : 'SD-' + row.id }}</strong><small>{{ row.createdAt | date:'dd/MM/yyyy HH:mm':'-0500' }}</small></td>
+                  <td>{{ row.technicianName || 'Por asignar' }}</td>
+                  <td><strong>{{ row.productName }}</strong><small>{{ row.productSku }}</small></td>
+                  <td>{{ row.quantity | number:'1.0-4' }}</td>
+                  <td><span class="kind" [class.warranty]="row.type === 'WARRANTY_REPLACEMENT'">{{ row.type === 'ORDER' ? row.itemCode : row.reason }}</span></td>
+                  <td>
+                    <div class="row-actions">
+                      @if (row.type === 'ORDER') {
+                        <a class="btn primary" routerLink="/supervisor-panel" [queryParams]="{ orderId: row.serviceOrderId, itemId: row.serviceOrderItemId, section: 'materials' }"><i class="fas fa-external-link-alt"></i> Atender</a>
+                      } @else if (canFulfill) {
+                        <button type="button" class="btn primary" (click)="openFulfillment(row)"><i class="fas fa-box"></i> Despachar</button>
+                        @if (row.type === 'INTERNAL_SUPPLY') { <button type="button" class="btn" (click)="reject(row)"><i class="fas fa-times"></i> Rechazar</button> }
                       }
-                    </ul>
+                    </div>
                   </td>
                 </tr>
               }
-            }
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        } @else {
+          <table>
+            <thead><tr><th>Despacho</th><th>Tipo</th><th>Técnico</th><th>Productos</th><th>Responsable</th><th>Fecha</th></tr></thead>
+            <tbody>
+              @for (row of history; track row.id) {
+                <tr><td><strong>DP-{{ row.id }}</strong></td><td><span class="kind">{{ typeLabel(row.type) }}</span></td><td>{{ row.technicianName }}</td><td>{{ row.lines[0]?.productName || 'Sin líneas' }}<small>{{ row.lines.length }} línea(s)</small></td><td>{{ row.issuerName }}</td><td>{{ row.createdAt | date:'dd/MM/yyyy HH:mm':'-0500' }}</td></tr>
+              }
+            </tbody>
+          </table>
+        }
       </div>
-      <nav class="pagination" aria-label="Paginación de entregas">
-        <button class="btn-pagination" [disabled]="page <= 1" (click)="navigate(1)" title="Primera página" aria-label="Primera página">
-          <i class="fas fa-angle-double-left" aria-hidden="true"></i>
-        </button>
-        <button class="btn-pagination" [disabled]="page <= 1" (click)="navigate(page - 1)" title="Página anterior" aria-label="Página anterior">
-          <i class="fas fa-angle-left" aria-hidden="true"></i>
-        </button>
-        <span class="page-info">Página {{ page }} de {{ pages }}</span>
-        <button class="btn-pagination" [disabled]="page >= pages" (click)="navigate(page + 1)" title="Página siguiente" aria-label="Página siguiente">
-          <i class="fas fa-angle-right" aria-hidden="true"></i>
-        </button>
-        <button class="btn-pagination" [disabled]="page >= pages" (click)="navigate(pages)" title="Última página" aria-label="Última página">
-          <i class="fas fa-angle-double-right" aria-hidden="true"></i>
-        </button>
-      </nav>
+      <nav class="pagination" aria-label="Paginación"><button [disabled]="page <= 1" (click)="navigate(1)"><i class="fas fa-angle-double-left"></i></button><button [disabled]="page <= 1" (click)="navigate(page - 1)"><i class="fas fa-angle-left"></i></button><span>Página {{ page }} de {{ pages }}</span><button [disabled]="page >= pages" (click)="navigate(page + 1)"><i class="fas fa-angle-right"></i></button><button [disabled]="page >= pages" (click)="navigate(pages)"><i class="fas fa-angle-double-right"></i></button></nav>
     }
   </section>
 </main>
+
+@if (actionRow) {
+  <div class="modal-overlay" (click)="closeFulfillment()">
+    <section class="dispatch-modal" role="dialog" aria-modal="true" aria-labelledby="dispatch-modal-title" (click)="$event.stopPropagation()">
+      <header><div><span>SALIDA DE ALMACÉN</span><h2 id="dispatch-modal-title">Confirmar despacho</h2></div><button type="button" (click)="closeFulfillment()" aria-label="Cerrar"><i class="fas fa-times"></i></button></header>
+      <div class="modal-body">
+        <div class="request-summary"><i class="fas fa-box"></i><div><strong>{{ actionRow.productName }}</strong><span>{{ actionRow.quantity | number:'1.0-4' }} para {{ actionRow.technicianName }}</span></div></div>
+        @if (optionsLoading) { <p class="loading-line"><i class="fas fa-spinner fa-spin"></i> Consultando disponibilidad…</p> }
+        @if (options) {
+          <p class="availability">Disponible: <strong>{{ options.availableQuantity | number:'1.0-4' }} {{ options.product.unit }}</strong></p>
+          @if (options.lots.length) { <label>Lote<select [(ngModel)]="lotId"><option [ngValue]="null">Selecciona un lote</option>@for (lot of options.lots; track lot.id) { <option [ngValue]="lot.id">{{ lot.lotCode }} · {{ lot.availableQuantity }} disponibles</option> }</select></label> }
+          @if (options.product.isSerialized) { <label>Series<ng-select [items]="options.serials" bindLabel="serialCode" bindValue="id" [multiple]="true" [closeOnSelect]="false" [(ngModel)]="serialIds" (ngModelChange)="serialsChanged()" placeholder="Selecciona las unidades físicas"></ng-select><small>{{ serialIds.length }} de {{ actionRow.quantity }} seleccionadas</small></label> }
+          <label>Observación <span>Opcional</span><textarea [(ngModel)]="resolutionNote" rows="3" placeholder="Detalle de la entrega"></textarea></label>
+        }
+        @if (actionError) { <p class="modal-error">{{ actionError }}</p> }
+      </div>
+      <footer><button type="button" class="btn" (click)="closeFulfillment()">Cancelar</button><button type="button" class="btn primary" [disabled]="actionInvalid || saving" (click)="fulfill()"><i class="fas fa-check"></i> {{ saving ? 'Confirmando…' : 'Confirmar salida' }}</button></footer>
+    </section>
+  </div>
+}

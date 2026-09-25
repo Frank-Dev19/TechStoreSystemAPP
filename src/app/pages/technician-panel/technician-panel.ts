@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { Router } from "@angular/router"
-import { forkJoin, of } from "rxjs"
-import { catchError, finalize, map, switchMap } from "rxjs/operators"
+import { forkJoin, of, Subject, Subscription } from "rxjs"
+import { catchError, debounceTime, distinctUntilChanged, finalize, map, switchMap } from "rxjs/operators"
 import {
   EquipmentType,
   ServiceOrderDerivedMetric,
@@ -21,6 +21,7 @@ import {
   ServiceOrderDiagnosis,
   ServiceOrderDiagnosisOutcome,
   ServiceOrderDiagnosisStatus,
+  WarrantyResolutionType,
 } from "../../models/service-orders/service-order-diagnosis"
 import { ServiceOrderDiagnosisSaveRequest } from "../../models/service-orders/service-order-diagnosis-request"
 import {
@@ -50,6 +51,7 @@ import { User } from "../../models/user/user"
 import { hasAnyRole, TECHNICIAN_ROLE_NAMES } from "../../utils/role.utils"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
 import { ServiceOrderItemCancellationTarget } from "../../components/service-order-item-cancellation-modal/service-order-item-cancellation-modal"
+import { BaseService } from "../../services/base.service"
 
 interface AgreementProductComposer {
   id: number
@@ -110,6 +112,23 @@ interface ItemTransitionContext {
   description: string
   confirmLabel: string
   successMessage: string
+}
+
+interface TechnicianDispatchRequest {
+  id: number
+  type: "ORDER" | "INTERNAL_SUPPLY" | "WARRANTY_REPLACEMENT"
+  status: "PENDING" | "DELIVERED" | "CONFIRMED" | "REJECTED" | "CANCELLED"
+  productName: string
+  productSku?: string | null
+  quantity: number
+  reason?: string | null
+  serviceOrderId: number | null
+  orderCode?: string | null
+  serviceOrderItemId: number | null
+  itemCode?: string | null
+  deliveredAt?: string | null
+  confirmedAt?: string | null
+  createdAt: string
 }
 
 type TechnicianPanelTab = "todo" | "diagnosis" | "pending_approval" | "repair" | "repaired" | "all"
@@ -185,6 +204,25 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   showDiagnosisModal = false
   diagnosisForm: FormGroup
+  showSupplyRequestModal = false
+  supplyRequestForm: FormGroup
+  supplyProducts: Product[] = []
+  supplyProductsLoading = false
+  savingSupplyRequest = false
+  supplyRequestError = ""
+  technicianDispatchRequests: TechnicianDispatchRequest[] = []
+  technicianView: "orders" | "requests" = "orders"
+  dispatchHistory: TechnicianDispatchRequest[] = []
+  dispatchHistoryPage = 1
+  readonly dispatchHistoryLimit = 10
+  dispatchHistoryTotal = 0
+  dispatchHistoryType = ""
+  dispatchHistoryStatus = ""
+  dispatchHistorySearch = ""
+  dispatchHistoryLoading = false
+  dispatchHistoryError = ""
+  readonly supplyProductSearch$ = new Subject<string>()
+  private supplySearchSubscription?: Subscription
   warrantyResolutionOutcome: ServiceOrderDiagnosisOutcome | null = null
   showAgreementModal = false
   agreementForm: FormGroup
@@ -250,8 +288,10 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     private readonly currentUserService: CurrentUserService,
     private readonly serviceOrderInboxService: ServiceOrderInboxService,
     private readonly router: Router,
+    private readonly base: BaseService,
   ) {
     this.diagnosisForm = this.createDiagnosisForm()
+    this.supplyRequestForm = this.createSupplyRequestForm()
     this.agreementForm = this.createAgreementForm()
     this.clientDecisionForm = this.createClientDecisionForm()
   }
@@ -260,11 +300,15 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     this.syncCurrentUserContext()
     this.loadAgreementCatalogs()
     this.loadTechnicianOrders()
+    this.loadMyDispatchRequests()
     this.loadTechnicians()
+    this.configureSupplyProductSearch()
   }
 
   ngOnDestroy(): void {
     this.stopLiveTimer()
+    this.supplySearchSubscription?.unsubscribe()
+    this.supplyProductSearch$.complete()
   }
 
   setActiveTab(tab: TechnicianPanelTab): void {
@@ -286,6 +330,181 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       summary: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(100)]],
       details: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(1000)]],
       outcome: [ServiceOrderDiagnosisOutcome.REPAIRABLE, Validators.required],
+      warrantyResolutionType: [null],
+    })
+  }
+
+  private createSupplyRequestForm(): FormGroup {
+    return this.formBuilder.group({
+      productId: [null, Validators.required],
+      quantity: [1, [Validators.required, Validators.min(0.0001)]],
+      reason: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(1000)]],
+    })
+  }
+
+  private configureSupplyProductSearch(): void {
+    this.supplySearchSubscription = this.supplyProductSearch$.pipe(
+      debounceTime(250),
+      distinctUntilChanged(),
+      switchMap((term) => {
+        this.supplyProductsLoading = true
+        return this.productsService.listWithFilter({ search: term.trim() || undefined, page: 1, limit: 20 })
+          .pipe(finalize(() => (this.supplyProductsLoading = false)))
+      }),
+    ).subscribe({ next: (result) => (this.supplyProducts = result.data ?? []) })
+  }
+
+  openSupplyRequestModal(): void {
+    this.supplyRequestError = ""
+    this.supplyRequestForm.reset({ productId: null, quantity: 1, reason: "" })
+    this.showSupplyRequestModal = true
+    this.supplyProductSearch$.next("")
+    this.loadMyDispatchRequests()
+  }
+
+  closeSupplyRequestModal(): void {
+    if (!this.savingSupplyRequest) this.showSupplyRequestModal = false
+  }
+
+  submitSupplyRequest(): void {
+    if (this.supplyRequestForm.invalid || this.savingSupplyRequest) {
+      this.markFormGroupAsTouched(this.supplyRequestForm)
+      return
+    }
+    this.savingSupplyRequest = true
+    this.supplyRequestError = ""
+    this.base.post('/dispatches/requests/internal', this.supplyRequestForm.getRawValue(), { withLoader: false })
+      .pipe(finalize(() => (this.savingSupplyRequest = false)))
+      .subscribe({
+        next: () => {
+          this.supplyRequestForm.reset({ productId: null, quantity: 1, reason: "" })
+          this.loadMyDispatchRequests()
+          this.showMessage("success", "fas fa-check-circle", "Solicitud enviada a recepción correctamente.")
+        },
+        error: (err) => {
+          const message = err?.error?.message
+          this.supplyRequestError = Array.isArray(message) ? message.join(" · ") : message || "No se pudo enviar la solicitud."
+        },
+      })
+  }
+
+  private loadMyDispatchRequests(): void {
+    this.base.get<{ data: TechnicianDispatchRequest[] }>(
+      '/dispatches/requests/mine',
+      { params: { page: 1, limit: 50 }, withLoader: false },
+    ).subscribe({ next: (result) => (this.technicianDispatchRequests = result.data ?? []) })
+  }
+
+  get recentInternalSupplyRequests(): TechnicianDispatchRequest[] {
+    return this.technicianDispatchRequests
+      .filter((request) => request.type === "INTERNAL_SUPPLY")
+      .slice(0, 3)
+  }
+
+  get dispatchHistoryPages(): number {
+    return Math.max(1, Math.ceil(this.dispatchHistoryTotal / this.dispatchHistoryLimit))
+  }
+
+  showOrdersView(): void {
+    this.technicianView = "orders"
+  }
+
+  showDispatchHistory(resetPage = false): void {
+    this.technicianView = "requests"
+    if (resetPage) this.dispatchHistoryPage = 1
+    this.loadDispatchHistory()
+  }
+
+  openDispatchHistoryFromModal(): void {
+    this.showSupplyRequestModal = false
+    this.showDispatchHistory(true)
+  }
+
+  applyDispatchHistoryFilters(): void {
+    this.dispatchHistoryPage = 1
+    this.loadDispatchHistory()
+  }
+
+  clearDispatchHistoryFilters(): void {
+    this.dispatchHistoryType = ""
+    this.dispatchHistoryStatus = ""
+    this.dispatchHistorySearch = ""
+    this.applyDispatchHistoryFilters()
+  }
+
+  changeDispatchHistoryPage(page: number): void {
+    if (page < 1 || page > this.dispatchHistoryPages || page === this.dispatchHistoryPage) return
+    this.dispatchHistoryPage = page
+    this.loadDispatchHistory()
+  }
+
+  getDispatchTypeLabel(type: TechnicianDispatchRequest["type"]): string {
+    if (type === "ORDER") return "Material de orden"
+    if (type === "WARRANTY_REPLACEMENT") return "Reemplazo por garantía"
+    return "Insumo interno"
+  }
+
+  getDispatchStatusLabel(status: TechnicianDispatchRequest["status"]): string {
+    const labels: Record<TechnicianDispatchRequest["status"], string> = {
+      PENDING: "Pendiente",
+      DELIVERED: "Entregado",
+      CONFIRMED: "Confirmado",
+      REJECTED: "Rechazado",
+      CANCELLED: "Cancelado",
+    }
+    return labels[status] ?? status
+  }
+
+  private loadDispatchHistory(): void {
+    this.dispatchHistoryLoading = true
+    this.dispatchHistoryError = ""
+    const params: Record<string, string | number> = {
+      page: this.dispatchHistoryPage,
+      limit: this.dispatchHistoryLimit,
+    }
+    if (this.dispatchHistoryType) params["type"] = this.dispatchHistoryType
+    if (this.dispatchHistoryStatus) params["status"] = this.dispatchHistoryStatus
+    if (this.dispatchHistorySearch.trim()) params["search"] = this.dispatchHistorySearch.trim()
+    this.base.get<{
+      data: TechnicianDispatchRequest[]
+      total: number
+      page: number
+      limit: number
+    }>("/dispatches/history/mine", { params, withLoader: false })
+      .pipe(finalize(() => (this.dispatchHistoryLoading = false)))
+      .subscribe({
+        next: (result) => {
+          this.dispatchHistory = result.data ?? []
+          this.dispatchHistoryTotal = Number(result.total ?? 0)
+          this.dispatchHistoryPage = Number(result.page ?? this.dispatchHistoryPage)
+        },
+        error: () => {
+          this.dispatchHistory = []
+          this.dispatchHistoryTotal = 0
+          this.dispatchHistoryError = "No pudimos cargar el historial de solicitudes. Intenta nuevamente."
+        },
+      })
+  }
+
+  get selectedPendingReplacement(): TechnicianDispatchRequest | null {
+    const orderId = Number(this.selectedServiceOrder?.id ?? 0)
+    const itemId = Number(this.selectedServiceOrderItem?.id ?? 0)
+    return this.technicianDispatchRequests.find((request) =>
+      request.type === 'WARRANTY_REPLACEMENT' &&
+      request.status === 'DELIVERED' &&
+      Number(request.serviceOrderId) === orderId &&
+      (!request.serviceOrderItemId || Number(request.serviceOrderItemId) === itemId)
+    ) ?? null
+  }
+
+  confirmWarrantyReplacement(requestId: number): void {
+    this.base.post(`/dispatches/requests/${requestId}/confirm`, {}, { withLoader: false }).subscribe({
+      next: () => {
+        this.loadMyDispatchRequests()
+        this.loadTechnicianOrders()
+        this.showMessage("success", "fas fa-check-circle", "Reemplazo confirmado y garantía finalizada.")
+      },
+      error: () => this.showMessage("danger", "fas fa-times-circle", "No se pudo confirmar el reemplazo."),
     })
   }
 
@@ -791,6 +1010,9 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       summary: "",
       details: "",
       outcome: presetOutcome,
+      warrantyResolutionType: isWarrantyResolution && presetOutcome === ServiceOrderDiagnosisOutcome.WARRANTY_APPLIES
+        ? WarrantyResolutionType.CONFIGURATION
+        : null,
     })
   }
 
@@ -802,6 +1024,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       summary: "",
       details: "",
       outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE,
+      warrantyResolutionType: null,
     })
   }
 
@@ -1269,6 +1492,9 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       summary: this.diagnosisForm.get("summary")?.value,
       details: this.diagnosisForm.get("details")?.value,
       outcome: selectedOutcome,
+      ...(selectedOutcome === ServiceOrderDiagnosisOutcome.WARRANTY_APPLIES
+        ? { warrantyResolutionType: this.diagnosisForm.get("warrantyResolutionType")?.value as WarrantyResolutionType }
+        : {}),
     }
 
     this.isSavingDiagnosis = true
@@ -1484,7 +1710,13 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           this.showMessage("success", "fas fa-check-circle", context.successMessage)
           this.loadTechnicianOrders()
         },
-        error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos actualizar el estado del equipo."),
+        error: (error) => {
+          const backendMessage = error?.error?.message
+          const message = Array.isArray(backendMessage)
+            ? backendMessage.join(" ")
+            : backendMessage || "No pudimos actualizar el estado del equipo."
+          this.showMessage("danger", "fas fa-times-circle", message)
+        },
       })
   }
 

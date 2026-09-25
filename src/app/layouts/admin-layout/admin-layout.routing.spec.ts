@@ -9,7 +9,7 @@ describe('AdminLayoutRoutes', () => {
     expect(route?.canActivate).toEqual([PermissionGuard]);
     expect(route?.data?.['requiredPermissions']).toEqual([
       'navigation.internal-deliveries',
-      'internal-deliveries.read',
+      'dispatches.read',
     ]);
   });
 });

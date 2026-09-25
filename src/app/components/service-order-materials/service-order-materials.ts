@@ -1,7 +1,11 @@
 import { Component, ElementRef, Input, OnChanges, OnDestroy, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { CurrentUserService } from '../../services/current-user.service';
-import { ServiceOrder, ServiceOrderItem } from '../../models/service-orders/service-order';
+import {
+  ServiceOrder,
+  ServiceOrderItem,
+  ServiceType,
+} from '../../models/service-orders/service-order';
 import {
   MaterialLine,
   MaterialQuoteLine,
@@ -54,6 +58,9 @@ export class ServiceOrderMaterialsComponent implements OnChanges, OnDestroy {
   ) {}
   get items(): ServiceOrderItem[] {
     return this.order?.items ?? [];
+  }
+  get isWarrantyOrder(): boolean {
+    return this.order?.serviceType === ServiceType.WARRANTY_SERVICE;
   }
   get canManage() {
     return (
@@ -135,7 +142,8 @@ export class ServiceOrderMaterialsComponent implements OnChanges, OnDestroy {
     return '';
   }
   get statusLabel() {
-    if (!this.state?.version) return 'Sin cotización aprobada';
+    if (!this.state?.version)
+      return this.isWarrantyOrder ? 'Gestión por garantía' : 'Sin cotización aprobada';
     if (!this.hasMaterials) return 'No requiere materiales';
     if (this.frozen) return 'Registro cerrado';
     if (this.reconciled) return 'Uso confirmado';

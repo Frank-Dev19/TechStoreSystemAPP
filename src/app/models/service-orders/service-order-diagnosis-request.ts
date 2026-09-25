@@ -1,4 +1,4 @@
-import { ServiceOrderDiagnosisOutcome, ServiceOrderDiagnosisStatus } from './service-order-diagnosis';
+import { ServiceOrderDiagnosisOutcome, ServiceOrderDiagnosisStatus, WarrantyResolutionType } from './service-order-diagnosis';
 
 export interface ServiceOrderDiagnosisSaveRequest {
   serviceOrderItemId?: number;
@@ -11,6 +11,7 @@ export interface ServiceOrderDiagnosisSaveRequest {
   details?: string | null;
   outcomeReason?: string | null;
   recommendedAction?: string | null;
+  warrantyResolutionType?: WarrantyResolutionType | null;
 }
 
 export interface ServiceOrderDiagnosisUpdateRequest {

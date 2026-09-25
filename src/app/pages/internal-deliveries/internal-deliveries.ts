@@ -1,68 +1,26 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
-import {
-  catchError,
-  debounceTime,
-  distinctUntilChanged,
-  finalize,
-  of,
-  Subject,
-  Subscription,
-  switchMap,
-} from 'rxjs';
+import { Subscription, timer } from 'rxjs';
 import { BaseService } from '../../services/base.service';
 import { CurrentUserService } from '../../services/current-user.service';
 
-type DeliveryType = 'ORDER' | 'MANUAL' | '';
-interface TechnicianOption {
-  id: number;
-  name: string;
-  canReceiveManual: boolean;
+type DispatchTab = 'ORDER' | 'INTERNAL_SUPPLY' | 'WARRANTY_REPLACEMENT' | 'HISTORY';
+interface DispatchSummary { order: number; internal: number; warranty: number; total: number; }
+interface DispatchRow {
+  id: number; type: string; status: string; technicianId: number; technicianName: string;
+  productId: number; productName: string; productSku: string; quantity: number; reason?: string;
+  serviceOrderId?: number; serviceOrderItemId?: number; orderCode?: string; itemCode?: string;
+  isSerialized?: boolean; managesExpiration?: boolean; createdAt: string;
 }
-interface ProductOption {
-  id: number;
-  name: string;
-  sku: string;
-  isSerialized: boolean;
-  managesExpiration: boolean;
-  baseUnit?: { name: string; abbreviation: string };
+interface DeliveryRow {
+  id: number; type: string; createdAt: string; notes: string | null; orderId: number | null;
+  orderCode: string | null; technicianName: string; issuerName: string; status: string;
+  lines: { id: number; productName: string; quantity: number; serialCode: string | null }[];
 }
 interface DeliveryOptions {
-  product: {
-    id: number;
-    name: string;
-    sku: string;
-    isSerialized: boolean;
-    managesExpiration: boolean;
-    unit: string;
-  };
+  product: { id: number; name: string; sku: string; isSerialized: boolean; managesExpiration: boolean; unit: string };
   availableQuantity: number;
   lots: { id: number; lotCode: string; availableQuantity: number }[];
   serials: { id: number; serialCode: string; lotId: number | null }[];
-}
-export interface DeliveryRow {
-  id: number;
-  type: 'ORDER' | 'MANUAL';
-  createdAt: string;
-  notes: string | null;
-  orderId: number | null;
-  orderCode: string | null;
-  itemId: number | null;
-  itemCode: string | null;
-  brand: string | null;
-  model: string | null;
-  technicianId: number;
-  technicianName: string;
-  issuerName: string;
-  status: string;
-  lines: {
-    id: number;
-    productName: string;
-    quantity: number;
-    returnedQuantity: number;
-    serialCode: string | null;
-    saleId: number | null;
-  }[];
 }
 
 @Component({
@@ -72,337 +30,154 @@ export interface DeliveryRow {
   styleUrls: ['./internal-deliveries.scss'],
 })
 export class InternalDeliveries implements OnInit, OnDestroy {
-  technicianId: number | null = null;
-  deliveryType: DeliveryType = '';
-  from = '';
-  to = '';
-  page = 1;
+  activeTab: DispatchTab = 'ORDER';
   readonly limit = 20;
-  rows: DeliveryRow[] = [];
-  technicians: TechnicianOption[] = [];
-  manualTechnicians: TechnicianOption[] = [];
-  products: ProductOption[] = [];
-  activeProduct: ProductOption | null = null;
-  productsLoading = false;
+  page = 1;
   total = 0;
+  rows: DispatchRow[] = [];
+  history: DeliveryRow[] = [];
+  summary: DispatchSummary = { order: 0, internal: 0, warranty: 0, total: 0 };
   loading = false;
   error = '';
-  technicianError = '';
-  expandedId: number | null = null;
-  editorOpen = false;
-  saving = false;
-  editorError = '';
-  editorSuccess = '';
-  manualTechnicianId: number | null = null;
-  productId: number | null = null;
-  quantity = 1;
-  lotId: number | null = null;
-  serialIds: number[] = [];
-  notes = '';
+  noticeOpen = false;
+  actionRow: DispatchRow | null = null;
   options: DeliveryOptions | null = null;
   optionsLoading = false;
-  optionsError = '';
-  private request?: Subscription;
-  private optionsRequest?: Subscription;
-  readonly productSearch$ = new Subject<string>();
-  private subscriptions = new Subscription();
-  readonly labels: Record<string, string> = {
-    PENDING: 'Por confirmar uso',
-    CONFIRMED: 'Uso confirmado',
-    SOLD: 'Vinculada a venta',
-    RETURNED: 'Recibida por falla',
-    IN_CUSTODY: 'En custodia del técnico',
-  };
-  constructor(
-    private readonly base: BaseService,
-    private readonly router: Router,
-    private readonly route: ActivatedRoute,
-    private readonly current: CurrentUserService,
-  ) {}
-  ngOnInit() {
-    this.loadTechnicians();
-    if (this.canCreate) {
-      this.configureProductSearch();
-      this.searchProducts('');
+  lotId: number | null = null;
+  serialIds: number[] = [];
+  resolutionNote = '';
+  actionError = '';
+  saving = false;
+  private readonly subscriptions = new Subscription();
+
+  constructor(private readonly base: BaseService, private readonly current: CurrentUserService) {}
+
+  ngOnInit(): void {
+    this.load();
+    this.loadSummary();
+    this.subscriptions.add(timer(30000, 30000).subscribe(() => this.loadSummary()));
+  }
+
+  ngOnDestroy(): void { this.subscriptions.unsubscribe(); }
+  get pages(): number { return Math.max(1, Math.ceil(this.total / this.limit)); }
+  get canFulfill(): boolean { return this.current.hasPermission('dispatches.fulfill'); }
+  get selectedLotAvailable(): number {
+    return this.options?.lots.find((lot) => Number(lot.id) === Number(this.lotId))?.availableQuantity
+      ?? this.options?.availableQuantity ?? 0;
+  }
+  get actionInvalid(): boolean {
+    if (!this.actionRow || !this.options) return true;
+    if (this.options.product.isSerialized) return this.serialIds.length !== Number(this.actionRow.quantity);
+    if (this.options.product.managesExpiration && !this.lotId) return true;
+    return Number(this.actionRow.quantity) > this.selectedLotAvailable;
+  }
+
+  setTab(tab: DispatchTab): void {
+    this.activeTab = tab;
+    this.page = 1;
+    this.noticeOpen = false;
+    this.load();
+  }
+
+  load(): void {
+    this.loading = true;
+    this.error = '';
+    if (this.activeTab === 'HISTORY') {
+      this.subscriptions.add(this.base.get<{ data: DeliveryRow[]; total: number }>(
+        '/service-order-material-deliveries',
+        { params: { page: this.page, limit: this.limit }, withLoader: false },
+      ).subscribe({
+        next: (result) => { this.history = result.data; this.total = result.total; this.loading = false; },
+        error: () => { this.error = 'No se pudo cargar el historial de despachos.'; this.loading = false; },
+      }));
+      return;
     }
-    this.subscriptions.add(
-      this.route.queryParamMap.subscribe((params) => {
-        this.technicianId =
-          Number(params.get('technicianId')) > 0 ? Number(params.get('technicianId')) : null;
-        const type = params.get('type');
-        this.deliveryType = type === 'ORDER' || type === 'MANUAL' ? type : '';
-        this.from = params.get('from') || '';
-        this.to = params.get('to') || '';
-        this.page = Math.max(1, Math.floor(Number(params.get('page')) || 1));
-        this.load();
-      }),
-    );
-  }
-  ngOnDestroy() {
-    this.request?.unsubscribe();
-    this.optionsRequest?.unsubscribe();
-    this.subscriptions.unsubscribe();
-  }
-  get canCreate() {
-    return this.current.hasPermission('internal-deliveries.create');
-  }
-  get pages() {
-    return Math.max(1, Math.ceil(this.total / this.limit));
-  }
-  get invalidRange() {
-    return !!this.from && !!this.to && this.from > this.to;
-  }
-  get selectedProduct() {
-    if (Number(this.activeProduct?.id) === Number(this.productId)) return this.activeProduct;
-    return this.products.find((product) => Number(product.id) === Number(this.productId)) ?? null;
-  }
-  get selectedLotAvailable() {
-    return (
-      this.options?.lots.find((lot) => Number(lot.id) === Number(this.lotId))?.availableQuantity ??
-      this.options?.availableQuantity ??
-      0
-    );
-  }
-  get requestedQuantity() {
-    return this.selectedProduct?.isSerialized ? this.serialIds.length : Number(this.quantity);
-  }
-  get manualInvalid() {
-    if (!this.manualTechnicianId || !this.productId || !this.options) return true;
-    if (this.selectedProduct?.isSerialized) return !this.serialIds.length;
-    if (
-      !Number.isFinite(Number(this.quantity)) ||
-      Number(this.quantity) <= 0 ||
-      Number(this.quantity) > this.selectedLotAvailable
-    )
-      return true;
-    return !!this.options.lots.length && !this.lotId;
-  }
-  loadTechnicians() {
-    this.technicianError = '';
-    this.subscriptions.add(
-      this.base
-        .get<TechnicianOption[]>('/service-order-material-deliveries/technicians', {
-          withLoader: false,
-        })
-        .subscribe({
-          next: (values) => {
-            this.technicians = values;
-            this.manualTechnicians = values.filter((technician) => technician.canReceiveManual);
-          },
-          error: () => (this.technicianError = 'No se pudo cargar la lista de técnicos.'),
-        }),
-    );
+    this.subscriptions.add(this.base.get<{ data: DispatchRow[]; total: number }>(
+      '/dispatches/queue',
+      { params: { type: this.activeTab, status: 'PENDING', page: this.page, limit: this.limit }, withLoader: false },
+    ).subscribe({
+      next: (result) => { this.rows = result.data; this.total = result.total; this.loading = false; },
+      error: () => { this.error = 'No se pudo cargar la cola de despachos.'; this.loading = false; },
+    }));
   }
 
-  private configureProductSearch() {
-    this.subscriptions.add(
-      this.productSearch$
-        .pipe(
-          debounceTime(250),
-          distinctUntilChanged(),
-          switchMap((term) => this.productRequest(term)),
-        )
-        .subscribe((values) => (this.products = values)),
-    );
+  loadSummary(): void {
+    this.subscriptions.add(this.base.get<DispatchSummary>('/dispatches/summary', { withLoader: false })
+      .subscribe({ next: (value) => (this.summary = value) }));
   }
 
-  searchProducts(term: string) {
-    this.productSearch$.next(term.trim());
-  }
+  navigate(page: number): void { this.page = Math.max(1, Math.min(this.pages, page)); this.load(); }
 
-  private productRequest(term: string) {
-    this.productsLoading = true;
-    this.editorError = '';
-    const params: Record<string, string | number> = { page: 1, limit: 20 };
-    if (term) params['search'] = term;
-    return this.base
-      .get<{ data: ProductOption[] }>('/inventory/catalogs/products', {
-        params,
-        withLoader: false,
-      })
-      .pipe(
-        catchError(() => {
-          this.editorError = 'No se pudo buscar el catálogo de productos.';
-          return of({ data: [] as ProductOption[] });
-        }),
-        finalize(() => (this.productsLoading = false)),
-        switchMap((result) => of(result.data)),
-      );
-  }
-  productChanged(product?: ProductOption) {
-    this.optionsRequest?.unsubscribe();
-    this.activeProduct = product ?? this.selectedProduct;
+  openFulfillment(row: DispatchRow): void {
+    this.actionRow = row;
     this.options = null;
-    this.optionsError = '';
-    this.serialIds = [];
     this.lotId = null;
-    if (!this.productId) return;
+    this.serialIds = [];
+    this.resolutionNote = '';
+    this.actionError = '';
     this.optionsLoading = true;
-    this.optionsRequest = this.base
-      .get<DeliveryOptions>(`/service-order-material-deliveries/manual/options/${this.productId}`, {
-        withLoader: false,
-      })
+    this.subscriptions.add(this.base.get<DeliveryOptions>(`/dispatches/options/${row.productId}`, { withLoader: false })
       .subscribe({
         next: (value) => {
           this.options = value;
           this.optionsLoading = false;
           if (value.lots.length === 1) this.lotId = value.lots[0].id;
         },
-        error: () => {
-          this.optionsLoading = false;
-          this.optionsError = 'No se pudo consultar la disponibilidad del producto.';
-        },
-      });
+        error: () => { this.optionsLoading = false; this.actionError = 'No se pudo consultar el stock disponible.'; },
+      }));
   }
-  serialsChanged() {
-    if (!this.serialIds.length || !this.options) {
-      this.lotId = null;
-      return;
-    }
+
+  closeFulfillment(): void { if (!this.saving) this.actionRow = null; }
+  serialsChanged(): void {
+    if (!this.options || !this.serialIds.length) { this.lotId = null; return; }
     const selected = this.options.serials.filter((serial) => this.serialIds.includes(serial.id));
-    const lots = new Set(selected.map((serial) => serial.lotId ?? null));
+    const lots = new Set(selected.map((serial) => serial.lotId));
     if (lots.size > 1) {
       this.serialIds = [];
       this.lotId = null;
-      this.optionsError = 'Selecciona series del mismo lote.';
-      return;
+      this.actionError = 'Selecciona series pertenecientes al mismo lote.';
+    } else {
+      this.actionError = '';
+      this.lotId = selected[0]?.lotId ?? null;
     }
-    this.optionsError = '';
-    this.lotId = selected[0]?.lotId ?? null;
   }
-  openEditor() {
-    this.resetEditor();
-    this.editorError = '';
-    this.editorSuccess = '';
-    this.editorOpen = true;
-    this.searchProducts('');
-  }
-  closeEditor() {
-    if (this.saving) return;
-    this.editorOpen = false;
-    this.editorError = '';
-    this.resetEditor();
-  }
-  @HostListener('document:keydown.escape')
-  closeEditorOnEscape() {
-    if (this.editorOpen) this.closeEditor();
-  }
-  resetEditor() {
-    this.manualTechnicianId = null;
-    this.productId = null;
-    this.activeProduct = null;
-    this.quantity = 1;
-    this.lotId = null;
-    this.serialIds = [];
-    this.notes = '';
-    this.options = null;
-    this.optionsError = '';
-  }
-  saveManual() {
-    if (this.manualInvalid || this.saving) {
-      this.editorError = 'Completa técnico, producto y cantidad disponible.';
-      return;
-    }
+
+  fulfill(): void {
+    if (!this.actionRow || this.actionInvalid || this.saving) return;
     this.saving = true;
-    this.editorError = '';
-    this.editorSuccess = '';
-    const line: Record<string, unknown> = {
-      productId: this.productId,
-      quantity: this.requestedQuantity,
-    };
-    if (this.lotId) line['lotId'] = this.lotId;
-    if (this.selectedProduct?.isSerialized) line['serialIds'] = this.serialIds;
-    this.base
-      .post<{ deliveryId: number; code: string }>(
-        '/service-order-material-deliveries/manual',
-        {
-          requestKey: crypto.randomUUID(),
-          technicianId: this.manualTechnicianId,
-          notes: this.notes.trim() || undefined,
-          lines: [line],
-        },
-        { withLoader: false },
-      )
+    const body: Record<string, unknown> = { requestKey: crypto.randomUUID() };
+    if (this.lotId) body['lotId'] = this.lotId;
+    if (this.serialIds.length) body['serialIds'] = this.serialIds;
+    if (this.resolutionNote.trim()) body['note'] = this.resolutionNote.trim();
+    this.subscriptions.add(this.base.post(`/dispatches/requests/${this.actionRow.id}/fulfill`, body, { withLoader: false })
       .subscribe({
-        next: (result) => {
-          this.saving = false;
-          this.editorSuccess = `${result.code} registrada correctamente.`;
-          this.editorOpen = false;
-          this.resetEditor();
-          this.load();
-        },
+        next: () => { this.saving = false; this.actionRow = null; this.load(); this.loadSummary(); },
         error: (err) => {
           this.saving = false;
           const message = err?.error?.message;
-          this.editorError = Array.isArray(message)
-            ? message.join(' · ')
-            : message || 'No se pudo registrar la entrega.';
+          this.actionError = Array.isArray(message) ? message.join(' · ') : message || 'No se pudo confirmar el despacho.';
         },
-      });
+      }));
   }
-  search() {
-    if (!this.invalidRange) this.navigate(1);
+
+  reject(row: DispatchRow): void {
+    const reason = window.prompt('Motivo del rechazo de la solicitud:');
+    if (!reason?.trim()) return;
+    this.subscriptions.add(this.base.post(`/dispatches/requests/${row.id}/reject`, { reason: reason.trim() }, { withLoader: false })
+      .subscribe({ next: () => { this.load(); this.loadSummary(); } }));
   }
-  clear() {
-    this.technicianId = null;
-    this.deliveryType = '';
-    this.from = '';
-    this.to = '';
-    this.navigate(1);
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void { if (this.actionRow) this.closeFulfillment(); else this.noticeOpen = false; }
+
+  tabCount(tab: DispatchTab): number {
+    if (tab === 'ORDER') return this.summary.order;
+    if (tab === 'INTERNAL_SUPPLY') return this.summary.internal;
+    if (tab === 'WARRANTY_REPLACEMENT') return this.summary.warranty;
+    return 0;
   }
-  navigate(page: number) {
-    const queryParams = {
-      technicianId: this.technicianId || undefined,
-      type: this.deliveryType || undefined,
-      from: this.from || undefined,
-      to: this.to || undefined,
-      page,
-    };
-    this.router.navigate([], { relativeTo: this.route, queryParams });
-    if (
-      this.page === page &&
-      String(this.route.snapshot.queryParamMap.get('technicianId') || '') ===
-        String(this.technicianId || '') &&
-      (this.route.snapshot.queryParamMap.get('type') || '') === this.deliveryType &&
-      (this.route.snapshot.queryParamMap.get('from') || '') === this.from &&
-      (this.route.snapshot.queryParamMap.get('to') || '') === this.to
-    )
-      this.load();
-  }
-  load() {
-    this.request?.unsubscribe();
-    this.error = '';
-    this.expandedId = null;
-    if (this.invalidRange) {
-      this.rows = [];
-      this.total = 0;
-      this.loading = false;
-      this.error = 'La fecha Desde no puede ser posterior a Hasta.';
-      return;
-    }
-    this.loading = true;
-    const params: Record<string, string | number> = { page: this.page, limit: this.limit };
-    if (this.technicianId) params['technicianId'] = this.technicianId;
-    if (this.deliveryType) params['type'] = this.deliveryType;
-    if (this.from) params['from'] = this.from;
-    if (this.to) params['to'] = this.to;
-    this.request = this.base
-      .get<{ data: DeliveryRow[]; total: number }>('/service-order-material-deliveries', {
-        params,
-        withLoader: false,
-      })
-      .subscribe({
-        next: (result) => {
-          this.rows = result.data;
-          this.total = result.total;
-          this.loading = false;
-        },
-        error: () => {
-          this.rows = [];
-          this.total = 0;
-          this.loading = false;
-          this.error = 'No pudimos cargar las entregas. Vuelve a intentarlo.';
-        },
-      });
+
+  typeLabel(type: string): string {
+    return ({ ORDER: 'Material de orden', MANUAL: 'Entrega interna', INTERNAL_REQUEST: 'Insumo interno', WARRANTY_REPLACEMENT: 'Reemplazo por garantía' } as Record<string, string>)[type] || type;
   }
 }

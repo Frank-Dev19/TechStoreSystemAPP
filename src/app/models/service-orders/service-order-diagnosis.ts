@@ -13,9 +13,16 @@ export interface ServiceOrderDiagnosis {
   details: string | null;
   outcomeReason: string | null;
   recommendedAction: string | null;
+  warrantyResolutionType?: WarrantyResolutionType | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
+}
+
+export enum WarrantyResolutionType {
+  CONFIGURATION = 'CONFIGURATION',
+  REPAIR = 'REPAIR',
+  FACTORY_REPLACEMENT = 'FACTORY_REPLACEMENT',
 }
 
 export enum ServiceOrderDiagnosisStatus {

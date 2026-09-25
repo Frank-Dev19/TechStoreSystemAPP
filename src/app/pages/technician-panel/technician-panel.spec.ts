@@ -19,6 +19,7 @@ import { PricingQueryApiService } from '../../services/pricing/pricing-query-api
 import { UsersApiService } from '../../services/rbac/users-api.service';
 import { CurrentUserService } from '../../services/current-user.service';
 import { ServiceOrderInboxService } from '../../services/service-orders/service-order-inbox.service';
+import { BaseService } from '../../services/base.service';
 import {
   EquipmentType,
   RequestOrigin,
@@ -70,6 +71,11 @@ describe('TechnicianPanel', () => {
 
   const productsServiceStub = {
     list: jasmine.createSpy('list').and.returnValue(of([])),
+    listWithFilter: jasmine.createSpy('listWithFilter').and.returnValue(of({ data: [], total: 0, page: 1, limit: 20 })),
+  };
+  const baseServiceStub = {
+    get: jasmine.createSpy('get').and.returnValue(of({ data: [] })),
+    post: jasmine.createSpy('post').and.returnValue(of({})),
   };
 
   const pricingQueryStub = {
@@ -125,6 +131,7 @@ describe('TechnicianPanel', () => {
         { provide: CurrentUserService, useValue: currentUserServiceStub },
         { provide: ServiceOrderInboxService, useValue: inboxServiceStub },
         { provide: Router, useValue: routerStub },
+        { provide: BaseService, useValue: baseServiceStub },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -363,6 +370,7 @@ describe('TechnicianPanel', () => {
       summary: 'Falla en la fuente',
       details: 'La fuente no entrega voltaje estable.',
       outcome: ServiceOrderDiagnosisOutcome.REPAIRABLE,
+      warrantyResolutionType: null,
     });
 
     component.submitDiagnosis();
@@ -416,6 +424,9 @@ describe('TechnicianPanel', () => {
         summary: 'Resultado de la garantía',
         details: 'Se revisó el equipo y se documentaron los hallazgos técnicos.',
         outcome,
+        ...(outcome === ServiceOrderDiagnosisOutcome.WARRANTY_APPLIES
+          ? { warrantyResolutionType: 'CONFIGURATION' }
+          : {}),
       });
     });
   });
@@ -1201,6 +1212,39 @@ describe('TechnicianPanel', () => {
 
     order.itemProgress = { ...order.itemProgress!, delivered: 1, isPartial: true };
     expect(component.getOrderStageLabel(order)).toBe('Devolución parcial al cliente');
+  });
+
+  it('muestra en el modal solo las tres solicitudes internas más recientes', () => {
+    component.technicianDispatchRequests = [
+      { id: 1, type: 'WARRANTY_REPLACEMENT', status: 'PENDING', productName: 'Mouse', quantity: 1 },
+      { id: 2, type: 'INTERNAL_SUPPLY', status: 'PENDING', productName: 'Pasta 1', quantity: 1 },
+      { id: 3, type: 'INTERNAL_SUPPLY', status: 'CONFIRMED', productName: 'Pasta 2', quantity: 1 },
+      { id: 4, type: 'INTERNAL_SUPPLY', status: 'REJECTED', productName: 'Pasta 3', quantity: 1 },
+      { id: 5, type: 'INTERNAL_SUPPLY', status: 'PENDING', productName: 'Pasta 4', quantity: 1 },
+    ] as any;
+
+    expect(component.recentInternalSupplyRequests.map((request) => request.id)).toEqual([2, 3, 4]);
+  });
+
+  it('consulta el historial propio con paginación y filtros', () => {
+    baseServiceStub.get.and.returnValue(of({ data: [], total: 0, page: 1, limit: 10 }));
+    component.dispatchHistoryType = 'WARRANTY_REPLACEMENT';
+    component.dispatchHistoryStatus = 'PENDING';
+    component.dispatchHistorySearch = 'SO-24';
+
+    component.showDispatchHistory(true);
+
+    expect(component.technicianView).toBe('requests');
+    expect(baseServiceStub.get).toHaveBeenCalledWith('/dispatches/history/mine', {
+      params: {
+        page: 1,
+        limit: 10,
+        type: 'WARRANTY_REPLACEMENT',
+        status: 'PENDING',
+        search: 'SO-24',
+      },
+      withLoader: false,
+    });
   });
 });
 

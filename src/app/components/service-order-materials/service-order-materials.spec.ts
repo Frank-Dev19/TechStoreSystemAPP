@@ -34,6 +34,14 @@ describe('ServiceOrderMaterialsComponent', () => {
     component.state = { version: { id: 2 }, reconciliation: { valid: true, versionId: 1 } } as any;
     expect(component.reconciled).toBeFalse();
   });
+  it('does not describe a warranty replacement as a missing quotation', () => {
+    const component = new ServiceOrderMaterialsComponent({} as any, {} as any);
+    component.order = { serviceType: 'WARRANTY_SERVICE' } as any;
+    component.state = { version: null } as any;
+
+    expect(component.isWarrantyOrder).toBeTrue();
+    expect(component.statusLabel).toBe('Gestión por garantía');
+  });
 });
 
 describe('Material workflow guidance', () => {

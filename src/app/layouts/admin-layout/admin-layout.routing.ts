@@ -35,8 +35,8 @@ export const AdminLayoutRoutes: Routes = [
     component: InternalDeliveries,
     canActivate: [PermissionGuard],
     data: {
-      navbarTitle: 'ENTREGAS INTERNAS',
-      requiredPermissions: ['navigation.internal-deliveries', 'internal-deliveries.read'],
+      navbarTitle: 'GESTIÓN DE DESPACHOS',
+      requiredPermissions: ['navigation.internal-deliveries', 'dispatches.read'],
     },
   },
   {
@@ -179,6 +179,9 @@ export const AdminLayoutRoutes: Routes = [
     path: 'supervisor-panel',
     component: SupervisorPanel,
     canActivate: [RoleGuard],
-    data: { navbarTitle: 'PANEL DE SUPERVISIÓN', allowedRoles: SUPERVISOR_ROLE_NAMES },
+    data: {
+      navbarTitle: 'PANEL DE SUPERVISIÓN',
+      allowedRoles: [...SUPERVISOR_ROLE_NAMES, ...RECEPTIONIST_ROLE_NAMES],
+    },
   },
 ];

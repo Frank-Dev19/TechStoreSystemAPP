@@ -6,6 +6,9 @@ export type WarrantyCoverageStatus = 'ACTIVE' | 'RESERVED' | 'CONSUMED' | 'EXPIR
 export type WarrantyClaimStatus =
   | 'RECEIVED'
   | 'IN_REVIEW'
+  | 'WAITING_REPLACEMENT'
+  | 'REPLACEMENT_DELIVERED'
+  | 'RESOLVED_REPLACED'
   | 'RESOLVED_APPLIES'
   | 'RESOLVED_REJECTED'
   | 'CANCELLED';
@@ -97,6 +100,34 @@ export interface WarrantyClaim {
   reviewStartedAt: string | null;
   resolvedAt: string | null;
   createdAt: string;
+  replacement?: WarrantyReplacementTrace | null;
+}
+
+export interface WarrantyReplacementTrace {
+  requestId: number;
+  status: 'PENDING' | 'DELIVERED' | 'CONFIRMED' | 'REJECTED' | 'CANCELLED';
+  reason: string;
+  resolutionNote: string | null;
+  requestedAt: string;
+  deliveredAt: string | null;
+  confirmedAt: string | null;
+  originalSerialId: number | null;
+  originalSerialCode: string | null;
+  originalSerialCondition: string | null;
+  deliveryId: number | null;
+  deliveryCode: string | null;
+  resolvedBy: { id: number; name: string } | null;
+  lines: WarrantyReplacementLine[];
+}
+
+export interface WarrantyReplacementLine {
+  id: number;
+  productId: number;
+  productName: string;
+  productSku: string | null;
+  serialId: number | null;
+  serialCode: string | null;
+  quantity: number;
 }
 
 export interface WarrantyTechnicianReportRow {

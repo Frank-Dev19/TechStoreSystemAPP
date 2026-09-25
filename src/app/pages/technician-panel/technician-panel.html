@@ -6,9 +6,22 @@
         Gestiona tus órdenes asignadas y avanza en cada etapa del servicio.
       </p>
     </div>
+    <div class="technician-header-actions">
+      <button
+        type="button"
+        class="btn-secondary request-history-button"
+        [class.active]="technicianView === 'requests'"
+        (click)="showDispatchHistory(true)"
+      >
+        <i class="fas fa-history"></i> Mis solicitudes
+      </button>
+      <button type="button" class="btn-primary supply-request-button" (click)="openSupplyRequestModal()">
+        <i class="fas fa-box-open"></i> Solicitar insumo
+      </button>
+    </div>
   </div>
 
-  <section class="technician-status-card">
+  <section class="technician-status-card" [hidden]="technicianView !== 'orders'">
     <div class="tabs-navigation technician-status-nav">
       <button
         type="button"
@@ -73,7 +86,147 @@
     </div>
   </section>
 
-  <div class="split-pane-layout" [class.has-selection]="selectedServiceOrder">
+  @if (technicianView === 'requests') {
+    <section class="panel-card dispatch-history">
+      <div class="dispatch-history__header">
+        <div>
+          <span class="dispatch-history__eyebrow">Trazabilidad personal</span>
+          <h2>Mis solicitudes y materiales</h2>
+          <p>Consulta insumos internos, reemplazos de garantía y materiales autorizados para tus órdenes.</p>
+        </div>
+        <button type="button" class="btn btn-outline-secondary" (click)="showOrdersView()">
+          <i class="fas fa-arrow-left"></i> Volver a órdenes
+        </button>
+      </div>
+
+      <form class="dispatch-history__filters" (ngSubmit)="applyDispatchHistoryFilters()">
+        <label>
+          Buscar
+          <input
+            class="form-control"
+            name="dispatchHistorySearch"
+            [(ngModel)]="dispatchHistorySearch"
+            placeholder="Producto, SKU, orden o motivo"
+          />
+        </label>
+        <label>
+          Tipo
+          <select class="form-select" name="dispatchHistoryType" [(ngModel)]="dispatchHistoryType">
+            <option value="">Todos los tipos</option>
+            <option value="ORDER">Material de orden</option>
+            <option value="INTERNAL_SUPPLY">Insumo interno</option>
+            <option value="WARRANTY_REPLACEMENT">Reemplazo por garantía</option>
+          </select>
+        </label>
+        <label>
+          Estado
+          <select class="form-select" name="dispatchHistoryStatus" [(ngModel)]="dispatchHistoryStatus">
+            <option value="">Todos los estados</option>
+            <option value="PENDING">Pendiente</option>
+            <option value="DELIVERED">Entregado</option>
+            <option value="CONFIRMED">Confirmado</option>
+            <option value="REJECTED">Rechazado</option>
+            <option value="CANCELLED">Cancelado</option>
+          </select>
+        </label>
+        <div class="dispatch-history__filter-actions">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Buscar</button>
+          <button type="button" class="btn btn-outline-secondary" (click)="clearDispatchHistoryFilters()">
+            <i class="fas fa-eraser"></i> Limpiar
+          </button>
+        </div>
+      </form>
+
+      <div class="dispatch-history__result-bar">
+        <strong>{{ dispatchHistoryTotal }} {{ dispatchHistoryTotal === 1 ? 'registro' : 'registros' }}</strong>
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="showDispatchHistory()">
+          <i class="fas fa-sync-alt"></i> Actualizar
+        </button>
+      </div>
+
+      @if (dispatchHistoryLoading) {
+        <div class="dispatch-history__state" role="status">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Cargando solicitudes...
+        </div>
+      } @else if (dispatchHistoryError) {
+        <div class="dispatch-history__state dispatch-history__state--error" role="alert">
+          <i class="fas fa-exclamation-circle"></i>
+          <span>{{ dispatchHistoryError }}</span>
+          <button type="button" class="btn btn-outline-secondary" (click)="showDispatchHistory()">Reintentar</button>
+        </div>
+      } @else if (!dispatchHistory.length) {
+        <div class="dispatch-history__state">
+          <i class="fas fa-inbox"></i>
+          <strong>No hay solicitudes con estos filtros</strong>
+          <span>Prueba otra búsqueda o registra un nuevo insumo interno.</span>
+        </div>
+      } @else {
+        <div class="dispatch-history__table-wrap">
+          <table class="dispatch-history__table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Producto</th>
+                <th>Origen / motivo</th>
+                <th>Cantidad</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (request of dispatchHistory; track request.type + '-' + request.id) {
+                <tr>
+                  <td data-label="Fecha">{{ request.createdAt | date: 'dd/MM/yyyy HH:mm' }}</td>
+                  <td data-label="Tipo">
+                    <span class="dispatch-type" [attr.data-type]="request.type">{{ getDispatchTypeLabel(request.type) }}</span>
+                  </td>
+                  <td data-label="Producto">
+                    <strong>{{ request.productName }}</strong>
+                    @if (request.productSku) { <small>{{ request.productSku }}</small> }
+                  </td>
+                  <td data-label="Origen / motivo">
+                    @if (request.orderCode) {
+                      <strong>{{ request.orderCode }}</strong>
+                      @if (request.itemCode) { <small>{{ request.itemCode }}</small> }
+                    } @else {
+                      <span>{{ request.reason || 'Solicitud interna' }}</span>
+                    }
+                  </td>
+                  <td data-label="Cantidad">{{ request.quantity | number: '1.0-4' }}</td>
+                  <td data-label="Estado">
+                    <span class="dispatch-status" [attr.data-status]="request.status">{{ getDispatchStatusLabel(request.status) }}</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="dispatch-history__pagination">
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            (click)="changeDispatchHistoryPage(dispatchHistoryPage - 1)"
+            [disabled]="dispatchHistoryPage === 1"
+            aria-label="Página anterior"
+          >
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <span>Página {{ dispatchHistoryPage }} de {{ dispatchHistoryPages }}</span>
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            (click)="changeDispatchHistoryPage(dispatchHistoryPage + 1)"
+            [disabled]="dispatchHistoryPage === dispatchHistoryPages"
+            aria-label="Página siguiente"
+          >
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      }
+    </section>
+  }
+
+  <div class="split-pane-layout" [class.has-selection]="selectedServiceOrder" [hidden]="technicianView !== 'orders'">
     <section class="panel-card technician-workspace-card">
       <div class="panel-card-header technician-workspace-card__header">
         <div>
@@ -204,6 +357,13 @@
           [itemId]="selectedServiceOrderItem?.id"
           [allowInventoryActions]="false"
         ></app-service-order-materials>
+        @if (selectedPendingReplacement; as replacement) {
+          <section class="replacement-confirmation" aria-label="Confirmación de reemplazo pendiente">
+            <span class="replacement-confirmation__icon"><i class="fas fa-exchange-alt"></i></span>
+            <div><strong>Reemplazo entregado pendiente de confirmación</strong><p>{{ replacement.productName }} · Confirma que el producto fue instalado o entregado correctamente.</p></div>
+            <button type="button" class="btn btn-success" (click)="confirmWarrantyReplacement(replacement.id)"><i class="fas fa-check"></i> Confirmar reemplazo</button>
+          </section>
+        }
         <div class="detail-actions-bar">
           <div class="detail-actions-flex">
             <button
@@ -1573,6 +1733,19 @@
               acuerdo.
             </div>
           }
+          @if (isWarrantyResolutionFlow && isWarrantyApprovalResolution) {
+            <div class="form-group">
+              <label for="warranty-resolution-type">Tipo de solución *</label>
+              <select id="warranty-resolution-type" class="form-control" formControlName="warrantyResolutionType">
+                <option value="CONFIGURATION">Ajuste o configuración</option>
+                <option value="REPAIR">Reparación técnica</option>
+                <option value="FACTORY_REPLACEMENT">Reemplazo por falla de fábrica</option>
+              </select>
+              @if (diagnosisForm.get('warrantyResolutionType')?.value === 'FACTORY_REPLACEMENT') {
+                <small class="form-help">Se solicitará automáticamente el mismo producto a recepción y la cobertura permanecerá reservada hasta confirmar el reemplazo.</small>
+              }
+            </div>
+          }
           <div class="form-group">
             <label for="summary">{{ isWarrantyResolutionFlow ? 'Resumen de la revisión' : 'Resumen del diagnóstico' }} *</label>
             <input
@@ -1663,3 +1836,37 @@
     </div>
   </div>
 </div>
+
+@if (showSupplyRequestModal) {
+  <div class="modal-overlay" (click)="closeSupplyRequestModal()">
+    <section class="modal-content supply-request-modal" role="dialog" aria-modal="true" aria-labelledby="supply-request-title" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div><h2 id="supply-request-title">Solicitar insumo interno</h2><p>La solicitud llegará a recepción para su evaluación y despacho.</p></div>
+        <button type="button" class="btn-close" (click)="closeSupplyRequestModal()" aria-label="Cerrar"><i class="fas fa-times"></i></button>
+      </div>
+      <form [formGroup]="supplyRequestForm" (ngSubmit)="submitSupplyRequest()" class="modal-body">
+        <div class="form-group">
+          <label for="supply-product">Producto *</label>
+          <ng-select id="supply-product" [items]="supplyProducts" bindLabel="name" bindValue="id" formControlName="productId" [typeahead]="supplyProductSearch$" [loading]="supplyProductsLoading" [minTermLength]="2" placeholder="Buscar por nombre o SKU" typeToSearchText="Escribe al menos 2 caracteres" notFoundText="Sin coincidencias"></ng-select>
+        </div>
+        <div class="form-group"><label for="supply-quantity">Cantidad *</label><input id="supply-quantity" class="form-control" type="number" min="0.0001" step="0.0001" formControlName="quantity" /></div>
+        <div class="form-group"><label for="supply-reason">Motivo *</label><textarea id="supply-reason" class="form-control" rows="4" formControlName="reason" placeholder="Ej. Pasta térmica para mantenimientos preventivos"></textarea></div>
+        @if (supplyRequestError) { <p class="supply-request-error" role="alert">{{ supplyRequestError }}</p> }
+        @if (recentInternalSupplyRequests.length) {
+          <section class="my-dispatch-requests">
+            <div class="my-dispatch-requests__header">
+              <h3>Últimas solicitudes internas</h3>
+              <button type="button" (click)="openDispatchHistoryFromModal()">Ver historial</button>
+            </div>
+            @for (request of recentInternalSupplyRequests; track request.id) {
+              <div class="my-dispatch-request">
+                <div><strong>{{ request.productName }}</strong><span>{{ request.quantity }} · {{ getDispatchStatusLabel(request.status) }}</span></div>
+              </div>
+            }
+          </section>
+        }
+      </form>
+      <div class="modal-footer"><button type="button" class="btn btn-secondary" (click)="closeSupplyRequestModal()">Cancelar</button><button type="button" class="btn btn-success" (click)="submitSupplyRequest()" [disabled]="supplyRequestForm.invalid || savingSupplyRequest"><i class="fas fa-paper-plane"></i> {{ savingSupplyRequest ? 'Enviando…' : 'Enviar solicitud' }}</button></div>
+    </section>
+  </div>
+}

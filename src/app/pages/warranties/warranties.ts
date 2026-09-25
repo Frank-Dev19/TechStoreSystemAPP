@@ -46,6 +46,9 @@ export class WarrantiesPage implements OnInit {
     { value: '', label: 'Todos los estados' },
     { value: 'RECEIVED', label: 'Recibida' },
     { value: 'IN_REVIEW', label: 'En revisión' },
+    { value: 'WAITING_REPLACEMENT', label: 'Esperando reemplazo' },
+    { value: 'REPLACEMENT_DELIVERED', label: 'Reemplazo entregado' },
+    { value: 'RESOLVED_REPLACED', label: 'Reemplazo confirmado' },
     { value: 'RESOLVED_APPLIES', label: 'Garantía aplicada' },
     { value: 'RESOLVED_REJECTED', label: 'Garantía rechazada' },
     { value: 'CANCELLED', label: 'Cancelada' },
@@ -336,7 +339,9 @@ export class WarrantiesPage implements OnInit {
 
   claimStatusLabel(status: WarrantyClaim['status']): string {
     return ({
-      RECEIVED: 'Recibida', IN_REVIEW: 'En revisión', RESOLVED_APPLIES: 'Garantía aplicada',
+      RECEIVED: 'Recibida', IN_REVIEW: 'En revisión', WAITING_REPLACEMENT: 'Esperando reemplazo',
+      REPLACEMENT_DELIVERED: 'Reemplazo entregado', RESOLVED_REPLACED: 'Reemplazo confirmado',
+      RESOLVED_APPLIES: 'Garantía aplicada',
       RESOLVED_REJECTED: 'Garantía rechazada', CANCELLED: 'Cancelada',
     })[status];
   }
@@ -345,6 +350,25 @@ export class WarrantiesPage implements OnInit {
     if (outcome === 'WARRANTY_APPLIES') return 'Garantía aplicada';
     if (outcome === 'WARRANTY_REJECTED') return 'Garantía rechazada';
     return 'Pendiente de evaluación';
+  }
+
+  replacementStatusLabel(status: string): string {
+    return ({
+      PENDING: 'Pendiente de despacho',
+      DELIVERED: 'Entregado al técnico',
+      CONFIRMED: 'Reemplazo confirmado',
+      REJECTED: 'Solicitud rechazada',
+      CANCELLED: 'Solicitud cancelada',
+    } as Record<string, string>)[status] ?? status;
+  }
+
+  serialConditionLabel(condition: string | null | undefined): string {
+    if (!condition) return 'Sin estado registrado';
+    return ({
+      USABLE: 'Utilizable',
+      UNDER_REVIEW: 'En cuarentena',
+      UNUSABLE: 'Inutilizable',
+    } as Record<string, string>)[condition] ?? condition;
   }
 
   equipmentTypeLabel(type: EquipmentType): string {

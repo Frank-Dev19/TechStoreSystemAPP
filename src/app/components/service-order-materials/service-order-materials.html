@@ -72,11 +72,10 @@
       }
       @if (state && !loading) {
         <div class="materials__summary">
-          <div>
-            <span class="materials__eyebrow">{{ state.itemCode }}</span
-            ><span class="materials__status" [class.materials__status--success]="reconciled">{{
-              statusLabel
-            }}</span>
+          <div class="materials__summary-main">
+            <span class="materials__summary-icon"><i class="fas fa-clipboard-list" aria-hidden="true"></i></span>
+            <span class="materials__summary-copy"><small>Equipo seleccionado</small><strong>{{ state.itemCode }}</strong></span>
+            <span class="materials__status" [class.materials__status--success]="reconciled">{{ statusLabel }}</span>
           </div>
           <button
             type="button"
@@ -88,17 +87,11 @@
             <i class="fas fa-sync-alt" aria-hidden="true"></i><span>Actualizar</span>
           </button>
         </div>
-        @if (!state.version) {
-          <p class="materials__empty">
-            Este equipo aún no tiene una cotización aprobada. Los productos aparecerán aquí cuando
-            el cliente los autorice.
-          </p>
+        @if (!state.version && !isWarrantyOrder) {
+          <div class="materials__empty-state"><span><i class="fas fa-file-signature" aria-hidden="true"></i></span><div><strong>Sin materiales autorizados</strong><p>Este equipo aún no tiene una cotización aprobada. Los productos aparecerán cuando el cliente los autorice.</p></div></div>
         }
         @if (!hasMaterials && state.version) {
-          <p class="materials__empty">
-            La cotización incluye solo servicios. Puedes continuar sin registrar una entrega de
-            materiales.
-          </p>
+          <div class="materials__empty-state"><span><i class="fas fa-check" aria-hidden="true"></i></span><div><strong>No requiere materiales</strong><p>La cotización incluye solo servicios. Puedes continuar sin registrar una entrega de almacén.</p></div></div>
         }
         @if (productProgress.length) {
           <div class="materials__section-heading">
@@ -107,21 +100,15 @@
           </div>
           <ul class="materials__products">
             @for (row of productProgress; track row.line.productId) {
-              <li>
+              <li class="materials__product-row">
                 <div class="materials__product-name">
-                  <strong>{{ row.line.catalogNameSnapshot }}</strong
-                  ><span>{{
-                    row.line.product?.isSerialized ? 'Control por serie' : 'Control por cantidad'
-                  }}</span>
+                  <span class="materials__product-icon"><i class="fas fa-box" aria-hidden="true"></i></span>
+                  <span><strong>{{ row.line.catalogNameSnapshot }}</strong><small>{{ row.line.product?.isSerialized ? 'Control individual por serie' : 'Control por cantidad' }}</small></span>
                 </div>
                 <div class="materials__quantities">
-                  <span
-                    ><b>{{ row.authorized | number: '1.0-4' }}</b> Aprobado</span
-                  ><span
-                    ><b>{{ row.issued | number: '1.0-4' }}</b> Entregado</span
-                  ><span [class.materials__pending]="row.pending > 0"
-                    ><b>{{ row.pending | number: '1.0-4' }}</b> Pendiente</span
-                  >
+                  <span><small>Aprobado</small><b>{{ row.authorized | number: '1.0-4' }}</b></span>
+                  <span><small>Entregado</small><b>{{ row.issued | number: '1.0-4' }}</b></span>
+                  <span [class.materials__pending]="row.pending > 0"><small>Pendiente</small><b>{{ row.pending | number: '1.0-4' }}</b></span>
                 </div>
                 @if (canManage && !frozen && row.pending > 0) {
                   <button
@@ -275,19 +262,16 @@
           </div>
           <ul class="materials__deliveries">
             @for (line of activeLines; track line.id) {
-              <li>
+              <li class="materials__delivery-card">
                 <div class="materials__delivery-main">
-                  <div>
-                    <span class="materials__eyebrow"
-                      >GI-{{ line.deliveryId }}
-                      @if (deliveryDate(line)) {
-                        · {{ deliveryDate(line) | date: 'dd/MM/yyyy' }}
-                      }</span
-                    ><strong>{{ name(line) }}</strong>
+                  <span class="materials__delivery-icon"><i class="fas fa-dolly" aria-hidden="true"></i></span>
+                  <div class="materials__delivery-copy">
+                    <span class="materials__eyebrow">Guía GI-{{ line.deliveryId }}</span>
+                    <strong>{{ name(line) }}</strong>
                     @if (line.serialCode) {
-                      <span class="materials__serial">{{ line.serialCode }}</span>
+                      <span class="materials__serial"><i class="fas fa-barcode" aria-hidden="true"></i>{{ line.serialCode }}</span>
                     } @else {
-                      <span class="materials__hint">Sin control por serie</span>
+                      <span class="materials__hint"><i class="fas fa-layer-group" aria-hidden="true"></i> Sin control por serie</span>
                     }
                   </div>
                   <span
@@ -305,12 +289,11 @@
                   >
                 </div>
                 <div class="materials__delivery-footer">
-                  <span
-                    >Cantidad: <strong>{{ line.quantity | number: '1.0-4' }}</strong>
-                    @if (condition(line)) {
-                      · {{ conditionLabel(condition(line).condition) }}
-                    }
-                  </span>
+                  <div class="materials__delivery-meta">
+                    <span><i class="fas fa-calendar-alt" aria-hidden="true"></i>{{ deliveryDate(line) ? (deliveryDate(line) | date: 'dd/MM/yyyy') : 'Fecha no disponible' }}</span>
+                    <span><i class="fas fa-cubes" aria-hidden="true"></i>Cantidad: <strong>{{ line.quantity | number: '1.0-4' }}</strong></span>
+                    @if (condition(line)) { <span><i class="fas fa-shield-alt" aria-hidden="true"></i>{{ conditionLabel(condition(line).condition) }}</span> }
+                  </div>
                   @if (canManage && !!line.serialId && !line.saleId && outstanding(line) > 0) {
                     <button
                       type="button"

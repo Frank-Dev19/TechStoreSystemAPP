@@ -157,6 +157,37 @@
       } @else {
         <div class="pending-detail"><i class="fas fa-hourglass-half"></i><span>El técnico aún no ha registrado el resultado de la revisión.</span></div>
       }
+      @if (selectedClaim.replacement; as replacement) {
+        <section class="replacement-trace" aria-labelledby="replacement-trace-title">
+          <div class="replacement-trace__heading">
+            <div><span class="replacement-trace__icon"><i class="fas fa-exchange-alt"></i></span><div><h3 id="replacement-trace-title">Trazabilidad del reemplazo</h3><p>{{ replacement.deliveryCode || 'Despacho pendiente' }} · {{ replacementStatusLabel(replacement.status) }}</p></div></div>
+            <span class="status-badge" [attr.data-status]="replacement.status">{{ replacementStatusLabel(replacement.status) }}</span>
+          </div>
+          <div class="replacement-flow">
+            <article class="replacement-product replacement-product--original">
+              <span class="replacement-product__label">Producto retirado</span>
+              <strong>{{ selectedClaim.coverage.sourceNameSnapshot }}</strong>
+              <span><i class="fas fa-barcode"></i> Serie: {{ replacement.originalSerialCode || selectedClaim.coverage.serialSnapshot || 'No registrada' }}</span>
+              <span><i class="fas fa-shield-alt"></i> {{ serialConditionLabel(replacement.originalSerialCondition) }}</span>
+            </article>
+            <span class="replacement-flow__arrow" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+            <div class="replacement-lines">
+              <article class="replacement-product replacement-product--new" *ngFor="let line of replacement.lines">
+                <span class="replacement-product__label">Producto entregado</span>
+                <strong>{{ line.productName || ('Producto #' + line.productId) }}</strong>
+                <span><i class="fas fa-tag"></i> SKU: {{ line.productSku || 'No registrado' }}</span>
+                <span><i class="fas fa-barcode"></i> Serie: {{ line.serialCode || 'Sin control por serie' }}</span>
+                <span><i class="fas fa-box"></i> Cantidad: {{ line.quantity | number:'1.0-4' }}</span>
+              </article>
+              @if (!replacement.lines.length) {
+                <article class="replacement-product replacement-product--pending"><span class="replacement-product__label">Producto de reemplazo</span><strong>Pendiente de entrega</strong><span>Recepción todavía no ha registrado la salida del almacén.</span></article>
+              }
+            </div>
+          </div>
+          <div class="replacement-reason"><strong>Motivo técnico</strong><p>{{ replacement.reason || 'Sin motivo registrado' }}</p></div>
+          <div class="replacement-meta"><span><strong>Solicitado:</strong> {{ replacement.requestedAt | date:'dd/MM/yyyy HH:mm' }}</span><span><strong>Entregado:</strong> {{ replacement.deliveredAt ? (replacement.deliveredAt | date:'dd/MM/yyyy HH:mm') : 'Pendiente' }}</span><span><strong>Confirmado:</strong> {{ replacement.confirmedAt ? (replacement.confirmedAt | date:'dd/MM/yyyy HH:mm') : 'Pendiente' }}</span><span><strong>Atendido por:</strong> {{ replacement.resolvedBy?.name || 'Pendiente' }}</span></div>
+        </section>
+      }
       <div class="detail-metadata"><span><strong>Producto o equipo:</strong> {{ selectedClaim.coverage.sourceNameSnapshot }}</span><span><strong>Serie:</strong> {{ selectedClaim.coverage.serialSnapshot || 'No registrada' }}</span><span><strong>Recepción:</strong> {{ selectedClaim.createdAt | date:'dd/MM/yyyy HH:mm' }}</span><span><strong>Resolución:</strong> {{ selectedClaim.resolvedAt ? (selectedClaim.resolvedAt | date:'dd/MM/yyyy HH:mm') : 'Pendiente' }}</span></div>
     </div>
     <footer><button class="btn primary" type="button" (click)="closeClaimDetail()">Cerrar</button></footer>
