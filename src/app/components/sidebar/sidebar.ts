@@ -85,7 +85,9 @@ export class Sidebar implements OnInit {
   }
 
   isSupervisor(): boolean {
-    return hasAdminRole(this.authenticatedUser?.roles) || hasAnyRole(this.authenticatedUser?.roles, SUPERVISOR_ROLE_NAMES)
+    return hasAdminRole(this.authenticatedUser?.roles) ||
+      hasAnyRole(this.authenticatedUser?.roles, SUPERVISOR_ROLE_NAMES) ||
+      hasAnyRole(this.authenticatedUser?.roles, RECEPTIONIST_ROLE_NAMES)
   }
 
   can(permission: string): boolean {

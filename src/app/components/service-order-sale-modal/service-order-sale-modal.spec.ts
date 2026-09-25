@@ -136,6 +136,7 @@ describe('ServiceOrderSaleModalComponent', () => {
     component = fixture.componentInstance;
     component.order = { ...createOrder(), montoComprometidoVigente: 0 };
     component.ngOnInit();
+    component.paymentMethod = PaymentMethod.CARD;
 
     component.confirmSale();
 
@@ -145,6 +146,22 @@ describe('ServiceOrderSaleModalComponent', () => {
         payments: [jasmine.objectContaining({ amount: 508.52 })],
       }),
     );
+  });
+
+  it('redondea el pago en efectivo a diez céntimos y conserva el importe exacto con tarjeta', () => {
+    agreementApi.findAll.and.returnValue(of({
+      data: [createAgreement(508.52)], total: 1, page: 1, limit: 20,
+    }));
+    fixture = TestBed.createComponent(ServiceOrderSaleModalComponent);
+    component = fixture.componentInstance;
+    component.order = createOrder();
+    component.ngOnInit();
+
+    component.paymentMethod = PaymentMethod.CASH;
+    expect(component.paymentTotal).toBe(508.5);
+
+    component.paymentMethod = PaymentMethod.CARD;
+    expect(component.paymentTotal).toBe(508.52);
   });
 
   it('presenta el detalle comercial bajo demanda sin incrustar materiales', () => {

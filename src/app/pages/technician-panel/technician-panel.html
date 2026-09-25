@@ -1260,6 +1260,9 @@
                         <label>Producto</label>
                         <ng-select
                           [items]="products"
+                          [typeahead]="productSearch$"
+                          [loading]="productSearchLoading"
+                          [minTermLength]="3"
                           bindValue="id"
                           [searchFn]="productSearchFn"
                           [clearable]="true"
@@ -1847,7 +1850,16 @@
       <form [formGroup]="supplyRequestForm" (ngSubmit)="submitSupplyRequest()" class="modal-body">
         <div class="form-group">
           <label for="supply-product">Producto *</label>
-          <ng-select id="supply-product" [items]="supplyProducts" bindLabel="name" bindValue="id" formControlName="productId" [typeahead]="supplyProductSearch$" [loading]="supplyProductsLoading" [minTermLength]="2" placeholder="Buscar por nombre o SKU" typeToSearchText="Escribe al menos 2 caracteres" notFoundText="Sin coincidencias"></ng-select>
+          <ng-select id="supply-product" [items]="supplyProducts" bindLabel="name" bindValue="id" formControlName="productId" [typeahead]="supplyProductSearch$" [loading]="supplyProductsLoading" [minTermLength]="3" placeholder="Buscar por nombre o SKU" typeToSearchText="Escribe al menos 3 caracteres" notFoundText="Sin coincidencias"></ng-select>
+        </div>
+        <div class="form-group">
+          <label for="supply-order">Orden relacionada <span class="text-muted">(opcional)</span></label>
+          <select id="supply-order" class="form-control" formControlName="serviceOrderId">
+            <option [ngValue]="null">Sin orden relacionada</option>
+            @for (order of allOrders; track order.id) {
+              <option [ngValue]="order.id">{{ order.code }} · {{ order.clientSnapshotName || order.client?.name || 'Cliente' }}</option>
+            }
+          </select>
         </div>
         <div class="form-group"><label for="supply-quantity">Cantidad *</label><input id="supply-quantity" class="form-control" type="number" min="0.0001" step="0.0001" formControlName="quantity" /></div>
         <div class="form-group"><label for="supply-reason">Motivo *</label><textarea id="supply-reason" class="form-control" rows="4" formControlName="reason" placeholder="Ej. Pasta térmica para mantenimientos preventivos"></textarea></div>

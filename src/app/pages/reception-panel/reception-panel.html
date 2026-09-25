@@ -6,6 +6,9 @@
         Coordina órdenes de servicio, pagos y cotizaciones desde una sola pantalla
       </p>
     </div>
+    <button type="button" class="btn btn-outline-primary" (click)="refreshOrders()">
+      <i class="fas fa-sync-alt" aria-hidden="true"></i> Actualizar
+    </button>
   </div>
 
   <div class="stats-grid">
@@ -1584,6 +1587,9 @@
                               <label>Producto</label>
                               <ng-select
                                 [items]="products"
+                                [typeahead]="productSearch$"
+                                [loading]="productSearchLoading"
+                                [minTermLength]="3"
                                 bindValue="id"
                                 [searchFn]="productSearchFn"
                                 [clearable]="true"
@@ -2069,6 +2075,9 @@
                         <label>Producto</label>
                         <ng-select
                           [items]="products"
+                          [typeahead]="productSearch$"
+                          [loading]="productSearchLoading"
+                          [minTermLength]="3"
                           bindValue="id"
                           [searchFn]="productSearchFn"
                           [clearable]="true"

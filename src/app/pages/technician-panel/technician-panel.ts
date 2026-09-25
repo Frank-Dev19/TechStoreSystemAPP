@@ -180,6 +180,9 @@ export function shouldOpenDerivedAgreementComposer(
   styleUrls: ["./technician-panel.scss"],
 })
 export class TechnicianPanel implements OnInit, OnDestroy {
+  readonly productSearch$ = new Subject<string>()
+  productSearchLoading = false
+  private readonly subscriptions = new Subscription()
 
   activeTab: TechnicianPanelTab = "todo"
   activeDetailTab: TechnicianDetailTab = "equipment"
@@ -299,6 +302,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.syncCurrentUserContext()
     this.loadAgreementCatalogs()
+    this.configureProductSearch()
     this.loadTechnicianOrders()
     this.loadMyDispatchRequests()
     this.loadTechnicians()
@@ -307,6 +311,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopLiveTimer()
+    this.subscriptions.unsubscribe()
+    this.productSearch$.complete()
     this.supplySearchSubscription?.unsubscribe()
     this.supplyProductSearch$.complete()
   }
@@ -337,6 +343,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   private createSupplyRequestForm(): FormGroup {
     return this.formBuilder.group({
       productId: [null, Validators.required],
+      serviceOrderId: [null],
       quantity: [1, [Validators.required, Validators.min(0.0001)]],
       reason: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(1000)]],
     })
@@ -347,16 +354,39 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       debounceTime(250),
       distinctUntilChanged(),
       switchMap((term) => {
+        const normalized = term.trim()
+        if (normalized.length < 3) return of({ data: [] as Product[], total: 0, page: 1, limit: 20 })
         this.supplyProductsLoading = true
-        return this.productsService.listWithFilter({ search: term.trim() || undefined, page: 1, limit: 20 })
+        return this.productsService.listWithFilter({ search: normalized, page: 1, limit: 20 })
           .pipe(finalize(() => (this.supplyProductsLoading = false)))
       }),
     ).subscribe({ next: (result) => (this.supplyProducts = result.data ?? []) })
   }
 
+  private configureProductSearch(): void {
+    this.subscriptions.add(this.productSearch$.pipe(
+      debounceTime(500),
+      distinctUntilChanged(),
+      switchMap((raw) => {
+        const term = raw.trim()
+        if (term.length < 3) return of([] as Product[])
+        this.productSearchLoading = true
+        return this.productsService.search(term).pipe(
+          catchError(() => of([] as Product[])),
+          finalize(() => (this.productSearchLoading = false)),
+        )
+      }),
+    ).subscribe((products) => (this.products = products)))
+  }
+
   openSupplyRequestModal(): void {
     this.supplyRequestError = ""
-    this.supplyRequestForm.reset({ productId: null, quantity: 1, reason: "" })
+    this.supplyRequestForm.reset({
+      productId: null,
+      serviceOrderId: this.selectedServiceOrder?.id ?? null,
+      quantity: 1,
+      reason: "",
+    })
     this.showSupplyRequestModal = true
     this.supplyProductSearch$.next("")
     this.loadMyDispatchRequests()
@@ -377,7 +407,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       .pipe(finalize(() => (this.savingSupplyRequest = false)))
       .subscribe({
         next: () => {
-          this.supplyRequestForm.reset({ productId: null, quantity: 1, reason: "" })
+          this.supplyRequestForm.reset({ productId: null, serviceOrderId: null, quantity: 1, reason: "" })
           this.loadMyDispatchRequests()
           this.showMessage("success", "fas fa-check-circle", "Solicitud enviada a recepción correctamente.")
         },
@@ -524,14 +554,11 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   private loadAgreementCatalogs(): void {
-    this.productsService.list().subscribe({
-      next: (products) => {
-        this.products = products ?? []
-      },
-      error: () => {
-        this.products = []
-      },
-    })
+    this.products = []
+  }
+
+  refreshOrders(): void {
+    this.loadTechnicianOrders();
   }
 
   private loadTechnicianOrders(): void {

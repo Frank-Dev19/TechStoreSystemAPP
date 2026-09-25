@@ -6,6 +6,9 @@
         Monitorea cotizaciones, diagnósticos y equipos de todas las órdenes de servicio.
       </p>
     </div>
+    <button type="button" class="btn btn-outline-primary" (click)="refreshOrders()">
+      <i class="fas fa-sync-alt" aria-hidden="true"></i> Actualizar
+    </button>
     @if (failedNotifications.length) {
       <button
         class="notification-trigger"

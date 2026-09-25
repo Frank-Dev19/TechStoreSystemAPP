@@ -75,6 +75,12 @@ export class ProductsService {
     );
   }
 
+  search(term: string, limit = 100): Observable<Product[]> {
+    return this.listWithFilter({ search: term.trim(), page: 1, limit }).pipe(
+      map((response) => response.data),
+    );
+  }
+
   create(body: Partial<Product>): Observable<Product> {
     return this.baseSvc.post<ProductApi>(this.base, mapProductToApi(body as Product)).pipe(
       map(mapProductFromApi)

@@ -304,6 +304,13 @@ export class SupervisorPanel implements OnInit {
     return `Falta: ${metric.missingTimestamps.join(', ')}`;
   }
 
+  refreshOrders(): void {
+    this.loadServiceOrderAgreements();
+    this.loadServiceOrders();
+    this.loadTechnicianRankings();
+    this.loadFailedNotifications();
+  }
+
   private loadServiceOrderAgreements(): void {
     this.isLoadingServiceOrderAgreements = true;
     this.agreementService

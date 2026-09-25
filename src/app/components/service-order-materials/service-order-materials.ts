@@ -69,6 +69,9 @@ export class ServiceOrderMaterialsComponent implements OnChanges, OnDestroy {
       this.current.hasPermission('inventory-manage.manage')
     );
   }
+  get canIssue() {
+    return this.canManage && this.state?.technicalStatus === 'EN_EJECUCION';
+  }
   get canReconcile() {
     return !this.readOnly && this.current.hasPermission('service-order.update');
   }
@@ -248,6 +251,10 @@ export class ServiceOrderMaterialsComponent implements OnChanges, OnDestroy {
     );
   }
   openIssue(line: MaterialQuoteLine, event?: Event) {
+    if (!this.canIssue) {
+      this.error = 'El equipo debe estar En servicio antes de entregar materiales.';
+      return;
+    }
     this.issueLine = line;
     this.returnLine = null;
     this.reviewSerial = null;

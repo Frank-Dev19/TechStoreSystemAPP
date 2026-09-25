@@ -1,5 +1,5 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { Observable, of, Subject } from 'rxjs';
 
@@ -62,7 +62,7 @@ describe('Ventas', () => {
     expect(component).toBeTruthy();
   });
 
-  it('descarga exclusivamente el PDF del comprobante electrónico aceptado', fakeAsync(() => {
+  it('descarga exclusivamente el PDF del comprobante electrónico aceptado', async () => {
     const showToastSpy = spyOn(component, 'showToast');
     spyOn<any>(component, 'downloadBlob');
     component.electronicDocumentsBySaleId[77] = {
@@ -79,12 +79,11 @@ describe('Ventas', () => {
       updatedAt: '2026-08-20T10:00:00.000Z',
     };
 
-    component.onDownloadSalePdf({ id: 77, companyId: 1, documentType: 'FACTURA', series: 'F001', number: '123' } as never);
-    tick();
+    await component.onDownloadSalePdf({ id: 77, companyId: 1, documentType: 'FACTURA', series: 'F001', number: '123' } as never);
 
     expect(electronicBillingApiStub.downloadPdf).toHaveBeenCalledWith(77);
     expect(showToastSpy).toHaveBeenCalledWith('success', 'PDF electronico descargado');
-  }));
+  });
 
   it('usa el selector nativo y confirma solo después de escribir el archivo', async () => {
     const blob = new Blob(['pdf'], { type: 'application/pdf' });

@@ -1731,7 +1731,7 @@ export class Ventas implements OnInit {
     line.showDetails = !line.showDetails;
   }
 
-  onDownloadSalePdf(sale: Sale | null): void {
+  async onDownloadSalePdf(sale: Sale | null): Promise<void> {
     if (!sale) {
       return;
     }
@@ -1742,7 +1742,7 @@ export class Ventas implements OnInit {
       return;
     }
 
-    this.downloadElectronicFile(
+    await this.downloadElectronicFile(
       this.electronicBillingApi.downloadPdf(sale.id),
       this.buildElectronicFileName(sale, 'pdf'),
       'PDF electronico descargado',

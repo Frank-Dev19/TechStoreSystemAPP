@@ -98,6 +98,12 @@ export class ServiceOrderSaleModalComponent implements OnInit {
     return Number(Number(amount).toFixed(2));
   }
 
+  get paymentTotal(): number {
+    return this.paymentMethod === PaymentMethod.CASH
+      ? Number((Math.round((this.saleTotal + Number.EPSILON) * 10) / 10).toFixed(2))
+      : this.saleTotal;
+  }
+
   get saleLines(): ServiceOrderItemCommercialLine[] {
     return (this.saleAgreement?.items ?? []).flatMap(
       (item) => item.commercialVersion?.lines ?? [],
@@ -242,7 +248,7 @@ export class ServiceOrderSaleModalComponent implements OnInit {
 
     const payment = {
       method: this.paymentMethod,
-      amount: this.saleTotal,
+      amount: this.paymentTotal,
       reference: this.paymentReference.trim() || undefined,
       bankName: this.resolveBankName(),
       cardType: this.requiresCardType ? this.cardType || undefined : undefined,

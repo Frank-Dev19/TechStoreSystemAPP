@@ -1,7 +1,7 @@
 import { Component, HostListener, OnDestroy, OnInit, ChangeDetectorRef } from "@angular/core"
 import { Router } from "@angular/router"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
-import { Observable, Subscription } from "rxjs"
+import { Observable, Subject, Subscription } from "rxjs"
 import { catchError, debounceTime, finalize, map, switchMap, tap } from "rxjs/operators"
 import { of, throwError } from "rxjs"
 import { ClientsApiService } from "../../services/clients-api.service"
@@ -366,6 +366,8 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   actionMenuStyle: Record<string, string> | null = null
 
   private readonly subscriptions = new Subscription()
+  readonly productSearch$ = new Subject<string>()
+  productSearchLoading = false
   private isRestoringCreateServiceOrderDraft = false
 
   constructor(
@@ -420,6 +422,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.loadServiceOrders()
     this.loadClients()
     this.loadCatalogData()
+    this.configureProductSearch()
     this.loadDocumentTypes()
     if (this.hasValidCreateServiceOrderDraft()) {
       this.openCreateServiceOrderModal()
@@ -502,6 +505,25 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     return this.formBuilder.group({
       technicianId: [null, Validators.required],
     })
+  }
+
+  refreshOrders(): void {
+    this.loadServiceOrders();
+  }
+
+  private configureProductSearch(): void {
+    this.subscriptions.add(this.productSearch$.pipe(
+      debounceTime(500),
+      switchMap((raw) => {
+        const term = raw.trim()
+        if (term.length < 3) return of([] as Product[])
+        this.productSearchLoading = true
+        return this.productsService.search(term).pipe(
+          catchError(() => of([] as Product[])),
+          finalize(() => (this.productSearchLoading = false)),
+        )
+      }),
+    ).subscribe((products) => (this.products = products)))
   }
 
   private loadServiceOrders(): void {

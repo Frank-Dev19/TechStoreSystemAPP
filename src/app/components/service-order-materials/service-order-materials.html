@@ -115,7 +115,7 @@
                     type="button"
                     class="btn btn-outline-primary"
                     (click)="openIssue(row.line, $event)"
-                    [disabled]="busy || !state.technicianId"
+                    [disabled]="busy || !state.technicianId || !canIssue"
                     [attr.aria-label]="'Entregar ' + row.line.catalogNameSnapshot"
                   >
                     Entregar
@@ -130,6 +130,8 @@
           </ul>
           @if (!state.technicianId) {
             <p class="materials__note">Asigna un técnico al equipo para habilitar las entregas.</p>
+          } @else if (!canIssue && !frozen) {
+            <p class="materials__note">El equipo debe estar En servicio para entregar materiales.</p>
           }
         }
         @if (issueLine) {
