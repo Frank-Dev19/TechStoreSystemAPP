@@ -80,14 +80,14 @@ export class QzTrayPrintService {
         density: 300 / 25.4,
         jobName: job.jobName,
         margins: 0,
-        orientation: 'landscape',
+        orientation: 'portrait',
         rasterize: true,
         scaleContent: false,
         size: {
-          // Driver paper dimensions before landscape orientation.
-          width: job.heightMm,
-          height: job.widthMm,
-          custom: false,
+          // Keep the 62 mm roll width across feed; PDF is already landscape.
+          width: job.widthMm,
+          height: job.heightMm,
+          custom: true,
         },
         units: 'mm',
       });

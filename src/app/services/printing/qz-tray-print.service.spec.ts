@@ -34,15 +34,15 @@ describe('QzTrayPrintService', () => {
     (globalThis as any).qz = undefined;
   });
 
-  it('imprime en la Brother QL-700 con rollo de 17 x 54 mm horizontal a 300 dpi', async () => {
+  it('imprime en la Brother QL-700 con cinta continua de 62 mm con corte a 35 mm y 300 dpi', async () => {
     const config = { printer: 'Brother QL-700' };
     qz.configs.create.and.returnValue(config);
 
     await service.printPdfLabel({
       base64: 'JVBERi0xLjQ=',
       copies: 4,
-      widthMm: 54,
-      heightMm: 17,
+      widthMm: 62,
+      heightMm: 35,
       jobName: 'Sticker SO-01-01',
     });
 
@@ -50,9 +50,9 @@ describe('QzTrayPrintService', () => {
       copies: 4,
       density: 300 / 25.4,
       units: 'mm',
-      size: { width: 17, height: 54, custom: false },
+      size: { width: 62, height: 35, custom: true },
       margins: 0,
-      orientation: 'landscape',
+      orientation: 'portrait',
       rasterize: true,
       scaleContent: false,
     }));
@@ -67,7 +67,7 @@ describe('QzTrayPrintService', () => {
 
   it('obtiene el certificado y las firmas desde el API antes de usar QZ', async () => {
     await service.printPdfLabel({
-      base64: 'JVBERi0xLjQ=', copies: 1, widthMm: 54, heightMm: 17, jobName: 'Sticker',
+      base64: 'JVBERi0xLjQ=', copies: 1, widthMm: 62, heightMm: 35, jobName: 'Sticker',
     });
 
     const certificateResolver = qz.security.setCertificatePromise.calls.mostRecent().args[0];
@@ -90,7 +90,7 @@ describe('QzTrayPrintService', () => {
     qz.websocket.connect.and.rejectWith(new Error('WebSocket connection failed'));
 
     await expectAsync(service.printPdfLabel({
-      base64: 'JVBERi0xLjQ=', copies: 1, widthMm: 54, heightMm: 17, jobName: 'Sticker',
+      base64: 'JVBERi0xLjQ=', copies: 1, widthMm: 62, heightMm: 35, jobName: 'Sticker',
     })).toBeRejectedWithError(/No pudimos conectar con QZ Tray/i);
   });
 
@@ -98,12 +98,12 @@ describe('QzTrayPrintService', () => {
     qz.printers.find.and.resolveTo(['Microsoft Print to PDF', 'EPSON L3110 Series']);
 
     const printer = await service.printPdfLabel({
-      base64: 'JVBERi0xLjQ=', copies: 1, widthMm: 54, heightMm: 17, jobName: 'Sticker',
+      base64: 'JVBERi0xLjQ=', copies: 1, widthMm: 62, heightMm: 35, jobName: 'Sticker',
     });
 
     expect(printer).toBe('EPSON L3110 Series');
     expect(qz.configs.create).toHaveBeenCalledWith('EPSON L3110 Series', jasmine.objectContaining({
-      bounds: { x: 10, y: 10, width: 54, height: 17 },
+      bounds: { x: 10, y: 10, width: 62, height: 35 },
       units: 'mm',
       size: { width: 210, height: 297, custom: false },
       orientation: 'portrait',
