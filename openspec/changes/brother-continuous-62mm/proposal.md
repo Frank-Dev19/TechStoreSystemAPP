@@ -7,3 +7,5 @@ The PDF MUST be 62 x 35 mm, retaining the original detailed layout. QZ MUST requ
 Validate one-page PDF dimensions and content, printer configuration, nine targeted tests, rendered PDF, build and deployed image. Physical roll/cut validation remains with the operator. Rollback: frontend image d326d2792df53f5e11c1144919d7566a2a885f69; no migration.
 
 Physical validation: operator confirms printing on continuous tape, but the header is clipped. Move the content block down 2 mm and place the footer 4.5 mm above the lower edge. Preserve font sizes, paper dimensions and QZ settings. Render short/long examples before release.
+
+Second physical sample shows clipping of the issue below y~26 mm. Compact line spacing and slightly reduce fonts: header baseline 6.05 mm, final footer baseline 25.5 mm. Keep two bounded issue lines, all fields and the established paper/driver settings. This is a conservative calibration, pending physical validation.
