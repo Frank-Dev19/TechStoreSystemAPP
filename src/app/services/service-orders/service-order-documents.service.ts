@@ -97,37 +97,37 @@ export class ServiceOrderDocumentsService {
     doc.setFontSize(
       fitInlineHeaderFontSize(doc, serviceOrder.code, headerDate, contentWidth, 6.2, 4.8),
     );
-    doc.text(serviceOrder.code, left, 4.05);
-    doc.text(headerDate, right, 4.05, { align: 'right' });
+    doc.text(serviceOrder.code, left, 6.05);
+    doc.text(headerDate, right, 6.05, { align: 'right' });
 
     doc.setDrawColor(12, 18, 24);
     doc.setLineWidth(0.24);
-    doc.line(left, 5.25, right, 5.25);
+    doc.line(left, 7.25, right, 7.25);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(fitPdfFontSize(doc, clientName.toUpperCase(), contentWidth, 6.7, 5.2));
-    doc.text(truncatePdfText(doc, clientName.toUpperCase(), contentWidth), left, 8.35);
+    doc.text(truncatePdfText(doc, clientName.toUpperCase(), contentWidth), left, 10.35);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fitPdfFontSize(doc, equipment.toUpperCase(), contentWidth, 5.8, 4.8));
     doc.text(
       truncatePdfText(doc, equipment.toUpperCase(), contentWidth),
       left,
-      11.05,
+      13.05,
     );
 
-    drawStickerField(doc, 'SERIE', item.serialNumber || 'No registrada', left, contentWidth, 13.75);
-    drawStickerField(doc, 'ACCESORIOS', item.accessories || 'Sin accesorios', left, contentWidth, 16.15);
-    drawStickerField(doc, 'NOTAS', item.notes || 'Sin notas', left, contentWidth, 18.55);
+    drawStickerField(doc, 'SERIE', item.serialNumber || 'No registrada', left, contentWidth, 15.75);
+    drawStickerField(doc, 'ACCESORIOS', item.accessories || 'Sin accesorios', left, contentWidth, 18.15);
+    drawStickerField(doc, 'NOTAS', item.notes || 'Sin notas', left, contentWidth, 20.55);
 
     doc.setDrawColor(12, 18, 24);
     doc.setLineWidth(0.18);
-    doc.line(left, 19.75, right, 19.75);
+    doc.line(left, 21.75, right, 21.75);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(4.2);
     doc.setCharSpace(0.12);
-    doc.text('FALLA REPORTADA', left, 21.75);
+    doc.text('FALLA REPORTADA', left, 23.75);
     doc.setCharSpace(0);
 
     doc.setFontSize(5.8);
@@ -137,11 +137,11 @@ export class ServiceOrderDocumentsService {
       2,
       contentWidth,
     );
-    doc.text(issueLines, left, 24.55, { lineHeightFactor: 1.05 });
+    doc.text(issueLines, left, 26.55, { lineHeightFactor: 1.05 });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(4.4);
-    doc.text(`RECIBIDO  ${formatStickerDateTime(receivedAt).toUpperCase()}`, left, heightMm - 1.35);
+    doc.text(`RECIBIDO  ${formatStickerDateTime(receivedAt).toUpperCase()}`, left, heightMm - 4.5);
     return doc;
   }
 
@@ -306,4 +306,3 @@ function truncatePdfText(doc: jsPDF, value: string, maximumWidth: number): strin
   }
   return `${truncated.trimEnd()}...`;
 }
-
