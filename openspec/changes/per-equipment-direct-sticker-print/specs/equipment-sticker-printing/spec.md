@@ -26,7 +26,7 @@ The quantity dialog MUST accept an integer from 1 through 50 and MUST prevent in
 
 ### Requirement: Brother label dimensions
 
-The generated sticker MUST be 62 mm wide and 35 mm high and SHOULD preserve content inside the QL-700 printable width.
+The generated sticker MUST be 54 mm wide and 17 mm high (17 x 54 mm stock, landscape) and SHOULD preserve content inside the QL-700 printable width.
 
 #### Scenario: Render a sticker
 

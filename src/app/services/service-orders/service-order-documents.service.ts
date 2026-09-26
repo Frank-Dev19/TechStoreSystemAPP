@@ -54,8 +54,8 @@ export class ServiceOrderDocumentsService {
     item: ServiceOrderItem,
     copies: number,
   ): Promise<string> {
-    const widthMm = 62;
-    const heightMm = 35;
+    const widthMm = 54;
+    const heightMm = 17;
     const doc = this.buildEquipmentStickerPdf(serviceOrder, item, widthMm, heightMm);
     const dataUri = doc.output('datauristring');
 
@@ -90,58 +90,27 @@ export class ServiceOrderDocumentsService {
       item.brand,
       item.model,
     ].filter(Boolean).join(' ');
-    const headerDate = formatStickerDate(receivedAt).toUpperCase();
+    const headerDate = Number.isNaN(receivedAt.getTime()) ? '-' :
+      new Intl.DateTimeFormat('es-PE', {
+        day: '2-digit', month: '2-digit', year: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).format(receivedAt);
 
-    doc.setTextColor(12, 18, 24);
+    doc.setTextColor(0, 0, 0);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(
-      fitInlineHeaderFontSize(doc, serviceOrder.code, headerDate, contentWidth, 6.2, 4.8),
-    );
-    doc.text(serviceOrder.code, left, 4.05);
-    doc.text(headerDate, right, 4.05, { align: 'right' });
+    doc.setFontSize(fitInlineHeaderFontSize(doc, serviceOrder.code, headerDate, contentWidth, 5, 4.5));
+    doc.text(serviceOrder.code, left, 2.9);
+    doc.text(headerDate, right, 2.9, { align: 'right' });
 
-    doc.setDrawColor(12, 18, 24);
-    doc.setLineWidth(0.24);
-    doc.line(left, 5.25, right, 5.25);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(fitPdfFontSize(doc, clientName.toUpperCase(), contentWidth, 6.7, 5.2));
-    doc.text(truncatePdfText(doc, clientName.toUpperCase(), contentWidth), left, 8.35);
-
+    doc.setFontSize(fitPdfFontSize(doc, clientName.toUpperCase(), contentWidth, 5.8, 5));
+    doc.text(truncatePdfText(doc, clientName.toUpperCase(), contentWidth), left, 5);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(fitPdfFontSize(doc, equipment.toUpperCase(), contentWidth, 5.8, 4.8));
-    doc.text(
-      truncatePdfText(doc, equipment.toUpperCase(), contentWidth),
-      left,
-      11.05,
-    );
-
-    drawStickerField(doc, 'SERIE', item.serialNumber || 'No registrada', left, contentWidth, 13.75);
-    drawStickerField(doc, 'ACCESORIOS', item.accessories || 'Sin accesorios', left, contentWidth, 16.15);
-    drawStickerField(doc, 'NOTAS', item.notes || 'Sin notas', left, contentWidth, 18.55);
-
-    doc.setDrawColor(12, 18, 24);
-    doc.setLineWidth(0.18);
-    doc.line(left, 19.75, right, 19.75);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(4.2);
-    doc.setCharSpace(0.12);
-    doc.text('FALLA REPORTADA', left, 21.75);
-    doc.setCharSpace(0);
-
-    doc.setFontSize(5.8);
-    const issueLines = limitPdfLines(
-      doc,
-      doc.splitTextToSize((item.initialIssue || 'SIN FALLA REPORTADA').toUpperCase(), contentWidth),
-      2,
-      contentWidth,
-    );
-    doc.text(issueLines, left, 24.55, { lineHeightFactor: 1.05 });
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(4.4);
-    doc.text(`RECIBIDO  ${formatStickerDateTime(receivedAt).toUpperCase()}`, left, heightMm - 1.35);
+    doc.setFontSize(5);
+    doc.text(truncatePdfText(doc, equipment.toUpperCase(), contentWidth), left, 7);
+    drawStickerField(doc, 'SERIE', item.serialNumber || 'No registrada', left, contentWidth, 9);
+    drawStickerField(doc, 'ACCESORIOS', item.accessories || 'Sin accesorios', left, contentWidth, 11);
+    drawStickerField(doc, 'NOTAS', item.notes || 'Sin notas', left, contentWidth, 13);
+    drawStickerField(doc, 'FALLA', item.initialIssue || 'Sin falla reportada', left, contentWidth, 15);
     return doc;
   }
 
@@ -192,49 +161,6 @@ function getEquipmentTypeLabel(type?: string, other?: string | null): string {
     OTHER: 'Otro',
   };
   return labels[type ?? ''] || type || '-';
-}
-
-function formatStickerDate(value: Date): string {
-  if (Number.isNaN(value.getTime())) return 'Fecha no registrada';
-  const formatted = new Intl.DateTimeFormat('es-PE', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: '2-digit',
-  }).format(value);
-  return capitalizeStickerDate(formatted);
-}
-
-function formatStickerDateTime(value: Date): string {
-  if (Number.isNaN(value.getTime())) return 'Fecha no registrada';
-  const date = formatStickerDate(value);
-  const time = new Intl.DateTimeFormat('es-PE', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(value);
-  return `${date} / ${time}`;
-}
-
-function capitalizeStickerDate(value: string): string {
-  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
-}
-
-function limitPdfLines(
-  doc: jsPDF,
-  lines: string[] | string,
-  maximum: number,
-  maximumWidth: number,
-): string[] {
-  const values = Array.isArray(lines) ? lines : [lines];
-  if (values.length <= maximum) return values;
-  const limited = values.slice(0, maximum);
-  let finalLine = limited[maximum - 1].replace(/[.]+$/, '').trimEnd();
-  while (finalLine.length > 1 && doc.getTextWidth(`${finalLine}...`) > maximumWidth) {
-    finalLine = finalLine.slice(0, -1).trimEnd();
-  }
-  limited[maximum - 1] = `${finalLine}...`;
-  return limited;
 }
 
 function fitPdfFontSize(
@@ -306,4 +232,3 @@ function truncatePdfText(doc: jsPDF, value: string, maximumWidth: number): strin
   }
   return `${truncated.trimEnd()}...`;
 }
-

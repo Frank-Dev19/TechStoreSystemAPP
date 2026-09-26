@@ -76,16 +76,18 @@ export class QzTrayPrintService {
       } : {
         copies: job.copies,
         colorType: 'blackwhite',
-        density: 300,
+        // QZ uses dots/mm when units are mm (300 dpi).
+        density: 300 / 25.4,
         jobName: job.jobName,
         margins: 0,
         orientation: 'landscape',
         rasterize: true,
         scaleContent: false,
         size: {
-          width: job.widthMm,
-          height: job.heightMm,
-          custom: true,
+          // Driver paper dimensions before landscape orientation.
+          width: job.heightMm,
+          height: job.widthMm,
+          custom: false,
         },
         units: 'mm',
       });

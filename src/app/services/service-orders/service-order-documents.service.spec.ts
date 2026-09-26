@@ -80,7 +80,7 @@ describe('ServiceOrderDocumentsService', () => {
     });
   });
 
-  it('genera un sticker de 62 x 35 mm para un equipo y lo envía a QZ Tray', async () => {
+  it('genera un sticker de 54 x 17 mm para un equipo y lo envía a QZ Tray', async () => {
     const order = createServiceOrder();
     const item = createServiceOrderItem();
 
@@ -88,13 +88,17 @@ describe('ServiceOrderDocumentsService', () => {
 
     expect(qzTrayPrintStub.printPdfLabel).toHaveBeenCalledWith(jasmine.objectContaining({
       copies: 3,
-      widthMm: 62,
-      heightMm: 35,
+      widthMm: 54,
+      heightMm: 17,
       jobName: `Sticker ${item.code}`,
       base64: jasmine.stringMatching(/^JVBER/),
     }));
     const job = qzTrayPrintStub.printPdfLabel.calls.mostRecent().args[0];
     const pdfSource = atob(job.base64);
+    expect(pdfSource).toContain('/Count 1');
+    const box = /\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/.exec(pdfSource)!;
+    expect(Number(box[1]) * 25.4 / 72).toBeCloseTo(54, 2);
+    expect(Number(box[2]) * 25.4 / 72).toBeCloseTo(17, 2);
     expect(pdfSource).toContain('CLIENTE BASE');
     expect(pdfSource).toContain('(SO-BASE) Tj');
     expect(pdfSource).not.toContain('(SO-BASE-01) Tj');
@@ -174,4 +178,3 @@ function createServiceOrderItem(): ServiceOrderItem {
     warrantySourceItemId: null,
   } as ServiceOrderItem;
 }
-
