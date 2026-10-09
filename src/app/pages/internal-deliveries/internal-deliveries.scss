@@ -52,7 +52,10 @@ tbody tr:hover { background: #f8fbf9; }
 .request-summary { display: flex; align-items: center; gap: 12px; padding: 13px; border-left: 4px solid #15934a; border-radius: 5px; background: #eff9f3; }.request-summary i { color: #15934a; }.request-summary span { display: block; margin-top: 3px; color: #5f7487; font-size: 12px; }
 .availability { margin: 16px 0; padding: 10px 12px; border: 1px solid #d4e7db; border-radius: 5px; color: #536c60; }.availability strong { color: #126c37; }
 .dispatch-modal label { display: block; margin-top: 15px; color: #29435f; font-size: 12px; font-weight: 700; }.dispatch-modal label > span { float: right; color: #8492a2; font-weight: 400; }
-.dispatch-modal select,.dispatch-modal textarea { width: 100%; margin-top: 7px; padding: 10px 11px; border: 1px solid #d5e0e9; border-radius: 5px; background: #fff; color: #283e55; }.dispatch-modal textarea { resize: vertical; }
+.dispatch-modal select,.dispatch-modal textarea,.dispatch-modal input { width: 100%; margin-top: 7px; padding: 10px 11px; border: 1px solid #d5e0e9; border-radius: 5px; background: #fff; color: #283e55; }.dispatch-modal textarea { resize: vertical; }
+.external-dispatch-notice { display: flex; gap: 10px; margin-top: 15px; padding: 12px; border-left: 4px solid #15934a; border-radius: 5px; background: #f0f8f3; color: #496658; font-size: 12px; }
+.external-dispatch-notice p { margin: 0; }.external-dispatch-notice i { color: #15934a; }
+.external-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
 .dispatch-modal label small { display: block; margin-top: 5px; color: #73859a; }.loading-line,.modal-error { margin: 15px 0 0; }.modal-error { color: #b52f2f; }
 .dispatch-modal > footer { justify-content: flex-end; border-top: 1px solid #dde5ed; border-bottom: 0; background: #fafcfd; }
 :host ::ng-deep .dispatch-modal .ng-select { margin-top: 7px; }.dispatch-modal .ng-select-container { min-height: 42px; border-color: #d5e0e9; border-radius: 5px; }
@@ -64,4 +67,5 @@ tbody tr:hover { background: #f8fbf9; }
   .dispatch-tabs { margin-top: 12px; padding: 0; }.dispatch-tabs button { padding: 0 13px; }
   .panel-heading { align-items: flex-start; }.panel-heading p { max-width: 32ch; }
   .modal-overlay { align-items: stretch; padding: 0; }.dispatch-modal { width: 100%; max-height: 100dvh; border-radius: 0; }.modal-body { max-height: calc(100dvh - 145px); }.dispatch-modal > footer .btn { flex: 1; }
+  .external-fields { grid-template-columns: 1fr; }
 }

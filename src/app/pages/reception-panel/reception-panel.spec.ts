@@ -32,6 +32,7 @@ import { ServiceOrderDiagnosisService } from '../../services/service-orders/serv
 import { ServiceOrderDocumentsService } from '../../services/service-orders/service-order-documents.service';
 import { ServiceOrderInboxService } from '../../services/service-orders/service-order-inbox.service';
 import { CurrentUserService } from '../../services/current-user.service';
+import { WarrantiesApiService } from '../../services/warranties-api.service';
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
 import { DEFAULT_PHONE_COUNTRY } from '../../utils/phone.util';
 import { ReceptionPanel } from './reception-panel';
@@ -138,6 +139,14 @@ describe('ReceptionPanel', () => {
     hasAllPermissions: () => true,
     value: { id: 99 },
   };
+  const warrantiesApiStub = {
+    createExternalIntake: jasmine.createSpy('createExternalIntake').and.returnValue(of({
+      id: 77,
+      code: 'SO-EXT-77',
+      serviceType: ServiceType.WARRANTY_SERVICE,
+      items: [{ id: 701 }],
+    })),
+  };
 
   beforeEach(async () => {
     localStorage.removeItem('techstore:reception:create-service-order-draft:v2:1:99');
@@ -169,6 +178,7 @@ describe('ReceptionPanel', () => {
         { provide: ElectronicBillingApiService, useValue: electronicBillingApiStub },
         { provide: ServiceOrderInboxService, useValue: inboxServiceStub },
         { provide: CurrentUserService, useValue: currentUserServiceStub },
+        { provide: WarrantiesApiService, useValue: warrantiesApiStub },
         { provide: Router, useValue: routerStub },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -179,7 +189,7 @@ describe('ReceptionPanel', () => {
     fixture.detectChanges();
   });
 
-  for (const removedType of [ServiceType.WARRANTY_SERVICE, ServiceType.CUSTOMER_SERVICE]) {
+  for (const removedType of [ServiceType.CUSTOMER_SERVICE]) {
     it('mantiene la identificación del cliente para ensamblaje y retira origen del formulario', () => {
     component.createServiceOrderForm.patchValue({ workflowServiceType: ServiceType.ASSEMBLY, contactName: 'Colaborador' });
     component.onCreateWorkflowServiceTypeChange();
@@ -209,6 +219,12 @@ describe('ReceptionPanel', () => {
       expect(localStorage.getItem(key)).toBeNull()
     })
   }
+
+  it('admite garantía como flujo especializado del asistente', () => {
+    component.createServiceOrderForm.patchValue({ workflowServiceType: ServiceType.WARRANTY_SERVICE });
+    expect(component.createServiceOrderForm.get('workflowServiceType')?.valid).toBeTrue();
+    expect(component.requiresCreateServiceOrderInitialAgreementStep()).toBeFalse();
+  });
 
   it('should create', () => {
     expect(component).toBeTruthy();

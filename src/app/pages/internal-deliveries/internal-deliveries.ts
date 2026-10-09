@@ -10,6 +10,7 @@ interface DispatchRow {
   productId: number; productName: string; productSku: string; quantity: number; reason?: string;
   serviceOrderId?: number; serviceOrderItemId?: number; orderCode?: string; itemCode?: string;
   isSerialized?: boolean; managesExpiration?: boolean; createdAt: string;
+  fulfillmentSource?: 'INTERNAL' | 'EXTERNAL';
 }
 interface DeliveryRow {
   id: number; type: string; createdAt: string; notes: string | null; orderId: number | null;
@@ -46,6 +47,12 @@ export class InternalDeliveries implements OnInit, OnDestroy {
   lotId: number | null = null;
   serialIds: number[] = [];
   resolutionNote = '';
+  externalProductName = '';
+  externalProductCode = '';
+  externalBrand = '';
+  externalModel = '';
+  externalSerialCode = '';
+  externalReference = '';
   actionError = '';
   saving = false;
   private readonly subscriptions = new Subscription();
@@ -61,12 +68,18 @@ export class InternalDeliveries implements OnInit, OnDestroy {
   ngOnDestroy(): void { this.subscriptions.unsubscribe(); }
   get pages(): number { return Math.max(1, Math.ceil(this.total / this.limit)); }
   get canFulfill(): boolean { return this.current.hasPermission('dispatches.fulfill'); }
+  get canFulfillExternal(): boolean { return this.current.hasPermission('dispatches.fulfill-external'); }
+  get isExternalAction(): boolean { return this.actionRow?.fulfillmentSource === 'EXTERNAL'; }
   get selectedLotAvailable(): number {
     return this.options?.lots.find((lot) => Number(lot.id) === Number(this.lotId))?.availableQuantity
       ?? this.options?.availableQuantity ?? 0;
   }
   get actionInvalid(): boolean {
-    if (!this.actionRow || !this.options) return true;
+    if (!this.actionRow) return true;
+    if (this.isExternalAction) {
+      return !this.externalProductName.trim() || !this.externalSerialCode.trim() || !this.externalReference.trim();
+    }
+    if (!this.options) return true;
     if (this.options.product.isSerialized) return this.serialIds.length !== Number(this.actionRow.quantity);
     if (this.options.product.managesExpiration && !this.lotId) return true;
     return Number(this.actionRow.quantity) > this.selectedLotAvailable;
@@ -114,7 +127,17 @@ export class InternalDeliveries implements OnInit, OnDestroy {
     this.lotId = null;
     this.serialIds = [];
     this.resolutionNote = '';
+    this.externalProductName = row.productName || '';
+    this.externalProductCode = row.productSku || '';
+    this.externalBrand = '';
+    this.externalModel = '';
+    this.externalSerialCode = '';
+    this.externalReference = '';
     this.actionError = '';
+    if (row.fulfillmentSource === 'EXTERNAL') {
+      this.optionsLoading = false;
+      return;
+    }
     this.optionsLoading = true;
     this.subscriptions.add(this.base.get<DeliveryOptions>(`/dispatches/options/${row.productId}`, { withLoader: false })
       .subscribe({
@@ -146,6 +169,25 @@ export class InternalDeliveries implements OnInit, OnDestroy {
     if (!this.actionRow || this.actionInvalid || this.saving) return;
     this.saving = true;
     const body: Record<string, unknown> = { requestKey: crypto.randomUUID() };
+    if (this.isExternalAction) {
+      body['productName'] = this.externalProductName.trim();
+      body['productCode'] = this.externalProductCode.trim() || undefined;
+      body['brand'] = this.externalBrand.trim() || undefined;
+      body['model'] = this.externalModel.trim() || undefined;
+      body['serialCode'] = this.externalSerialCode.trim();
+      body['externalReference'] = this.externalReference.trim();
+      if (this.resolutionNote.trim()) body['note'] = this.resolutionNote.trim();
+      this.subscriptions.add(this.base.post(`/dispatches/requests/${this.actionRow.id}/fulfill-external`, body, { withLoader: false })
+        .subscribe({
+          next: () => { this.saving = false; this.actionRow = null; this.load(); this.loadSummary(); },
+          error: (err) => {
+            this.saving = false;
+            const message = err?.error?.message;
+            this.actionError = Array.isArray(message) ? message.join(' · ') : message || 'No se pudo registrar el reemplazo externo.';
+          },
+        }));
+      return;
+    }
     if (this.lotId) body['lotId'] = this.lotId;
     if (this.serialIds.length) body['serialIds'] = this.serialIds;
     if (this.resolutionNote.trim()) body['note'] = this.resolutionNote.trim();

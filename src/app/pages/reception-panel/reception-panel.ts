@@ -62,6 +62,8 @@ import { ElectronicBillingApiService } from "../../services/electronic-billing/e
 import { ElectronicDocument } from "../../models/electronic-billing/electronic-document.model"
 import { ServiceOrderInboxService } from "../../services/service-orders/service-order-inbox.service"
 import { CurrentUserService } from "../../services/current-user.service"
+import { WarrantiesApiService } from "../../services/warranties-api.service"
+import { ExternalWarrantyIntakeRequest } from "../../models/warranties/warranty.model"
 import {
   buildPhoneFormValue,
   DEFAULT_PHONE_COUNTRY,
@@ -303,6 +305,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     ServiceType.STANDARD_SERVICE,
     ServiceType.DIAGNOSIS,
     ServiceType.ASSEMBLY,
+    ServiceType.WARRANTY_SERVICE,
   ]
   readonly companyId = Number(config.defaultCompanyId ?? 1) || 1
   showServiceOrderAgreementsModal = false
@@ -385,6 +388,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     private readonly electronicBillingApi: ElectronicBillingApiService,
     private readonly serviceOrderInboxService: ServiceOrderInboxService,
     private readonly currentUserService: CurrentUserService,
+    private readonly warrantiesApi: WarrantiesApiService,
     private readonly router: Router,
     private readonly cdr: ChangeDetectorRef,
   ) {
@@ -468,6 +472,19 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       serialNumber: [""],
       initialIssue: ["", [Validators.required, Validators.minLength(5), Validators.maxLength(500)]],
       accessories: [""],
+      receivedCondition: [""],
+      warrantyOrigin: ["EXTERNAL"],
+      externalDocumentType: ["BOLETA"],
+      externalDocumentSeries: [""],
+      externalDocumentNumber: [""],
+      externalDocumentDate: [""],
+      externalEvidenceReference: [""],
+      externalProductCode: [""],
+      externalProductDescription: [""],
+      externalWarrantyResponsibility: ["STORE"],
+      externalWarrantyDurationValue: [30],
+      externalWarrantyDurationUnit: ["DAY"],
+      externalCoverageAmount: [0],
     })
     this.configureEquipmentTypeOtherValidation(group)
     return group
@@ -1467,6 +1484,19 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       serialNumber: "",
       initialIssue: "",
       accessories: "",
+      receivedCondition: "",
+      warrantyOrigin: "EXTERNAL",
+      externalDocumentType: "BOLETA",
+      externalDocumentSeries: "",
+      externalDocumentNumber: "",
+      externalDocumentDate: "",
+      externalEvidenceReference: "",
+      externalProductCode: "",
+      externalProductDescription: "",
+      externalWarrantyResponsibility: "STORE",
+      externalWarrantyDurationValue: 30,
+      externalWarrantyDurationUnit: "DAY",
+      externalCoverageAmount: 0,
     })
     this.documentSearchMessage = ""
     this.documentSearchError = ""
@@ -1519,6 +1549,19 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       serialNumber: "",
       initialIssue: "",
       accessories: "",
+      receivedCondition: "",
+      warrantyOrigin: "EXTERNAL",
+      externalDocumentType: "BOLETA",
+      externalDocumentSeries: "",
+      externalDocumentNumber: "",
+      externalDocumentDate: "",
+      externalEvidenceReference: "",
+      externalProductCode: "",
+      externalProductDescription: "",
+      externalWarrantyResponsibility: "STORE",
+      externalWarrantyDurationValue: 30,
+      externalWarrantyDurationUnit: "DAY",
+      externalCoverageAmount: 0,
     })
     this.documentSearchMessage = ""
     this.documentSearchError = ""
@@ -1583,6 +1626,38 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       .pipe(
         switchMap(({ clientId, clientContactId }) => {
           this.syncCandidateCommercialDrafts()
+          if (formValue.workflowServiceType === ServiceType.WARRANTY_SERVICE) {
+            const candidate = this.createServiceOrderCandidates[0]
+            const payload: ExternalWarrantyIntakeRequest = {
+              companyId: this.companyId,
+              clientId: Number(clientId),
+              assignedToTechnicianId: this.toNumericId(formValue.assignedToTechnicianId)!,
+              externalDocumentType: String(formValue.externalDocumentType).trim(),
+              externalDocumentSeries: String(formValue.externalDocumentSeries).trim(),
+              externalDocumentNumber: String(formValue.externalDocumentNumber).trim(),
+              externalDocumentDate: String(formValue.externalDocumentDate),
+              externalEvidenceReference: String(formValue.externalEvidenceReference ?? '').trim() || undefined,
+              externalProductCode: String(formValue.externalProductCode ?? '').trim() || undefined,
+              productDescription: String(formValue.externalProductDescription).trim(),
+              responsibility: formValue.externalWarrantyResponsibility,
+              durationValue: Number(formValue.externalWarrantyDurationValue),
+              durationUnit: formValue.externalWarrantyDurationUnit,
+              coverageAmount: Number(formValue.externalCoverageAmount ?? 0),
+              equipmentType: candidate.equipmentType,
+              equipmentTypeOther: candidate.equipmentTypeOther || undefined,
+              brand: candidate.brand || undefined,
+              model: candidate.model || undefined,
+              serialNumber: candidate.serialNumber || undefined,
+              accessories: candidate.accessories || undefined,
+              receivedCondition: String(formValue.receivedCondition ?? '').trim() || undefined,
+              reportedIssue: candidate.initialIssue,
+              priority: candidate.priority,
+              notes: candidate.notes || undefined,
+              contactPhone: normalizeOptionalPhone(formValue.contactPhone) || undefined,
+              contactEmail: String(formValue.contactEmail ?? '').trim() || undefined,
+            }
+            return this.warrantiesApi.createExternalIntake(payload)
+          }
           const payload: ServiceOrderSaveRequest = {
             requestOrigin: RequestOrigin.CLIENT,
             clientId: clientId || null,
@@ -2786,6 +2861,16 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     this.loadTechnicianAssignmentSuggestion(true)
   }
 
+  openRegisteredWarrantyFlow(): void {
+    this.closeCreateServiceOrderModal(false)
+    this.router.navigate(['/garantias'])
+  }
+
+  isExternalWarrantyWorkflow(): boolean {
+    return this.getSelectedWorkflowServiceType() === ServiceType.WARRANTY_SERVICE &&
+      this.createServiceOrderForm.get('warrantyOrigin')?.value === 'EXTERNAL'
+  }
+
   getCreateServiceOrderSteps(): CreateServiceOrderStep[] {
     const steps: CreateServiceOrderStep[] = [
       {
@@ -2849,6 +2934,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   }
 
   canAddAnotherCreateServiceOrderCandidate(): boolean {
+    if (this.getSelectedWorkflowServiceType() === ServiceType.WARRANTY_SERVICE) return false
     return (
       this.isCreateServiceOrderStepActive(3) &&
       this.editingCreateServiceOrderCandidateIndex === null
@@ -3615,8 +3701,25 @@ export class ReceptionPanel implements OnInit, OnDestroy {
   private validateCurrentCreateServiceOrderStep(): boolean {
     const step = this.getCurrentCreateServiceOrderStep().key
     if (step === "workflow") {
-      this.markControlsAsTouched(["workflowServiceType"])
-      return this.areControlsValid(["workflowServiceType"])
+      const controls = ["workflowServiceType"]
+      if (this.getSelectedWorkflowServiceType() === ServiceType.WARRANTY_SERVICE) {
+        if (this.createServiceOrderForm.get('warrantyOrigin')?.value === 'INTERNAL') {
+          this.showMessage('info', 'fas fa-shield-alt', 'Las coberturas registradas se atienden desde Gestión de Garantías.')
+          return false
+        }
+        controls.push(
+          'externalDocumentType', 'externalDocumentSeries', 'externalDocumentNumber',
+          'externalDocumentDate', 'externalProductDescription', 'externalWarrantyResponsibility',
+          'externalWarrantyDurationValue', 'externalWarrantyDurationUnit', 'externalCoverageAmount',
+        )
+        const required = ['externalDocumentType', 'externalDocumentSeries', 'externalDocumentNumber', 'externalDocumentDate', 'externalProductDescription']
+        required.forEach((name) => this.createServiceOrderForm.get(name)?.setValidators([Validators.required]))
+        this.createServiceOrderForm.get('externalWarrantyDurationValue')?.setValidators([Validators.required, Validators.min(1)])
+        this.createServiceOrderForm.get('externalCoverageAmount')?.setValidators([Validators.required, Validators.min(0)])
+        controls.forEach((name) => this.createServiceOrderForm.get(name)?.updateValueAndValidity({ emitEvent: false }))
+      }
+      this.markControlsAsTouched(controls)
+      return this.areControlsValid(controls)
     }
 
     if (step === "assignment") {

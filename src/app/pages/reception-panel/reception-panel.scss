@@ -5104,3 +5104,32 @@ label.labor-waiver-option {
   letter-spacing: normal;
   line-height: 1.4;
 }
+.warranty-origin-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.warranty-origin-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #d5e1e9;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.warranty-origin-option:has(input:checked) {
+  border-color: #16934b;
+  background: #f1faf5;
+}
+
+.warranty-origin-option small { display: block; margin-top: 4px; color: #64778b; font-weight: 400; }
+.warranty-external-heading { margin-top: 22px; }
+
+@media (max-width: 767px) {
+  .warranty-origin-selector { grid-template-columns: 1fr; }
+}

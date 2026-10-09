@@ -29,4 +29,16 @@ describe('InternalDeliveries', () => {
     component.serialIds = [9];
     expect(component.actionInvalid).toBeFalse();
   });
+
+  it('valida los datos manuales sin consultar stock para un reemplazo externo', () => {
+    const base = { get: jasmine.createSpy('get') };
+    const component = new InternalDeliveries(base as any, { hasPermission: () => true } as any);
+    const row = { id: 9, type: 'WARRANTY_REPLACEMENT', status: 'PENDING', technicianId: 2, technicianName: 'Técnico', productId: null, productName: 'Mouse', productSku: 'EXT-1', quantity: 1, createdAt: '', fulfillmentSource: 'EXTERNAL' } as any;
+    component.openFulfillment(row);
+    expect(base.get).not.toHaveBeenCalled();
+    expect(component.actionInvalid).toBeTrue();
+    component.externalSerialCode = 'MS-02';
+    component.externalReference = 'B001-100';
+    expect(component.actionInvalid).toBeFalse();
+  });
 });

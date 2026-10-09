@@ -22,6 +22,8 @@ export interface WarrantyCustomer {
 export interface WarrantyCoverage {
   id: number;
   sourceType: WarrantySourceType;
+  registrationOrigin?: 'INTERNAL' | 'EXTERNAL';
+  responsibility?: 'STORE' | 'SUPPLIER' | 'MANUFACTURER';
   sourceUnitKey: string;
   customerId: number;
   customer?: WarrantyCustomer;
@@ -44,6 +46,10 @@ export interface WarrantyCoverage {
   status: WarrantyCoverageStatus;
   consumedAt: string | null;
   revokedAt: string | null;
+  externalDocumentType?: string | null;
+  externalDocumentSeries?: string | null;
+  externalDocumentNumber?: string | null;
+  externalDocumentDate?: string | null;
   createdAt: string;
 }
 
@@ -122,7 +128,7 @@ export interface WarrantyReplacementTrace {
 
 export interface WarrantyReplacementLine {
   id: number;
-  productId: number;
+  productId: number | null;
   productName: string;
   productSku: string | null;
   serialId: number | null;
@@ -171,4 +177,33 @@ export interface WarrantyIntakeRequest {
   accessories?: string;
   priority?: ServiceOrderPriority;
   notes?: string;
+}
+
+export interface ExternalWarrantyIntakeRequest {
+  companyId: number;
+  clientId: number;
+  assignedToTechnicianId: number;
+  externalDocumentType: string;
+  externalDocumentSeries: string;
+  externalDocumentNumber: string;
+  externalDocumentDate: string;
+  externalEvidenceReference?: string;
+  externalProductCode?: string;
+  productDescription: string;
+  responsibility: 'STORE' | 'SUPPLIER' | 'MANUFACTURER';
+  durationValue: number;
+  durationUnit: WarrantyDurationUnit;
+  coverageAmount: number;
+  equipmentType: EquipmentType;
+  equipmentTypeOther?: string;
+  brand?: string;
+  model?: string;
+  serialNumber?: string;
+  accessories?: string;
+  receivedCondition?: string;
+  reportedIssue: string;
+  priority?: ServiceOrderPriority;
+  notes?: string;
+  contactPhone?: string;
+  contactEmail?: string;
 }

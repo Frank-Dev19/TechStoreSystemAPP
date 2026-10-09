@@ -1052,11 +1052,51 @@
                     }
                   </select>
                   @if (createServiceOrderForm.get('workflowServiceType')?.hasError('unsupportedWorkflow')) {
-                    <p class="invalid-feedback d-block">Selecciona Express, Diagnóstico o Ensamblaje para continuar.</p>
+                    <p class="invalid-feedback d-block">Selecciona un tipo de atención válido para continuar.</p>
                   }
                 </div>
-
               </div>
+
+              @if (getSelectedWorkflowServiceType() === serviceTypeEnum.WARRANTY_SERVICE) {
+                <div class="warranty-origin-selector">
+                  <label class="warranty-origin-option">
+                    <input type="radio" formControlName="warrantyOrigin" value="INTERNAL" />
+                    <span><strong>Cobertura registrada</strong><small>Venta o servicio registrado previamente en este sistema.</small></span>
+                  </label>
+                  <label class="warranty-origin-option">
+                    <input type="radio" formControlName="warrantyOrigin" value="EXTERNAL" />
+                    <span><strong>Compra del sistema externo</strong><small>La recepcionista verifica el comprobante y registra una cobertura trazable.</small></span>
+                  </label>
+                </div>
+
+                @if (createServiceOrderForm.get('warrantyOrigin')?.value === 'INTERNAL') {
+                  <div class="summary-card">
+                    <h5>Cobertura ya registrada</h5>
+                    <p>Selecciona la venta o servicio vigente desde Gestión de Garantías para evitar duplicar su cobertura.</p>
+                    <button class="btn btn-outline" type="button" (click)="openRegisteredWarrantyFlow()">
+                      <i class="fas fa-shield-alt"></i> Ir a Gestión de Garantías
+                    </button>
+                  </div>
+                } @else {
+                  <div class="section-header warranty-external-heading">
+                    <h4>Verificación de compra externa</h4>
+                    <p>Estos datos respaldan la cobertura. No crean una venta ni modifican el inventario local.</p>
+                  </div>
+                  <div class="form-grid form-grid--wide">
+                    <div class="form-group"><label>Tipo de comprobante *</label><select class="form-control" formControlName="externalDocumentType"><option value="BOLETA">Boleta</option><option value="FACTURA">Factura</option><option value="TICKET">Ticket</option><option value="OTRO">Otro</option></select></div>
+                    <div class="form-group"><label>Serie *</label><input class="form-control" formControlName="externalDocumentSeries" placeholder="Ej: B001" /></div>
+                    <div class="form-group"><label>Número *</label><input class="form-control" formControlName="externalDocumentNumber" placeholder="Ej: 00001234" /></div>
+                    <div class="form-group"><label>Fecha de compra *</label><input type="date" class="form-control" formControlName="externalDocumentDate" /></div>
+                    <div class="form-group"><label>Descripción del producto *</label><input class="form-control" formControlName="externalProductDescription" placeholder="Ej: Mouse Logitech M520" /></div>
+                    <div class="form-group"><label>Código externo</label><input class="form-control" formControlName="externalProductCode" placeholder="SKU o código del otro sistema" /></div>
+                    <div class="form-group"><label>Responsable de la garantía *</label><select class="form-control" formControlName="externalWarrantyResponsibility"><option value="STORE">Tienda</option><option value="SUPPLIER">Proveedor</option><option value="MANUFACTURER">Fabricante</option></select></div>
+                    <div class="form-group"><label>Referencia de verificación</label><input class="form-control" formControlName="externalEvidenceReference" placeholder="Ruta, folio o referencia del comprobante" /></div>
+                    <div class="form-group"><label>Duración *</label><input type="number" min="1" class="form-control" formControlName="externalWarrantyDurationValue" /></div>
+                    <div class="form-group"><label>Unidad *</label><select class="form-control" formControlName="externalWarrantyDurationUnit"><option value="DAY">Días</option><option value="MONTH">Meses</option><option value="YEAR">Años</option></select></div>
+                    <div class="form-group"><label>Monto cubierto (S/) *</label><input type="number" min="0" step="0.01" class="form-control" formControlName="externalCoverageAmount" /></div>
+                  </div>
+                }
+              }
             </div>
           }
 
@@ -1410,6 +1450,12 @@
                       placeholder="Listado de accesorios entregados (cargador, mouse, etc.)"
                     ></textarea>
                   </div>
+                  @if (isExternalWarrantyWorkflow()) {
+                    <div class="form-group">
+                      <label>Estado del equipo al recepcionarlo</label>
+                      <textarea class="form-control" formControlName="receivedCondition" rows="2" placeholder="Describe el estado físico, sellos, piezas faltantes u observaciones de recepción"></textarea>
+                    </div>
+                  }
                   <div class="form-group">
                     <label>Nota del equipo</label>
                     <textarea

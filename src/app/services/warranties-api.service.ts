@@ -7,6 +7,7 @@ import {
   WarrantyCoverage,
   WarrantyCoverageGroupPage,
   WarrantyIntakeRequest,
+  ExternalWarrantyIntakeRequest,
   WarrantyPage,
   WarrantyTechnicianReport,
 } from '../models/warranties/warranty.model';
@@ -55,6 +56,10 @@ export class WarrantiesApiService {
 
   createIntake(payload: WarrantyIntakeRequest): Observable<ServiceOrder> {
     return this.base.post<ServiceOrder>('/service-orders/warranty-intake', payload);
+  }
+
+  createExternalIntake(payload: ExternalWarrantyIntakeRequest): Observable<ServiceOrder> {
+    return this.base.post<ServiceOrder>('/service-orders/warranty-intake/external', payload);
   }
 
   cancelClaim(id: number, reason: string): Observable<WarrantyClaim> {

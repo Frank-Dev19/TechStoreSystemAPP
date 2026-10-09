@@ -74,7 +74,7 @@
                     <div class="row-actions">
                       @if (row.type === 'ORDER') {
                         <a class="btn primary" routerLink="/supervisor-panel" [queryParams]="{ orderId: row.serviceOrderId, itemId: row.serviceOrderItemId, section: 'materials' }"><i class="fas fa-external-link-alt"></i> Atender</a>
-                      } @else if (canFulfill) {
+                      } @else if ((row.fulfillmentSource === 'EXTERNAL' && canFulfillExternal) || (row.fulfillmentSource !== 'EXTERNAL' && canFulfill)) {
                         <button type="button" class="btn primary" (click)="openFulfillment(row)"><i class="fas fa-box"></i> Despachar</button>
                         @if (row.type === 'INTERNAL_SUPPLY') { <button type="button" class="btn" (click)="reject(row)"><i class="fas fa-times"></i> Rechazar</button> }
                       }
@@ -103,10 +103,21 @@
 @if (actionRow) {
   <div class="modal-overlay" (click)="closeFulfillment()">
     <section class="dispatch-modal" role="dialog" aria-modal="true" aria-labelledby="dispatch-modal-title" (click)="$event.stopPropagation()">
-      <header><div><span>SALIDA DE ALMACÉN</span><h2 id="dispatch-modal-title">Confirmar despacho</h2></div><button type="button" (click)="closeFulfillment()" aria-label="Cerrar"><i class="fas fa-times"></i></button></header>
+      <header><div><span>{{ isExternalAction ? 'REEMPLAZO EXTERNO' : 'SALIDA DE ALMACÉN' }}</span><h2 id="dispatch-modal-title">{{ isExternalAction ? 'Registrar producto de reemplazo' : 'Confirmar despacho' }}</h2></div><button type="button" (click)="closeFulfillment()" aria-label="Cerrar"><i class="fas fa-times"></i></button></header>
       <div class="modal-body">
         <div class="request-summary"><i class="fas fa-box"></i><div><strong>{{ actionRow.productName }}</strong><span>{{ actionRow.quantity | number:'1.0-4' }} para {{ actionRow.technicianName }}</span></div></div>
-        @if (optionsLoading) { <p class="loading-line"><i class="fas fa-spinner fa-spin"></i> Consultando disponibilidad…</p> }
+        @if (isExternalAction) {
+          <div class="external-dispatch-notice"><i class="fas fa-info-circle"></i><p>Este producto proviene del sistema externo. El registro deja trazabilidad en la garantía y no descuenta stock ni genera Kardex local.</p></div>
+          <div class="external-fields">
+            <label>Producto entregado *<input [(ngModel)]="externalProductName" maxlength="255" placeholder="Nombre del producto" /></label>
+            <label>Código externo <input [(ngModel)]="externalProductCode" maxlength="100" placeholder="SKU o código externo" /></label>
+            <label>Marca <input [(ngModel)]="externalBrand" maxlength="100" /></label>
+            <label>Modelo <input [(ngModel)]="externalModel" maxlength="150" /></label>
+            <label>Serie entregada *<input [(ngModel)]="externalSerialCode" maxlength="100" placeholder="Serie física del reemplazo" /></label>
+            <label>Referencia externa *<input [(ngModel)]="externalReference" maxlength="200" placeholder="Boleta, guía o movimiento del otro sistema" /></label>
+          </div>
+          <label>Observación <span>Opcional</span><textarea [(ngModel)]="resolutionNote" rows="3" placeholder="Detalle de la entrega"></textarea></label>
+        } @else if (optionsLoading) { <p class="loading-line"><i class="fas fa-spinner fa-spin"></i> Consultando disponibilidad…</p> }
         @if (options) {
           <p class="availability">Disponible: <strong>{{ options.availableQuantity | number:'1.0-4' }} {{ options.product.unit }}</strong></p>
           @if (options.lots.length) { <label>Lote<select [(ngModel)]="lotId"><option [ngValue]="null">Selecciona un lote</option>@for (lot of options.lots; track lot.id) { <option [ngValue]="lot.id">{{ lot.lotCode }} · {{ lot.availableQuantity }} disponibles</option> }</select></label> }
@@ -115,7 +126,7 @@
         }
         @if (actionError) { <p class="modal-error">{{ actionError }}</p> }
       </div>
-      <footer><button type="button" class="btn" (click)="closeFulfillment()">Cancelar</button><button type="button" class="btn primary" [disabled]="actionInvalid || saving" (click)="fulfill()"><i class="fas fa-check"></i> {{ saving ? 'Confirmando…' : 'Confirmar salida' }}</button></footer>
+      <footer><button type="button" class="btn" (click)="closeFulfillment()">Cancelar</button><button type="button" class="btn primary" [disabled]="actionInvalid || saving" (click)="fulfill()"><i class="fas fa-check"></i> {{ saving ? 'Confirmando…' : (isExternalAction ? 'Registrar reemplazo' : 'Confirmar salida') }}</button></footer>
     </section>
   </div>
 }
