@@ -3633,6 +3633,11 @@ $bg-light: #f5f7fa;
     overflow: hidden;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
+    &:focus-within {
+      border-color: $primary;
+      box-shadow: 0 0 0 3px rgba($primary, 0.12);
+    }
+
     span {
       position: absolute;
       left: 14px;
@@ -3695,6 +3700,23 @@ $bg-light: #f5f7fa;
     display: flex;
     flex-direction: column;
     gap: 6px;
+
+    input {
+      width: 100%;
+      min-height: 40px;
+      padding: 0 14px;
+      border: 1px solid #cfdcf0;
+      border-radius: 14px;
+      background: #f4f7fc;
+      color: $primary;
+      font-size: 14px;
+
+      &:focus-visible {
+        outline: none;
+        border-color: $primary;
+        box-shadow: 0 0 0 3px rgba($primary, 0.12);
+      }
+    }
 
     label {
       display: block;
@@ -3901,7 +3923,7 @@ $bg-light: #f5f7fa;
       font-weight: 600;
     }
 
-    input {
+    > input {
       width: 100%;
       min-height: 40px;
       padding: 0 14px !important;
@@ -3919,7 +3941,7 @@ $bg-light: #f5f7fa;
     }
   }
 
-  .ng-select {
+  ::ng-deep .ng-select {
     .ng-select-container {
       min-height: 40px !important;
       border: 1px solid #cfdcf0 !important;
