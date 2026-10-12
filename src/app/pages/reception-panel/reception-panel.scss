@@ -43,6 +43,33 @@ $bg-light: #f5f7fa;
       padding: 1.75rem;
       color: white;
       box-shadow: var(--brand-page-header-shadow);
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+
+      .title-copy {
+        flex: 1 1 240px;
+        min-width: 0;
+      }
+
+      .panel-refresh-button {
+        flex: 0 0 44px;
+        width: 44px;
+        height: 44px;
+        margin-left: auto;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid $border;
+        border-radius: 8px;
+        background: #fff;
+        color: $primary;
+
+        &:hover { background: #f1f5f9; }
+        &:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+      }
 
       .page-title {
         font-size: 2rem;

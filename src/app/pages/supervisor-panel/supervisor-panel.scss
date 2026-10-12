@@ -26,9 +26,29 @@ $bg-light: #f5f7fa;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 1.5rem;
 
+    .panel-refresh-button {
+      flex: 0 0 44px;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid $border;
+      border-radius: 8px;
+      background: #fff;
+      color: $primary;
+
+      &:hover { background: #f1f5f9; }
+      &:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+    }
+
     .title-section {
+      flex: 1 1 240px;
+      min-width: 0;
       .page-title {
         margin: 0;
         font-size: 2rem;

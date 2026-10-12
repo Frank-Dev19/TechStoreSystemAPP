@@ -1,14 +1,17 @@
 <div class="reception-panel-container">
   <div class="header-section">
     <div class="title-section">
+      <div class="title-copy">
       <h1 class="page-title">Panel de Recepción</h1>
       <p class="page-subtitle">
         Coordina órdenes de servicio, pagos y cotizaciones desde una sola pantalla
       </p>
+      </div>
+      <button type="button" class="btn btn-light panel-refresh-button" (click)="refreshOrders()"
+        title="Actualizar órdenes" aria-label="Actualizar órdenes">
+        <i class="fas fa-sync-alt" aria-hidden="true"></i>
+      </button>
     </div>
-    <button type="button" class="btn btn-outline-primary" (click)="refreshOrders()">
-      <i class="fas fa-sync-alt" aria-hidden="true"></i> Actualizar
-    </button>
   </div>
 
   <div class="stats-grid">
