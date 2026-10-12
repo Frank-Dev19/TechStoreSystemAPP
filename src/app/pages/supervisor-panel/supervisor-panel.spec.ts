@@ -3,7 +3,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, of, throwError } from 'rxjs';
 
 import {
   EquipmentType,
@@ -40,6 +40,7 @@ describe('SupervisorPanel', () => {
   };
 
   const serviceOrderServiceStub = {
+    ignoreFinalNotification: jasmine.createSpy('ignoreFinalNotification').and.returnValue(of({ status: 'IGNORED' })),
     findAll: jasmine
       .createSpy('findAll')
       .and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
@@ -160,6 +161,35 @@ describe('SupervisorPanel', () => {
     ]);
     expect(component.showFailedNotifications).toBeTrue();
     expect(component.alertMessage).toContain('sigue pendiente');
+  });
+
+  it('ignora sin reenviar y retira la notificación del modal', () => {
+    const notification = createFailedNotification();
+    component.failedNotifications = [notification];
+    component.openFailedNotifications();
+    serviceOrderServiceStub.ignoreFinalNotification.and.returnValue(of({ status: 'IGNORED' }));
+    const retries = serviceOrderServiceStub.retryFinalNotification.calls.count();
+    component.ignoreNotification(notification);
+    expect(serviceOrderServiceStub.ignoreFinalNotification).toHaveBeenCalledWith(notification.id);
+    expect(serviceOrderServiceStub.retryFinalNotification.calls.count()).toBe(retries);
+    expect(component.failedNotifications).toEqual([]);
+    expect(component.showFailedNotifications).toBeFalse();
+  });
+
+  it('conserva la notificación cuando ignorar falla', () => {
+    const notification = createFailedNotification();
+    component.failedNotifications = [notification];
+    serviceOrderServiceStub.ignoreFinalNotification.and.returnValue(throwError(() => new Error('Fallo')));
+    component.ignoreNotification(notification);
+    expect(component.failedNotifications).toEqual([notification]);
+    expect(component.ignoringNotificationIds.size).toBe(0);
+  });
+
+  it('muestra UTC 19:37 como 14:37 de Perú, usando el intento y no updatedAt', () => {
+    component.failedNotifications = [{ ...createFailedNotification(), lastAttemptAt: '2026-10-12T19:37:15Z' }];
+    component.openFailedNotifications();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('12/10/2026, 14:37');
   });
 
   it('retira la notificación y cierra el modal cuando el reintento resulta exitoso', () => {

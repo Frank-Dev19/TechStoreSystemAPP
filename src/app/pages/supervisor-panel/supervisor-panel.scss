@@ -1674,6 +1674,13 @@ $bg-light: #f5f7fa;
     background: #f8fafc;
     display: flex;
     justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .notification-ignore-button {
+    background: #fff !important;
+    color: $text-muted !important;
   }
 
   .notification-retry-button {

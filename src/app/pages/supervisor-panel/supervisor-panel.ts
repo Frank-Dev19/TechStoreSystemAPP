@@ -74,6 +74,23 @@ export class SupervisorPanel implements OnInit {
   failedNotifications: FailedServiceOrderNotification[] = [];
   showFailedNotifications = false;
   readonly retryingNotificationIds = new Set<number>();
+  readonly ignoringNotificationIds = new Set<number>();
+
+  ignoreNotification(notification: FailedServiceOrderNotification): void {
+    const id = Number(notification.id);
+    if (this.ignoringNotificationIds.has(id) || this.isRetryingNotification(id)) return;
+    this.ignoringNotificationIds.add(id);
+    this.serviceOrderService.ignoreFinalNotification(id)
+      .pipe(finalize(() => this.ignoringNotificationIds.delete(id)))
+      .subscribe({
+        next: () => {
+          this.failedNotifications = this.failedNotifications.filter(n => Number(n.id) !== id);
+          if (!this.failedNotifications.length) this.closeFailedNotifications();
+          this.showMessage('success', 'fas fa-check', 'Notificación ignorada. Se conservó el historial y no se enviará de nuevo.');
+        },
+        error: () => this.showMessage('danger', 'fas fa-exclamation-circle', 'No pudimos ignorar la notificación.'),
+      });
+  }
 
   isLoadingServiceOrderAgreements = false;
   isLoadingDiagnosis = false;
@@ -219,7 +236,7 @@ export class SupervisorPanel implements OnInit {
   }
 
   retryNotification(notification: FailedServiceOrderNotification): void {
-    if (this.isRetryingNotification(notification.id)) return;
+    if (this.isRetryingNotification(notification.id) || this.ignoringNotificationIds.has(Number(notification.id))) return;
     this.retryingNotificationIds.add(Number(notification.id));
 
     this.serviceOrderService

@@ -56,6 +56,7 @@ export interface FailedServiceOrderNotification {
   attemptCount: number;
   createdAt?: string;
   updatedAt: string;
+  lastAttemptAt?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -129,6 +130,12 @@ export class ServiceOrderService {
     return this.base.post<FailedServiceOrderNotification>(
       `${config.serviceOrders.serviceOrders}/notifications/${notificationId}/retry`,
       {},
+    );
+  }
+
+  ignoreFinalNotification(notificationId: number): Observable<FailedServiceOrderNotification> {
+    return this.base.post<FailedServiceOrderNotification>(
+      `${config.serviceOrders.serviceOrders}/notifications/${notificationId}/ignore`, {},
     );
   }
 

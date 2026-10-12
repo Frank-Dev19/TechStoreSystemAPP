@@ -93,8 +93,8 @@
                       <dd>{{ notification.attemptCount }}</dd>
                     </div>
                     <div>
-                      <dt>Último intento</dt>
-                      <dd>{{ notification.updatedAt | date: 'dd/MM/yyyy, HH:mm' }}</dd>
+                      <dt>Último intento · Perú</dt>
+                      <dd>{{ notification.lastAttemptAt ? (notification.lastAttemptAt | date: 'dd/MM/yyyy, HH:mm': '-0500') : 'Sin registro' }}</dd>
                     </div>
                   </dl>
 
@@ -105,10 +105,17 @@
                 </div>
 
                 <div class="notification-card-actions">
+                  <button type="button" class="notification-retry-button notification-ignore-button"
+                    [disabled]="isRetryingNotification(notification.id) || ignoringNotificationIds.has(+notification.id)"
+                    title="Retirar de pendientes sin borrar el historial ni reenviar el mensaje"
+                    (click)="ignoreNotification(notification)">
+                    <i class="fas fa-ban" aria-hidden="true"></i>
+                    {{ ignoringNotificationIds.has(+notification.id) ? 'Ignorando...' : 'Ignorar' }}
+                  </button>
                   <button
                     class="notification-retry-button"
                     type="button"
-                    [disabled]="isRetryingNotification(notification.id)"
+                    [disabled]="isRetryingNotification(notification.id) || ignoringNotificationIds.has(+notification.id)"
                     (click)="retryNotification(notification)"
                   >
                     <i
