@@ -33,6 +33,7 @@ export interface ServiceOrderInitialCommercialLineRequest {
 }
 
 export interface ServiceOrderInitialCommercialRequest {
+  customerSummary?: string;
   notes?: string;
   lines: ServiceOrderInitialCommercialLineRequest[];
 }

@@ -46,13 +46,38 @@ describe('ServiceOrderInboxPage', () => {
   } as any;
 
   const inboxServiceStub = {
-    listThreads: jasmine.createSpy('listThreads').and.returnValue(of({ data: [thread] as any[], total: 1, page: 1, limit: 50 })),
+    listThreads: jasmine
+      .createSpy('listThreads')
+      .and.returnValue(of({ data: [thread] as any[], total: 1, page: 1, limit: 50 })),
     getThreadByOrder: jasmine.createSpy('getThreadByOrder').and.returnValue(of(thread)),
-    getMessages: jasmine.createSpy('getMessages').and.returnValue(of({ thread, messages: [] } as any)),
-    getThreadOrders: jasmine.createSpy('getThreadOrders').and.returnValue(of([{ id: 11, code: 'SO-11', equipmentLabel: 'Laptop', operativeStatus: null, technicalStatus: null, commercialStatus: null, economicStatus: null, assignedTechnicianId: 3, assignedTechnicianAlias: 'Tech', isActive: true }])),
+    getMessages: jasmine
+      .createSpy('getMessages')
+      .and.returnValue(of({ thread, messages: [] } as any)),
+    getThreadOrders: jasmine
+      .createSpy('getThreadOrders')
+      .and.returnValue(
+        of([
+          {
+            id: 11,
+            code: 'SO-11',
+            equipmentLabel: 'Laptop',
+            operativeStatus: null,
+            technicalStatus: null,
+            commercialStatus: null,
+            economicStatus: null,
+            assignedTechnicianId: 3,
+            assignedTechnicianAlias: 'Tech',
+            isActive: true,
+          },
+        ]),
+      ),
     markRead: jasmine.createSpy('markRead').and.returnValue(of({ ok: true })),
-    sendMessage: jasmine.createSpy('sendMessage').and.returnValue(of({ id: 99, serviceOrderIds: [11] } as any)),
-    downloadAttachmentBlob: jasmine.createSpy('downloadAttachmentBlob').and.returnValue(of(new Blob())),
+    sendMessage: jasmine
+      .createSpy('sendMessage')
+      .and.returnValue(of({ id: 99, serviceOrderIds: [11] } as any)),
+    downloadAttachmentBlob: jasmine
+      .createSpy('downloadAttachmentBlob')
+      .and.returnValue(of(new Blob())),
     watchChanges: jasmine.createSpy('watchChanges'),
   };
 
@@ -60,20 +85,26 @@ describe('ServiceOrderInboxPage', () => {
     value: null as any,
   };
   const serviceOrderServiceStub = {
-    findOne: jasmine.createSpy('findOne').and.returnValue(of({
-      id: 11,
-      code: 'SO-11',
-      serviceType: 'STANDARD_SERVICE',
-      equipmentType: 'LAPTOP',
-      technicalStatus: 'ASIGNADA',
-      initialIssue: 'No enciende',
-    } as any)),
+    findOne: jasmine.createSpy('findOne').and.returnValue(
+      of({
+        id: 11,
+        code: 'SO-11',
+        serviceType: 'STANDARD_SERVICE',
+        equipmentType: 'LAPTOP',
+        technicalStatus: 'ASIGNADA',
+        initialIssue: 'No enciende',
+      } as any),
+    ),
   };
   const diagnosisServiceStub = {
-    findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
+    findAll: jasmine
+      .createSpy('findAll')
+      .and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
   };
   const agreementServiceStub = {
-    findAll: jasmine.createSpy('findAll').and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
+    findAll: jasmine
+      .createSpy('findAll')
+      .and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 })),
   };
 
   beforeEach(async () => {
@@ -82,13 +113,30 @@ describe('ServiceOrderInboxPage', () => {
     inboxServiceStub.watchChanges.and.returnValue(inboxChanges.asObservable());
     currentUserServiceStub.value = null;
     inboxServiceStub.listThreads.calls.reset();
-    inboxServiceStub.listThreads.and.returnValue(of({ data: [thread] as any[], total: 1, page: 1, limit: 50 }));
+    inboxServiceStub.listThreads.and.returnValue(
+      of({ data: [thread] as any[], total: 1, page: 1, limit: 50 }),
+    );
     inboxServiceStub.getThreadByOrder.calls.reset();
     inboxServiceStub.getThreadByOrder.and.returnValue(of(thread));
     inboxServiceStub.getMessages.calls.reset();
     inboxServiceStub.getMessages.and.returnValue(of({ thread, messages: [] } as any));
     inboxServiceStub.getThreadOrders.calls.reset();
-    inboxServiceStub.getThreadOrders.and.returnValue(of([{ id: 11, code: 'SO-11', equipmentLabel: 'Laptop', operativeStatus: null, technicalStatus: null, commercialStatus: null, economicStatus: null, assignedTechnicianId: 3, assignedTechnicianAlias: 'Tech', isActive: true }]));
+    inboxServiceStub.getThreadOrders.and.returnValue(
+      of([
+        {
+          id: 11,
+          code: 'SO-11',
+          equipmentLabel: 'Laptop',
+          operativeStatus: null,
+          technicalStatus: null,
+          commercialStatus: null,
+          economicStatus: null,
+          assignedTechnicianId: 3,
+          assignedTechnicianAlias: 'Tech',
+          isActive: true,
+        },
+      ]),
+    );
     inboxServiceStub.markRead.calls.reset();
     inboxServiceStub.markRead.and.returnValue(of({ ok: true }));
     inboxServiceStub.sendMessage.calls.reset();
@@ -105,13 +153,48 @@ describe('ServiceOrderInboxPage', () => {
         { provide: ServiceOrderDiagnosisService, useValue: diagnosisServiceStub },
         { provide: ServiceOrderAgreementService, useValue: agreementServiceStub },
         { provide: CurrentUserService, useValue: currentUserServiceStub },
-        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ serviceOrderId: '11' }) } } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { queryParamMap: convertToParamMap({ serviceOrderId: '11' }) } },
+        },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ServiceOrderInboxPage);
     component = fixture.componentInstance;
+  });
+
+  it('bloquea envío de archivados aunque la ventana siga abierta', () => {
+    component.selectedThread = { ...thread, canSend: false, isArchived: true };
+    component.draftMessage = 'mensaje';
+    component.sendMessage();
+    expect(inboxServiceStub.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('conserva el borrador separado para cada conversación', () => {
+    inboxServiceStub.getMessages.and.callFake((id: number) =>
+      of({ thread: { ...thread, id }, messages: [] }),
+    );
+    component.selectThread(thread);
+    component.draftMessage = 'Borrador A';
+    component.selectThread({ ...thread, id: 8 });
+    expect(component.draftMessage).toBe('');
+    component.draftMessage = 'Borrador B';
+    component.selectThread(thread);
+    expect(component.draftMessage).toBe('Borrador A');
+  });
+
+  it('ignora la respuesta tardía de otro chat', () => {
+    const pending = new Subject<any>();
+    inboxServiceStub.getMessages.and.callFake((id: number) =>
+      id === 7 ? pending : of({ thread: { ...thread, id: 8 }, messages: [] }),
+    );
+    component.selectThread(thread);
+    component.selectThread({ ...thread, id: 8 });
+    pending.next({ thread, messages: [] });
+    pending.complete();
+    expect(component.selectedThread?.id).toBe(8);
   });
 
   it('loads the unified thread context from a service order query param', fakeAsync(() => {
@@ -157,21 +240,27 @@ describe('ServiceOrderInboxPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.unread-count')?.textContent?.trim()).toBe('4');
-    expect(compiled.querySelector('.unread-count')?.getAttribute('aria-label')).toBe('4 mensajes sin leer');
+    expect(compiled.querySelector('.unread-count')?.getAttribute('aria-label')).toBe(
+      '4 mensajes sin leer',
+    );
     expect(compiled.querySelector('.order-count')?.textContent?.trim()).toContain('2');
-    expect(compiled.querySelector('.order-count')?.getAttribute('aria-label')).toBe('2 órdenes vinculadas');
+    expect(compiled.querySelector('.order-count')?.getAttribute('aria-label')).toBe(
+      '2 órdenes vinculadas',
+    );
   }));
 
   it('no repone el contador del hilo abierto durante una recarga en tiempo real', fakeAsync(() => {
     const unreadThread = { ...thread, unreadCount: 3 } as any;
     component.selectedThread = { ...unreadThread, unreadCount: 0 };
     component.threads = [{ ...unreadThread, unreadCount: 0 }];
-    inboxServiceStub.listThreads.and.returnValue(of({
-      data: [unreadThread],
-      total: 1,
-      page: 1,
-      limit: 100,
-    }));
+    inboxServiceStub.listThreads.and.returnValue(
+      of({
+        data: [unreadThread],
+        total: 1,
+        page: 1,
+        limit: 100,
+      }),
+    );
     inboxServiceStub.getMessages.and.returnValue(of({ thread: unreadThread, messages: [] } as any));
 
     fixture.detectChanges();
@@ -199,13 +288,17 @@ describe('ServiceOrderInboxPage', () => {
     component.sendMessage();
 
     expect(inboxServiceStub.sendMessage).not.toHaveBeenCalled();
-    expect(component.messageError).toBe('La ventana de 24h está cerrada. No se puede enviar texto libre.');
+    expect(component.messageError).toBe(
+      'La ventana de 24h está cerrada. No se puede enviar texto libre.',
+    );
   });
 
   it('muestra el aviso cuando la ventana de 24h está cerrada', fakeAsync(() => {
     const closedThread = { ...thread, lastCustomerMessageAt: closedWindowDate } as any;
     inboxServiceStub.getThreadByOrder.and.returnValue(of(closedThread));
-    inboxServiceStub.listThreads.and.returnValue(of({ data: [closedThread] as any[], total: 1, page: 1, limit: 50 }));
+    inboxServiceStub.listThreads.and.returnValue(
+      of({ data: [closedThread] as any[], total: 1, page: 1, limit: 50 }),
+    );
     inboxServiceStub.getMessages.and.returnValue(of({ thread: closedThread, messages: [] } as any));
 
     fixture.detectChanges();
@@ -213,8 +306,12 @@ describe('ServiceOrderInboxPage', () => {
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('La ventana de 24h está cerrada. No se puede enviar texto libre.');
-    expect((compiled.querySelector('.composer textarea') as HTMLTextAreaElement | null)?.disabled).toBe(true);
+    expect(compiled.textContent).toContain(
+      'La ventana de 24h está cerrada. No se puede enviar texto libre.',
+    );
+    expect(
+      (compiled.querySelector('.composer textarea') as HTMLTextAreaElement | null)?.disabled,
+    ).toBe(true);
   }));
 
   it('oculta el teléfono cuando el visor es técnico', fakeAsync(() => {
@@ -230,9 +327,9 @@ describe('ServiceOrderInboxPage', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).not.toContain('+51999999999');
     expect(compiled.textContent).not.toContain('Teléfono');
-    expect((compiled.querySelector('.search-box input') as HTMLInputElement | null)?.placeholder).toBe(
-      'Buscar cliente, código o equipo...',
-    );
+    expect(
+      (compiled.querySelector('.search-box input') as HTMLInputElement | null)?.placeholder,
+    ).toBe('Buscar cliente, código o equipo...');
   }));
 
   it('oculta el teléfono cuando el visor es recepcionista', fakeAsync(() => {
@@ -247,9 +344,9 @@ describe('ServiceOrderInboxPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).not.toContain('+51999999999');
-    expect((compiled.querySelector('.search-box input') as HTMLInputElement | null)?.placeholder).toBe(
-      'Buscar cliente, código o equipo...',
-    );
+    expect(
+      (compiled.querySelector('.search-box input') as HTMLInputElement | null)?.placeholder,
+    ).toBe('Buscar cliente, código o equipo...');
   }));
 
   it('muestra el teléfono únicamente al supervisor o administrador', fakeAsync(() => {
@@ -271,8 +368,16 @@ describe('ServiceOrderInboxPage', () => {
     fixture.detectChanges();
 
     expect(serviceOrderServiceStub.findOne).toHaveBeenCalledWith(11);
-    expect(diagnosisServiceStub.findAll).toHaveBeenCalledWith({ serviceOrderId: 11, page: 1, limit: 100 });
-    expect(agreementServiceStub.findAll).toHaveBeenCalledWith({ serviceOrderId: 11, page: 1, limit: 100 });
+    expect(diagnosisServiceStub.findAll).toHaveBeenCalledWith({
+      serviceOrderId: 11,
+      page: 1,
+      limit: 100,
+    });
+    expect(agreementServiceStub.findAll).toHaveBeenCalledWith({
+      serviceOrderId: 11,
+      page: 1,
+      limit: 100,
+    });
     expect((fixture.nativeElement as HTMLElement).querySelector('[role="dialog"]')).not.toBeNull();
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Detalles generales');
   }));
@@ -294,14 +399,16 @@ describe('ServiceOrderInboxPage', () => {
     component.isOrderDetailOpen = true;
     component.selectedOrderDetail = { serviceType: 'DIAGNOSIS' } as any;
     component.orderDetailTab = 'diagnosis';
-    component.selectedOrderDiagnoses = [{
-      sequenceNumber: 1,
-      status: 'CURRENT',
-      summary: 'Fuente dañada',
-      details: 'Se verificó pérdida de voltaje.',
-      outcome: 'REPAIRABLE',
-      recommendedAction: 'Cambiar fuente',
-    } as any];
+    component.selectedOrderDiagnoses = [
+      {
+        sequenceNumber: 1,
+        status: 'CURRENT',
+        summary: 'Fuente dañada',
+        details: 'Se verificó pérdida de voltaje.',
+        outcome: 'REPAIRABLE',
+        recommendedAction: 'Cambiar fuente',
+      } as any,
+    ];
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent || '';
@@ -314,28 +421,34 @@ describe('ServiceOrderInboxPage', () => {
     component.isOrderDetailOpen = true;
     component.selectedOrderDetail = { serviceType: 'DIAGNOSIS' } as any;
     component.orderDetailTab = 'agreement';
-    component.selectedOrderAgreements = [{
-      sequenceNumber: 1,
-      status: 'CONFIRMED',
-      totalAmount: 250,
-      currency: 'PEN',
-      notes: 'Incluye instalación.',
-      agreedAt: new Date('2026-07-24T10:00:00'),
-      clientNotes: 'Cliente conforme.',
-      serviceItems: [{
-        serviceNameSnapshot: 'Mantenimiento preventivo',
-        serviceDescriptionSnapshot: 'Limpieza interna',
-        estimatedHours: 2,
-        lineTotal: 100,
-      }],
-      productItems: [{
-        productNameSnapshot: 'Fuente de poder',
-        productDescriptionSnapshot: '500 W',
-        quantity: 1,
-        unitPrice: 150,
-        lineTotal: 150,
-      }],
-    } as any];
+    component.selectedOrderAgreements = [
+      {
+        sequenceNumber: 1,
+        status: 'CONFIRMED',
+        totalAmount: 250,
+        currency: 'PEN',
+        notes: 'Incluye instalación.',
+        agreedAt: new Date('2026-07-24T10:00:00'),
+        clientNotes: 'Cliente conforme.',
+        serviceItems: [
+          {
+            serviceNameSnapshot: 'Mantenimiento preventivo',
+            serviceDescriptionSnapshot: 'Limpieza interna',
+            estimatedHours: 2,
+            lineTotal: 100,
+          },
+        ],
+        productItems: [
+          {
+            productNameSnapshot: 'Fuente de poder',
+            productDescriptionSnapshot: '500 W',
+            quantity: 1,
+            unitPrice: 150,
+            lineTotal: 150,
+          },
+        ],
+      } as any,
+    ];
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent || '';
@@ -345,14 +458,38 @@ describe('ServiceOrderInboxPage', () => {
     expect(text).toContain('Cliente conforme.');
   });
 
-  it('no usa el teléfono como criterio de búsqueda para técnico', () => {
-    currentUserServiceStub.value = {
-      id: 77,
-      roles: [{ id: 1, name: 'technician', permissions: [] }],
-    };
-    component.threads = [thread];
-    component.searchTerm = '+51999999999';
+  it('busca conversaciones en el servidor despues de 500 ms', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    inboxServiceStub.listThreads.calls.reset();
+    component.searchTerm = 'cliente lejano';
+    component.searchChanged();
+    tick(499);
+    expect(inboxServiceStub.listThreads).not.toHaveBeenCalled();
+    tick(1);
+    expect(inboxServiceStub.listThreads).toHaveBeenCalledWith(
+      jasmine.objectContaining({ search: 'cliente lejano', page: 1, limit: 30 }),
+    );
+  }));
 
-    expect(component.filteredThreads.length).toBe(0);
-  });
+  it('un evento de otro chat no recarga los mensajes abiertos', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    inboxServiceStub.getMessages.calls.reset();
+    (inboxChanges as Subject<any>).next({ threadId: 8 });
+    tick(251);
+    expect(inboxServiceStub.getMessages).not.toHaveBeenCalled();
+  }));
+
+  it('keeps loaded conversation pages after a realtime refresh', fakeAsync(() => {
+    inboxServiceStub.listThreads.and.callFake((query: any) => of({
+      data: [{ ...thread, id: query.page === 2 ? 8 : 7 }], total: 60, page: query.page, limit: 30,
+    }));
+    fixture.detectChanges(); tick();
+    component.loadMoreThreads();
+    expect(component.threadPage).toBe(2);
+    (inboxChanges as Subject<any>).next({ threadId: 8 }); tick(251);
+    expect(component.threadPage).toBe(2);
+    expect(component.threads.map(item => item.id)).toEqual([7, 8]);
+  }));
 });

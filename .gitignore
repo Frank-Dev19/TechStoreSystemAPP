@@ -4,6 +4,8 @@
 /dist
 dist-codex-*/
 /tmp
+/output/
+/.playwright-mcp/
 /out-tsc
 /bazel-out
 

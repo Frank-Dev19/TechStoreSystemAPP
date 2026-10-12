@@ -22,8 +22,8 @@ export class ServiceOrderInboxService {
     private readonly authSession: AuthSessionService,
   ) {}
 
-  watchChanges(): Observable<void> {
-    return new Observable<void>((subscriber) => {
+  watchChanges(): Observable<{ threadId?: number }> {
+    return new Observable<{ threadId?: number }>((subscriber) => {
       const abortController = new AbortController();
 
       const connect = async (): Promise<void> => {
@@ -53,7 +53,9 @@ export class ServiceOrderInboxService {
     });
   }
 
-  listThreads(params: Record<string, string | number | boolean | undefined>): Observable<PaginatedResponse<ServiceOrderInboxThreadSummary>> {
+  listThreads(
+    params: Record<string, string | number | boolean | undefined>,
+  ): Observable<PaginatedResponse<ServiceOrderInboxThreadSummary>> {
     let httpParams = new HttpParams();
     Object.entries(params ?? {}).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
@@ -61,30 +63,65 @@ export class ServiceOrderInboxService {
       }
     });
 
-    return this.http.get<PaginatedResponse<ServiceOrderInboxThreadSummary>>(this.threadsUrl, { params: httpParams });
+    return this.http.get<PaginatedResponse<ServiceOrderInboxThreadSummary>>(this.threadsUrl, {
+      params: httpParams,
+    });
   }
 
   getThreadByOrder(serviceOrderId: number): Observable<ServiceOrderInboxThreadSummary> {
-    return this.http.get<ServiceOrderInboxThreadSummary>(`${this.serviceOrdersUrl}/${serviceOrderId}/inbox-thread`);
+    return this.http.get<ServiceOrderInboxThreadSummary>(
+      `${this.serviceOrdersUrl}/${serviceOrderId}/inbox-thread`,
+    );
   }
 
   ensureThreadByOrder(serviceOrderId: number): Observable<ServiceOrderInboxThreadSummary> {
     return this.getThreadByOrder(serviceOrderId);
   }
 
-  getMessages(threadId: number): Observable<ServiceOrderInboxThreadMessagesResponse> {
-    return this.http.get<ServiceOrderInboxThreadMessagesResponse>(`${this.threadsUrl}/${threadId}/messages`);
+  getMessages(
+    threadId: number,
+    query?: { limit?: number; beforeId?: number },
+  ): Observable<ServiceOrderInboxThreadMessagesResponse> {
+    const params = new HttpParams({
+      fromObject: query
+        ? Object.fromEntries(
+            Object.entries(query)
+              .filter(([, value]) => value != null)
+              .map(([key, value]) => [key, String(value)]),
+          )
+        : {},
+    });
+    return this.http.get<ServiceOrderInboxThreadMessagesResponse>(
+      `${this.threadsUrl}/${threadId}/messages`,
+      { params },
+    );
+  }
+
+  getThreadSummary(threadId: number): Observable<ServiceOrderInboxThreadSummary> {
+    return this.http.get<ServiceOrderInboxThreadSummary>(`${this.threadsUrl}/${threadId}`);
+  }
+
+  linkThreadOrder(threadId: number, orderId: number): Observable<ServiceOrderInboxThreadSummary> {
+    return this.http.post<ServiceOrderInboxThreadSummary>(
+      `${this.threadsUrl}/${threadId}/orders/${orderId}`,
+      {},
+    );
   }
 
   getThreadOrders(threadId: number): Observable<ServiceOrderInboxThreadOrderSummary[]> {
-    return this.http.get<ServiceOrderInboxThreadOrderSummary[]>(`${this.threadsUrl}/${threadId}/orders`);
+    return this.http.get<ServiceOrderInboxThreadOrderSummary[]>(
+      `${this.threadsUrl}/${threadId}/orders`,
+    );
   }
 
   markRead(threadId: number): Observable<{ ok: boolean }> {
     return this.http.post<{ ok: boolean }>(`${this.threadsUrl}/${threadId}/read`, {});
   }
 
-  replaceMessageOrders(messageId: number, serviceOrderIds: number[]): Observable<ServiceOrderInboxMessage> {
+  replaceMessageOrders(
+    messageId: number,
+    serviceOrderIds: number[],
+  ): Observable<ServiceOrderInboxMessage> {
     return this.http.put<ServiceOrderInboxMessage>(
       `${config.endpointServices}/service-orders/inbox/messages/${messageId}/orders`,
       { serviceOrderIds },
@@ -101,10 +138,15 @@ export class ServiceOrderInboxService {
     if (text.trim()) {
       payload.append('text', text.trim());
     }
-    serviceOrderIds.forEach((serviceOrderId) => payload.append('serviceOrderIds', String(serviceOrderId)));
+    serviceOrderIds.forEach((serviceOrderId) =>
+      payload.append('serviceOrderIds', String(serviceOrderId)),
+    );
     attachments.forEach((attachment) => payload.append('attachments', attachment));
 
-    return this.http.post<ServiceOrderInboxMessage>(`${this.threadsUrl}/${threadId}/messages`, payload);
+    return this.http.post<ServiceOrderInboxMessage>(
+      `${this.threadsUrl}/${threadId}/messages`,
+      payload,
+    );
   }
 
   downloadAttachmentBlob(attachmentId: number): Observable<Blob> {
@@ -128,7 +170,7 @@ export class ServiceOrderInboxService {
 
   private async consumeEventStream(
     body: ReadableStream<Uint8Array>,
-    subscriber: { next: (value: void) => void },
+    subscriber: { next: (value: { threadId?: number }) => void },
     signal: AbortSignal,
   ): Promise<void> {
     const reader = body.getReader();
@@ -145,8 +187,21 @@ export class ServiceOrderInboxService {
       const frames = buffer.split(/\r?\n\r?\n/);
       buffer = frames.pop() ?? '';
       frames.forEach((frame) => {
-        if (frame.split(/\r?\n/).some((line) => line.trim() === 'event: inbox.changed')) {
-          subscriber.next();
+        if (
+          frame
+            .split(/\r?\n/)
+            .some((line) => ['event: inbox.changed', 'event: heartbeat'].includes(line.trim()))
+        ) {
+          const data = frame
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.slice(5).trim())
+            .join('\n');
+          try {
+            subscriber.next(data ? JSON.parse(data) : {});
+          } catch {
+            subscriber.next({});
+          }
         }
       });
     }

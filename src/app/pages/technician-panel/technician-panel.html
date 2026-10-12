@@ -923,6 +923,15 @@
             }
           }
 
+          @if (usesItemCommercialComposer()) {
+            <section class="agreement-section customer-quote-summary" aria-label="Cotización que recibe el cliente">
+              <label>Concepto para el cliente</label>
+              <p class="mb-2" aria-live="polite">{{ getAutomaticAgreementSummary() }}</p>
+              <small class="text-muted">Se genera automáticamente con el servicio y los productos de la cotización.</small>
+              <div class="mt-2"><strong>Total final: S/ {{ calculateAgreementTotal() | number: '1.2-2' }}</strong></div>
+            </section>
+          }
+
           @if (!usesItemCommercialComposer() && isDerivedAgreementComposer()) {
             <section class="agreement-section agreement-derived-hero">
               <div class="agreement-derived-hero__eyebrow">Versionado coordinado</div>

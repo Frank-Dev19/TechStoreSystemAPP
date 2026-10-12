@@ -141,6 +141,13 @@ describe('TechnicianPanel', () => {
     fixture.detectChanges();
   });
 
+  it('previsualiza el concepto automáticamente sin formulario manual', () => {
+    component.agreementEditableTechnicalService = { type: 'service', serviceNameSnapshot: 'Servicio técnico', unitPrice: 80 } as any;
+    component.agreementNewItems = [{ type: 'product', productId: 1, productNameSnapshot: 'RAM', quantity: 2, unitPrice: 100 } as any];
+    expect(component.getAutomaticAgreementSummary()).toBe('Servicio técnico + 2 RAM');
+    expect(component.agreementForm.get('customerSummary')).toBeNull();
+  });
+
   it('calcula la exoneración sin modificar el importe bruto ni los repuestos', () => {
     const labor = { type: 'service', unitPrice: 80, laborWaiverReason: 'INTERNAL_SERVICE' } as any;
     const part = { type: 'product', unitPrice: 150, quantity: 1 } as any;

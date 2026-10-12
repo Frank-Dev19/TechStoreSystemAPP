@@ -1,3 +1,4 @@
+import { automaticCustomerConcept } from '../../models/service-orders/automatic-customer-concept';
 import { Component, HostListener, OnDestroy, OnInit, ChangeDetectorRef } from "@angular/core"
 import { Router } from "@angular/router"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
@@ -146,6 +147,7 @@ interface SaleLinkSearchResult {
 
 
 interface CreateServiceOrderCandidateDraft {
+  customerSummary?: string;
   equipmentType: EquipmentType
   equipmentTypeOther: string | null
   brand: string | null
@@ -2980,6 +2982,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     }
     const nextCandidate = this.buildCreateServiceOrderCandidateDraft()
     if (this.editingCreateServiceOrderCandidateIndex !== null) {
+      nextCandidate.customerSummary = this.createServiceOrderCandidates[this.editingCreateServiceOrderCandidateIndex]?.customerSummary ?? ""
       this.createServiceOrderCandidates = this.createServiceOrderCandidates.map((entry, index) =>
         index === this.editingCreateServiceOrderCandidateIndex ? nextCandidate : entry,
       )
@@ -3077,6 +3080,7 @@ export class ReceptionPanel implements OnInit, OnDestroy {
     quoteItems: ServiceOrderAgreementComposerItem[]
     quoteItemsCount: number
     quoteTotal: number
+    customerSummary: string
   }> {
     return this.createServiceOrderCandidates.map((candidate, index) => ({
       index,
@@ -3092,7 +3096,17 @@ export class ReceptionPanel implements OnInit, OnDestroy {
       quoteItems: candidate.quoteItems,
       quoteItemsCount: candidate.quoteItems.length,
       quoteTotal: this.calculateQuoteItemsTotal(candidate.quoteItems),
+      customerSummary: this.getCreateOrderCustomerSummary(index),
     }))
+  }
+
+  getCreateOrderCustomerSummary(index: number): string {
+    return automaticCustomerConcept(this.getCreateOrderAgreementItems(index).map((line) => ({
+      type: line.type,
+      quantity: line.type === "product" ? line.quantity : 1,
+      productId: line.type === "product" ? line.productId : null,
+      name: line.type === "product" ? this.products.find(p => Number(p.id) === Number(line.productId))?.name || this.getProductLabel(line.productId) : "Servicio técnico",
+    })))
   }
 
   getCreateOrderCandidateQuoteItems(index: number): ServiceOrderAgreementComposerItem[] {

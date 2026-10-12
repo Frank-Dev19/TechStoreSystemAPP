@@ -1,32 +1,84 @@
-<section class="inbox-shell">
+<section
+  class="inbox-shell"
+  [class.inbox-shell--chat-open]="mobileChatOpen"
+  (keydown.escape)="contextDrawerOpen = false"
+>
   <h1 class="sr-only">Conversaciones de servicio técnico</h1>
 
   <aside class="thread-pane" aria-label="Conversaciones">
+    <header class="inbox-heading">
+      <h2>Chats</h2>
+      <button
+        type="button"
+        class="icon-button"
+        (click)="loadThreads()"
+        [disabled]="isLoadingThreads"
+        aria-label="Actualizar chats"
+        title="Actualizar"
+      >
+        <i class="fas fa-sync-alt" aria-hidden="true"></i>
+      </button>
+    </header>
+
     <div class="thread-search search-box">
       <i class="fas fa-search" aria-hidden="true"></i>
+
       <input
         type="search"
         [(ngModel)]="searchTerm"
+        (ngModelChange)="searchChanged()"
         [placeholder]="searchPlaceholder"
         aria-label="Buscar conversaciones"
       />
     </div>
 
-    <div class="pane-feedback" *ngIf="isLoadingThreads">
+    <nav class="inbox-filters" aria-label="Filtrar conversaciones">
+      <button
+        type="button"
+        *ngIf="!isTechnicianViewer"
+        [class.is-active]="folder === 'all'"
+        (click)="setFolder('all')"
+      >
+        Todos
+      </button>
+
+      <button type="button" [class.is-active]="folder === 'active'" (click)="setFolder('active')">
+        Activos
+      </button>
+
+      <button
+        type="button"
+        [class.is-active]="folder === 'archived'"
+        (click)="setFolder('archived')"
+      >
+        Archivados
+      </button>
+
+      <button
+        type="button"
+        [class.is-active]="unreadOnly"
+        [attr.aria-pressed]="unreadOnly"
+        (click)="toggleUnread()"
+      >
+        No leídos
+      </button>
+    </nav>
+
+    <div class="pane-feedback" role="status" *ngIf="isLoadingThreads">
       <span class="loading-dot"></span>
+
       Cargando conversaciones
     </div>
+
     <div class="pane-feedback pane-feedback--error" *ngIf="!isLoadingThreads && threadError">
       {{ threadError }}
     </div>
-    <div
-      class="pane-feedback"
-      *ngIf="!isLoadingThreads && !threadError && !filteredThreads.length"
-    >
+
+    <div class="pane-feedback" *ngIf="!isLoadingThreads && !threadError && !filteredThreads.length">
       No hay conversaciones para mostrar.
     </div>
 
-    <div class="thread-list" *ngIf="!isLoadingThreads && filteredThreads.length">
+    <div class="thread-list" *ngIf="filteredThreads.length">
       <button
         *ngFor="let thread of filteredThreads; trackBy: trackByThreadId"
         type="button"
@@ -40,20 +92,25 @@
         <span class="thread-row__content">
           <span class="thread-row__heading">
             <strong>{{ thread.clientAlias }}</strong>
+
             <time>{{ thread.lastMessageAt | date: 'HH:mm' }}</time>
           </span>
+
           <span class="thread-row__preview">
             <span>{{ thread.lastMessageText || 'Sin mensajes todavía' }}</span>
+
             <span class="thread-row__indicators">
               <span
                 class="order-count"
-                *ngIf="(thread.orders?.length || thread.serviceOrderIds?.length || 0) as orderCount"
+                *ngIf="thread.orders?.length || thread.serviceOrderIds?.length || 0 as orderCount"
                 [attr.aria-label]="orderCount + ' órdenes vinculadas'"
                 title="Órdenes vinculadas"
               >
                 <i class="fas fa-link" aria-hidden="true"></i>
+
                 {{ orderCount }}
               </span>
+
               <span
                 class="unread-count"
                 *ngIf="thread.unreadCount > 0"
@@ -64,10 +121,25 @@
               </span>
             </span>
           </span>
+
           <span class="thread-row__order">
-            {{ thread.serviceOrderCodes?.join(', ') || thread.serviceOrderCode || 'Sin orden vinculada' }}
+            {{
+              thread.serviceOrderCodes?.join(', ') ||
+                thread.serviceOrderCode ||
+                'Sin orden vinculada'
+            }}
           </span>
         </span>
+      </button>
+
+      <button
+        type="button"
+        class="history-button"
+        *ngIf="hasMoreThreads"
+        [disabled]="isLoadingThreads"
+        (click)="loadMoreThreads()"
+      >
+        {{ isLoadingThreads ? 'Cargando…' : 'Más conversaciones' }}
       </button>
     </div>
   </aside>
@@ -75,84 +147,134 @@
   <main class="chat-pane">
     <ng-container *ngIf="selectedThread as thread; else emptyThreadState">
       <header class="chat-header">
+        <button
+          type="button"
+          class="icon-button mobile-back"
+          (click)="backToList()"
+          aria-label="Volver a chats"
+        >
+          <i class="fas fa-arrow-left" aria-hidden="true"></i>
+        </button>
+
         <span class="avatar">{{ getInitials(thread.clientAlias) }}</span>
+
         <div class="chat-header__identity">
           <h2>{{ thread.clientAlias }}</h2>
+
           <p>{{ getThreadSecondaryMeta(thread) }}</p>
         </div>
-        <span
-          class="service-window"
-          [class.service-window--closed]="!isCustomerServiceWindowOpen"
-        >
+
+        <span class="service-window" [class.service-window--closed]="!isCustomerServiceWindowOpen">
           <span></span>
+
           {{ isCustomerServiceWindowOpen ? 'Ventana disponible' : 'Ventana cerrada' }}
         </span>
+
+        <button
+          type="button"
+          class="icon-button"
+          [attr.aria-expanded]="contextDrawerOpen"
+          aria-controls="chat-context"
+          (click)="contextDrawerOpen = !contextDrawerOpen"
+          title="Ver órdenes del cliente"
+          aria-label="Ver órdenes del cliente"
+        >
+          <i class="fas fa-info-circle" aria-hidden="true"></i>
+        </button>
       </header>
 
       <div class="chat-feedback" *ngIf="isLoadingMessages">
         <span class="loading-dot"></span>
+
         Cargando mensajes
       </div>
+
       <div class="chat-feedback chat-feedback--error" *ngIf="!isLoadingMessages && messageError">
         {{ messageError }}
       </div>
-      <div
-        class="chat-feedback"
-        *ngIf="!isLoadingMessages && !messageError && !messages.length"
-      >
+
+      <div class="chat-feedback" *ngIf="!isLoadingMessages && !messageError && !messages.length">
         <i class="far fa-comment-dots" aria-hidden="true"></i>
+
         <strong>Aún no hay mensajes</strong>
+
         <span>La conversación aparecerá aquí cuando el cliente escriba.</span>
       </div>
 
-      <div class="message-timeline" *ngIf="!isLoadingMessages && messages.length">
-        <article
-          *ngFor="let message of messages; trackBy: trackByMessageId"
-          class="message"
-          [class.message--outbound]="message.direction === 'OUTBOUND'"
+      <div
+        #timeline
+        class="message-timeline"
+        *ngIf="!isLoadingMessages && messages.length"
+        role="log"
+        aria-label="Historial de mensajes"
+      >
+        <button
+          type="button"
+          class="history-button"
+          *ngIf="hasOlderMessages"
+          [disabled]="isLoadingOlder"
+          (click)="loadOlderMessages()"
         >
-          <div class="message__bubble">
-            <div class="message__author" *ngIf="message.direction !== 'OUTBOUND'">
-              {{ message.authorDisplayName || formatStatus(message.authorRole) }}
-            </div>
+          {{ isLoadingOlder ? 'Cargando…' : 'Ver mensajes anteriores' }}
+        </button>
 
-            <p *ngIf="message.text">{{ message.text }}</p>
-
-            <div class="message__attachments" *ngIf="message.attachments.length">
-              <button
-                type="button"
-                *ngFor="let attachment of message.attachments"
-                (click)="downloadAttachment(attachment)"
-              >
-                <i class="fas fa-paperclip" aria-hidden="true"></i>
-                <span>{{ attachment.fileName }}</span>
-              </button>
-            </div>
-
-            <div class="message__meta">
-              <time>{{ message.createdAt | date: 'HH:mm' }}</time>
-              <i
-                *ngIf="message.direction === 'OUTBOUND'"
-                class="fas fa-check-double"
-                [class.delivery-read]="message.deliveryStatus === 'READ'"
-                [attr.title]="formatStatus(message.deliveryStatus)"
-              ></i>
-            </div>
+        <ng-container *ngFor="let message of messages; let i = index; trackBy: trackByMessageId">
+          <div class="date-divider" *ngIf="isNewDay(i)">
+            <time>{{ message.createdAt | date: 'dd MMM yyyy' }}</time>
           </div>
 
-        </article>
+          <article class="message" [class.message--outbound]="message.direction === 'OUTBOUND'">
+            <div class="message__bubble">
+              <div class="message__author" *ngIf="message.direction === 'OUTBOUND'">
+                {{ message.authorDisplayName || formatStatus(message.authorRole) }}
+              </div>
+
+              <p *ngIf="message.text">{{ message.text }}</p>
+
+              <div class="message__attachments" *ngIf="message.attachments.length">
+                <button
+                  type="button"
+                  *ngFor="let attachment of message.attachments"
+                  (click)="downloadAttachment(attachment)"
+                >
+                  <i class="fas fa-paperclip" aria-hidden="true"></i>
+
+                  <span>{{ attachment.fileName }}</span>
+                </button>
+              </div>
+
+              <div class="message__meta">
+                <time>{{ message.createdAt | date: 'HH:mm' }}</time>
+
+                <i
+                  *ngIf="message.direction === 'OUTBOUND'"
+                  [class]="deliveryIcon(message)"
+                  [class.delivery-read]="message.deliveryStatus === 'READ'"
+                  [attr.title]="formatStatus(message.deliveryStatus)"
+                ></i>
+              </div>
+            </div>
+          </article>
+        </ng-container>
       </div>
 
       <footer class="composer">
+        <div class="archive-notice" *ngIf="thread.canSend === false">
+          <i class="fas fa-archive" aria-hidden="true"></i> Chat archivado · solo lectura
+        </div>
+
         <div class="window-warning" *ngIf="showClosedWindowWarning">
           <i class="fas fa-clock" aria-hidden="true"></i>
+
           {{ closedWindowMessage }}
         </div>
 
         <div class="draft-attachments" *ngIf="draftAttachments.length">
           <div class="draft-attachment" *ngFor="let attachment of draftAttachments; let i = index">
             <i class="fas fa-file" aria-hidden="true"></i>
+
             <span>{{ attachment.file.name }}</span>
+
             <button type="button" (click)="removeDraftAttachment(i)" aria-label="Quitar adjunto">
               <i class="fas fa-times"></i>
             </button>
@@ -162,25 +284,28 @@
         <div class="composer__bar">
           <label
             class="icon-button"
-            [class.icon-button--disabled]="!isCustomerServiceWindowOpen"
+            [class.icon-button--disabled]="!canCompose"
             title="Adjuntar archivo"
           >
             <i class="fas fa-paperclip" aria-hidden="true"></i>
+
             <span class="sr-only">Adjuntar archivo</span>
+
             <input
               type="file"
               multiple
               hidden
               (change)="onFilesSelected($event)"
-              [disabled]="!isCustomerServiceWindowOpen"
+              [disabled]="!canCompose"
             />
           </label>
 
           <textarea
             [(ngModel)]="draftMessage"
+            (keydown)="composerKeydown($event)"
             rows="1"
             placeholder="Escribe un mensaje"
-            [disabled]="!isCustomerServiceWindowOpen"
+            [disabled]="!canCompose"
             aria-label="Mensaje para el cliente"
           ></textarea>
 
@@ -188,34 +313,57 @@
             type="button"
             class="send-button"
             [disabled]="
-              isSendingMessage ||
-              !isCustomerServiceWindowOpen ||
-              (!draftMessage.trim() && !draftAttachments.length)
+              isSendingMessage || !canCompose || (!draftMessage.trim() && !draftAttachments.length)
             "
             (click)="sendMessage()"
             [attr.aria-label]="isSendingMessage ? 'Enviando mensaje' : 'Enviar mensaje'"
           >
-            <i [class]="isSendingMessage ? 'fas fa-circle-notch fa-spin' : 'fas fa-paper-plane'"></i>
+            <i
+              [class]="isSendingMessage ? 'fas fa-circle-notch fa-spin' : 'fas fa-paper-plane'"
+            ></i>
           </button>
         </div>
       </footer>
     </ng-container>
   </main>
 
-  <aside class="orders-pane" aria-label="Órdenes vinculadas">
+  <button
+    type="button"
+    class="context-backdrop"
+    *ngIf="contextDrawerOpen"
+    (click)="contextDrawerOpen = false"
+    aria-label="Cerrar contexto"
+  ></button>
+  <aside
+    id="chat-context"
+    class="orders-pane"
+    *ngIf="contextDrawerOpen"
+    aria-label="Contexto del cliente"
+  >
     <ng-container *ngIf="selectedThread as thread; else emptyContextState">
       <header class="orders-pane__header">
         <div>
           <p>{{ contextCardTitle }}</p>
+
           <h2>Órdenes vinculadas</h2>
         </div>
-        <span>{{ threadOrders.length }}</span>
+
+        <button
+          type="button"
+          class="icon-button"
+          (click)="contextDrawerOpen = false"
+          aria-label="Cerrar órdenes"
+        >
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
       </header>
 
       <div class="customer-summary">
         <span class="avatar avatar--small">{{ getInitials(thread.clientAlias) }}</span>
+
         <div>
           <strong>{{ thread.clientAlias }}</strong>
+
           <span *ngIf="showSensitiveCustomerData">{{ thread.clientPhone || 'Sin teléfono' }}</span>
         </div>
       </div>
@@ -223,6 +371,29 @@
       <div class="pane-feedback" *ngIf="!threadOrders.length">
         Este hilo todavía no tiene órdenes vinculadas.
       </div>
+
+      <section class="link-order" *ngIf="!isTechnicianViewer">
+        <label for="link-order-search">Vincular una orden existente</label>
+
+        <input
+          id="link-order-search"
+          type="search"
+          [(ngModel)]="orderSearch"
+          (ngModelChange)="searchOrders()"
+          placeholder="Código o cliente (mínimo 3 letras)"
+        />
+
+        <p *ngIf="linkError" class="pane-feedback--error" role="alert">{{ linkError }}</p>
+
+        <button
+          type="button"
+          *ngFor="let order of linkableOrders"
+          [disabled]="linkingOrder"
+          (click)="linkOrder(order)"
+        >
+          {{ order.code }} · {{ order.clientSnapshotName }}
+        </button>
+      </section>
 
       <div class="linked-orders">
         <article
@@ -232,30 +403,35 @@
         >
           <div class="linked-order__top">
             <strong>{{ order.code }}</strong>
+
             <span class="order-state" [class.order-state--inactive]="!order.isActive">
               {{ order.isActive ? 'Activa' : 'Finalizada' }}
             </span>
           </div>
+
           <dl>
             <div>
               <dt>Equipo</dt>
+
               <dd>{{ order.equipmentLabel }}</dd>
             </div>
+
             <div>
               <dt>Técnico</dt>
+
               <dd>{{ order.assignedTechnicianAlias || 'Sin asignar' }}</dd>
             </div>
+
             <div>
               <dt>Etapa técnica</dt>
+
               <dd>{{ formatStatus(order.technicalStatus) }}</dd>
             </div>
           </dl>
-          <button
-            type="button"
-            class="order-detail-button"
-            (click)="openOrderDetail(order)"
-          >
+
+          <button type="button" class="order-detail-button" (click)="openOrderDetail(order)">
             Ver detalles
+
             <i class="fas fa-arrow-right" aria-hidden="true"></i>
           </button>
         </article>
@@ -267,7 +443,9 @@
 <ng-template #emptyThreadState>
   <div class="chat-empty">
     <span class="chat-empty__icon"><i class="far fa-comments"></i></span>
+
     <h2>Selecciona una conversación</h2>
+
     <p>Los mensajes y adjuntos aparecerán aquí.</p>
   </div>
 </ng-template>
@@ -275,6 +453,7 @@
 <ng-template #emptyContextState>
   <div class="orders-empty">
     <i class="fas fa-link" aria-hidden="true"></i>
+
     <span>Selecciona una conversación para ver sus órdenes.</span>
   </div>
 </ng-template>
@@ -290,32 +469,55 @@
     <header class="order-modal__header">
       <div>
         <p>Orden de servicio</p>
+
         <h2 id="order-detail-title">{{ selectedOrderDetail?.code || 'Cargando detalles' }}</h2>
       </div>
-      <button type="button" class="order-modal__close" (click)="closeOrderDetail()" aria-label="Cerrar detalles">
+
+      <button
+        type="button"
+        class="order-modal__close"
+        (click)="closeOrderDetail()"
+        aria-label="Cerrar detalles"
+      >
         <i class="fas fa-times" aria-hidden="true"></i>
       </button>
     </header>
 
     <div class="order-modal__loading" *ngIf="isLoadingOrderDetail">
       <span class="loading-dot"></span>
+
       Cargando información de la orden
     </div>
 
     <div class="order-modal__error" *ngIf="!isLoadingOrderDetail && orderDetailError">
       <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+
       {{ orderDetailError }}
     </div>
 
     <ng-container *ngIf="!isLoadingOrderDetail && selectedOrderDetail as detail">
       <nav class="order-tabs" aria-label="Secciones del detalle">
-        <button type="button" [class.order-tabs__button--active]="orderDetailTab === 'general'" (click)="setOrderDetailTab('general')">
+        <button
+          type="button"
+          [class.order-tabs__button--active]="orderDetailTab === 'general'"
+          (click)="setOrderDetailTab('general')"
+        >
           Detalles generales
         </button>
-        <button type="button" [class.order-tabs__button--active]="orderDetailTab === 'diagnosis'" (click)="setOrderDetailTab('diagnosis')">
+
+        <button
+          type="button"
+          [class.order-tabs__button--active]="orderDetailTab === 'diagnosis'"
+          (click)="setOrderDetailTab('diagnosis')"
+        >
           Diagnóstico
         </button>
-        <button type="button" [class.order-tabs__button--active]="orderDetailTab === 'agreement'" (click)="setOrderDetailTab('agreement')">
+
+        <button
+          type="button"
+          [class.order-tabs__button--active]="orderDetailTab === 'agreement'"
+          (click)="setOrderDetailTab('agreement')"
+        >
           Cotización
         </button>
       </nav>
@@ -323,19 +525,46 @@
       <div class="order-modal__body">
         <section *ngIf="orderDetailTab === 'general'" class="order-detail-section">
           <dl class="order-detail-grid">
-            <div><dt>Equipo</dt><dd>{{ formatEquipmentType(detail.equipmentType, detail.equipmentTypeOther) }}</dd></div>
-            <div><dt>Tipo de servicio</dt><dd>{{ formatServiceType(detail.serviceType) }}</dd></div>
-            <div><dt>Marca y modelo</dt><dd>{{ detail.brand || 'Sin marca' }} · {{ detail.model || 'Sin modelo' }}</dd></div>
-            <div><dt>Número de serie</dt><dd>{{ detail.serialNumber || 'No registrado' }}</dd></div>
-            <div><dt>Estado actual</dt><dd>{{ formatStatus(detail.technicalStatus) }}</dd></div>
-            <div><dt>Técnico asignado</dt><dd>{{ detail.assignedToTechnicianName || 'Sin asignar' }}</dd></div>
+            <div>
+              <dt>Equipo</dt>
+              <dd>{{ formatEquipmentType(detail.equipmentType, detail.equipmentTypeOther) }}</dd>
+            </div>
+
+            <div>
+              <dt>Tipo de servicio</dt>
+              <dd>{{ formatServiceType(detail.serviceType) }}</dd>
+            </div>
+
+            <div>
+              <dt>Marca y modelo</dt>
+              <dd>{{ detail.brand || 'Sin marca' }} · {{ detail.model || 'Sin modelo' }}</dd>
+            </div>
+
+            <div>
+              <dt>Número de serie</dt>
+              <dd>{{ detail.serialNumber || 'No registrado' }}</dd>
+            </div>
+
+            <div>
+              <dt>Estado actual</dt>
+              <dd>{{ formatStatus(detail.technicalStatus) }}</dd>
+            </div>
+
+            <div>
+              <dt>Técnico asignado</dt>
+              <dd>{{ detail.assignedToTechnicianName || 'Sin asignar' }}</dd>
+            </div>
           </dl>
+
           <div class="order-note">
             <span>Falla o solicitud inicial</span>
+
             <p>{{ detail.initialIssue || 'No se registró una descripción inicial.' }}</p>
           </div>
+
           <div class="order-note">
             <span>Nota de la orden</span>
+
             <p>{{ detail.notes || 'No hay notas adicionales.' }}</p>
           </div>
         </section>
@@ -343,21 +572,34 @@
         <section *ngIf="orderDetailTab === 'diagnosis'" class="order-detail-section">
           <div class="detail-empty" *ngIf="!orderHasDiagnosisFlow">
             <i class="fas fa-tools" aria-hidden="true"></i>
+
             <strong>Este servicio no requiere diagnóstico</strong>
-            <span>Las órdenes express continúan directamente a cotización, sin etapa de diagnóstico.</span>
+
+            <span
+              >Las órdenes express continúan directamente a cotización, sin etapa de
+              diagnóstico.</span
+            >
           </div>
+
           <div class="detail-empty" *ngIf="orderHasDiagnosisFlow && !selectedOrderDiagnoses.length">
             <i class="fas fa-stethoscope" aria-hidden="true"></i>
+
             <strong>Aún no hay detalles de diagnóstico</strong>
+
             <span>La información aparecerá cuando el técnico registre el diagnóstico.</span>
           </div>
+
           <article class="history-entry" *ngFor="let diagnosis of selectedOrderDiagnoses">
             <header>
               <strong>Diagnóstico {{ diagnosis.sequenceNumber }}</strong>
+
               <span *ngIf="diagnosis.serviceOrderItem">{{ diagnosis.serviceOrderItem.code }}</span>
+
               <span>{{ formatStatus(diagnosis.status) }}</span>
             </header>
+
             <h3>{{ diagnosis.summary }}</h3>
+
             <p>{{ diagnosis.details || 'Sin detalles adicionales.' }}</p>
           </article>
         </section>
@@ -365,54 +607,90 @@
         <section *ngIf="orderDetailTab === 'agreement'" class="order-detail-section">
           <div class="detail-empty" *ngIf="!selectedOrderAgreements.length">
             <i class="fas fa-file-signature" aria-hidden="true"></i>
+
             <strong>Aún no hay una cotización</strong>
+
             <span>Los términos y montos aparecerán cuando se registre una propuesta.</span>
           </div>
+
           <article class="history-entry" *ngFor="let agreement of selectedOrderAgreements">
             <header>
               <strong>Cotización {{ agreement.sequenceNumber }}</strong>
+
               <span>{{ formatStatus(agreement.status) }}</span>
             </header>
+
             <div class="agreement-total">
               <span>Total acordado</span>
-              <strong>{{ agreement.totalAmount | currency: (agreement.currency || 'PEN') : 'symbol-narrow' }}</strong>
+
+              <strong>{{
+                agreement.totalAmount | currency: agreement.currency || 'PEN' : 'symbol-narrow'
+              }}</strong>
             </div>
 
             <div class="agreement-meta">
               <div>
                 <span>Fecha de la cotización</span>
-                <strong>{{ agreement.agreedAt ? (agreement.agreedAt | date: 'dd/MM/yyyy, HH:mm') : 'Pendiente' }}</strong>
+
+                <strong>{{
+                  agreement.agreedAt
+                    ? (agreement.agreedAt | date: 'dd/MM/yyyy, HH:mm')
+                    : 'Pendiente'
+                }}</strong>
               </div>
+
               <div>
                 <span>Moneda</span>
+
                 <strong>{{ agreement.currency || 'PEN' }}</strong>
               </div>
             </div>
 
             <section class="agreement-lines" *ngIf="agreement.serviceItems?.length">
               <h4>Servicios</h4>
+
               <div class="agreement-line" *ngFor="let item of agreement.serviceItems">
                 <div>
                   <strong>{{ item.serviceNameSnapshot }}</strong>
-                  <span>{{ item.serviceDescriptionSnapshot || item.notes || 'Sin descripción adicional.' }}</span>
+
+                  <span>{{
+                    item.serviceDescriptionSnapshot || item.notes || 'Sin descripción adicional.'
+                  }}</span>
                 </div>
+
                 <div class="agreement-line__numbers">
                   <span>{{ item.estimatedHours || 0 }} h</span>
-                  <strong>{{ item.lineTotal | currency: (agreement.currency || 'PEN') : 'symbol-narrow' }}</strong>
+
+                  <strong>{{
+                    item.lineTotal | currency: agreement.currency || 'PEN' : 'symbol-narrow'
+                  }}</strong>
                 </div>
               </div>
             </section>
 
             <section class="agreement-lines" *ngIf="agreement.productItems?.length">
               <h4>Productos y repuestos</h4>
+
               <div class="agreement-line" *ngFor="let item of agreement.productItems">
                 <div>
                   <strong>{{ item.productNameSnapshot }}</strong>
-                  <span>{{ item.productDescriptionSnapshot || item.notes || 'Sin descripción adicional.' }}</span>
+
+                  <span>{{
+                    item.productDescriptionSnapshot || item.notes || 'Sin descripción adicional.'
+                  }}</span>
                 </div>
+
                 <div class="agreement-line__numbers">
-                  <span>{{ item.quantity }} × {{ item.unitPrice | currency: (agreement.currency || 'PEN') : 'symbol-narrow' }}</span>
-                  <strong>{{ item.lineTotal | currency: (agreement.currency || 'PEN') : 'symbol-narrow' }}</strong>
+                  <span
+                    >{{ item.quantity }} ×
+                    {{
+                      item.unitPrice | currency: agreement.currency || 'PEN' : 'symbol-narrow'
+                    }}</span
+                  >
+
+                  <strong>{{
+                    item.lineTotal | currency: agreement.currency || 'PEN' : 'symbol-narrow'
+                  }}</strong>
                 </div>
               </div>
             </section>
@@ -426,10 +704,13 @@
 
             <div class="agreement-notes">
               <span>Notas comerciales</span>
+
               <p>{{ agreement.notes || 'Sin notas comerciales.' }}</p>
             </div>
+
             <div class="agreement-notes" *ngIf="agreement.clientNotes">
               <span>Respuesta del cliente</span>
+
               <p>{{ agreement.clientNotes }}</p>
             </div>
           </article>

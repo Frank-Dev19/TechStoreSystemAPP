@@ -156,7 +156,7 @@ export const AdminLayoutRoutes: Routes = [
     component: ServiceOrderInboxPage,
     canActivate: [RoleGuard, PermissionGuard],
     data: {
-      navbarTitle: 'BANDEJA DE ÓRDENES DE SERVICIO',
+      navbarTitle: 'CHATS',
       allowedRoles: [
         ...RECEPTIONIST_ROLE_NAMES,
         ...TECHNICIAN_ROLE_NAMES,

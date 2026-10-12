@@ -7,19 +7,9 @@ import {
 
 export type ServiceOrderInboxDirection = 'INBOUND' | 'OUTBOUND';
 export type ServiceOrderInboxAuthorRole =
-  | 'CLIENT'
-  | 'TECHNICIAN'
-  | 'RECEPTION'
-  | 'SUPERVISOR'
-  | 'SYSTEM';
+  'CLIENT' | 'TECHNICIAN' | 'RECEPTION' | 'SUPERVISOR' | 'SYSTEM';
 export type ServiceOrderInboxDeliveryStatus =
-  | 'QUEUED'
-  | 'SENT'
-  | 'DELIVERED'
-  | 'READ'
-  | 'RECEIVED'
-  | 'FAILED'
-  | 'SKIPPED';
+  'QUEUED' | 'SENT' | 'DELIVERED' | 'READ' | 'RECEIVED' | 'FAILED' | 'SKIPPED';
 export type ServiceOrderInboxAttachmentType = 'image' | 'pdf' | 'audio' | 'document';
 
 export interface ServiceOrderInboxAttachment {
@@ -67,6 +57,8 @@ export interface ServiceOrderInboxMessage {
 }
 
 export interface ServiceOrderInboxThreadSummary {
+  canSend?: boolean;
+  isArchived?: boolean;
   id: number;
   serviceOrderId: number | null;
   serviceOrderCode: string | null;
@@ -94,4 +86,6 @@ export interface ServiceOrderInboxThreadSummary {
 export interface ServiceOrderInboxThreadMessagesResponse {
   thread: ServiceOrderInboxThreadSummary;
   messages: ServiceOrderInboxMessage[];
+  hasMore?: boolean;
+  nextCursor?: number | null;
 }

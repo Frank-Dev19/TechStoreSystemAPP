@@ -1,6 +1,18 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { auditTime, catchError, finalize, forkJoin, of, Subscription } from 'rxjs';
+import {
+  auditTime,
+  catchError,
+  debounceTime,
+  distinctUntilChanged,
+  finalize,
+  forkJoin,
+  map,
+  of,
+  Subject,
+  Subscription,
+  tap,
+} from 'rxjs';
 
 import {
   ServiceOrderInboxAttachment,
@@ -18,6 +30,7 @@ import { ServiceOrderInboxService } from '../../services/service-orders/service-
 import { ServiceOrderService } from '../../services/service-orders/service-order.service';
 import {
   ADMIN_ROLE_NAMES,
+  RECEPTIONIST_ROLE_NAMES,
   hasAnyRole,
   SUPERVISOR_ROLE_NAMES,
   TECHNICIAN_ROLE_NAMES,
@@ -133,6 +146,29 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
   threadError = '';
   messageError = '';
 
+  @ViewChild('timeline') timeline?: ElementRef<HTMLElement>;
+  folder: 'active' | 'archived' | 'all' = 'active';
+  unreadOnly = false;
+  totalThreads = 0;
+  threadPage = 1;
+  hasOlderMessages = false;
+  olderCursor: number | null = null;
+  isLoadingOlder = false;
+  mobileChatOpen = false;
+  contextDrawerOpen = false;
+  orderSearch = '';
+  linkableOrders: ServiceOrder[] = [];
+  linkingOrder = false;
+  linkError = '';
+  private readonly searches = new Subject<string>();
+  private readonly orderSearches = new Subject<string>();
+  private readonly drafts = new Map<
+    number,
+    { text: string; attachments: InboxDraftAttachment[] }
+  >();
+  private listVersion = 0;
+  private detailVersion = 0;
+  private detailRequest?: Subscription;
   private readonly subscriptions = new Subscription();
 
   constructor(
@@ -146,6 +182,30 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.folder = this.isTechnicianViewer ? 'active' : 'all';
+    this.subscriptions.add(
+      this.searches
+        .pipe(debounceTime(500), distinctUntilChanged())
+        .subscribe(() => this.loadThreads()),
+    );
+    this.subscriptions.add(
+      this.orderSearches.pipe(debounceTime(500), distinctUntilChanged()).subscribe((search) => {
+        if (search.trim().length < 3) {
+          this.linkableOrders = [];
+          return;
+        }
+        this.subscriptions.add(
+          this.serviceOrderService
+            .findAll({ search: search.trim(), page: 1, limit: 20 })
+            .subscribe({
+              next: (response) => {
+                if (this.orderSearch === search) this.linkableOrders = response.data;
+              },
+              error: () => (this.linkError = 'No pudimos buscar las órdenes.'),
+            }),
+        );
+      }),
+    );
     this.subscribeToInboxChanges();
     const queryMap = this.route.snapshot.queryParamMap;
     const serviceOrderId = Number(queryMap.get('serviceOrderId') ?? 0);
@@ -162,19 +222,32 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
     this.clearAttachmentPreviews();
-    this.clearDraftAttachments();
+    this.saveDraft();
+    this.drafts.forEach((draft) =>
+      draft.attachments.forEach((attachment) => {
+        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      }),
+    );
+    this.drafts.clear();
+    this.searches.complete();
+    this.orderSearches.complete();
   }
 
   get isTechnicianViewer(): boolean {
-    return hasAnyRole(this.currentUserService.value?.roles, TECHNICIAN_ROLE_NAMES);
+    const roles = this.currentUserService.value?.roles;
+    return (
+      hasAnyRole(roles, TECHNICIAN_ROLE_NAMES) &&
+      !hasAnyRole(roles, [
+        ...ADMIN_ROLE_NAMES,
+        ...SUPERVISOR_ROLE_NAMES,
+        ...RECEPTIONIST_ROLE_NAMES,
+      ])
+    );
   }
 
   get showSensitiveCustomerData(): boolean {
     const roles = this.currentUserService.value?.roles;
-    return (
-      hasAnyRole(roles, SUPERVISOR_ROLE_NAMES) ||
-      hasAnyRole(roles, ADMIN_ROLE_NAMES)
-    );
+    return hasAnyRole(roles, SUPERVISOR_ROLE_NAMES) || hasAnyRole(roles, ADMIN_ROLE_NAMES);
   }
 
   get searchPlaceholder(): string {
@@ -200,62 +273,77 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
   }
 
   get filteredThreads(): ServiceOrderInboxThreadSummary[] {
-    const normalized = this.searchTerm.trim().toLowerCase();
-    if (!normalized) {
-      return this.threads;
-    }
-
-    return this.threads.filter((thread) => {
-      const haystack = [
-        thread.clientAlias,
-        thread.equipmentLabel,
-        thread.serviceOrderCode ?? '',
-        ...(thread.serviceOrderCodes ?? []),
-        thread.lastMessageText ?? '',
-        this.showSensitiveCustomerData ? thread.clientPhone ?? '' : '',
-      ]
-        .join(' ')
-        .toLowerCase();
-
-      return haystack.includes(normalized);
-    });
+    return this.threads;
+  }
+  get canCompose(): boolean {
+    return (
+      !!this.selectedThread &&
+      this.selectedThread.canSend !== false &&
+      this.isCustomerServiceWindowOpen
+    );
+  }
+  get hasMoreThreads(): boolean {
+    return this.threads.length < this.totalThreads;
+  }
+  searchChanged(): void {
+    this.searches.next(this.searchTerm);
+  }
+  setFolder(folder: 'active' | 'archived' | 'all'): void {
+    this.detailRequest?.unsubscribe();
+    ++this.detailVersion;
+    this.clearSelection();
+    this.folder = folder;
+    this.loadThreads();
+  }
+  toggleUnread(): void {
+    this.unreadOnly = !this.unreadOnly;
+    this.loadThreads();
+  }
+  loadMoreThreads(): void {
+    if (!this.isLoadingThreads && this.hasMoreThreads) this.loadThreads(null, true);
   }
 
-  loadThreads(preferredThreadId?: number | null): void {
+  loadThreads(preferredThreadId?: number | null, append = false, refresh = false): void {
+    if (refresh && this.isLoadingThreads) return;
+    const version = ++this.listVersion;
+    const page = append ? this.threadPage + 1 : 1;
     this.isLoadingThreads = true;
     this.threadError = '';
-
-    const request = this.inboxService
-      .listThreads({ page: 1, limit: 100 })
-      .pipe(finalize(() => (this.isLoadingThreads = false)))
-      .subscribe({
-        next: ({ data }) => {
-          this.threads = data ?? [];
-          const nextThread =
-            this.threads.find((thread) => thread.id === preferredThreadId) ??
-            (this.selectedThread ? this.threads.find((thread) => thread.id === this.selectedThread?.id) : null) ??
-            this.threads[0] ??
-            null;
-
-          if (!nextThread) {
-            this.selectedThread = null;
-            this.messages = [];
-            this.threadOrders = [];
-            return;
-          }
-
-          this.selectThread(nextThread, false);
-        },
-        error: () => {
-          this.threadError = 'No pudimos cargar las conversaciones.';
-          this.threads = [];
-          this.selectedThread = null;
-          this.messages = [];
-          this.threadOrders = [];
-        },
-      });
-
-    this.subscriptions.add(request);
+    const query = { limit: 30, folder: this.folder, search: this.searchTerm.trim(), unread: this.unreadOnly };
+    // Refresh only explicitly loaded pages and preserve pagination position.
+    const source = refresh
+      ? forkJoin(Array.from({ length: this.threadPage }, (_, index) => this.inboxService.listThreads({ ...query, page: index + 1 }))).pipe(map(pages => ({ ...pages[0], data: pages.flatMap(result => result.data ?? []) })))
+      : this.inboxService.listThreads({ ...query, page });
+    this.subscriptions.add(
+      source
+        .pipe(
+          finalize(() => {
+            if (version === this.listVersion) this.isLoadingThreads = false;
+          }),
+        )
+        .subscribe({
+          next: ({ data, total }) => {
+            if (version !== this.listVersion) return;
+            if (!refresh) this.threadPage = page;
+            this.totalThreads = total;
+            const combined = append ? [...this.threads, ...(data ?? [])] : (data ?? []);
+            this.threads = [
+              ...new Map(combined.map((thread) => [Number(thread.id), thread])).values(),
+            ];
+            const preferred = this.threads.find(
+              (thread) => Number(thread.id) === Number(preferredThreadId),
+            );
+            if (preferred && preferred.id !== this.selectedThread?.id)
+              this.selectThread(preferred, false);
+            else if (!this.selectedThread && this.threads.length)
+              this.selectThread(this.threads[0], false);
+          },
+          error: () => {
+            if (version === this.listVersion)
+              this.threadError = 'No pudimos cargar las conversaciones. Intenta actualizar.';
+          },
+        }),
+    );
   }
 
   loadThreadFromOrder(serviceOrderId: number): void {
@@ -267,9 +355,9 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
       .pipe(finalize(() => (this.isLoadingThreads = false)))
       .subscribe({
         next: (thread) => {
-          this.selectedThread = thread;
+          this.selectThread(thread, false);
+          this.mobileChatOpen = true;
           this.loadThreads(thread.id);
-          this.loadThreadDetail(thread.id, false);
         },
         error: () => {
           this.threadError = 'No pudimos resolver la conversación para esa orden.';
@@ -281,6 +369,15 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
   }
 
   selectThread(thread: ServiceOrderInboxThreadSummary, syncRoute = true): void {
+    this.saveDraft();
+    const saved = this.drafts.get(Number(thread.id));
+    this.draftMessage = saved?.text ?? '';
+    this.draftAttachments = saved?.attachments ?? [];
+    this.contextDrawerOpen = false;
+    this.linkableOrders = [];
+    this.orderSearch = '';
+    this.linkError = '';
+    this.mobileChatOpen = syncRoute;
     this.selectedThread = { ...thread, unreadCount: 0 };
     this.clearThreadUnreadCount(thread.id);
     this.loadThreadDetail(thread.id, syncRoute);
@@ -292,24 +389,38 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
       return;
     }
 
-    if (!this.isCustomerServiceWindowOpen) {
-      this.messageError = this.closedWindowMessage;
+    if (!this.canCompose) {
+      this.messageError =
+        this.selectedThread.canSend === false
+          ? 'El chat archivado es de solo lectura.'
+          : this.closedWindowMessage;
       return;
     }
 
+    const threadId = Number(this.selectedThread.id);
+    const sentDraft = this.draftAttachments;
     this.isSendingMessage = true;
     const attachments = this.draftAttachments.map((attachment) => attachment.file);
     const request = this.inboxService
-      .sendMessage(this.selectedThread.id, text, attachments)
+      .sendMessage(threadId, text, attachments)
       .pipe(finalize(() => (this.isSendingMessage = false)))
       .subscribe({
         next: () => {
-          this.draftMessage = '';
-          this.clearDraftAttachments();
-          this.loadThreadDetail(this.selectedThread!.id, false);
+          sentDraft.forEach((attachment) => {
+            if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+          });
+          this.drafts.delete(threadId);
+          if (Number(this.selectedThread?.id) === threadId) {
+            if (this.draftMessage.trim() === text) this.draftMessage = '';
+            this.draftAttachments = this.draftAttachments.filter(
+              (attachment) => !sentDraft.includes(attachment),
+            );
+            this.loadThreadDetail(threadId, false, true);
+          }
         },
         error: (error) => {
-          this.messageError = error?.error?.message || 'No pudimos enviar el mensaje.';
+          if (Number(this.selectedThread?.id) === threadId)
+            this.messageError = error?.error?.message || 'No pudimos enviar el mensaje.';
         },
       });
 
@@ -462,79 +573,228 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
     if (value === 'OTHER' && other?.trim()) {
       return other.trim();
     }
-    return value ? (EQUIPMENT_TYPE_LABELS[value] ?? 'Equipo no especificado') : 'Equipo no especificado';
+    return value
+      ? (EQUIPMENT_TYPE_LABELS[value] ?? 'Equipo no especificado')
+      : 'Equipo no especificado';
   }
 
-  private loadThreadDetail(threadId: number, syncRoute: boolean): void {
-    this.isLoadingMessages = true;
+  private loadThreadDetail(threadId: number, syncRoute: boolean, refresh = false): void {
+    this.detailRequest?.unsubscribe();
+    const version = ++this.detailVersion;
+    if (!refresh) {
+      this.isLoadingMessages = true;
+      this.messages = [];
+      this.clearAttachmentPreviews();
+    }
     this.messageError = '';
-
-    const request = forkJoin({
+    const wasNearBottom = this.isNearBottom();
+    this.detailRequest = forkJoin({
       response: this.inboxService.getMessages(threadId),
-      orders: this.inboxService.getThreadOrders(threadId),
+      orders: refresh ? of(null) : this.inboxService.getThreadOrders(threadId),
       markRead: this.inboxService.markRead(threadId).pipe(catchError(() => of({ ok: false }))),
     })
-      .pipe(finalize(() => (this.isLoadingMessages = false)))
+      .pipe(
+        finalize(() => {
+          if (version === this.detailVersion) this.isLoadingMessages = false;
+        }),
+      )
       .subscribe({
         next: ({ response, orders }) => {
+          if (
+            version !== this.detailVersion ||
+            Number(this.selectedThread?.id) !== Number(threadId)
+          )
+            return;
           this.selectedThread = { ...response.thread, unreadCount: 0 };
-          this.messages = response.messages ?? [];
-          this.messageError = '';
+          const latest = response.messages ?? [];
+          const gap =
+            refresh &&
+            response.hasMore &&
+            latest.length &&
+            this.messages.length &&
+            Number(latest[0].id) > Number(this.messages[this.messages.length - 1].id);
+          this.messages = this.mergeMessages(refresh && !gap ? this.messages : [], latest);
+          if (gap) {
+            this.hasOlderMessages = response.hasMore ?? false;
+            this.olderCursor = response.nextCursor ?? null;
+          }
+          if (!refresh) {
+            this.hasOlderMessages = response.hasMore ?? false;
+            this.olderCursor = response.nextCursor ?? null;
+          }
           this.threadOrders = orders ?? response.thread.orders ?? [];
           this.threads = this.threads.map((thread) =>
-            thread.id === response.thread.id ? { ...response.thread, unreadCount: 0 } : thread,
+            Number(thread.id) === Number(threadId) ? this.selectedThread! : thread,
           );
-          this.clearAttachmentPreviews();
           this.hydrateAttachmentPreviews(this.messages);
-          if (syncRoute) {
+          if (!refresh || wasNearBottom) this.scrollToLatest();
+          if (syncRoute)
             void this.router.navigate([], {
               relativeTo: this.route,
               queryParams: {
-                threadId: response.thread.id,
+                threadId,
                 serviceOrderId: response.thread.serviceOrderId ?? undefined,
               },
               queryParamsHandling: 'merge',
               replaceUrl: true,
             });
-          }
         },
-        error: () => {
-          this.messageError = 'No pudimos cargar el detalle de la conversación.';
-          this.messages = [];
-          this.threadOrders = [];
+        error: (error) => {
+          if (
+            version !== this.detailVersion ||
+            Number(this.selectedThread?.id) !== Number(threadId)
+          )
+            return;
+          if (error?.status === 403 || error?.status === 404) this.clearSelection();
+          this.messageError = 'No pudimos cargar el chat. Puede haber cambiado su asignación.';
         },
       });
+    this.subscriptions.add(this.detailRequest);
+  }
 
-    this.subscriptions.add(request);
+  loadOlderMessages(): void {
+    const threadId = this.selectedThread?.id,
+      cursor = this.olderCursor;
+    if (!threadId || !cursor || this.isLoadingOlder) return;
+    const version = this.detailVersion;
+    const previousHeight = this.timeline?.nativeElement.scrollHeight ?? 0;
+    const previousTop = this.timeline?.nativeElement.scrollTop ?? 0;
+    this.isLoadingOlder = true;
+    this.subscriptions.add(
+      this.inboxService
+        .getMessages(threadId, { limit: 50, beforeId: cursor })
+        .pipe(finalize(() => (this.isLoadingOlder = false)))
+        .subscribe({
+          next: (response) => {
+            if (version !== this.detailVersion || this.selectedThread?.id !== threadId) return;
+            this.messages = this.mergeMessages(response.messages, this.messages);
+            this.hasOlderMessages = response.hasMore ?? false;
+            this.olderCursor = response.nextCursor ?? null;
+            this.hydrateAttachmentPreviews(response.messages);
+            requestAnimationFrame(() => {
+              const element = this.timeline?.nativeElement;
+              if (element && this.selectedThread?.id === threadId)
+                element.scrollTop = previousTop + element.scrollHeight - previousHeight;
+            });
+          },
+          error: () => (this.messageError = 'No pudimos cargar los mensajes anteriores.'),
+        }),
+    );
   }
 
   private subscribeToInboxChanges(): void {
-    const request = this.inboxService
-      .watchChanges()
-      .pipe(auditTime(250))
-      .subscribe(() => {
-        const selectedThreadId = this.selectedThread?.id ?? null;
-        const threadsRequest = this.inboxService
-          .listThreads({ page: 1, limit: 100 })
-          .subscribe(({ data }) => {
-            this.threads = (data ?? []).map((thread) =>
-              thread.id === selectedThreadId ? { ...thread, unreadCount: 0 } : thread,
-            );
-            if (selectedThreadId) {
-              const updatedSelection = this.threads.find((thread) => thread.id === selectedThreadId);
-              if (updatedSelection) {
-                this.selectedThread = updatedSelection;
-              }
-            }
-          });
-        this.subscriptions.add(threadsRequest);
+    const changedIds = new Set<number>();
+    let reconcile = false;
+    this.subscriptions.add(
+      this.inboxService
+        .watchChanges()
+        .pipe(
+          tap((event) => {
+            if (event?.threadId) changedIds.add(Number(event.threadId));
+            else reconcile = true;
+          }),
+          auditTime(250),
+        )
+        .subscribe(() => {
+        this.loadThreads(undefined, false, true);
+          const id = Number(this.selectedThread?.id);
+          if (id && (reconcile || changedIds.has(id))) this.loadThreadDetail(id, false, true);
+          changedIds.clear();
+          reconcile = false;
+        }),
+    );
+  }
 
-        if (selectedThreadId) {
-          this.loadThreadDetail(selectedThreadId, false);
-        }
+  private saveDraft(): void {
+    if (this.selectedThread)
+      this.drafts.set(Number(this.selectedThread.id), {
+        text: this.draftMessage,
+        attachments: this.draftAttachments,
       });
-
-    this.subscriptions.add(request);
+  }
+  private clearSelection(): void {
+    this.saveDraft();
+    this.selectedThread = null;
+    this.messages = [];
+    this.threadOrders = [];
+    this.draftMessage = '';
+    this.draftAttachments = [];
+    this.contextDrawerOpen = false;
+    this.mobileChatOpen = false;
+    this.clearAttachmentPreviews();
+  }
+  private mergeMessages(
+    first: ServiceOrderInboxMessage[],
+    second: ServiceOrderInboxMessage[],
+  ): ServiceOrderInboxMessage[] {
+    return [
+      ...new Map([...first, ...second].map((message) => [Number(message.id), message])).values(),
+    ].sort((a, b) => Number(a.id) - Number(b.id));
+  }
+  private isNearBottom(): boolean {
+    const el = this.timeline?.nativeElement;
+    return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+  }
+  private scrollToLatest(): void {
+    const id = this.selectedThread?.id;
+    requestAnimationFrame(() => {
+      const el = this.timeline?.nativeElement;
+      if (el && this.selectedThread?.id === id) el.scrollTop = el.scrollHeight;
+    });
+  }
+  isNewDay(index: number): boolean {
+    return (
+      index === 0 ||
+      new Date(this.messages[index].createdAt).toDateString() !==
+        new Date(this.messages[index - 1].createdAt).toDateString()
+    );
+  }
+  deliveryIcon(message: ServiceOrderInboxMessage): string {
+    return {
+      QUEUED: 'far fa-clock',
+      SENT: 'fas fa-check',
+      DELIVERED: 'fas fa-check-double',
+      READ: 'fas fa-check-double',
+      FAILED: 'fas fa-exclamation-circle',
+      SKIPPED: 'fas fa-ban',
+      RECEIVED: 'fas fa-check',
+    }[message.deliveryStatus];
+  }
+  composerKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      this.sendMessage();
+    }
+  }
+  backToList(): void {
+    this.mobileChatOpen = false;
+    this.contextDrawerOpen = false;
+  }
+  searchOrders(): void {
+    this.orderSearches.next(this.orderSearch);
+  }
+  linkOrder(order: ServiceOrder): void {
+    const id = this.selectedThread?.id;
+    if (!id || this.isTechnicianViewer || this.linkingOrder) return;
+    this.linkingOrder = true;
+    this.linkError = '';
+    this.subscriptions.add(
+      this.inboxService
+        .linkThreadOrder(id, order.id)
+        .pipe(finalize(() => (this.linkingOrder = false)))
+        .subscribe({
+          next: (thread) => {
+            if (this.selectedThread?.id !== id) return;
+            this.selectedThread = thread;
+            this.threadOrders = thread.orders ?? [];
+            this.linkableOrders = [];
+            this.orderSearch = '';
+            this.loadThreads();
+          },
+          error: (error) =>
+            (this.linkError = error?.error?.message ?? 'No pudimos vincular la orden.'),
+        }),
+    );
   }
 
   private clearThreadUnreadCount(threadId: number): void {
@@ -544,8 +804,11 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
   }
 
   private hydrateAttachmentPreviews(messages: ServiceOrderInboxMessage[]): void {
+    const threadId = this.selectedThread?.id;
     messages
-      .flatMap((message) => (message.attachments ?? []).filter((attachment) => attachment.previewable))
+      .flatMap((message) =>
+        (message.attachments ?? []).filter((attachment) => attachment.previewable),
+      )
       .forEach((attachment) => {
         if (this.attachmentPreviewUrls[attachment.id]) {
           return;
@@ -553,7 +816,8 @@ export class ServiceOrderInboxPage implements OnInit, OnDestroy {
 
         const request = this.inboxService.downloadAttachmentBlob(attachment.id).subscribe({
           next: (blob) => {
-            this.attachmentPreviewUrls[attachment.id] = URL.createObjectURL(blob);
+            if (this.selectedThread?.id === threadId)
+              this.attachmentPreviewUrls[attachment.id] = URL.createObjectURL(blob);
           },
         });
 

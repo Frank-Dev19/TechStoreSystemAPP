@@ -1494,6 +1494,12 @@
 
               @for (candidate of createServiceOrderCandidates; track $index; let itemIndex = $index) {
               <div class="initial-agreement-card">
+                <section class="agreement-section">
+                  <label>Concepto para el cliente, equipo {{ itemIndex + 1 }}</label>
+                  <p class="mb-2" aria-live="polite">{{ getCreateOrderCustomerSummary(itemIndex) }}</p>
+                  <small class="text-muted">Se genera automáticamente con el servicio y los productos de la cotización.</small>
+                  <div class="mt-2"><strong>Total final: S/ {{ calculateQuoteItemsTotal(getCreateOrderAgreementItems(itemIndex)) | number: '1.2-2' }}</strong></div>
+                </section>
                 <section class="agreement-section agreement-required-card">
                   <div class="agreement-required-strip">
                     <span>Componente obligatorio</span>
@@ -1775,13 +1781,16 @@
                       </div>
                       @if (requiresCreateServiceOrderInitialAgreementStep()) {
                         <div class="review-item-total">
-                          <span class="muted small">{{ summaryItem.quoteItemsCount }} líneas</span>
+                          <span class="muted small">Un concepto para el cliente</span>
                           <strong>{{ summaryItem.quoteTotal | number: '1.2-2' }} PEN</strong>
                         </div>
                       }
                     </div>
 
                     <div class="review-item-body">
+                      @if (requiresCreateServiceOrderInitialAgreementStep()) {
+                        <p class="mb-3"><strong>Resumen para el cliente:</strong> {{ summaryItem.customerSummary }}</p>
+                      }
                       <div class="info-tile full-span">
                         <span class="muted">Detalle</span>
                         <strong>{{ summaryItem.description || 'Sin detalle adicional' }}</strong>

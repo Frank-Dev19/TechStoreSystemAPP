@@ -746,6 +746,8 @@ describe('ReceptionPanel', () => {
     component.addCurrentEquipmentToCreateOrder()
     ;(component as any).prepareCandidateCommercialDrafts()
     component.getCreateOrderAgreementTechnicalServiceItem(0)!.unitPrice = 30
+    component.createServiceOrderCandidates[0].customerSummary = 'Mantenimiento de laptop'
+    component.createServiceOrderCandidates[1].customerSummary = 'Mantenimiento de impresora'
     component.getCreateOrderAgreementTechnicalServiceItem(1)!.unitPrice = 45
     component.createOrderAgreementItemsByItemIndex[1].push({
       id: 999,

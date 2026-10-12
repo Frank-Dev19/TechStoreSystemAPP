@@ -28,6 +28,7 @@ export interface ServiceOrderCommercialRevisionRequest {
 }
 
 export interface ServiceOrderCommercialRevisionItemRequest {
+  customerSummary?: string;
   serviceOrderItemId: number;
   baseVersionId?: number;
   notes?: string;

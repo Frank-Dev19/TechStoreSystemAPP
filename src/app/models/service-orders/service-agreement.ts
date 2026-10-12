@@ -135,6 +135,7 @@ export interface ServiceOrderLineDiscount {
 }
 
 export interface ServiceOrderItemCommercialVersion {
+  customerSummary?: string | null;
   id: number;
   serviceOrderItemId: number;
   derivedFromVersionId: number | null;

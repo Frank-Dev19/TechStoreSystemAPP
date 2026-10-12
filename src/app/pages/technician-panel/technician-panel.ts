@@ -1,3 +1,4 @@
+import { automaticCustomerConcept } from '../../models/service-orders/automatic-customer-concept';
 import { Component, OnDestroy, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { Router } from "@angular/router"
@@ -2755,6 +2756,15 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   getAgreementInheritedItems(): AgreementComposerItem[] {
     return this.agreementInheritedItems
+  }
+
+  getAutomaticAgreementSummary(): string {
+    return automaticCustomerConcept(this.getAgreementComposerItems().map((line) => ({
+      type: line.type,
+      quantity: line.type === "product" ? line.quantity : 1,
+      productId: line.type === "product" ? line.productId : null,
+      name: line.type === "product" ? line.productNameSnapshot : line.serviceNameSnapshot || "Servicio técnico",
+    })))
   }
 
   getAgreementComposerItems(): AgreementComposerItem[] {
