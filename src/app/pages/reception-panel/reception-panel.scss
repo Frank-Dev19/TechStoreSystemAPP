@@ -3481,6 +3481,7 @@ $bg-light: #f5f7fa;
 
 .initial-agreement-section,
 .quote-modal {
+  --agreement-control-height: 44px;
   .agreement-section {
     margin: 0;
     padding: 0;
@@ -3626,7 +3627,9 @@ $bg-light: #f5f7fa;
     position: relative;
     display: flex;
     align-items: center;
-    min-height: 44px;
+    height: var(--agreement-control-height);
+    min-height: var(--agreement-control-height);
+    box-sizing: border-box;
     border: 1px solid #cfdcf0;
     border-radius: 14px;
     background: #f4f7fc;
@@ -3651,12 +3654,14 @@ $bg-light: #f5f7fa;
 
     input {
       width: 100%;
-      min-height: 44px;
+      height: 100%;
+      min-height: 0;
       padding: 0 14px 0 38px !important;
       border: none !important;
       background: transparent !important;
       color: $primary;
-      font-size: 15px;
+      font-size: 14px;
+      line-height: 20px;
       font-weight: 600;
       box-shadow: none !important;
 
@@ -3703,13 +3708,16 @@ $bg-light: #f5f7fa;
 
     input {
       width: 100%;
-      min-height: 40px;
+      height: var(--agreement-control-height);
+      min-height: var(--agreement-control-height);
+      box-sizing: border-box;
       padding: 0 14px;
       border: 1px solid #cfdcf0;
       border-radius: 14px;
       background: #f4f7fc;
       color: $primary;
       font-size: 14px;
+      line-height: 20px;
 
       &:focus-visible {
         outline: none;
@@ -3911,7 +3919,7 @@ $bg-light: #f5f7fa;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 120px 1fr;
     gap: 12px;
-    align-items: end;
+    align-items: start;
   }
 
   .agreement-product-field {
@@ -3921,17 +3929,21 @@ $bg-light: #f5f7fa;
       color: #64748b;
       font-size: 12px;
       font-weight: 600;
+      line-height: 18px;
     }
 
     > input {
       width: 100%;
-      min-height: 40px;
+      height: var(--agreement-control-height);
+      min-height: var(--agreement-control-height);
+      box-sizing: border-box;
       padding: 0 14px !important;
       border: 1px solid #cfdcf0 !important;
       border-radius: 14px !important;
       background: #f4f7fc !important;
       color: $primary;
       font-size: 14px;
+      line-height: 20px;
       font-weight: 600;
       box-shadow: none !important;
     }
@@ -3943,16 +3955,42 @@ $bg-light: #f5f7fa;
 
   ::ng-deep .ng-select {
     .ng-select-container {
-      min-height: 40px !important;
+      height: var(--agreement-control-height) !important;
+      min-height: var(--agreement-control-height) !important;
+      box-sizing: border-box;
+      font-size: 14px !important;
+      line-height: 20px !important;
+      color: $primary;
+      align-items: center;
       border: 1px solid #cfdcf0 !important;
       border-radius: 14px !important;
       background: #f4f7fc !important;
       box-shadow: none !important;
     }
 
-    .ng-value-container,
+    .ng-value-container {
+      height: 100%;
+      align-items: center;
+      padding-left: 14px !important;
+    }
+
     .ng-input {
-      padding-left: 0 !important;
+      top: 0 !important;
+      height: 100%;
+      padding-left: 14px !important;
+      display: flex;
+      align-items: center;
+
+      > input {
+        height: 100% !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        font-size: 14px !important;
+        line-height: 20px !important;
+        box-shadow: none !important;
+      }
     }
 
     .ng-placeholder {
@@ -3964,6 +4002,11 @@ $bg-light: #f5f7fa;
       border-color: rgba(44, 82, 130, 0.45) !important;
       box-shadow: 0 0 0 3px rgba(44, 82, 130, 0.06) !important;
     }
+  }
+
+  .agreement-item-card .agreement-inline-note {
+    padding: 0;
+    margin-top: 12px;
   }
 
   .agreement-subtotal-row {
