@@ -105,6 +105,8 @@ describe('TechnicianPanel', () => {
   };
 
   beforeEach(async () => {
+    serviceOrderServiceStub.findAll.and.returnValue(of({ data: [] }));
+    serviceOrderServiceStub.changeItemTechnicalStatus.and.returnValue(of({}));
     agreementServiceStub.create.calls.reset();
     agreementServiceStub.createRevision.calls.reset();
     agreementServiceStub.recordClientDecision.calls.reset();
@@ -170,6 +172,68 @@ describe('TechnicianPanel', () => {
 
     expect(emptyDetail).not.toBeNull();
     expect(emptyDetail?.textContent).toContain('Selecciona una orden para gestionarla');
+  });
+
+  it('sigue la misma orden al iniciar diagnóstico desde una tarjeta', () => {
+    const order = createServiceOrder({ id: 31, serviceType: ServiceType.DIAGNOSIS, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA });
+    order.items = [createServiceOrderItem(order, { id: 311, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA })];
+    const updated = { ...order, technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO, items: [{ ...order.items[0], technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO }] };
+    serviceOrderServiceStub.findAll.and.returnValue(of({ data: [updated] }));
+    component.activeTab = 'todo';
+    component.startDiagnosis(order);
+    expect(component.activeTab).toBe('diagnosis');
+    expect(component.selectedServiceOrder?.id).toBe(31);
+    expect(component.selectedServiceOrderItemId).toBe(311);
+    expect(component.paginatedVisibleOrders.map(o => o.id)).toContain(31);
+  });
+
+  it('muestra la página de la orden al seguir el diagnóstico', () => {
+    const order = createServiceOrder({ id: 34, serviceType: ServiceType.DIAGNOSIS, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA });
+    order.items = [createServiceOrderItem(order, { id: 341, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA })];
+    const others = Array.from({ length: 7 }, (_, index) => createServiceOrder({ id: 100 + index, technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO }));
+    serviceOrderServiceStub.findAll.and.returnValue(of({ data: [...others, { ...order, technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO }] }));
+    component.startDiagnosis(order);
+    expect(component.currentPage).toBe(2);
+    expect(component.paginatedVisibleOrders.map(o => o.id)).toContain(34);
+  });
+
+  it('respeta una pestaña elegida mientras la transición está pendiente', () => {
+    const response = new Subject<any>();
+    const order = createServiceOrder({ id: 35, serviceType: ServiceType.DIAGNOSIS, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA });
+    order.items = [createServiceOrderItem(order, { id: 351, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA })];
+    serviceOrderServiceStub.changeItemTechnicalStatus.and.returnValue(response);
+    serviceOrderServiceStub.findAll.and.returnValue(of({ data: [{ ...order, technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO }] }));
+    component.startDiagnosis(order);
+    component.setActiveTab('repair');
+    response.next({});
+    response.complete();
+    expect(component.activeTab).toBe('repair');
+    expect(component.selectedServiceOrder).toBeNull();
+  });
+
+  it('conserva orden y equipo al pasar a cotización, servicio y finalización', () => {
+    const order = createServiceOrder({ id: 32, technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO });
+    order.items = [createServiceOrderItem(order, { id: 321 }), createServiceOrderItem(order, { id: 322 })];
+    component.selectedServiceOrder = order;
+    component.selectedServiceOrderItemId = 322;
+    component.activeTab = 'diagnosis';
+    for (const [status, tab] of [[ServiceOrderTechnicalStatus.DIAGNOSTICADA, 'pending_approval'], [ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION, 'todo'], [ServiceOrderTechnicalStatus.EN_EJECUCION, 'repair'], [ServiceOrderTechnicalStatus.RESUELTA, 'repaired']] as const) {
+      (component as any).hydrateLists([{ ...order, technicalStatus: status }]);
+      expect(component.activeTab).toBe(tab);
+      expect(component.selectedServiceOrder?.id).toBe(32);
+      expect(component.selectedServiceOrderItemId).toBe(322);
+    }
+  });
+
+  it('no mueve la pestaña ni selección cuando falla iniciar diagnóstico', () => {
+    const order = createServiceOrder({ id: 33, serviceType: ServiceType.DIAGNOSIS, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA });
+    order.items = [createServiceOrderItem(order, { id: 331, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA })];
+    component.selectedServiceOrder = order;
+    component.activeTab = 'todo';
+    serviceOrderServiceStub.changeItemTechnicalStatus.and.returnValue(throwError(() => new Error('Fallo')));
+    component.startDiagnosis(order);
+    expect(component.activeTab).toBe('todo');
+    expect(component.selectedServiceOrder?.id).toBe(33);
   });
 
   it('inicia el diagnóstico mediante la transición del único equipo', () => {

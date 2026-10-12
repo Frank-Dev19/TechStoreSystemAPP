@@ -185,6 +185,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   productSearchLoading = false
   private readonly subscriptions = new Subscription()
 
+  private orderSelectionVersion = 0
   activeTab: TechnicianPanelTab = "todo"
   activeDetailTab: TechnicianDetailTab = "equipment"
   currentPage = 1
@@ -562,7 +563,8 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     this.loadTechnicianOrders();
   }
 
-  private loadTechnicianOrders(): void {
+  private loadTechnicianOrders(follow?: { orderId: number; itemId: number | null; selectionVersion: number }): void {
+    const selectionVersion = follow?.selectionVersion ?? this.orderSelectionVersion
     const technicianId = this.getCurrentUserId()
     if (!technicianId) {
       this.allOrders = []
@@ -579,12 +581,12 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       })
       .pipe(finalize(() => (this.isLoadingOrders = false)))
       .subscribe({
-        next: ({ data }) => this.hydrateLists(data ?? []),
+        next: ({ data }) => this.hydrateLists(data ?? [], selectionVersion === this.orderSelectionVersion ? follow : undefined),
         error: () => this.showMessage("danger", "fas fa-exclamation-circle", "No pudimos cargar tus órdenes asignadas."),
       })
   }
 
-  private hydrateLists(orders: ServiceOrder[]): void {
+  private hydrateLists(orders: ServiceOrder[], follow?: { orderId: number; itemId: number | null }): void {
     this.allOrders = [...orders]
 
     this.todoOrders = orders.filter((order) =>
@@ -612,28 +614,44 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         .includes(order.technicalStatus),
     )
 
-    if (this.selectedServiceOrder) {
-      const previousItemId = this.selectedServiceOrderItemId
-      const updated = orders.find((entry) => Number(entry.id) === Number(this.selectedServiceOrder?.id))
+    const selectedOrderId = follow?.orderId ?? this.selectedServiceOrder?.id
+    const previousItemId = follow ? follow.itemId : this.selectedServiceOrderItemId
+    const previousStatus = this.selectedServiceOrder?.technicalStatus
+    if (selectedOrderId) {
+      const updated = orders.find(entry => Number(entry.id) === Number(selectedOrderId))
       this.selectedServiceOrder = updated ?? null
-      if (this.selectedServiceOrder) {
-        if (!this.isOrderVisibleInCurrentTab(this.selectedServiceOrder)) {
-          this.clearSelectedServiceOrder()
-        } else {
-          this.syncSelectedServiceOrderItem(previousItemId)
-          this.loadSelectedItemDiagnosisHistory()
-          this.loadServiceOrderAgreementSummary(this.selectedServiceOrder)
+      if (updated) {
+        const followsStage = !!follow || previousStatus !== updated.technicalStatus || !this.isOrderVisibleInCurrentTab(updated)
+        if (followsStage) {
+          this.activeTab = this.getWorkflowTab(updated.technicalStatus)
+          const index = this.visibleOrders.findIndex(entry => Number(entry.id) === Number(updated.id))
+          this.currentPage = index < 0 ? 1 : Math.floor(index / this.itemsPerPage) + 1
         }
+        this.syncSelectedServiceOrderItem(previousItemId)
+        this.loadSelectedItemDiagnosisHistory()
+        this.loadServiceOrderAgreementSummary(updated)
       } else {
-        this.selectedServiceOrderItemId = null
-        this.diagnosticHistory = []
-        this.agreementSummary = null
-        this.agreementHistory = []
+        this.clearSelectedServiceOrder()
       }
     }
 
     if (this.currentPage > this.totalPages) {
       this.currentPage = this.totalPages
+    }
+  }
+
+  private getWorkflowTab(status: ServiceOrderTechnicalStatus): TechnicianPanelTab {
+    switch (status) {
+      case ServiceOrderTechnicalStatus.ASIGNADA:
+      case ServiceOrderTechnicalStatus.AUTORIZADA_PARA_EJECUCION: return "todo"
+      case ServiceOrderTechnicalStatus.EN_DIAGNOSTICO: return "diagnosis"
+      case ServiceOrderTechnicalStatus.DIAGNOSTICADA:
+      case ServiceOrderTechnicalStatus.PENDIENTE_DEFINICION_COMERCIAL: return "pending_approval"
+      case ServiceOrderTechnicalStatus.EN_EJECUCION:
+      case ServiceOrderTechnicalStatus.ESPERANDO_REPUESTOS_O_TERCERO: return "repair"
+      case ServiceOrderTechnicalStatus.RESUELTA:
+      case ServiceOrderTechnicalStatus.GARANTIA_RECHAZADA: return "repaired"
+      default: return "all"
     }
   }
 
@@ -676,6 +694,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   selectServiceOrder(order: ServiceOrder): void {
+    this.orderSelectionVersion += 1
     const preservedItemId = Number(this.selectedServiceOrder?.id) === Number(order.id)
       ? this.selectedServiceOrderItemId
       : null
@@ -689,6 +708,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
 
   selectServiceOrderItem(item: ServiceOrderItem): void {
     if (!this.selectedServiceOrder?.items?.some((entry) => Number(entry.id) === Number(item.id))) return
+    this.orderSelectionVersion += 1
     this.selectedServiceOrderItemId = Number(item.id)
     this.activeDetailTab = "equipment"
     this.loadSelectedItemDiagnosisHistory()
@@ -697,6 +717,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   clearSelectedServiceOrder(): void {
+    this.orderSelectionVersion += 1
     this.selectedServiceOrder = null
     this.selectedServiceOrderItemId = null
     this.activeDetailTab = "equipment"
@@ -1525,6 +1546,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
         : {}),
     }
 
+    const follow = { orderId, itemId: selectedItem ? Number(selectedItem.id) : this.selectedServiceOrderItemId, selectionVersion: this.orderSelectionVersion }
     this.isSavingDiagnosis = true
     this.diagnosticService
       .create(payload)
@@ -1561,7 +1583,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
                   : "Diagnostico registrado correctamente."),
           )
           this.closeDiagnosisModal()
-          this.loadTechnicianOrders()
+          this.loadTechnicianOrders(follow)
         },
         error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos registrar el diagnóstico."),
       })
@@ -1726,6 +1748,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   private executeItemTransition(context: ItemTransitionContext, item: ServiceOrderItem): void {
+    const follow = { orderId: Number(context.order.id), itemId: Number(item.id), selectionVersion: this.orderSelectionVersion }
     this.isSavingItemTransition = true
     this.serviceOrderService
       .changeItemTechnicalStatus(Number(context.order.id), Number(item.id), context.nextStatus)
@@ -1736,7 +1759,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
           this.selectedItemTransitionId = null
           this.itemTransitionContext = null
           this.showMessage("success", "fas fa-check-circle", context.successMessage)
-          this.loadTechnicianOrders()
+          this.loadTechnicianOrders(follow)
         },
         error: (error) => {
           const backendMessage = error?.error?.message
@@ -1795,10 +1818,11 @@ export class TechnicianPanel implements OnInit, OnDestroy {
       return
     }
 
+    const follow = { orderId, itemId: this.selectedServiceOrderItemId, selectionVersion: this.orderSelectionVersion }
     this.serviceOrderService.changeTechnicalStatus(orderId, status).subscribe({
       next: () => {
         this.showMessage("success", "fas fa-check-circle", successMessage)
-        this.loadTechnicianOrders()
+        this.loadTechnicianOrders(follow)
       },
       error: () => this.showMessage("danger", "fas fa-times-circle", "No pudimos actualizar el estado de la orden."),
     })
