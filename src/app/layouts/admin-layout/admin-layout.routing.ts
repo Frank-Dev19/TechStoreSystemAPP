@@ -180,7 +180,7 @@ export const AdminLayoutRoutes: Routes = [
     component: SupervisorPanel,
     canActivate: [RoleGuard],
     data: {
-      navbarTitle: 'PANEL DE SUPERVISIÓN',
+      navbarTitle: 'SUPERVISIÓN',
       allowedRoles: [...SUPERVISOR_ROLE_NAMES, ...RECEPTIONIST_ROLE_NAMES],
     },
   },

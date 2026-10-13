@@ -3,7 +3,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 
 import {
   EquipmentType,
@@ -92,6 +92,134 @@ describe('SupervisorPanel', () => {
     fixture = TestBed.createComponent(SupervisorPanel);
     component = fixture.componentInstance;
     fixture.detectChanges();
+  });
+
+  it('muestra un vacío real al completar una consulta sin órdenes', () => {
+    serviceOrderServiceStub.findAll.and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 }));
+    (component as any).loadServiceOrders();
+    fixture.detectChanges();
+    const text = fixture.nativeElement.querySelector('.orders-list-column').textContent;
+    expect(text).toContain('No hay órdenes registradas');
+    expect(text).not.toContain('Cargando órdenes');
+  });
+
+  it('distingue error de carga y ofrece reintentar', () => {
+    serviceOrderServiceStub.findAll.and.returnValue(throwError(() => new Error('Fallo de lectura')));
+    (component as any).loadServiceOrders();
+    fixture.detectChanges();
+    const state = fixture.nativeElement.querySelector('.orders-list-column');
+    expect(state.textContent).toContain('No pudimos cargar las órdenes');
+    expect(state.textContent).not.toContain('Cargando órdenes');
+    const retry = state.querySelector('button');
+    expect(retry).not.toBeNull();
+    serviceOrderServiceStub.findAll.and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 }));
+    retry?.click();
+    fixture.detectChanges();
+    expect(state.textContent).toContain('No hay órdenes registradas');
+  });
+
+  it('mantiene el estado de carga solo mientras la petición está pendiente', () => {
+    const response = new Subject<any>();
+    serviceOrderServiceStub.findAll.and.returnValue(response.asObservable());
+    (component as any).loadServiceOrders();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.orders-list-column').textContent).toContain('Cargando órdenes');
+    response.next({ data: [], total: 0, page: 1, limit: 100 });
+    response.complete();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.orders-list-column').textContent).toContain('No hay órdenes registradas');
+    serviceOrderServiceStub.findAll.and.returnValue(of({ data: [], total: 0, page: 1, limit: 100 }));
+  });
+
+  it('vuelve a la primera página al filtrar desde una página avanzada', async () => {
+    component.serviceOrders = Array.from({ length: 8 }, (_, i) => createServiceOrder({ id: i + 1, brand: i === 0 ? 'Unica' : 'Lenovo' }));
+    component.currentPage = 2;
+    fixture.detectChanges();
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('.order-filters input');
+    input.value = 'Unica';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.currentPage).toBe(1);
+    expect(fixture.nativeElement.querySelectorAll('.orders-table tbody tr').length).toBe(1);
+  });
+
+  it('vuelve a la primera página cuando cambia el estado operativo', async () => {
+    component.serviceOrders = Array.from({ length: 8 }, (_, i) => createServiceOrder({ id: i + 1, operativeStatus: i === 0 ? ServiceOrderOperativeStatus.EN_PROCESO : ServiceOrderOperativeStatus.ABIERTA }));
+    component.currentPage = 2;
+    fixture.detectChanges();
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector('.order-filters select');
+    select.value = ServiceOrderOperativeStatus.EN_PROCESO;
+    select.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.currentPage).toBe(1);
+    expect(fixture.nativeElement.querySelectorAll('.orders-table tbody tr').length).toBe(1);
+  });
+
+  it('abre un drawer desde el botón de la fila y conserva filtros y página', () => {
+    component.serviceOrders = [createServiceOrder({ id: 71 })];
+    component.orderSearchTerm = 'Lenovo';
+    serviceOrderServiceStub.findOne.and.returnValue(of(createServiceOrder({ id: 71 })));
+    fixture.detectChanges();
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('.order-detail-button');
+    expect(button).not.toBeNull();
+    expect(button?.tagName).toBe('BUTTON');
+    button?.focus();
+    button?.click();
+    fixture.detectChanges();
+    const drawer: HTMLElement = fixture.nativeElement.querySelector('.order-detail-drawer');
+    expect(drawer?.getAttribute('role')).toBe('dialog');
+    expect(drawer?.getAttribute('aria-modal')).toBe('true');
+    expect(component.selectedServiceOrder?.id).toBe(71);
+    expect(component.orderSearchTerm).toBe('Lenovo');
+    expect(document.activeElement).toBe(drawer?.querySelector('.btn-close'));
+    drawer?.querySelector<HTMLButtonElement>('.btn-close')?.click();
+    fixture.detectChanges();
+    expect(component.selectedServiceOrder).toBeNull();
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('cierra el drawer con Escape sin alterar la página actual', () => {
+    component.selectedServiceOrder = createServiceOrder();
+    component.currentPage = 2;
+    fixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+    expect(component.selectedServiceOrder).toBeNull();
+    expect(component.currentPage).toBe(2);
+  });
+
+  it('cierra el detalle al pulsar su fondo', () => {
+    component.selectedServiceOrder = createServiceOrder();
+    fixture.detectChanges();
+    const overlay: HTMLElement = fixture.nativeElement.querySelector('.order-detail-overlay');
+    expect(overlay).not.toBeNull();
+    overlay?.click();
+    fixture.detectChanges();
+    expect(component.selectedServiceOrder).toBeNull();
+  });
+
+  it('distingue error del ranking de un ranking sin datos', () => {
+    component.setActiveSection('ranking');
+    agreementServiceStub.getTechnicianRevenueRankings.and.returnValue(throwError(() => new Error('Ranking no disponible')));
+    (component as any).loadTechnicianRankings();
+    fixture.detectChanges();
+    const panel = fixture.nativeElement.querySelector('.ranking-panel');
+    expect(panel.textContent).toContain('No pudimos cargar el ranking');
+    expect(panel.textContent).not.toContain('Aún no hay información suficiente');
+    expect(panel.querySelector('.list-error-state button')).not.toBeNull();
+    agreementServiceStub.getTechnicianRevenueRankings.and.returnValue(of({ technicians: [] }));
+  });
+
+  it('ajusta la página del ranking cuando una recarga reduce el número de técnicos', () => {
+    component.setActiveSection('ranking');
+    component.currentPage = 2;
+    agreementServiceStub.getTechnicianRevenueRankings.and.returnValue(of({ technicians: [{ rank: 1, technicianId: 1, technicianName: 'María', itemsCount: 1, totalRevenue: 100, productRevenue: 50, serviceRevenue: 50, diagnosisRevenue: 100, standardRevenue: 0, diagnosisItemsCount: 1, standardItemsCount: 0 }] }));
+    (component as any).loadTechnicianRankings();
+    expect(component.currentPage).toBe(1);
+    expect(component.paginatedTechnicianRankings.length).toBe(1);
+    agreementServiceStub.getTechnicianRevenueRankings.and.returnValue(of({ technicians: [] }));
   });
 
   it('opens the requested order and equipment outside the current list', () => {

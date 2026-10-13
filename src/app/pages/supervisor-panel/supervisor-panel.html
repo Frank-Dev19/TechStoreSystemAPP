@@ -7,8 +7,8 @@
       </p>
     </div>
     <button type="button" class="btn btn-light panel-refresh-button" (click)="refreshOrders()"
-      title="Actualizar órdenes" aria-label="Actualizar órdenes">
-      <i class="fas fa-sync-alt" aria-hidden="true"></i>
+      title="Actualizar órdenes" aria-label="Actualizar órdenes" [disabled]="isLoadingServiceOrders">
+      <i class="fas fa-sync-alt" [class.fa-spin]="isLoadingServiceOrders" aria-hidden="true"></i>
     </button>
     @if (failedNotifications.length) {
       <button
@@ -218,6 +218,12 @@
           <i class="fas fa-spinner fa-spin"></i>
           <p>Cargando ranking...</p>
         </div>
+      } @else if (technicianRankingsLoadFailed) {
+        <div class="empty-state list-error-state" role="alert">
+          <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+          <p>No pudimos cargar el ranking.</p>
+          <button type="button" class="btn-secondary" (click)="refreshOrders()">Reintentar</button>
+        </div>
       } @else if (!technicianRankings.length) {
         <div class="empty-state">
           <i class="fas fa-chart-line"></i>
@@ -297,12 +303,12 @@
           }
         </div>
         @if (technicianRankings.length > itemsPerPage) {
-          <div class="pagination">
+          <nav class="pagination" aria-label="Paginación">
             <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
               <i class="fas fa-chevron-left"></i> Anterior
             </button>
             <span class="pagination-info"
-              >Pagina {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span
+              >Página {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span
             >
             <button
               class="btn-secondary"
@@ -311,7 +317,7 @@
             >
               Siguiente <i class="fas fa-chevron-right"></i>
             </button>
-          </div>
+          </nav>
         }
       }
     </section>
@@ -325,8 +331,10 @@
           type="text"
           placeholder="Buscar por código, técnico, marca o problema..."
           [(ngModel)]="orderSearchTerm"
+          (ngModelChange)="resetOrderPagination()"
+          aria-label="Buscar órdenes por código, técnico, marca o problema"
         />
-        <select class="tab-btn" [(ngModel)]="orderOperativeStatusFilter">
+        <select class="tab-btn" [(ngModel)]="orderOperativeStatusFilter" (ngModelChange)="resetOrderPagination()" aria-label="Filtrar órdenes por estado">
           <option value="ALL">Todos los estados</option>
           @for (status of getOrderOperativeStatusOptions(); track status) {
             <option [value]="status">{{ getInboxThreadOperativeStatusLabel(status) }}</option>
@@ -334,13 +342,24 @@
         </select>
       </div>
 
-      <div class="orders-workspace" [class.has-selection]="selectedServiceOrder">
+      <div class="orders-workspace">
         <div class="orders-list-column">
-          <div class="serviceOrderAgreements-grid">
-            @if (!serviceOrders.length) {
+          <div class="orders-list-content" [attr.aria-busy]="isLoadingServiceOrders">
+            @if (isLoadingServiceOrders) {
               <div class="empty-state">
                 <i class="fas fa-spinner fa-spin"></i>
                 <p>Cargando órdenes...</p>
+              </div>
+            } @else if (serviceOrdersLoadFailed) {
+              <div class="empty-state list-error-state" role="alert">
+                <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+                <p>No pudimos cargar las órdenes.</p>
+                <button type="button" class="btn-secondary" (click)="refreshOrders()">Reintentar</button>
+              </div>
+            } @else if (!serviceOrders.length) {
+              <div class="empty-state" role="status">
+                <i class="fas fa-inbox" aria-hidden="true"></i>
+                <p>No hay órdenes registradas.</p>
               </div>
             } @else if (filteredServiceOrders.length === 0) {
               <div class="empty-state">
@@ -348,58 +367,61 @@
                 <p>No hay órdenes para esta vista.</p>
               </div>
             } @else {
-              @for (order of paginatedServiceOrders; track order.id) {
-                <div
-                  class="quote-card"
-                  (click)="selectServiceOrder(order)"
-                  [class.selected]="selectedServiceOrder?.id === order.id"
-                >
-                  <div class="card-header">
-                    <div class="quote-info">
-                      <h3>
-                        {{ order.code }} .
-                        {{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}
-                      </h3>
-                      <span class="quote-badge status-current">
-                        {{ getInboxThreadOperativeStatusLabel(order.operativeStatus) }}
-                      </span>
-                    </div>
-                  </div>
-                  <div class="card-body">
-                    <p class="quote-date">
-                      <i class="fas fa-calendar-alt"></i>
-                      {{ order.receivedAt | date: 'dd/MM/yyyy HH:mm' }}
-                    </p>
-                    <p class="quote-date">
-                      <i class="fas fa-tag"></i>
-                      {{ getServiceTypeLabel(order.serviceType) }}
-                    </p>
-                    <p class="quote-date">
-                      <i class="fas fa-user-cog"></i>
-                      {{ order.assignedToTechnicianName || 'Sin asignar' }}
-                    </p>
-                    @if (order.initialIssue) {
-                      <p class="quote-notes">
-                        <i class="fas fa-sticky-note"></i>
-                        {{ order.initialIssue }}
-                      </p>
+              <div class="orders-table-scroll" role="region" aria-label="Listado de órdenes de servicio" tabindex="0">
+                <table class="orders-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Orden e ingreso</th>
+                      <th scope="col">Equipo</th>
+                      <th scope="col">Servicio</th>
+                      <th scope="col">Técnico</th>
+                      <th scope="col">Estado</th>
+                      <th scope="col">Motivo de ingreso</th>
+                      <th scope="col">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (order of paginatedServiceOrders; track order.id) {
+                      <tr [class.selected]="selectedServiceOrder?.id === order.id">
+                        <td class="order-code-cell">
+                          <strong>{{ order.code }}</strong>
+                          <small>{{ order.receivedAt | date: 'dd/MM/yyyy HH:mm' }}</small>
+                          <app-service-order-item-progress [order]="order" [compact]="true"></app-service-order-item-progress>
+                        </td>
+                        <td>
+                          @if ((order.items?.length ?? 0) > 1) {
+                            <strong>{{ order.items?.length }} equipos</strong>
+                          } @else {
+                            <strong>{{ getEquipmentTypeLabel(order.equipmentType, order.equipmentTypeOther) }}</strong>
+                            <small>{{ order.brand }} {{ order.model }}</small>
+                          }
+                        </td>
+                        <td>{{ getServiceTypeLabel(order.serviceType) }}</td>
+                        <td>{{ order.assignedToTechnicianName || 'Sin asignar' }}</td>
+                        <td><span class="quote-badge status-current">{{ getInboxThreadOperativeStatusLabel(order.operativeStatus) }}</span></td>
+                        <td class="order-issue-cell">{{ order.initialIssue || 'Sin motivo registrado' }}</td>
+                        <td>
+                          <button #detailsButton type="button" class="order-detail-button"
+                            aria-haspopup="dialog" [attr.aria-label]="'Ver detalles de ' + order.code"
+                            [attr.aria-expanded]="selectedServiceOrder?.id === order.id"
+                            (click)="selectServiceOrder(order, detailsButton)">
+                            <i class="fas fa-eye" aria-hidden="true"></i> Ver detalles
+                          </button>
+                        </td>
+                      </tr>
                     }
-                    <app-service-order-item-progress
-                      [order]="order"
-                      [compact]="true"
-                    ></app-service-order-item-progress>
-                  </div>
-                </div>
-              }
+                  </tbody>
+                </table>
+              </div>
             }
           </div>
           @if (filteredServiceOrders.length > itemsPerPage) {
-            <div class="pagination">
+            <nav class="pagination" aria-label="Paginación">
               <button class="btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
                 <i class="fas fa-chevron-left"></i> Anterior
               </button>
               <span class="pagination-info"
-                >Pagina {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span
+                >Página {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span
               >
               <button
                 class="btn-secondary"
@@ -408,16 +430,17 @@
               >
                 Siguiente <i class="fas fa-chevron-right"></i>
               </button>
-            </div>
+            </nav>
           }
         </div>
 
         @if (selectedServiceOrder) {
-          <aside class="detail-view">
+          <div class="order-detail-overlay" aria-hidden="true" (click)="clearSelectedServiceOrder()"></div>
+          <aside #orderDrawer class="detail-view order-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="supervisor-order-detail-title" tabindex="-1">
             <header class="detail-drawer-header">
               <div>
                 <p class="detail-drawer-kicker">Detalle de orden</p>
-                <h2>{{ selectedServiceOrder.code || 'Sin código' }}</h2>
+                <h2 id="supervisor-order-detail-title">{{ selectedServiceOrder.code || 'Sin código' }}</h2>
                 <app-service-order-item-progress
                   [order]="selectedServiceOrder"
                 ></app-service-order-item-progress>

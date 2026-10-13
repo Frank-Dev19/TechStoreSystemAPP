@@ -1,5 +1,5 @@
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Component, DestroyRef, HostListener, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { catchError, finalize, of, switchMap } from 'rxjs';
 import {
@@ -48,6 +48,28 @@ export class SupervisorPanel implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   materialItemId: number | null = null;
   openMaterials = false;
+  private detailDrawer: HTMLElement | null = null;
+  private detailReturnFocus: HTMLElement | null = null;
+  private previousBodyOverflow: string | null = null;
+
+  @ViewChild('orderDrawer')
+  set orderDrawer(ref: ElementRef<HTMLElement> | undefined) {
+    this.detailDrawer = ref?.nativeElement ?? null;
+    if (this.detailDrawer) {
+      if (this.previousBodyOverflow === null) this.previousBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      this.detailDrawer.querySelector<HTMLElement>('.btn-close')?.focus();
+    } else {
+      this.restoreDrawerScroll();
+    }
+  }
+
+  private restoreDrawerScroll(): void {
+    if (this.previousBodyOverflow !== null) {
+      document.body.style.overflow = this.previousBodyOverflow;
+      this.previousBodyOverflow = null;
+    }
+  }
   activeSection: 'ranking' | 'orders' = 'orders';
   activeTab: 'open' | 'answered' | 'all' = 'open';
   currentPage = 1;
@@ -57,6 +79,8 @@ export class SupervisorPanel implements OnInit {
   answeredServiceOrderAgreements: ServiceOrderAgreement[] = [];
   allServiceOrderAgreements: ServiceOrderAgreement[] = [];
   serviceOrders: ServiceOrder[] = [];
+  isLoadingServiceOrders = false;
+  serviceOrdersLoadFailed = false;
 
   selectedServiceOrderAgreement: ServiceOrderAgreement | null = null;
   selectedServiceOrder: ServiceOrder | null = null;
@@ -95,6 +119,7 @@ export class SupervisorPanel implements OnInit {
   isLoadingServiceOrderAgreements = false;
   isLoadingDiagnosis = false;
   isLoadingTechnicianRankings = false;
+  technicianRankingsLoadFailed = false;
 
   showAlert = false;
   alertType = '';
@@ -148,7 +173,9 @@ export class SupervisorPanel implements OnInit {
     private readonly productsService: ProductsService,
     private readonly serviceOrderInboxService: ServiceOrderInboxService,
     private readonly router: Router,
-  ) {}
+  ) {
+    this.destroyRef.onDestroy(() => this.restoreDrawerScroll());
+  }
 
   ngOnInit(): void {
     this.loadServiceOrderAgreements();
@@ -198,9 +225,28 @@ export class SupervisorPanel implements OnInit {
     this.showFailedNotifications = false;
   }
 
-  @HostListener('document:keydown.escape')
-  closeFailedNotificationsWithEscape(): void {
-    if (this.showFailedNotifications) this.closeFailedNotifications();
+  @HostListener('document:keydown', ['$event'])
+  handlePanelKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.showFailedNotifications) {
+      this.closeFailedNotifications();
+      return;
+    }
+    // Child commercial dialogs keep their own pending operations and dismissal.
+    if (!this.selectedServiceOrder || this.clientDecisionTarget || this.lineDiscountTarget || this.itemCancellationTarget || this.showFailedNotifications) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.clearSelectedServiceOrder();
+      return;
+    }
+    if (event.key !== 'Tab' || !this.detailDrawer) return;
+    const controls = [...this.detailDrawer.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]')]
+      .filter(element => element.getClientRects().length > 0);
+    const first = controls[0], last = controls[controls.length - 1];
+    if (!first) { event.preventDefault(); this.detailDrawer.focus(); return; }
+    if (!this.detailDrawer.contains(document.activeElement) || (event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    }
   }
 
   isRetryingNotification(notificationId: number): boolean {
@@ -345,7 +391,11 @@ export class SupervisorPanel implements OnInit {
   }
 
   private loadServiceOrders(): void {
-    this.serviceOrderService.findAll({ page: 1, limit: 100 }).subscribe({
+    this.isLoadingServiceOrders = true;
+    this.serviceOrdersLoadFailed = false;
+    this.serviceOrderService.findAll({ page: 1, limit: 100 })
+      .pipe(finalize(() => (this.isLoadingServiceOrders = false)))
+      .subscribe({
       next: ({ data }) => {
         this.serviceOrders = data ?? [];
 
@@ -367,6 +417,7 @@ export class SupervisorPanel implements OnInit {
       },
       error: () => {
         this.serviceOrders = [];
+        this.serviceOrdersLoadFailed = true;
         this.showMessage(
           'warning',
           'fas fa-info-circle',
@@ -416,15 +467,20 @@ export class SupervisorPanel implements OnInit {
 
   private loadTechnicianRankings(): void {
     this.isLoadingTechnicianRankings = true;
+    this.technicianRankingsLoadFailed = false;
     this.agreementService
       .getTechnicianRevenueRankings()
       .pipe(finalize(() => (this.isLoadingTechnicianRankings = false)))
       .subscribe({
         next: (response) => {
           this.technicianRankings = response.technicians ?? [];
+          if (this.activeSection === 'ranking' && this.currentPage > this.totalPages) {
+            this.currentPage = this.totalPages;
+          }
         },
         error: () => {
           this.technicianRankings = [];
+          this.technicianRankingsLoadFailed = true;
           this.showMessage(
             'warning',
             'fas fa-chart-line',
@@ -470,6 +526,10 @@ export class SupervisorPanel implements OnInit {
     const visibleQuotes = this.getVisibleAgreements();
     const start = (this.currentPage - 1) * this.itemsPerPage;
     return visibleQuotes.slice(start, start + this.itemsPerPage);
+  }
+
+  resetOrderPagination(): void {
+    this.currentPage = 1;
   }
 
   get filteredServiceOrders(): ServiceOrder[] {
@@ -525,7 +585,8 @@ export class SupervisorPanel implements OnInit {
     this.loadCurrentDiagnosis(quote.serviceOrderId);
   }
 
-  selectServiceOrder(order: ServiceOrder): void {
+  selectServiceOrder(order: ServiceOrder, trigger?: HTMLElement): void {
+    this.detailReturnFocus = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     this.materialItemId = null;
     this.openMaterials = false;
     this.selectedServiceOrder = order;
@@ -539,6 +600,8 @@ export class SupervisorPanel implements OnInit {
   }
 
   clearSelectedServiceOrder(): void {
+    const trigger = this.detailReturnFocus;
+    this.detailReturnFocus = null;
     this.selectedServiceOrder = null;
     this.selectedServiceOrderAgreement = null;
     this.selectedOrderAgreements = [];
@@ -546,6 +609,8 @@ export class SupervisorPanel implements OnInit {
     this.clientDecisionTarget = null;
     this.lineDiscountTarget = null;
     this.itemCancellationTarget = null;
+    this.restoreDrawerScroll();
+    if (trigger?.isConnected) trigger.focus();
   }
 
   canRecordClientDecision(link: ServiceOrderAgreementItemLink): boolean {
