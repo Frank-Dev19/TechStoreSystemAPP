@@ -10,7 +10,7 @@
         <div class="content-header">
             <div class="search-box">
                 <i class="fas fa-search"></i>
-                <input type="text" placeholder="Buscar por nombre, documento o correo..." [(ngModel)]="searchTerm"
+                <input type="text" aria-label="Buscar proveedores por nombre, documento o correo" placeholder="Buscar por nombre, documento o correo..." [(ngModel)]="searchTerm"
                     (keyup.enter)="onSearch()" (blur)="onSearch()">
             </div>
             <div class="filters-wrapper">
@@ -128,23 +128,15 @@
 
     </div>
     @if (visiblePartners.length > 0) {
-    <div class="pagination-container">
-        <div class="pagination-info">
-            Mostrando
-            {{ (currentPage - 1) * itemsPerPage + 1 }} -
-            {{ Math.min(currentPage * itemsPerPage, totalItems) }}
-            de {{ totalItems }} proveedores
-        </div>
-        <div class="pagination-controls">
-            <button class="btn-pagination" [disabled]="currentPage === 1" (click)="previousPage()">
-                <i class="fas fa-chevron-left"></i>
-            </button>
-            <span class="page-info">{{currentPage}} / {{totalPages}}</span>
-            <button class="btn-pagination" [disabled]="currentPage === totalPages" (click)="nextPage()">
-                <i class="fas fa-chevron-right"></i>
-            </button>
-        </div>
-    </div>
+      <nav class="suppliers-pagination" aria-label="Paginación de proveedores">
+        <button class="btn btn-secondary" [disabled]="currentPage === 1" (click)="previousPage()">
+          <i class="fas fa-chevron-left" aria-hidden="true"></i> Anterior
+        </button>
+        <span class="pagination-info" aria-live="polite">Página {{ currentPage }} de {{ totalPages }} ({{ totalItems }} total)</span>
+        <button class="btn btn-secondary" [disabled]="currentPage === totalPages" (click)="nextPage()">
+          Siguiente <i class="fas fa-chevron-right" aria-hidden="true"></i>
+        </button>
+      </nav>
 }
 </div>
 
