@@ -355,33 +355,6 @@ $bg-light: #f5f7fa;
         background 0.2s ease,
         transform 0.2s ease;
 
-      &.pending-quote {
-        background: rgba($warning, 0.16);
-        border-left: 4px solid $warning;
-
-        td {
-          color: #1f2937;
-        }
-      }
-
-      &.quote-rejected {
-        background: rgba($danger, 0.15);
-        border-left: 4px solid $danger;
-
-        td {
-          color: #1f2937;
-        }
-      }
-
-      &.pending-delivery {
-        background: rgba($accent, 0.12);
-        border-left: 4px solid $accent;
-
-        td {
-          color: #1f2937;
-        }
-      }
-
       &:hover {
         background: #f9fafb;
       }
@@ -5224,4 +5197,98 @@ label.labor-waiver-option {
 
 @media (max-width: 767px) {
   .warranty-origin-selector { grid-template-columns: 1fr; }
+}
+
+// Pilotos locales: Inventario (estructura visual) y Auditoría (paginación).
+:host { font-family: Inter, "Segoe UI", Roboto, system-ui, -apple-system, Arial, sans-serif; }
+.reception-panel-container {
+  padding: 20px;
+  background: var(--bg);
+  gap: 18px;
+  .header-section .title-section {
+    flex: initial;
+    border-radius: 12px;
+    padding: 28px;
+    .page-title { font-size: 24px; font-weight: 600; line-height: 1.3; margin: 0; }
+    .page-subtitle { font-size: 13px; line-height: 1.5; margin-top: 6px; }
+  }
+  .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    .stat-card {
+      min-width: 0;
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, .05);
+      .stat-icon { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 8px; font-size: 20px; }
+      .stat-content { min-width: 0; }
+      .stat-label { letter-spacing: .03em; }
+      .stat-value { font-size: 24px; font-weight: 600; }
+      .stat-meta { font-size: 13px; }
+    }
+  }
+  .panel-card {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .05);
+    .panel-card-header { margin-bottom: 18px; h2 { font-size: 18px; font-weight: 600; } p { font-size: 13px; } }
+  }
+  .filters-card .content-header {
+    .actions-wrapper .btn { min-height: 44px; height: auto; padding: 10px 14px; font-size: 14px; border-radius: 8px; }
+  }
+  .search-box {
+    min-width: min(220px, 100%);
+    input { height: 44px; line-height: normal; font-size: 14px; border-radius: 8px; }
+  }
+  .filter-control {
+    label { font-size: 12px; letter-spacing: .03em; }
+    .select-control { min-width: 160px; height: 44px; line-height: normal; font-size: 14px; border-radius: 8px; }
+  }
+  .data-table {
+    font-size: 14px;
+    thead th { padding: 14px 16px; font-size: 12px; letter-spacing: .03em; background: #f8fafc; border-bottom-width: 1px; }
+    tbody tr td { padding: 14px 16px; }
+    tbody tr .code-cell strong { font-size: 14px; }
+  }
+  .pagination {
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 18px;
+    .pagination-info { font-size: 13px; color: var(--text-muted); text-align: center; }
+    .btn-secondary {
+      min-height: 44px;
+      padding: 9px 14px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      i { font-size: 13px; }
+      &:hover:not(:disabled) { background: #f5f9ff; border-color: var(--primary); color: var(--primary); }
+    }
+  }
+  :is(button, input, select, a):focus-visible { outline: 3px solid $accent; outline-offset: 2px; }
+  @media (max-width: 1100px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 768px) {
+    padding: 12px;
+    .header-section .title-section {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 44px;
+      gap: 12px;
+      padding: 20px;
+      .title-copy { width: auto; }
+      .page-title { font-size: 22px; }
+    }
+    .panel-card { padding: 14px; }
+    .filters-card .content-header {
+      .filters-wrapper { width: 100%; min-width: 0; }
+      .filter-control { flex: 1 1 160px; min-width: 0; .select-control { width: 100%; min-width: 0; } }
+      .actions-wrapper { margin-left: 0; width: 100%; .btn { white-space: normal; justify-content: center; } }
+    }
+  }
+  @media (max-width: 480px) {
+    .stats-grid { grid-template-columns: minmax(0, 1fr); }
+    .pagination-info { order: -1; flex-basis: 100%; }
+  }
 }

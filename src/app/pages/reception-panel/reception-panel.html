@@ -169,11 +169,7 @@
             <tbody>
               @for (serviceOrder of paginatedServiceOrders; track serviceOrder.id) {
                 <ng-container>
-                  <tr
-                    [class.pending-quote]="hasPendingServiceOrderAgreementItems(serviceOrder)"
-                    [class.quote-rejected]="hasRejectedServiceOrderAgreementItems(serviceOrder)"
-                    [class.pending-delivery]="hasPendingDeliveryItems(serviceOrder)"
-                  >
+                  <tr>
                     <td class="select-column">
                       <input
                         type="checkbox"
