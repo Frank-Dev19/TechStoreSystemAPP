@@ -2,6 +2,8 @@ export type MailPurpose = 'ELECTRONIC_BILLING' | 'PASSWORD_RESET';
 export type MailEncryption = 'SSL_TLS' | 'STARTTLS' | 'NONE';
 
 export interface MailSetting {
+  transport?: 'SMTP' | 'MAILTRAP_API';
+  hasApiToken?: boolean;
   purpose: MailPurpose;
   host: string;
   port: number;

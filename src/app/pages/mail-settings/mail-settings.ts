@@ -72,7 +72,12 @@ export class MailSettingsPage implements OnInit {
   }
 
   test(): void {
+    if (this.isTesting || this.isSaving) return;
     if (!this.validate()) return;
+    if (this.isMailtrap && !this.testRecipient.trim()) {
+      this.showToast('warning', 'Indique un destinatario para probar el envío mediante Mailtrap');
+      return;
+    }
     if (this.testRecipient && !this.isEmail(this.testRecipient)) {
       this.showToast('warning', 'Ingrese un correo de prueba válido');
       return;
@@ -92,6 +97,10 @@ export class MailSettingsPage implements OnInit {
         complete: () => this.isTesting = false,
       });
     });
+  }
+
+  get isMailtrap(): boolean {
+    return this.activeProfile?.transport === 'MAILTRAP_API';
   }
 
   get activeProfile(): MailSetting | undefined {
@@ -175,11 +184,11 @@ export class MailSettingsPage implements OnInit {
   }
 
   private validate(): boolean {
-    if (!this.form.host.trim() || !this.form.username.trim()) {
+    if (!this.isMailtrap && (!this.form.host.trim() || !this.form.username.trim())) {
       this.showToast('warning', 'Complete el servidor SMTP y el usuario');
       return false;
     }
-    if (!Number.isInteger(Number(this.form.port)) || this.form.port < 1 || this.form.port > 65535) {
+    if (!this.isMailtrap && (!Number.isInteger(Number(this.form.port)) || this.form.port < 1 || this.form.port > 65535)) {
       this.showToast('warning', 'Ingrese un puerto SMTP válido');
       return false;
     }
@@ -191,7 +200,11 @@ export class MailSettingsPage implements OnInit {
       this.showToast('warning', 'El correo de respuesta no es válido');
       return false;
     }
-    if (!this.activeProfile?.hasPassword && !this.form.password) {
+    if (this.isMailtrap && !this.activeProfile?.hasApiToken) {
+      this.showToast('warning', 'Falta configurar el token de Mailtrap en el servidor');
+      return false;
+    }
+    if (!this.isMailtrap && !this.activeProfile?.hasPassword && !this.form.password) {
       this.showToast('warning', 'Ingrese la contraseña SMTP');
       return false;
     }

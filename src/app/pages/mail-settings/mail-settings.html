@@ -40,7 +40,7 @@
       </label>
     </section>
 
-    <section class="config-section">
+    <section class="config-section" *ngIf="!isMailtrap">
       <div class="section-title">
         <div>
           <h2>Conexión SMTP</h2>
@@ -83,6 +83,18 @@
           <small>{{ passwordHint }}</small>
         </div>
       </div>
+    </section>
+
+    <section class="config-section" *ngIf="isMailtrap">
+      <div class="section-title">
+        <div>
+          <h2>Envío con Mailtrap</h2>
+          <span>Los correos del sistema se envían mediante API HTTPS. Los buzones corporativos siguen en su proveedor actual.</span>
+        </div>
+        <i class="fas fa-envelope"></i>
+      </div>
+      <p>{{ activeProfile?.hasApiToken ? 'Token configurado en el servidor.' : 'Falta configurar el token de Mailtrap en el servidor.' }}</p>
+      <p>El dominio del remitente debe estar verificado en Mailtrap. La prueba enviará un correo real al destinatario que indiques.</p>
     </section>
 
     <section class="config-section">
