@@ -4,4 +4,5 @@
 - [x] Validar cuatro pruebas focalizadas del formulario.
 - [x] Build productivo.
 - [x] Cuenta y dominio preparados por el usuario; token privado guardado en VPS.
-- [ ] Despliegue y prueba real de envío.
+- [x] Despliegue y aceptación de correo real de prueba por Mailtrap.
+- [ ] Usuario confirma recepción y validación funcional en navegador.
