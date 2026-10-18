@@ -163,15 +163,58 @@ describe('TechnicianPanel', () => {
     expect(component).toBeTruthy();
   });
 
-  it('mantiene visible el panel de detalle con una orientación antes de seleccionar una orden', () => {
-    component.clearSelectedServiceOrder();
+  it('muestra listado sin detalle vacío y abre una única ventana con Ver detalles', () => {
+    const order = createServiceOrder({ id: 31 });
+    order.items = [createServiceOrderItem(order, { id: 311 })];
+    (component as any).hydrateLists([order]);
     fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.detail-view-card--empty')).toBeNull();
+    const button = fixture.nativeElement.querySelector('.order-detail-button') as HTMLButtonElement;
+    expect(button).not.toBeNull();
+    button.click(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.technician-order-modal[role="dialog"]').length).toBe(1);
+    expect(fixture.nativeElement.querySelector('.detail-tabs-nav')).toBeNull();
+    component.clearSelectedServiceOrder(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.technician-order-modal')).toBeNull();
+  });
 
-    const compiled = fixture.nativeElement as HTMLElement;
-    const emptyDetail = compiled.querySelector('.detail-view-card--empty');
+  it('integra diagnóstico dentro del mismo modal y vuelve al detalle al cerrar el formulario', () => {
+    const order = createServiceOrder({ id: 32, serviceType: ServiceType.DIAGNOSIS });
+    order.items = [createServiceOrderItem(order, { id: 321 })];
+    component.selectServiceOrder(order);
+    component.showDiagnosisModal = true; fixture.detectChanges();
+    const modal = fixture.nativeElement.querySelector('.technician-order-modal');
+    expect(modal).not.toBeNull();
+    expect(modal?.querySelector('.workflow-step')).not.toBeNull();
+    expect(modal?.querySelectorAll('[role="dialog"]').length).toBe(0);
+    component.closeDiagnosisModal(); fixture.detectChanges();
+    expect(component.selectedServiceOrder?.id).toBe(32);
+    expect(fixture.nativeElement.querySelector('.technician-order-modal')).toBe(modal);
+  });
 
-    expect(emptyDetail).not.toBeNull();
-    expect(emptyDetail?.textContent).toContain('Selecciona una orden para gestionarla');
+  it('mantiene la misma ventana al refrescar la etapa y ofrece acciones desde Todos', () => {
+    const order = createServiceOrder({ id: 35, serviceType: ServiceType.DIAGNOSIS, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA });
+    order.items = [createServiceOrderItem(order, { id: 351, technicalStatus: ServiceOrderTechnicalStatus.ASIGNADA })];
+    component.activeTab = 'all'; component.selectServiceOrder(order); fixture.detectChanges();
+    const modal = fixture.nativeElement.querySelector('.technician-order-modal');
+    const updated = { ...order, technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO, items: [{ ...order.items[0], technicalStatus: ServiceOrderTechnicalStatus.EN_DIAGNOSTICO }] };
+    (component as any).hydrateLists([updated]);
+    component.activeTab = 'all'; fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.technician-order-modal')).toBe(modal);
+    expect(component.selectedServiceOrderItemId).toBe(351);
+    expect(fixture.nativeElement.querySelector('[aria-label="Registrar diagnóstico"]')).not.toBeNull();
+  });
+
+  it('restaura el scroll tras refrescar referencias del mismo modal', () => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'auto';
+    const element = document.createElement('section');
+    component.orderWorkspace = { nativeElement: element };
+    component.orderWorkspace = { nativeElement: element };
+    expect(document.body.style.overflow).toBe('hidden');
+    component.orderWorkspace = undefined;
+    expect(document.body.style.overflow).toBe('auto');
+    document.body.style.overflow = original;
   });
 
   it('sigue la misma orden al iniciar diagnóstico desde una tarjeta', () => {

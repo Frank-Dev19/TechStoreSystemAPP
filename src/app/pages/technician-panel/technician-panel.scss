@@ -4219,3 +4219,33 @@ $bg-light: #f5f7fa;
   }
   @media (max-width: 480px) { .pagination .pagination-info, .dispatch-history__pagination > span { order: -1; flex-basis: 100%; } }
 }
+
+// Listado y espacio de trabajo único del técnico.
+.technician-panel-container {
+  .split-pane-layout, .split-pane-layout.has-selection { grid-template-columns: minmax(0, 1fr); }
+  .order-list-table {
+    .order-list-header, .order-list-row { grid-template-columns: minmax(160px,1fr) minmax(200px,2fr) minmax(180px,1.2fr) 120px; }
+    .order-list-row { cursor: default; }
+    .order-detail-button { min-height: 44px; padding: 9px 12px; border-radius: 8px; border: 1px solid $border; background: #fff; color: $primary; font-size: 13px; font-weight: 600; }
+  }
+  @media (max-width: 1050px) { .order-list-table { .order-list-header { display: none; } .order-list-row { grid-template-columns: minmax(0,1fr) 120px; .col-code, .col-equip, .col-status { grid-column: 1; } .col-actions { grid-column: 2; grid-row: 1 / span 3; align-self: center; } } } }
+  @media (max-width: 480px) { .order-list-table .order-list-row { grid-template-columns: minmax(0,1fr); .col-actions { grid-column: 1; grid-row: auto; } } }
+}
+.order-modal-overlay { position: fixed; inset: 0; z-index: 1800; padding: 24px; background: rgba(15,23,42,.55); display: flex; align-items: center; justify-content: center; }
+.technician-order-modal {
+  display: flex; flex-direction: column; width: min(1120px,100%); max-height: calc(100dvh - 48px); min-width: 0; background: #fff; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.2); overflow: hidden;
+  .order-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px; border-bottom: 1px solid $border; flex-shrink: 0; > div { min-width: 0; } h2 { font-size: 20px; font-weight: 600; margin: 0; overflow-wrap: anywhere; } p { font-size: 13px; color: #52657e; margin: 4px 0 0; } }
+  .order-modal-close { flex: 0 0 44px; height: 44px; border: 1px solid $border; border-radius: 8px; background: #fff; color: $primary; }
+  .order-modal-content { overflow-y: auto; overscroll-behavior: contain; min-height: 0; padding: 18px; }
+  .detail-view-card.panel-card { position: static; border: none; box-shadow: none; overflow: visible; }
+  .detail-view-card[hidden] { display: none; }
+  .detail-view-card__header { display: none; }
+  .detail-view-card__body { padding: 18px 0; }
+  .workflow-step.modal-overlay { position: static; display: block; padding: 0; background: transparent; animation: none; z-index: auto; }
+  .workflow-step .modal-content { width: 100%; max-width: 100%; max-height: none; margin: 0; border: 0; box-shadow: none; overflow: visible; .modal-body { max-height: none; overflow: visible; } }
+  .detail-actions-bar .primary-action-btn, .detail-actions-bar .action-whatsapp-btn { width: auto; min-width: 44px; padding: 0 12px; .action-btn__label { display: inline; } }
+}
+@media (max-width: 640px) {
+  .order-modal-overlay { padding: 0; }
+  .technician-order-modal { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; .order-modal-header { padding: 12px; } .order-modal-content { padding: 12px; } .equipment-info-grid { grid-template-columns: minmax(0,1fr); } .workflow-step .modal-content { width: 100% !important; max-height: none !important; } }
+}

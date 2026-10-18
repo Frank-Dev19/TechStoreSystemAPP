@@ -239,7 +239,7 @@
         <div class="order-list-header">
           <div class="col-code">Código</div>
           <div class="col-equip">Equipo / Problema</div>
-          <div class="col-status">Estado / etapa</div>
+          <div class="col-status">Estado / etapa</div><div>Acciones</div>
         </div>
         @if (visibleOrders.length === 0) {
           <div class="empty-state empty-state-card">
@@ -252,7 +252,7 @@
               class="order-list-row"
               [class.selected]="isOrderSelected(order)"
               [class.warranty-order]="isWarrantyService(order)"
-              (click)="selectServiceOrder(order)"
+
             >
               <div class="col-code">
                 @if (isWarrantyService(order)) {
@@ -277,6 +277,7 @@
                   [compact]="true"
                 ></app-service-order-item-progress>
               </div>
+              <div class="col-actions"><button type="button" class="btn-secondary order-detail-button" aria-haspopup="dialog" (click)="openOrderWorkspace(order, $event)">Ver detalles</button></div>
             </div>
           }
         }
@@ -301,8 +302,20 @@
       }
     </section>
 
-    @if (selectedServiceOrder) {
-      <section class="detail-view-card panel-card">
+
+  </div>
+
+
+  @if (selectedServiceOrder) {
+    <div class="order-modal-overlay" (click)="closeOrderWorkspace()">
+      <section #orderWorkspace class="technician-order-modal" role="dialog" aria-modal="true" aria-labelledby="order-workspace-title" tabindex="-1" (click)="$event.stopPropagation()">
+        <header class="order-modal-header">
+          <div><h2 id="order-workspace-title">{{ selectedServiceOrder.code }}</h2><p>{{ getOrderStageLabel(selectedServiceOrder) }}</p></div>
+          <button type="button" class="order-modal-close" aria-label="Cerrar orden" (click)="closeOrderWorkspace()"><i class="fas fa-times" aria-hidden="true"></i></button>
+        </header>
+        <div class="order-modal-content">
+
+      <section class="detail-view-card panel-card" [hidden]="showAgreementModal || showDiagnosisModal || showClientDecisionModal || showItemTransitionModal">
         <header class="detail-view-card__header">
           <div class="detail-view-card__identity">
             <div class="detail-view-card__icon">
@@ -317,13 +330,7 @@
             </div>
           </div>
 
-          <button
-            class="btn-close detail-close-btn"
-            (click)="clearSelectedServiceOrder()"
-            aria-label="Cerrar detalle"
-          >
-            <i class="fas fa-times"></i>
-          </button>
+
         </header>
         @if (selectedOrderItems.length > 0) {
           <section class="equipment-switcher" aria-label="Equipos de la orden">
@@ -483,7 +490,7 @@
 
             <button
               class="btn btn-primary primary-action-btn"
-              *ngIf="activeTab === 'diagnosis' && canRegisterDiagnosis(selectedServiceOrder)"
+              *ngIf="canRegisterDiagnosis(selectedServiceOrder)"
               title="Registrar diagnóstico"
               aria-label="Registrar diagnóstico"
               (click)="
@@ -528,51 +535,10 @@
           </div>
         </div>
 
-        <nav class="detail-tabs-nav">
-          <button
-            type="button"
-            class="detail-tab-btn"
-            [class.active]="activeDetailTab === 'equipment'"
-            (click)="setActiveDetailTab('equipment')"
-          >
-            <i class="fas fa-info-circle"></i>
-            Información del equipo
-          </button>
-          <button
-            type="button"
-            class="detail-tab-btn"
-            [class.active]="activeDetailTab === 'sla'"
-            (click)="setActiveDetailTab('sla')"
-          >
-            <i class="fas fa-stopwatch"></i>
-            SLA y métricas
-          </button>
-          @if (shouldShowHistoryTab(selectedServiceOrder)) {
-            <button
-              type="button"
-              class="detail-tab-btn"
-              [class.active]="activeDetailTab === 'history'"
-              (click)="setActiveDetailTab('history')"
-            >
-              <i class="fas fa-history"></i>
-              Historial de diagnósticos
-            </button>
-          }
-          @if (canShowServiceOrderAgreementSection(selectedServiceOrder)) {
-            <button
-              type="button"
-              class="detail-tab-btn"
-              [class.active]="activeDetailTab === 'agreements'"
-              (click)="setActiveDetailTab('agreements')"
-            >
-              <i class="fas fa-clock-rotate-left"></i>
-              Historial de cotizaciones
-            </button>
-          }
-        </nav>
+
 
         <div class="detail-view-card__body">
-          @if (activeDetailTab === 'equipment') {
+          @if (true) {
             <div class="equipment-info-grid">
               <article class="equipment-info-card">
                 <div class="equipment-info-card__icon"><i class="fas fa-laptop"></i></div>
@@ -672,7 +638,7 @@
             </div>
           }
 
-          @if (activeDetailTab === 'sla') {
+          @if (true) {
             @if (selectedServiceOrderItem?.sla; as sla) {
               <section class="detail-panel-section">
                 <div class="service-order-metrics-panel">
@@ -707,7 +673,7 @@
             }
           }
 
-          @if (activeDetailTab === 'history' && shouldShowHistoryTab(selectedServiceOrder)) {
+          @if (shouldShowHistoryTab(selectedServiceOrder)) {
             <section class="detail-panel-section">
               @if (isDiagnosisService(selectedServiceOrder)) {
                 @if (diagnosticHistory.length === 0) {
@@ -760,7 +726,6 @@
           }
 
           @if (
-            activeDetailTab === 'agreements' &&
             canShowServiceOrderAgreementSection(selectedServiceOrder)
           ) {
             @if (isLoadingServiceOrderAgreement) {
@@ -826,34 +791,12 @@
           }
         </div>
       </section>
-    } @else {
-      <section
-        class="detail-view-card detail-view-card--empty panel-card"
-        aria-labelledby="empty-detail-title"
-      >
-        <div class="detail-empty-state">
-          <div class="detail-empty-state__icon" aria-hidden="true">
-            <i class="fas fa-clipboard-list"></i>
-          </div>
-          <div>
-            <p class="detail-empty-state__eyebrow">Detalle de orden</p>
-            <h2 id="empty-detail-title">Selecciona una orden para gestionarla</h2>
-            <p>
-              Desde aquí podrás revisar sus equipos, consultar historiales y ejecutar las acciones
-              disponibles.
-            </p>
-          </div>
-        </div>
-      </section>
-    }
-  </div>
 
-  @if (showAgreementModal && selectedServiceOrder) {
-    <div class="modal-overlay" (click)="closeAgreementModal()">
+  @if (showAgreementModal && selectedServiceOrder && !showClientDecisionModal) {
+    <div class="modal-overlay workflow-step" #workflowContent>
       <div
         class="modal-content agreement-modal"
-        role="dialog"
-        aria-modal="true"
+        role="region"
         aria-labelledby="agreement-modal-title"
         (click)="$event.stopPropagation()"
       >
@@ -1527,11 +1470,10 @@
     </div>
   }
   @if (showClientDecisionModal && getSelectedAgreementItem(); as decisionItem) {
-    <div class="modal-overlay client-decision-overlay" (click)="closeClientDecisionModal()">
+    <div class="modal-overlay workflow-step" #workflowContent>
       <div
         class="modal-content client-decision-modal"
-        role="dialog"
-        aria-modal="true"
+        role="region"
         aria-labelledby="client-decision-title"
         (click)="$event.stopPropagation()"
       >
@@ -1611,7 +1553,7 @@
     </div>
   }
   @if (showItemTransitionModal && itemTransitionContext; as transition) {
-    <div class="modal-overlay" (click)="closeItemTransitionModal()">
+    <div class="modal-overlay workflow-step" #workflowContent>
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h2>{{ transition.title }}</h2>
@@ -1667,7 +1609,7 @@
   }
 
   @if (showDiagnosisModal) {
-    <div class="modal-overlay" (click)="closeDiagnosisModal()">
+    <div class="modal-overlay workflow-step" #workflowContent>
       <div
         class="modal-content"
         [class.modal-content--warranty]="isWarrantyResolutionFlow"
@@ -1827,6 +1769,12 @@
           </button>
         </div>
       </div>
+    </div>
+  }
+
+
+        </div>
+      </section>
     </div>
   }
 

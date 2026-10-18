@@ -1,5 +1,5 @@
 import { automaticCustomerConcept } from '../../models/service-orders/automatic-customer-concept';
-import { Component, OnDestroy, OnInit } from "@angular/core"
+import { Component, ElementRef, HostListener, ViewChild, OnDestroy, OnInit } from "@angular/core"
 import { FormBuilder, FormGroup, Validators } from "@angular/forms"
 import { Router } from "@angular/router"
 import { forkJoin, of, Subject, Subscription } from "rxjs"
@@ -301,6 +301,72 @@ export class TechnicianPanel implements OnInit, OnDestroy {
     this.clientDecisionForm = this.createClientDecisionForm()
   }
 
+  private workspaceElement: HTMLElement | null = null
+  private workspaceReturnFocus: HTMLElement | null = null
+  private workspaceBodyOverflow: string | null = null
+
+  @ViewChild('orderWorkspace') set orderWorkspace(ref: ElementRef<HTMLElement> | undefined) {
+    const element = ref?.nativeElement ?? null
+    if (element === this.workspaceElement) return
+    this.workspaceElement = element
+    if (ref) {
+      if (!this.workspaceReturnFocus) this.workspaceReturnFocus = document.activeElement as HTMLElement
+      if (this.workspaceBodyOverflow === null) this.workspaceBodyOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      queueMicrotask(() => this.workspaceElement?.querySelector<HTMLElement>('.order-modal-close')?.focus())
+    } else {
+      this.restoreWorkspacePage()
+    }
+  }
+
+  @ViewChild('workflowContent') set workflowContent(ref: ElementRef<HTMLElement> | undefined) {
+    queueMicrotask(() => {
+      if (ref) ref.nativeElement.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), button:not([disabled])')?.focus()
+      else this.workspaceElement?.querySelector<HTMLElement>('.order-modal-close')?.focus()
+    })
+  }
+
+  private restoreWorkspacePage(): void {
+    if (this.workspaceBodyOverflow !== null) document.body.style.overflow = this.workspaceBodyOverflow
+    this.workspaceBodyOverflow = null
+    if (this.workspaceReturnFocus?.isConnected) this.workspaceReturnFocus.focus()
+    this.workspaceReturnFocus = null
+  }
+
+  openOrderWorkspace(order: ServiceOrder, event: Event): void {
+    this.workspaceReturnFocus = event.currentTarget as HTMLElement
+    this.selectServiceOrder(order)
+  }
+
+  closeOrderWorkspace(): void {
+    if (this.isSavingDiagnosis || this.isSavingAgreement || this.isSavingItemTransition) return
+    this.showDiagnosisModal = false
+    this.showAgreementModal = false
+    this.showClientDecisionModal = false
+    this.showItemTransitionModal = false
+    this.clearSelectedServiceOrder()
+  }
+
+  @HostListener('document:keydown', ['$event']) onWorkspaceKeydown(event: KeyboardEvent): void {
+    if (!this.workspaceElement || this.itemCancellationTarget) return
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      if (this.isSavingDiagnosis || this.isSavingAgreement || this.isSavingItemTransition) return
+      if (this.showClientDecisionModal) this.closeClientDecisionModal()
+      else if (this.showDiagnosisModal) this.closeDiagnosisModal()
+      else if (this.showAgreementModal) this.closeAgreementModal()
+      else if (this.showItemTransitionModal) this.closeItemTransitionModal()
+      else this.closeOrderWorkspace()
+      queueMicrotask(() => this.workspaceElement?.querySelector<HTMLElement>('.order-modal-close')?.focus())
+    }
+    if (event.key === 'Tab') {
+      const controls = Array.from(this.workspaceElement.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]')).filter(el => el.getClientRects().length > 0)
+      const first = controls[0], last = controls[controls.length - 1]
+      if (event.shiftKey && (document.activeElement === first || !this.workspaceElement.contains(document.activeElement))) { event.preventDefault(); last?.focus() }
+      else if (!event.shiftKey && (document.activeElement === last || !this.workspaceElement.contains(document.activeElement))) { event.preventDefault(); first?.focus() }
+    }
+  }
+
   ngOnInit(): void {
     this.syncCurrentUserContext()
     this.loadAgreementCatalogs()
@@ -312,6 +378,7 @@ export class TechnicianPanel implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.restoreWorkspacePage()
     this.stopLiveTimer()
     this.subscriptions.unsubscribe()
     this.productSearch$.complete()
